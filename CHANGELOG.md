@@ -5,6 +5,9 @@ All notable changes to HAIP are documented here. This project adheres to
 
 ## [Unreleased]
 
+> Version numbers and release tags are assigned automatically by the release
+> workflow on merge — this section is intentionally left as _Unreleased_.
+
 ### Added — Reservation Operations
 
 - **Bulk actions** — check-in / check-out / cancel across many reservations in
@@ -109,6 +112,7 @@ not just functional.
 - Test suite: **691 tests across 61 files** (was 551 across 45), all passing —
   140 new tests across the accounting, AI-hook, house-account, split-folio,
   payment-correction, groups/allotment, and reservation-ops features.
+- No manual version bumps — the release workflow tags the next version on merge.
 
 ### Notes
 - All new property-scoped tables enforce `property_id` multi-tenancy: every
@@ -119,8 +123,9 @@ not just functional.
 - The A/R transfer-to-zero is a ledger move (reuses the folio adjustment path),
   not a payment, per the deposit/A/R domain rules.
 
-## [0.1.0]
+## [1.2.5] and earlier
 
-Initial public baseline: reservations, folios, rate plans, rooms, guests,
-housekeeping, night audit, reports, channel manager, payments (Stripe), tax
-engine, webhooks, Connect API, and the 9-agent AI framework.
+Prior baseline (released via git tags v1.0.0 → v1.2.5): reservations, folios,
+rate plans, rooms, guests, housekeeping, night audit, reports, channel manager,
+payments (Stripe), tax engine, webhooks, Connect API, and the 9-agent AI
+framework. See GitHub Releases for the per-tag history.
