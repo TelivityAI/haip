@@ -60,6 +60,23 @@ export const WEBHOOK_EVENTS = {
   'guest.communication_drafted': 'guest.communication_drafted',
   'guest.communication_sent': 'guest.communication_sent',
   'guest.review_response_drafted': 'guest.review_response_drafted',
+
+  // Deposit ledger events (KB 10)
+  'deposit.received': 'deposit.received',
+  'deposit.applied': 'deposit.applied',
+  'deposit.refunded': 'deposit.refunded',
+  'deposit.forfeited': 'deposit.forfeited',
+
+  // Accounts Receivable events (KB 11)
+  'ar.ledger_created': 'ar.ledger_created',
+  'ar.transfer_created': 'ar.transfer_created',
+  'ar.transfer_reversed': 'ar.transfer_reversed',
+  'ar.payment_recorded': 'ar.payment_recorded',
+
+  // Cash drawer / cashiering events (KB 12)
+  'cashdrawer.session_opened': 'cashdrawer.session_opened',
+  'cashdrawer.movement_recorded': 'cashdrawer.movement_recorded',
+  'cashdrawer.session_closed': 'cashdrawer.session_closed',
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;

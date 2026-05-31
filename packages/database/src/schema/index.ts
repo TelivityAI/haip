@@ -93,3 +93,32 @@ export {
   reviewResponseStatusEnum,
   guestReviews,
 } from './review.js';
+
+// Deposit Ledger (KB 10)
+export {
+  depositStatusEnum,
+  depositLedgerEntries,
+} from './deposit.js';
+
+// Accounts Receivable (KB 11)
+export {
+  arLedgerStatusEnum,
+  arTxnTypeEnum,
+  arLedgers,
+  arTransactions,
+} from './accounts-receivable.js';
+
+// Cash Drawer / Cashiering (KB 12)
+export {
+  cashSessionStatusEnum,
+  cashMovementTypeEnum,
+  cashDrawers,
+  cashDrawerSessions,
+  cashMovements,
+} from './cash-drawer.js';
+
+// Custom Accounting / GL Codes (KB 5)
+export {
+  accountingCodeKindEnum,
+  accountingCodes,
+} from './accounting-code.js';

@@ -40,6 +40,12 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_mode') THEN CREATE TYPE agent_mode AS ENUM ('manual','suggest','autopilot'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_decision_status') THEN CREATE TYPE agent_decision_status AS ENUM ('pending','approved','rejected','auto_executed','expired'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'webhook_delivery_status') THEN CREATE TYPE webhook_delivery_status AS ENUM ('pending','delivered','failed'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'deposit_status') THEN CREATE TYPE deposit_status AS ENUM ('held','applied','refunded','forfeited'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ar_ledger_status') THEN CREATE TYPE ar_ledger_status AS ENUM ('open','closed'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ar_txn_type') THEN CREATE TYPE ar_txn_type AS ENUM ('transfer_in','payment','reverse_transfer','adjustment'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cash_session_status') THEN CREATE TYPE cash_session_status AS ENUM ('open','closed'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cash_movement_type') THEN CREATE TYPE cash_movement_type AS ENUM ('payment','refund','paid_out','drop'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'accounting_code_kind') THEN CREATE TYPE accounting_code_kind AS ENUM ('transaction','gl'); END IF; END $$`,
   ];
 
   for (const e of enums) {
@@ -524,6 +530,97 @@ async function main() {
       last_error text,
       created_at timestamptz NOT NULL DEFAULT now(),
       delivered_at timestamptz
+    )`,
+    // deposit_ledger_entries (KB 10)
+    `CREATE TABLE IF NOT EXISTS deposit_ledger_entries (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      reservation_id uuid REFERENCES reservations(id),
+      payment_id uuid REFERENCES payments(id),
+      amount numeric(12,2) NOT NULL,
+      currency_code varchar(3) NOT NULL,
+      status deposit_status NOT NULL DEFAULT 'held',
+      is_refundable boolean NOT NULL DEFAULT true,
+      received_at timestamptz NOT NULL DEFAULT now(),
+      recognized_at timestamptz,
+      notes text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // ar_ledgers (KB 11)
+    `CREATE TABLE IF NOT EXISTS ar_ledgers (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      name varchar(255) NOT NULL,
+      description text,
+      payment_terms_days varchar(10),
+      status ar_ledger_status NOT NULL DEFAULT 'open',
+      balance numeric(12,2) NOT NULL DEFAULT 0,
+      currency_code varchar(3) NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // ar_transactions (KB 11)
+    `CREATE TABLE IF NOT EXISTS ar_transactions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      ar_ledger_id uuid NOT NULL REFERENCES ar_ledgers(id),
+      type ar_txn_type NOT NULL,
+      amount numeric(12,2) NOT NULL,
+      currency_code varchar(3) NOT NULL,
+      source_folio_id uuid REFERENCES folios(id),
+      reversed_by_id uuid REFERENCES ar_transactions(id),
+      note text,
+      created_by uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // cash_drawers (KB 12)
+    `CREATE TABLE IF NOT EXISTS cash_drawers (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      name varchar(255) NOT NULL,
+      starting_float numeric(12,2) NOT NULL DEFAULT 0,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // cash_drawer_sessions (KB 12)
+    `CREATE TABLE IF NOT EXISTS cash_drawer_sessions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      cash_drawer_id uuid NOT NULL REFERENCES cash_drawers(id),
+      cashier_user_id uuid NOT NULL,
+      status cash_session_status NOT NULL DEFAULT 'open',
+      opening_float numeric(12,2) NOT NULL,
+      expected_balance numeric(12,2),
+      counted_balance numeric(12,2),
+      variance numeric(12,2),
+      opened_at timestamptz NOT NULL DEFAULT now(),
+      closed_at timestamptz
+    )`,
+    // cash_movements (KB 12)
+    `CREATE TABLE IF NOT EXISTS cash_movements (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      session_id uuid NOT NULL REFERENCES cash_drawer_sessions(id),
+      type cash_movement_type NOT NULL,
+      amount numeric(12,2) NOT NULL,
+      reservation_id uuid,
+      note text,
+      created_by uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // accounting_codes (KB 5)
+    `CREATE TABLE IF NOT EXISTS accounting_codes (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      kind accounting_code_kind NOT NULL,
+      code varchar(50) NOT NULL,
+      label varchar(255) NOT NULL,
+      applies_to varchar(50),
+      archived boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
     )`,
   ];
 

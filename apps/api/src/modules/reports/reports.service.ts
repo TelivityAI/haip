@@ -9,6 +9,9 @@ import {
   auditRuns,
   properties,
   rooms,
+  depositLedgerEntries,
+  arLedgers,
+  arTransactions,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 
@@ -506,6 +509,155 @@ export class ReportsService {
         totalRevenue,
         totalRoomNights,
       },
+    };
+  }
+
+  /**
+   * Daily Trial Balance (KB 5, computed — no table).
+   *
+   * For each ledger (Deposit / Guest(current) / A/R) reports
+   * Opening + Net Activity + Transfers In/Out = Closing for the business date.
+   * Best-effort aggregation from `deposit_ledger_entries`, `folios`, and
+   * `ar_ledgers`/`ar_transactions`. The cross-ledger transfer total (folio →
+   * A/R) is surfaced so it can be reconciled to net to zero between ledgers.
+   */
+  async dailyTrialBalance(propertyId: string, date: string) {
+    // --- Deposit ledger (KB 10) ---
+    // Opening = held liability received before the date and not yet recognized
+    // before the date. Closing = held liability as of end of date.
+    const [depositOpeningRow] = await this.db
+      .select({
+        total: sql<string>`coalesce(sum(${depositLedgerEntries.amount}::numeric), 0)`,
+      })
+      .from(depositLedgerEntries)
+      .where(
+        and(
+          eq(depositLedgerEntries.propertyId, propertyId),
+          sql`${depositLedgerEntries.receivedAt}::date < ${date}`,
+          sql`(${depositLedgerEntries.recognizedAt} is null or ${depositLedgerEntries.recognizedAt}::date >= ${date})`,
+        ),
+      );
+
+    const [depositReceivedRow] = await this.db
+      .select({
+        total: sql<string>`coalesce(sum(${depositLedgerEntries.amount}::numeric), 0)`,
+      })
+      .from(depositLedgerEntries)
+      .where(
+        and(
+          eq(depositLedgerEntries.propertyId, propertyId),
+          sql`${depositLedgerEntries.receivedAt}::date = ${date}`,
+        ),
+      );
+
+    const [depositRecognizedRow] = await this.db
+      .select({
+        total: sql<string>`coalesce(sum(${depositLedgerEntries.amount}::numeric), 0)`,
+      })
+      .from(depositLedgerEntries)
+      .where(
+        and(
+          eq(depositLedgerEntries.propertyId, propertyId),
+          sql`${depositLedgerEntries.recognizedAt}::date = ${date}`,
+        ),
+      );
+
+    const depositOpening = new Decimal(depositOpeningRow?.total ?? '0');
+    const depositReceived = new Decimal(depositReceivedRow?.total ?? '0');
+    const depositRecognized = new Decimal(depositRecognizedRow?.total ?? '0');
+    // Recognition moves deposits out of the deposit ledger (to guest/revenue).
+    const depositNetActivity = depositReceived;
+    const depositTransfersOut = depositRecognized;
+    const depositClosing = depositOpening.plus(depositReceived).minus(depositRecognized);
+
+    // --- Guest (current) ledger (KB 5.4) — open guest folio balances ---
+    const [guestBalanceRow] = await this.db
+      .select({
+        total: sql<string>`coalesce(sum(${folios.balance}::numeric), 0)`,
+      })
+      .from(folios)
+      .where(
+        and(
+          eq(folios.propertyId, propertyId),
+          eq(folios.type, 'guest' as any),
+          eq(folios.status, 'open' as any),
+        ),
+      );
+    const guestClosing = new Decimal(guestBalanceRow?.total ?? '0');
+
+    // --- A/R ledger (KB 11) ---
+    const [arBalanceRow] = await this.db
+      .select({
+        total: sql<string>`coalesce(sum(${arLedgers.balance}::numeric), 0)`,
+      })
+      .from(arLedgers)
+      .where(eq(arLedgers.propertyId, propertyId));
+    const arClosing = new Decimal(arBalanceRow?.total ?? '0');
+
+    // A/R transfers in on the date (folio → A/R cross-ledger move, KB 11.3).
+    const [arTransfersInRow] = await this.db
+      .select({
+        total: sql<string>`coalesce(sum(${arTransactions.amount}::numeric), 0)`,
+      })
+      .from(arTransactions)
+      .where(
+        and(
+          eq(arTransactions.propertyId, propertyId),
+          eq(arTransactions.type, 'transfer_in' as any),
+          sql`${arTransactions.createdAt}::date = ${date}`,
+        ),
+      );
+
+    const [arPaymentsRow] = await this.db
+      .select({
+        total: sql<string>`coalesce(sum(${arTransactions.amount}::numeric), 0)`,
+      })
+      .from(arTransactions)
+      .where(
+        and(
+          eq(arTransactions.propertyId, propertyId),
+          eq(arTransactions.type, 'payment' as any),
+          sql`${arTransactions.createdAt}::date = ${date}`,
+        ),
+      );
+
+    const arTransfersIn = new Decimal(arTransfersInRow?.total ?? '0');
+    const arPayments = new Decimal(arPaymentsRow?.total ?? '0');
+    const arNetActivity = arPayments.negated();
+    const arOpening = arClosing.minus(arTransfersIn).plus(arPayments);
+
+    // Cross-ledger transfer reconciliation: the balance transferred out of the
+    // guest ledger should equal the amount transferred into A/R on the date.
+    const interLedgerTransfers = arTransfersIn;
+
+    return {
+      date,
+      ledgers: {
+        deposit: {
+          opening: depositOpening.toFixed(2),
+          netActivity: depositNetActivity.toFixed(2),
+          transfersIn: '0.00',
+          transfersOut: depositTransfersOut.toFixed(2),
+          closing: depositClosing.toFixed(2),
+        },
+        guest: {
+          // Opening/activity for the guest ledger requires per-day folio
+          // snapshots not retained here; closing is the live open-folio balance.
+          opening: '0.00',
+          netActivity: '0.00',
+          transfersIn: '0.00',
+          transfersOut: interLedgerTransfers.toFixed(2),
+          closing: guestClosing.toFixed(2),
+        },
+        ar: {
+          opening: arOpening.toFixed(2),
+          netActivity: arNetActivity.toFixed(2),
+          transfersIn: arTransfersIn.toFixed(2),
+          transfersOut: '0.00',
+          closing: arClosing.toFixed(2),
+        },
+      },
+      interLedgerTransfers: interLedgerTransfers.toFixed(2),
     };
   }
 }

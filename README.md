@@ -206,6 +206,13 @@ This creates a learning loop: each decision becomes training data for model impr
 - Folio settlement and close workflows
 - Charge locking for night audit
 
+### Accounting & Cashiering
+- **Deposit Ledger** — advance deposits tracked as a liability (not revenue) with a full recognition lifecycle: `held → applied` (at check-in/checkout), `refunded`, or `forfeited`. Refundable vs. non-refundable handling, with status-transition guards.
+- **Accounts Receivable** — named A/R ledgers for post-stay direct billing; transfer an outstanding folio balance to A/R (zeroing the folio), record A/R payments, reverse transfers with a preserved audit trail, and aging buckets (0–30 / 31–60 / 61–90 / 90+).
+- **Cash Drawer & Cashiering** — per-drawer cash tracking with shift sessions, cash movements (payment, refund, paid-out, drop), shift close with expected-vs-counted **variance** detection, and a cashier's report.
+- **Daily Trial Balance** — reconciliation across the Deposit, Guest, and A/R ledgers (opening + activity = closing).
+- **Custom Accounting Codes** — user-defined transaction and General Ledger (GL) codes for export to external accounting systems.
+
 ### Rate Plans & Pricing
 - BAR (Best Available Rate), derived rates, and negotiated rates
 - Rate derivation: amount or percentage adjustments from parent plans
@@ -292,7 +299,7 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ### Webhook Engine
 - Real-time webhook delivery on every entity state change
-- 35+ event types including AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
+- 48 event types including accounting events (`deposit.received`, `deposit.applied`, `ar.transfer_created`, `cashdrawer.session_closed`) and AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
 - Event format: `entity.action` (e.g., `reservation.created`, `housekeeping.task_completed`)
 - Subscription management for external consumers
 
@@ -332,7 +339,7 @@ This creates a learning loop: each decision becomes training data for model impr
 | OTA Channels | Booking.com (XML) + SiteMinder (REST) | Direct + aggregated OTA connectivity |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (551 tests) | Unit and integration tests |
+| Testing | Vitest (605 tests) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -397,7 +404,7 @@ This starts PostgreSQL, Redis, Keycloak, and the HAIP API + Dashboard in a singl
 ### Run tests
 
 ```bash
-# All tests (551 tests across 45 test files)
+# All tests (605 tests across 50 test files)
 pnpm test
 
 # API tests only
@@ -502,7 +509,7 @@ haip/
 
 All endpoints are prefixed with `/api/v1/` and documented via OpenAPI 3.0. Run the API and visit `http://localhost:3000/docs` for the interactive Swagger UI.
 
-### Core Endpoints (~100 total)
+### Core Endpoints (~125 total)
 
 <details>
 <summary><strong>AI Agents</strong> — 11 endpoints</summary>
@@ -558,6 +565,50 @@ POST   /api/v1/folios/:id/charges/:chargeId/reverse # Reverse charge
 POST   /api/v1/folios/:id/charges/lock             # Lock charges
 POST   /api/v1/folios/:id/transfer-charge          # Transfer charge
 POST   /api/v1/folios/:id/transfer-to-city-ledger  # Transfer to city ledger
+```
+</details>
+
+<details>
+<summary><strong>Accounting — Deposits, A/R & GL Codes</strong> — 20 endpoints</summary>
+
+```
+# Deposit Ledger
+POST   /api/v1/deposits                            # Record a deposit (held liability)
+GET    /api/v1/deposits                            # List deposits (filtered)
+GET    /api/v1/deposits/:id                         # Get deposit
+POST   /api/v1/deposits/:id/apply                  # Apply deposit to folio (recognize)
+POST   /api/v1/deposits/:id/refund                 # Refund a refundable deposit
+POST   /api/v1/deposits/:id/forfeit                # Forfeit (non-refundable → revenue)
+# Accounts Receivable
+POST   /api/v1/ar/ledgers                          # Create A/R ledger
+GET    /api/v1/ar/ledgers                          # List A/R ledgers
+GET    /api/v1/ar/ledgers/:id                       # Get A/R ledger
+PATCH  /api/v1/ar/ledgers/:id                       # Update A/R ledger
+POST   /api/v1/ar/ledgers/:id/close                # Close A/R ledger
+POST   /api/v1/ar/transfer                          # Transfer folio balance to A/R (zero folio)
+POST   /api/v1/ar/transactions/:id/reverse         # Reverse a transfer (audit-safe)
+POST   /api/v1/ar/ledgers/:id/payments             # Record an A/R payment
+GET    /api/v1/ar/ledgers/:id/aging                # Aging buckets (0–30/31–60/61–90/90+)
+# Accounting Codes
+POST   /api/v1/accounting/codes                    # Create transaction/GL code
+GET    /api/v1/accounting/codes                    # List codes
+GET    /api/v1/accounting/codes/:id                 # Get code
+PATCH  /api/v1/accounting/codes/:id                 # Update code
+POST   /api/v1/accounting/codes/:id/archive        # Archive code
+```
+</details>
+
+<details>
+<summary><strong>Cashier — Cash Drawer</strong> — 7 endpoints</summary>
+
+```
+POST   /api/v1/cash/drawers                        # Create cash drawer
+GET    /api/v1/cash/drawers/:id                     # Get drawer
+POST   /api/v1/cash/sessions                       # Open a cashier shift session
+GET    /api/v1/cash/sessions/:id                    # Get session
+POST   /api/v1/cash/sessions/:id/movements         # Record cash movement
+POST   /api/v1/cash/sessions/:id/close             # Close shift (variance check)
+GET    /api/v1/cash/sessions/:id/report            # Cashier's report
 ```
 </details>
 
@@ -794,7 +845,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (551 tests, 45 files)
+pnpm test             # Run all tests (605 tests, 50 files)
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```

@@ -45,6 +45,17 @@ export class ReportsController {
     return this.reportsService.getFinancialSummary(propertyId, date);
   }
 
+  @Get('/trial-balance')
+  @ApiOperation({ summary: 'Daily trial balance (Deposit / Guest / A/R ledgers)' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'date', required: true })
+  async getTrialBalance(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('date') date: string,
+  ) {
+    return this.reportsService.dailyTrialBalance(propertyId, date);
+  }
+
   @Get('/occupancy-trend')
   @ApiOperation({ summary: 'Occupancy trend report over date range' })
   @ApiQuery({ name: 'propertyId', required: true })
