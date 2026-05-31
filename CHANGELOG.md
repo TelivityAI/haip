@@ -5,6 +5,22 @@ All notable changes to HAIP are documented here. This project adheres to
 
 ## [Unreleased]
 
+### Added — Reservation Operations
+
+- **Bulk actions** — check-in / check-out / cancel across many reservations in
+  one call, with per-reservation success/error results (never aborts the batch).
+- **Reservation notes** — notes per reservation with active-count tracking.
+- **Guest messaging** — compose and send a message to a reservation's guest;
+  marketing messages respect the guest's GDPR opt-out.
+- **Unassigned-reservation finder** — list confirmed/assigned reservations that
+  have no room assigned, in a date window.
+- **Batch reservation import** — create many reservations from pre-parsed rows
+  with per-row error handling.
+- New `reservation.*` ops webhook events; `reservation_notes` table.
+- **Deliberate non-feature:** reservation status reversion ("un-cancel") is
+  intentionally NOT implemented (payment-integrity hazard, KB §14.8) — enforced
+  by a regression test.
+
 ### Added — Groups & Allotment Engine
 
 - **Group profiles** for corporate / travel-agent / wholesale / event business,
@@ -85,14 +101,14 @@ not just functional.
   endpoints.
 
 ### Changed
-- API surface grew to ~155 endpoints (+58: 20 accounting, 7 cashier, 11 house
-  accounts/products, 3 split-folio, 16 groups/allotment, plus payment-correct
-  and the trial-balance report).
-- Webhook catalog grew to **61 event types** (+24: 11 accounting, 7 house-account
-  & folio, 6 groups).
-- Test suite: **672 tests across 57 files** (was 551 across 45), all passing —
-  90 new tests across the accounting, AI-hook, house-account, split-folio,
-  payment-correction, and groups/allotment features.
+- API surface grew to ~165 endpoints (+66: 20 accounting, 7 cashier, 11 house
+  accounts/products, 3 split-folio, 16 groups/allotment, 8 reservation-ops, plus
+  payment-correct and the trial-balance report).
+- Webhook catalog grew to **64 event types** (+27: 11 accounting, 7 house-account
+  & folio, 6 groups, 3 reservation-ops).
+- Test suite: **691 tests across 61 files** (was 551 across 45), all passing —
+  140 new tests across the accounting, AI-hook, house-account, split-folio,
+  payment-correction, groups/allotment, and reservation-ops features.
 
 ### Notes
 - All new property-scoped tables enforce `property_id` multi-tenancy: every

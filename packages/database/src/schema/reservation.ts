@@ -134,3 +134,20 @@ export const reservations = pgTable('reservations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Reservation Notes — free-text operational notes attached to a reservation
+ * (front-desk handover, special handling, follow-ups). Property-scoped.
+ * `isActive` supports an active-count badge without hard-deleting history.
+ */
+export const reservationNotes = pgTable('reservation_notes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  reservationId: uuid('reservation_id').notNull().references(() => reservations.id),
+  body: text('body').notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  authorUserId: uuid('author_user_id'), // Staff user who wrote the note (nullable)
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

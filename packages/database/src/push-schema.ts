@@ -733,6 +733,17 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // reservation_notes (Tier 4 — Reservation Operations Polish)
+    `CREATE TABLE IF NOT EXISTS reservation_notes (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      reservation_id uuid NOT NULL REFERENCES reservations(id),
+      body text NOT NULL,
+      is_active boolean NOT NULL DEFAULT true,
+      author_user_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
   ];
 
   for (const t of tables) {

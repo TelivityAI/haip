@@ -20,6 +20,7 @@ export {
   bookingSourceEnum,
   bookings,
   reservations,
+  reservationNotes,
 } from './reservation.js';
 
 // Rate Plans & Restrictions

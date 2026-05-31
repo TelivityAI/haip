@@ -6,7 +6,7 @@ import {
   ConflictException,
   forwardRef,
 } from '@nestjs/common';
-import { eq, and, sql, gte, lte, inArray } from 'drizzle-orm';
+import { eq, and, sql, gte, lte, inArray, isNull } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import { reservations, bookings, guests, rooms, roomTypes, ratePlans, properties, payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
@@ -24,6 +24,8 @@ import { ListReservationsDto } from './dto/list-reservations.dto';
 import { CheckInDto } from './dto/check-in.dto';
 import { CheckOutDto } from './dto/check-out.dto';
 import { GroupCheckInDto } from './dto/group-check-in.dto';
+import { BulkActionDto } from './dto/bulk-action.dto';
+import { ListUnassignedDto } from './dto/list-unassigned.dto';
 import { randomUUID, createCipheriv, randomBytes } from 'crypto';
 
 @Injectable()
@@ -192,6 +194,11 @@ export class ReservationService {
     return updated;
   }
 
+  // DELIBERATE NON-FEATURE (KB §14.8): there is intentionally NO un-cancel /
+  // status-reversion method. Reverting a cancelled/inactive reservation back to
+  // active is a payment-integrity hazard (released/refunded deposits, expired
+  // auths cannot be silently reinstated). The correct workflow is to create a
+  // NEW reservation. Do not add uncancel()/reactivate() here.
   async cancel(id: string, propertyId: string, dto: CancelReservationDto) {
     const reservation = await this.findByIdRaw(id, propertyId);
     assertTransition(reservation.status as ReservationStatus, 'cancelled');
@@ -639,6 +646,108 @@ export class ReservationService {
       failed: results.filter((r) => !r.success).length,
       results,
     };
+  }
+
+  /**
+   * Bulk lifecycle action (Tier 4 — Reservation Operations Polish).
+   *
+   * Applies one action to many reservations, reusing the existing per-reservation
+   * checkIn/checkOut/cancel methods (so all multi-tenancy + state-machine
+   * guarantees hold). Each id runs in its own try/catch — a single failure (e.g.
+   * check-out blocked by an outstanding balance) is captured in the per-id result
+   * and NEVER aborts the batch.
+   *
+   * Deferred: 'add_payment' is intentionally not supported here (out of scope to
+   * keep the action set tight; use the payment/folio endpoints directly).
+   */
+  async bulkAction(propertyId: string, dto: BulkActionDto) {
+    const results: Array<{ id: string; success: boolean; error?: string }> = [];
+
+    for (const id of dto.ids) {
+      try {
+        switch (dto.action) {
+          case 'check_in':
+            await this.checkIn(id, propertyId, {});
+            break;
+          case 'check_out':
+            // A surfaced error (e.g. outstanding balance on express checkout) is
+            // captured per-id below as a warning rather than aborting the batch.
+            await this.checkOut(id, propertyId, {});
+            break;
+          case 'cancel':
+            await this.cancel(id, propertyId, { cancellationReason: dto.reason });
+            break;
+        }
+        results.push({ id, success: true });
+      } catch (err: any) {
+        results.push({ id, success: false, error: err.message ?? 'Unknown error' });
+      }
+    }
+
+    const succeeded = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+
+    await this.webhookService.emit(
+      'reservation.bulk_action_completed',
+      'reservation',
+      propertyId,
+      { action: dto.action, total: results.length, succeeded, failed },
+      propertyId,
+    );
+
+    return { results, succeeded, failed };
+  }
+
+  /**
+   * Unassigned-reservation finder (Tier 4 — Reservation Operations Polish).
+   *
+   * Returns reservations that are assignable-but-unassigned (status confirmed or
+   * assigned, no room linked yet) for an optional arrival-date window. Reuses the
+   * leftJoin shape from list() for guest/room-type display fields, tenant-scoped
+   * by propertyId.
+   */
+  async findUnassigned(dto: ListUnassignedDto) {
+    const conditions: any[] = [
+      eq(reservations.propertyId, dto.propertyId),
+      isNull(reservations.roomId),
+      inArray(reservations.status, ['confirmed', 'assigned'] as any),
+    ];
+    if (dto.from) {
+      conditions.push(gte(reservations.arrivalDate, dto.from));
+    }
+    if (dto.to) {
+      conditions.push(lte(reservations.arrivalDate, dto.to));
+    }
+
+    const whereClause = and(...conditions);
+
+    const [rows, countResult] = await Promise.all([
+      this.db
+        .select({
+          reservation: reservations,
+          guestFirstName: guests.firstName,
+          guestLastName: guests.lastName,
+          roomTypeName: roomTypes.name,
+        })
+        .from(reservations)
+        .leftJoin(guests, eq(reservations.guestId, guests.id))
+        .leftJoin(roomTypes, eq(reservations.roomTypeId, roomTypes.id))
+        .where(whereClause)
+        .orderBy(reservations.arrivalDate),
+      this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(reservations)
+        .where(whereClause),
+    ]);
+
+    const data = rows.map((r: any) => ({
+      ...r.reservation,
+      guestName: r.guestFirstName ? `${r.guestFirstName} ${r.guestLastName}` : null,
+      roomTypeName: r.roomTypeName,
+      reasonHint: 'no_room_assigned',
+    }));
+
+    return { data, total: Number(countResult[0]?.count ?? 0) };
   }
 
   async modify(id: string, propertyId: string, dto: ModifyReservationDto) {

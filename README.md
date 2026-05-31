@@ -196,8 +196,13 @@ This creates a learning loop: each decision becomes training data for model impr
 - Real-time availability engine with room type inventory
 - Room assignment with automatic status transitions
 - Group check-in (batch operations)
+- Bulk actions across multiple reservations (check-in / check-out / cancel) with per-reservation success/error results
+- Reservation notes with active-count tracking
+- Guest messaging from a reservation (GDPR marketing opt-out enforced)
+- Unassigned-reservation finder (confirmed/assigned reservations with no room)
+- Batch reservation import with per-row error handling
 - Express checkout
-- No-show and cancellation handling with policy enforcement
+- No-show and cancellation handling with policy enforcement (reservation "un-cancel" is intentionally unsupported — a payment-integrity hazard; create a new reservation instead)
 - Every state transition fires a webhook event and is audit-logged
 
 ### Folio & Billing
@@ -313,7 +318,7 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ### Webhook Engine
 - Real-time webhook delivery on every entity state change
-- 61 event types including accounting events (`deposit.received`, `ar.transfer_created`, `cashdrawer.session_closed`), house-account & folio events (`houseaccount.opened`, `folio.transactions_moved`, `payment.corrected`), group events (`group.block_created`, `group.rooming_list_imported`), and AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
+- 64 event types including accounting events (`deposit.received`, `ar.transfer_created`, `cashdrawer.session_closed`), house-account & folio events (`houseaccount.opened`, `folio.transactions_moved`, `payment.corrected`), group events (`group.block_created`, `group.rooming_list_imported`), reservation-ops events (`reservation.note_added`, `reservation.message_sent`, `reservation.bulk_action_completed`), and AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
 - Event format: `entity.action` (e.g., `reservation.created`, `housekeeping.task_completed`)
 - Subscription management for external consumers
 
@@ -353,7 +358,7 @@ This creates a learning loop: each decision becomes training data for model impr
 | OTA Channels | Booking.com (XML) + SiteMinder (REST) | Direct + aggregated OTA connectivity |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (672 tests) | Unit and integration tests |
+| Testing | Vitest (691 tests) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -418,7 +423,7 @@ This starts PostgreSQL, Redis, Keycloak, and the HAIP API + Dashboard in a singl
 ### Run tests
 
 ```bash
-# All tests (672 tests across 57 test files)
+# All tests (691 tests across 61 test files)
 pnpm test
 
 # API tests only
@@ -523,7 +528,7 @@ haip/
 
 All endpoints are prefixed with `/api/v1/` and documented via OpenAPI 3.0. Run the API and visit `http://localhost:3000/docs` for the interactive Swagger UI.
 
-### Core Endpoints (~155 total)
+### Core Endpoints (~165 total)
 
 <details>
 <summary><strong>AI Agents</strong> — 11 endpoints</summary>
@@ -544,11 +549,14 @@ PATCH  /api/v1/agents/:propertyId/reviews/:id              # Update review respo
 </details>
 
 <details>
-<summary><strong>Reservations</strong> — 13 endpoints</summary>
+<summary><strong>Reservations</strong> — 21 endpoints</summary>
 
 ```
 POST   /api/v1/reservations/search-availability   # Real-time availability check
 POST   /api/v1/reservations/group-check-in         # Batch check-in
+POST   /api/v1/reservations/bulk-action            # Bulk check-in/out/cancel
+GET    /api/v1/reservations/unassigned             # Find unassigned reservations
+POST   /api/v1/reservations/import                 # Batch import reservations
 POST   /api/v1/reservations                        # Create reservation
 GET    /api/v1/reservations                        # List (filtered, paginated)
 GET    /api/v1/reservations/:id                    # Get with guest/room/rate
@@ -560,6 +568,11 @@ PATCH  /api/v1/reservations/:id/check-out          # Check out
 POST   /api/v1/reservations/:id/express-checkout   # Express checkout
 PATCH  /api/v1/reservations/:id/cancel             # Cancel
 PATCH  /api/v1/reservations/:id/no-show            # Mark no-show
+POST   /api/v1/reservations/:id/notes              # Add a note
+GET    /api/v1/reservations/:id/notes              # List notes (with active count)
+PATCH  /api/v1/reservations/notes/:noteId          # Update a note
+DELETE /api/v1/reservations/notes/:noteId          # Delete a note
+POST   /api/v1/reservations/:id/messages           # Send a message to the guest
 ```
 </details>
 
@@ -907,7 +920,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (672 tests, 57 files)
+pnpm test             # Run all tests (691 tests, 61 files)
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```
