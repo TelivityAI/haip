@@ -8,6 +8,22 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Revenue Manager (RManager) Agent
+
+- **Revenue Manager orchestrator agent** (`revenue_manager`) — a meta-agent that
+  runs the revenue sub-agents in dependency order (demand → pricing, overbooking,
+  channel mix, group pickup) and reconciles their outputs into one coherent
+  revenue strategy. Grounded in established RM doctrine: optimizes **GOPPAR** over
+  raw revenue, moves price with demand band and booking pace, protects peak dates
+  with length-of-stay controls and zero overbooking, enforces rate-grid integrity
+  (no discount fires on strong demand), evaluates group displacement on net
+  contribution, and treats discounting as a last resort.
+- Pure, unit-tested decision logic (`revenue-manager.models.ts`, 20 tests):
+  demand-band classification, RevPAR/GOPPAR, the identical-net-revenue rule,
+  group-displacement accept test, per-date stance derivation, and horizon
+  synthesis with projected RevPAR/GOPPAR.
+- Adds `revenue_manager` to the `agent_type` enum (schema + idempotent push).
+
 ### Added — Reservation Operations
 
 - **Bulk actions** — check-in / check-out / cancel across many reservations in

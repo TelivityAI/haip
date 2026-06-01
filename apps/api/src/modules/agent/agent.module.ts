@@ -13,6 +13,7 @@ import { GuestCommunicationAgent } from './guest-comms/guest-communication.agent
 import { ReviewResponseAgent } from './review-response/review-response.agent';
 import { ArCollectionsAgent } from './ar-collections/ar-collections.agent';
 import { GroupPickupAgent } from './group-pickup/group-pickup.agent';
+import { RevenueManagerAgent } from './revenue-manager/revenue-manager.agent';
 import { EmailService } from './guest-comms/email.service';
 
 @Module({
@@ -32,6 +33,7 @@ import { EmailService } from './guest-comms/email.service';
     ReviewResponseAgent,
     ArCollectionsAgent,
     GroupPickupAgent,
+    RevenueManagerAgent,
   ],
   exports: [AgentService, DemandForecastAgent],
 })

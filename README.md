@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
   <img src="https://img.shields.io/badge/Tests-551%20passing-brightgreen" alt="551 Tests Passing" />
-  <img src="https://img.shields.io/badge/AI%20Agents-9%20built--in-blueviolet" alt="9 AI Agents" />
+  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -36,7 +36,7 @@
 
 The hotel industry runs on closed-source, legacy PMS platforms that charge per-room fees, lock data behind proprietary APIs, and treat integrations as an afterthought. Hotels pay $5–15/room/month just for the privilege of managing their own operations.
 
-HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **11 built-in AI agents** that optimize revenue, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
+HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
 
 What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and learning loop. HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
@@ -80,6 +80,7 @@ graph TB
 
         subgraph AI["AI Agent Framework"]
             direction LR
+            RManager["Revenue Manager<br/>(Orchestrator)"]
             DemandAgent["Demand<br/>Forecasting"]
             PricingAgent["Dynamic<br/>Pricing"]
             ChannelMix["Channel-Mix<br/>Optimization"]
@@ -127,7 +128,7 @@ graph TB
 
 - **Multi-tenant from day one** — `property_id` on every table, designed for portfolio operators managing multiple hotels
 - **Event-driven** — Webhook events on every state change (`reservation.created`, `folio.charge_posted`, `room.status_changed`). Build anything on top.
-- **AI agents as first-class citizens** — 9 built-in agents with a common interface: `analyze() → recommend() → execute()`. Three operating modes: manual, suggest, autopilot. Decision logging for continuous learning.
+- **AI agents as first-class citizens** — 12 built-in agents with a common interface: `analyze() → recommend() → execute()`, coordinated by a Revenue Manager orchestrator. Three operating modes: manual, suggest, autopilot. Decision logging for continuous learning.
 - **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. Booking.com direct adapter + SiteMinder adapter for 450+ OTA reach
 - **Keycloak RBAC** — JWT authentication with role-based access control (admin, front_desk, housekeeping, revenue_manager). Guards on every endpoint.
 - **Compliance as infrastructure** — PCI tokenization (Stripe), GDPR audit trails, jurisdiction-based tax calculation, guest registration per jurisdiction. Not bolted on — built in.
@@ -137,7 +138,7 @@ graph TB
 
 ## AI Agents
 
-HAIP includes **11 built-in AI agents** — 4 for revenue management, 5 for operations intelligence, and 2 for guest engagement. Every agent follows the `HaipAgent` interface:
+HAIP includes **12 built-in AI agents** — 5 for revenue management (including the Revenue Manager orchestrator), 5 for operations intelligence, and 2 for guest engagement. Every agent follows the `HaipAgent` interface:
 
 ```
 analyze() → recommend() → execute() → recordOutcome() → train()
@@ -155,6 +156,7 @@ analyze() → recommend() → execute() → recordOutcome() → train()
 
 | Agent | What It Does |
 |-------|-------------|
+| **Revenue Manager (RManager)** | The revenue **orchestrator**. Runs the levers below in dependency order (demand first, then pricing, overbooking, channel mix, group pickup) and reconciles them into one coherent strategy grounded in established RM doctrine: optimizes **GOPPAR** (profit per available room) over raw revenue, moves price with demand band and booking pace, protects peak dates with length-of-stay controls and zero overbooking, keeps the rate grid internally consistent, evaluates group displacement on net contribution, and treats discounting as a last resort. Surfaces conflicts between levers and projects RevPAR/GOPPAR across the horizon. |
 | **Demand Forecasting** | Predicts future occupancy using weighted moving averages with day-of-week seasonality, booking pace, and last-minute demand signals. Heuristic model → statistical model progression. |
 | **Dynamic Pricing** | Calculates optimal room rates based on demand tier, booking pace, lead-time decay, and weekend premiums. Enforces floor/ceiling rate constraints. |
 | **Channel-Mix Optimization** | Ranks OTA channels by net revenue (gross × (1−commission) × (1−cancel_rate)). Recommends allocation shifts and stop-sell when occupancy exceeds thresholds. |
