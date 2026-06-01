@@ -11,6 +11,9 @@ export const agentTypeEnum = pgEnum('agent_type', [
   'cancellation',
   'guest_comms',
   'review_response',
+  'ar_collections',
+  'deposit_risk',
+  'group_pickup',
 ]);
 
 export const agentModeEnum = pgEnum('agent_mode', [

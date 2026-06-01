@@ -83,6 +83,11 @@ export const reservations = pgTable('reservations', {
   // Status
   status: reservationStatusEnum('status').notNull().default('pending'),
 
+  // Group linkage (KB 14.3) — nullable; set when a reservation is a member of a
+  // group profile. FK is enforced at the DB layer via push-schema ALTER to avoid
+  // a circular import (group.ts already references reservations).
+  groupProfileId: uuid('group_profile_id'),
+
   // Rate
   ratePlanId: uuid('rate_plan_id').notNull().references(() => ratePlans.id),
   totalAmount: numeric('total_amount', { precision: 12, scale: 2 }).notNull(),
@@ -125,6 +130,23 @@ export const reservations = pgTable('reservations', {
 
   // Registration card acknowledgment
   registrationSignedAt: timestamp('registration_signed_at', { withTimezone: true }),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Reservation Notes — free-text operational notes attached to a reservation
+ * (front-desk handover, special handling, follow-ups). Property-scoped.
+ * `isActive` supports an active-count badge without hard-deleting history.
+ */
+export const reservationNotes = pgTable('reservation_notes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  reservationId: uuid('reservation_id').notNull().references(() => reservations.id),
+  body: text('body').notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  authorUserId: uuid('author_user_id'), // Staff user who wrote the note (nullable)
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

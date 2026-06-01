@@ -1,8 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { FolioRoutingService } from './folio-routing.service';
 import { FolioService } from './folio.service';
+import { WebhookService } from '../webhook/webhook.service';
 import { DRIZZLE } from '../../database/database.module';
+
+const mockWebhookService = { emit: vi.fn() };
 
 const mockFolio = {
   id: 'folio-001',
@@ -50,6 +53,9 @@ function createMockDb(returnData: any[] = [mockReservation]) {
     select: vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
+          // Routing-rule lookups call .orderBy() and resolve to [] (no rules);
+          // other lookups are awaited directly via .then().
+          orderBy: vi.fn().mockResolvedValue([]),
           then: (resolve: any) => resolve(returnData),
         }),
       }),
@@ -85,6 +91,7 @@ describe('FolioRoutingService', () => {
         FolioRoutingService,
         { provide: DRIZZLE, useValue: mockDb },
         { provide: FolioService, useValue: mockFolioService },
+        { provide: WebhookService, useValue: mockWebhookService },
       ],
     }).compile();
 
@@ -127,14 +134,16 @@ describe('FolioRoutingService', () => {
           }),
         })),
       };
-      // Override select to return folio on second call
-      let callCount = 0;
+      // Select call order in resolveTargetFolio: (1) routing rules .orderBy -> [],
+      // (2) reservation .then, (3) findDefaultFolio .then.
+      let thenCall = 0;
       db.select = vi.fn().mockImplementation(() => ({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockResolvedValue([]),
             then: (resolve: any) => {
-              callCount++;
-              if (callCount === 1) resolve([noRoutingReservation]);
+              thenCall++;
+              if (thenCall === 1) resolve([noRoutingReservation]);
               else resolve([mockFolio]);
             },
           }),
@@ -146,6 +155,7 @@ describe('FolioRoutingService', () => {
           FolioRoutingService,
           { provide: DRIZZLE, useValue: db },
           { provide: FolioService, useValue: mockFolioService },
+          { provide: WebhookService, useValue: mockWebhookService },
         ],
       }).compile();
       const svc = module.get<FolioRoutingService>(FolioRoutingService);
@@ -176,6 +186,7 @@ describe('FolioRoutingService', () => {
           FolioRoutingService,
           { provide: DRIZZLE, useValue: folioDb },
           { provide: FolioService, useValue: mockFolioService },
+          { provide: WebhookService, useValue: mockWebhookService },
         ],
       }).compile();
       const svc = module.get<FolioRoutingService>(FolioRoutingService);
@@ -192,6 +203,7 @@ describe('FolioRoutingService', () => {
           FolioRoutingService,
           { provide: DRIZZLE, useValue: emptyDb },
           { provide: FolioService, useValue: mockFolioService },
+          { provide: WebhookService, useValue: mockWebhookService },
         ],
       }).compile();
       const svc = module.get<FolioRoutingService>(FolioRoutingService);
@@ -199,6 +211,170 @@ describe('FolioRoutingService', () => {
       await expect(svc.findDefaultFolio('res-001', 'prop-001')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('resolveTargetFolio (split-folio rules, KB 14.2)', () => {
+    it('returns the highest-priority routing rule target', async () => {
+      const db: any = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockResolvedValue([
+                { id: 'rule-1', targetFolioId: 'folio-company', priority: 10 },
+              ]),
+              then: (resolve: any) => resolve([]),
+            }),
+          }),
+        })),
+        insert: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      };
+      db.transaction = (cb: any) => cb(db);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioRoutingService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<FolioRoutingService>(FolioRoutingService);
+
+      const target = await svc.resolveTargetFolio('res-001', 'prop-001', 'room');
+      expect(target).toBe('folio-company');
+    });
+  });
+
+  describe('createRoutingRule', () => {
+    it('creates a rule and emits folio.routing_rule_created', async () => {
+      const rule = {
+        id: 'rule-1',
+        propertyId: 'prop-001',
+        reservationId: 'res-001',
+        chargeType: 'room',
+        targetFolioId: 'folio-company',
+        priority: 5,
+      };
+      const db: any = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => resolve([mockReservation]),
+            }),
+          }),
+        })),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([rule]),
+          }),
+        }),
+        update: vi.fn(),
+        delete: vi.fn(),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioRoutingService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<FolioRoutingService>(FolioRoutingService);
+
+      const result = await svc.createRoutingRule('prop-001', {
+        propertyId: 'prop-001',
+        reservationId: 'res-001',
+        chargeType: 'room',
+        targetFolioId: 'folio-company',
+        priority: 5,
+      });
+      expect(result.id).toBe('rule-1');
+      expect(mockWebhookService.emit).toHaveBeenCalledWith(
+        'folio.routing_rule_created',
+        'folio_routing_rule',
+        'rule-1',
+        expect.any(Object),
+        'prop-001',
+      );
+    });
+  });
+
+  describe('moveTransactions (KB 14.2)', () => {
+    function moveDb(matchingCharges: any[]) {
+      let call = 0;
+      const db: any = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              // calls in order: lock firstFolio, lock secondFolio, matching charges
+              for: vi.fn().mockImplementation(() => {
+                const idx = call++;
+                return Promise.resolve([
+                  { ...mockFolio, id: idx === 0 ? 'folio-001' : 'folio-002', status: 'open' },
+                ]);
+              }),
+              then: (resolve: any) => resolve(matchingCharges),
+            }),
+          }),
+        })),
+        insert: vi.fn(),
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+        delete: vi.fn(),
+      };
+      db.transaction = (cb: any) => cb(db);
+      return db;
+    }
+
+    it('moves matching charges and emits folio.transactions_moved', async () => {
+      const db = moveDb([
+        { id: 'charge-001', type: 'room', isLocked: false },
+        { id: 'charge-002', type: 'room', isLocked: false },
+      ]);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioRoutingService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<FolioRoutingService>(FolioRoutingService);
+
+      const result = await svc.moveTransactions('prop-001', 'folio-001', 'folio-002', {
+        chargeType: 'room',
+      });
+      expect(result.moved).toBe(2);
+      expect(mockFolioService.recalculateBalance).toHaveBeenCalledTimes(2);
+      expect(mockWebhookService.emit).toHaveBeenCalledWith(
+        'folio.transactions_moved',
+        'folio',
+        'folio-002',
+        expect.objectContaining({ moved: 2 }),
+        'prop-001',
+      );
+    });
+
+    it('rejects moving locked (night-audited) charges', async () => {
+      const db = moveDb([{ id: 'charge-001', type: 'room', isLocked: true }]);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioRoutingService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<FolioRoutingService>(FolioRoutingService);
+
+      await expect(
+        svc.moveTransactions('prop-001', 'folio-001', 'folio-002', { chargeType: 'room' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

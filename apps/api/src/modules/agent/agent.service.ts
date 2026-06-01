@@ -13,6 +13,7 @@ import type {
 const VALID_AGENT_TYPES = [
   'pricing', 'demand_forecast', 'channel_mix', 'overbooking',
   'night_audit', 'housekeeping', 'cancellation', 'guest_comms', 'review_response',
+  'ar_collections', 'deposit_risk', 'group_pickup',
 ];
 
 @Injectable()

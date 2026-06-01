@@ -104,6 +104,44 @@ export function classifyRisk(probability: number): RiskLevel {
 }
 
 /**
+ * Estimate deposit forfeit/refund exposure for a reservation with a held deposit (KB 10.4).
+ *
+ * A non-refundable deposit is retained as earned revenue when the guest cancels,
+ * so its forfeit likelihood equals the cancellation probability. A refundable
+ * deposit is returned on cancellation, so its refund likelihood equals the
+ * cancellation probability. `exposure` is the deposit amount weighted by the
+ * relevant likelihood. Classification is the dominant outcome (>= 0.5).
+ */
+export function depositForfeitRisk(params: {
+  cancellationProbability: number;
+  isRefundable: boolean;
+  depositAmount: number;
+}): {
+  forfeitLikelihood: number;
+  refundLikelihood: number;
+  exposure: number;
+  classification: 'likely_forfeit' | 'likely_refund' | 'neutral';
+} {
+  const { cancellationProbability, isRefundable, depositAmount } = params;
+
+  const forfeitLikelihood = isRefundable ? 0 : cancellationProbability;
+  const refundLikelihood = isRefundable ? cancellationProbability : 0;
+  const relevantLikelihood = isRefundable ? refundLikelihood : forfeitLikelihood;
+  const exposure = Math.round(depositAmount * relevantLikelihood * 100) / 100;
+
+  let classification: 'likely_forfeit' | 'likely_refund' | 'neutral';
+  if (forfeitLikelihood >= 0.5) {
+    classification = 'likely_forfeit';
+  } else if (refundLikelihood >= 0.5) {
+    classification = 'likely_refund';
+  } else {
+    classification = 'neutral';
+  }
+
+  return { forfeitLikelihood, refundLikelihood, exposure, classification };
+}
+
+/**
  * Aggregate cancellation risk by date.
  */
 export function aggregateByDate(scores: ReservationRiskScore[], arrivalDates: Map<string, string>): DateAggregate[] {

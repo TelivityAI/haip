@@ -36,10 +36,27 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'tax_rule_type' AND e.enumlabel = 'split_component') THEN ALTER TYPE tax_rule_type ADD VALUE 'split_component'; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'review_source') THEN CREATE TYPE review_source AS ENUM ('google','tripadvisor','booking_com','expedia','other'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'review_response_status') THEN CREATE TYPE review_response_status AS ENUM ('pending','drafted','approved','posted'); END IF; END $$`,
-    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_type') THEN CREATE TYPE agent_type AS ENUM ('pricing','demand_forecast','channel_mix','overbooking','night_audit','housekeeping','cancellation','guest_comms','review_response'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_type') THEN CREATE TYPE agent_type AS ENUM ('pricing','demand_forecast','channel_mix','overbooking','night_audit','housekeeping','cancellation','guest_comms','review_response','ar_collections','deposit_risk','group_pickup'); END IF; END $$`,
+    // Idempotent add: append ar_collections / deposit_risk to agent_type if it already existed without them
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'agent_type' AND e.enumlabel = 'ar_collections') THEN ALTER TYPE agent_type ADD VALUE 'ar_collections'; END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'agent_type' AND e.enumlabel = 'deposit_risk') THEN ALTER TYPE agent_type ADD VALUE 'deposit_risk'; END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'agent_type' AND e.enumlabel = 'group_pickup') THEN ALTER TYPE agent_type ADD VALUE 'group_pickup'; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_mode') THEN CREATE TYPE agent_mode AS ENUM ('manual','suggest','autopilot'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_decision_status') THEN CREATE TYPE agent_decision_status AS ENUM ('pending','approved','rejected','auto_executed','expired'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'webhook_delivery_status') THEN CREATE TYPE webhook_delivery_status AS ENUM ('pending','delivered','failed'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'deposit_status') THEN CREATE TYPE deposit_status AS ENUM ('held','applied','refunded','forfeited'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ar_ledger_status') THEN CREATE TYPE ar_ledger_status AS ENUM ('open','closed'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ar_txn_type') THEN CREATE TYPE ar_txn_type AS ENUM ('transfer_in','payment','reverse_transfer','adjustment'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cash_session_status') THEN CREATE TYPE cash_session_status AS ENUM ('open','closed'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cash_movement_type') THEN CREATE TYPE cash_movement_type AS ENUM ('payment','refund','paid_out','drop'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'accounting_code_kind') THEN CREATE TYPE accounting_code_kind AS ENUM ('transaction','gl'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'house_account_kind') THEN CREATE TYPE house_account_kind AS ENUM ('retail','vendor','internal','other'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'house_account_status') THEN CREATE TYPE house_account_status AS ENUM ('open','closed'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'folio_target_role') THEN CREATE TYPE folio_target_role AS ENUM ('guest','company'); END IF; END $$`,
+    // Groups & Allotment Engine (KB 14.3–14.7)
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'group_type') THEN CREATE TYPE group_type AS ENUM ('corporate','travel_agent','wholesale','event','other'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'block_status') THEN CREATE TYPE block_status AS ENUM ('tentative','definite','released','cancelled'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'rooming_list_entry_status') THEN CREATE TYPE rooming_list_entry_status AS ENUM ('pending','created','error'); END IF; END $$`,
   ];
 
   for (const e of enums) {
@@ -525,6 +542,208 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       delivered_at timestamptz
     )`,
+    // deposit_ledger_entries (KB 10)
+    `CREATE TABLE IF NOT EXISTS deposit_ledger_entries (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      reservation_id uuid REFERENCES reservations(id),
+      payment_id uuid REFERENCES payments(id),
+      amount numeric(12,2) NOT NULL,
+      currency_code varchar(3) NOT NULL,
+      status deposit_status NOT NULL DEFAULT 'held',
+      is_refundable boolean NOT NULL DEFAULT true,
+      received_at timestamptz NOT NULL DEFAULT now(),
+      recognized_at timestamptz,
+      notes text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // ar_ledgers (KB 11)
+    `CREATE TABLE IF NOT EXISTS ar_ledgers (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      name varchar(255) NOT NULL,
+      description text,
+      payment_terms_days varchar(10),
+      status ar_ledger_status NOT NULL DEFAULT 'open',
+      balance numeric(12,2) NOT NULL DEFAULT 0,
+      currency_code varchar(3) NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // ar_transactions (KB 11)
+    `CREATE TABLE IF NOT EXISTS ar_transactions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      ar_ledger_id uuid NOT NULL REFERENCES ar_ledgers(id),
+      type ar_txn_type NOT NULL,
+      amount numeric(12,2) NOT NULL,
+      currency_code varchar(3) NOT NULL,
+      source_folio_id uuid REFERENCES folios(id),
+      reversed_by_id uuid REFERENCES ar_transactions(id),
+      note text,
+      created_by uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // cash_drawers (KB 12)
+    `CREATE TABLE IF NOT EXISTS cash_drawers (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      name varchar(255) NOT NULL,
+      starting_float numeric(12,2) NOT NULL DEFAULT 0,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // cash_drawer_sessions (KB 12)
+    `CREATE TABLE IF NOT EXISTS cash_drawer_sessions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      cash_drawer_id uuid NOT NULL REFERENCES cash_drawers(id),
+      cashier_user_id uuid NOT NULL,
+      status cash_session_status NOT NULL DEFAULT 'open',
+      opening_float numeric(12,2) NOT NULL,
+      expected_balance numeric(12,2),
+      counted_balance numeric(12,2),
+      variance numeric(12,2),
+      opened_at timestamptz NOT NULL DEFAULT now(),
+      closed_at timestamptz
+    )`,
+    // cash_movements (KB 12)
+    `CREATE TABLE IF NOT EXISTS cash_movements (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      session_id uuid NOT NULL REFERENCES cash_drawer_sessions(id),
+      type cash_movement_type NOT NULL,
+      amount numeric(12,2) NOT NULL,
+      reservation_id uuid,
+      note text,
+      created_by uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // accounting_codes (KB 5)
+    `CREATE TABLE IF NOT EXISTS accounting_codes (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      kind accounting_code_kind NOT NULL,
+      code varchar(50) NOT NULL,
+      label varchar(255) NOT NULL,
+      applies_to varchar(50),
+      archived boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // house_accounts (KB 13) — property-scoped ledger, NO reservation/guest link
+    `CREATE TABLE IF NOT EXISTS house_accounts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      name varchar(255) NOT NULL,
+      kind house_account_kind NOT NULL DEFAULT 'retail',
+      status house_account_status NOT NULL DEFAULT 'open',
+      balance numeric(12,2) NOT NULL DEFAULT 0,
+      total_charges numeric(12,2) NOT NULL DEFAULT 0,
+      total_payments numeric(12,2) NOT NULL DEFAULT 0,
+      currency_code varchar(3) NOT NULL,
+      notes text,
+      opened_by uuid,
+      opened_at timestamptz NOT NULL DEFAULT now(),
+      closed_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // products (KB 13.3) — retail / item catalog
+    `CREATE TABLE IF NOT EXISTS products (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      category varchar(100),
+      name varchar(255) NOT NULL,
+      price numeric(12,2) NOT NULL,
+      currency_code varchar(3) NOT NULL,
+      tax_code varchar(20),
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // folio_routing_rules (KB 14.2)
+    `CREATE TABLE IF NOT EXISTS folio_routing_rules (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      reservation_id uuid NOT NULL REFERENCES reservations(id),
+      charge_type charge_type NOT NULL,
+      target_folio_id uuid NOT NULL REFERENCES folios(id),
+      priority integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // Groups & Allotment Engine (KB 14.3–14.7)
+    `CREATE TABLE IF NOT EXISTS group_profiles (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      name varchar(255) NOT NULL,
+      type group_type NOT NULL DEFAULT 'corporate',
+      contact_name varchar(255),
+      contact_email varchar(255),
+      contact_phone varchar(30),
+      master_folio_id uuid REFERENCES folios(id),
+      notes text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS allotment_blocks (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      group_profile_id uuid NOT NULL REFERENCES group_profiles(id),
+      name varchar(255) NOT NULL,
+      rate_plan_id uuid REFERENCES rate_plans(id),
+      start_date date NOT NULL,
+      end_date date NOT NULL,
+      cutoff_date date,
+      auto_release boolean NOT NULL DEFAULT true,
+      shoulder_start date,
+      shoulder_end date,
+      min_los integer,
+      max_los integer,
+      group_code varchar(50),
+      status block_status NOT NULL DEFAULT 'tentative',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS allotment_block_inventory (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      allotment_block_id uuid NOT NULL REFERENCES allotment_blocks(id),
+      stay_date date NOT NULL,
+      room_type_id uuid NOT NULL REFERENCES room_types(id),
+      rooms_allotted integer NOT NULL DEFAULT 0,
+      rooms_picked_up integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS rooming_list_entries (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      allotment_block_id uuid NOT NULL REFERENCES allotment_blocks(id),
+      guest_name varchar(255) NOT NULL,
+      arrival date,
+      departure date,
+      room_type_id uuid REFERENCES room_types(id),
+      reservation_id uuid REFERENCES reservations(id),
+      status rooming_list_entry_status NOT NULL DEFAULT 'pending',
+      error_note text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // reservation_notes (Tier 4 — Reservation Operations Polish)
+    `CREATE TABLE IF NOT EXISTS reservation_notes (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      reservation_id uuid NOT NULL REFERENCES reservations(id),
+      body text NOT NULL,
+      is_active boolean NOT NULL DEFAULT true,
+      author_user_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
   ];
 
   for (const t of tables) {
@@ -534,6 +753,16 @@ async function main() {
   // Idempotent column additions for pre-existing databases
   const alters = [
     `ALTER TABLE tax_rules ADD COLUMN IF NOT EXISTS split_percentage numeric(5,2)`,
+    // House accounts reuse charges/payments (KB 13): folio_id becomes nullable,
+    // add house_account_id. A row belongs to EITHER a folio OR a house account.
+    `ALTER TABLE charges ALTER COLUMN folio_id DROP NOT NULL`,
+    `ALTER TABLE charges ADD COLUMN IF NOT EXISTS house_account_id uuid`,
+    `ALTER TABLE payments ALTER COLUMN folio_id DROP NOT NULL`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS house_account_id uuid`,
+    // Group linkage on reservations (KB 14.3) — added via ALTER to avoid a
+    // circular FK at table-create time (group_profiles references nothing of
+    // reservations, but reservations is created before group_profiles).
+    `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS group_profile_id uuid`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));

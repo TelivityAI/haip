@@ -22,6 +22,10 @@ import { EventsModule } from './modules/events/events.module';
 import { TaxModule } from './modules/tax/tax.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AgentModule } from './modules/agent/agent.module';
+import { AccountingModule } from './modules/accounting/accounting.module';
+import { CashierModule } from './modules/cashier/cashier.module';
+import { HouseAccountModule } from './modules/house-account/house-account.module';
+import { GroupsModule } from './modules/groups/groups.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -48,6 +52,10 @@ const imports: any[] = [
   TaxModule,
   AuthModule,
   AgentModule,
+  AccountingModule,
+  CashierModule,
+  HouseAccountModule,
+  GroupsModule,
 ];
 
 // Serve dashboard static files in production

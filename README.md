@@ -36,7 +36,7 @@
 
 The hotel industry runs on closed-source, legacy PMS platforms that charge per-room fees, lock data behind proprietary APIs, and treat integrations as an afterthought. Hotels pay $5–15/room/month just for the privilege of managing their own operations.
 
-HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **9 built-in AI agents** that optimize revenue, predict cancellations, detect audit anomalies, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
+HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **11 built-in AI agents** that optimize revenue, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
 
 What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and learning loop. HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
@@ -137,7 +137,7 @@ graph TB
 
 ## AI Agents
 
-HAIP includes **9 built-in AI agents** — 4 for revenue management, 3 for operations intelligence, and 2 for guest engagement. Every agent follows the `HaipAgent` interface:
+HAIP includes **11 built-in AI agents** — 4 for revenue management, 5 for operations intelligence, and 2 for guest engagement. Every agent follows the `HaipAgent` interface:
 
 ```
 analyze() → recommend() → execute() → recordOutcome() → train()
@@ -164,9 +164,11 @@ analyze() → recommend() → execute() → recordOutcome() → train()
 
 | Agent | What It Does |
 |-------|-------------|
-| **Night Audit Anomaly Detection** | Scans checked-in reservations and folios for 10 anomaly types: unposted charges, missing tax, payment mismatches, stale check-ins, duplicate folios, unusual charges (z-score > 2.5 statistical outlier detection). Ranked by severity (critical/warning/info) and confidence. |
+| **Night Audit Anomaly Detection** | Scans checked-in reservations, folios, and closed cashier shifts for 11 anomaly types: unposted charges, missing tax, payment mismatches, stale check-ins, duplicate folios, unusual charges, and cash-drawer variance outliers (z-score > 2.5 statistical outlier detection). Ranked by severity (critical/warning/info) and confidence. |
 | **Housekeeping Optimization** | Builds workload-balanced cleaning schedules. Prioritizes VIP and early check-in rooms, groups by floor for route efficiency, estimates cleaning times by task type (checkout 30min, stayover 20min, deep clean 60min, suite 45min). |
-| **Cancellation Prediction** | Scores every active reservation with a cancellation probability based on booking source (OTA 25% base vs direct 8%), deposit status, repeat guest history, VIP level, lead time, and days until arrival. Aggregates risk by date for overbooking decisions. |
+| **Cancellation Prediction** | Scores every active reservation with a cancellation probability based on booking source (OTA 25% base vs direct 8%), deposit status, repeat guest history, VIP level, lead time, and days until arrival. Adds **deposit-forfeit risk** scoring on held deposits (likely-forfeit vs likely-refund exposure). Aggregates risk by date for overbooking decisions. |
+| **A/R Collections Prioritization** | Ranks open Accounts Receivable ledgers by collection priority — weighing outstanding balance, days overdue beyond payment terms, and open transfer count — into low/medium/high risk tiers with a recommended action (monitor, send reminder, send final notice). |
+| **Group Pickup Forecasting** | Projects final pickup vs. wash/attrition for each allotment block ahead of its cutoff date, using current pickup pace and historical pickup rate. Recommends hold / partial-release / full-release with a suggested release quantity to recover unsold inventory. |
 
 ### Guest Engagement Agents
 
@@ -194,8 +196,13 @@ This creates a learning loop: each decision becomes training data for model impr
 - Real-time availability engine with room type inventory
 - Room assignment with automatic status transitions
 - Group check-in (batch operations)
+- Bulk actions across multiple reservations (check-in / check-out / cancel) with per-reservation success/error results
+- Reservation notes with active-count tracking
+- Guest messaging from a reservation (GDPR marketing opt-out enforced)
+- Unassigned-reservation finder (confirmed/assigned reservations with no room)
+- Batch reservation import with per-row error handling
 - Express checkout
-- No-show and cancellation handling with policy enforcement
+- No-show and cancellation handling with policy enforcement (reservation "un-cancel" is intentionally unsupported — a payment-integrity hazard; create a new reservation instead)
 - Every state transition fires a webhook event and is audit-logged
 
 ### Folio & Billing
@@ -205,6 +212,25 @@ This creates a learning loop: each decision becomes training data for model impr
 - Charge reversal, transfer between folios, and city ledger transfer
 - Folio settlement and close workflows
 - Charge locking for night audit
+
+### Split Folios & House Accounts
+- **Split folio** — multiple folios per reservation with config-driven routing rules (e.g. room & tax → company folio, incidentals → guest folio) and the ability to move transactions between folios individually or by charge type (night-audit-locked charges are protected).
+- **House accounts** — a non-guest ledger for walk-in retail, bar/restaurant, vendor, or internal sales not tied to any reservation. Open/close lifecycle, a product catalog for retail sales, and charge/payment posting on the same unified ledger as folios (keeps room vs. non-room revenue distinct in reports).
+- **Correction matrix** — a payment-state-aware correction policy that picks the safe operation automatically: **void** uncaptured authorizations (and same-day cash), **refund** captured card payments, or post a compensating **adjustment** when neither applies. Illegal overrides (e.g. voiding a captured card) are rejected.
+
+### Groups & Allotment
+- **Group profiles** — master records for corporate, travel-agent, wholesale, and event business, with an optional group (master) folio and computed group invoices.
+- **Allotment blocks** — hold a quantity of rooms per date and room type at negotiated rates, with cutoff dates, shoulder dates, and Min/Max LOS. Inventory is validated against live availability so a block can't over-allot.
+- **Cutoff & auto-release** — release unsold rooms back to general inventory at the cutoff date, per block or via a sweep endpoint that processes all expired auto-release blocks.
+- **Pickup tracking** — rooms allotted vs. picked up, per date and room type, with pickup rate.
+- **Rooming lists** — batch-import a group's guest roster; each row creates and links a reservation and increments pickup, with per-row success/error handling that never aborts the batch.
+
+### Accounting & Cashiering
+- **Deposit Ledger** — advance deposits tracked as a liability (not revenue) with a full recognition lifecycle: `held → applied` (at check-in/checkout), `refunded`, or `forfeited`. Refundable vs. non-refundable handling, with status-transition guards.
+- **Accounts Receivable** — named A/R ledgers for post-stay direct billing; transfer an outstanding folio balance to A/R (zeroing the folio), record A/R payments, reverse transfers with a preserved audit trail, and aging buckets (0–30 / 31–60 / 61–90 / 90+).
+- **Cash Drawer & Cashiering** — per-drawer cash tracking with shift sessions, cash movements (payment, refund, paid-out, drop), shift close with expected-vs-counted **variance** detection, and a cashier's report.
+- **Daily Trial Balance** — reconciliation across the Deposit, Guest, and A/R ledgers (opening + activity = closing).
+- **Custom Accounting Codes** — user-defined transaction and General Ledger (GL) codes for export to external accounting systems.
 
 ### Rate Plans & Pricing
 - BAR (Best Available Rate), derived rates, and negotiated rates
@@ -242,7 +268,7 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ### Night Audit & Reporting
 - Automated night audit: room revenue posting, no-show processing, rate validation, day close
-- AI anomaly detection: 10 anomaly types with severity ranking and confidence scores
+- AI anomaly detection: 11 anomaly types (incl. cash-drawer variance) with severity ranking and confidence scores
 - Daily revenue reports with department breakdown
 - Occupancy reports with ADR (Average Daily Rate) and RevPAR
 - Financial summaries with revenue categories
@@ -292,7 +318,7 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ### Webhook Engine
 - Real-time webhook delivery on every entity state change
-- 35+ event types including AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
+- 64 event types including accounting events (`deposit.received`, `ar.transfer_created`, `cashdrawer.session_closed`), house-account & folio events (`houseaccount.opened`, `folio.transactions_moved`, `payment.corrected`), group events (`group.block_created`, `group.rooming_list_imported`), reservation-ops events (`reservation.note_added`, `reservation.message_sent`, `reservation.bulk_action_completed`), and AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
 - Event format: `entity.action` (e.g., `reservation.created`, `housekeeping.task_completed`)
 - Subscription management for external consumers
 
@@ -332,7 +358,7 @@ This creates a learning loop: each decision becomes training data for model impr
 | OTA Channels | Booking.com (XML) + SiteMinder (REST) | Direct + aggregated OTA connectivity |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (551 tests) | Unit and integration tests |
+| Testing | Vitest (691 tests) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -397,7 +423,7 @@ This starts PostgreSQL, Redis, Keycloak, and the HAIP API + Dashboard in a singl
 ### Run tests
 
 ```bash
-# All tests (551 tests across 45 test files)
+# All tests (691 tests across 61 test files)
 pnpm test
 
 # API tests only
@@ -502,7 +528,7 @@ haip/
 
 All endpoints are prefixed with `/api/v1/` and documented via OpenAPI 3.0. Run the API and visit `http://localhost:3000/docs` for the interactive Swagger UI.
 
-### Core Endpoints (~100 total)
+### Core Endpoints (~165 total)
 
 <details>
 <summary><strong>AI Agents</strong> — 11 endpoints</summary>
@@ -523,11 +549,14 @@ PATCH  /api/v1/agents/:propertyId/reviews/:id              # Update review respo
 </details>
 
 <details>
-<summary><strong>Reservations</strong> — 13 endpoints</summary>
+<summary><strong>Reservations</strong> — 21 endpoints</summary>
 
 ```
 POST   /api/v1/reservations/search-availability   # Real-time availability check
 POST   /api/v1/reservations/group-check-in         # Batch check-in
+POST   /api/v1/reservations/bulk-action            # Bulk check-in/out/cancel
+GET    /api/v1/reservations/unassigned             # Find unassigned reservations
+POST   /api/v1/reservations/import                 # Batch import reservations
 POST   /api/v1/reservations                        # Create reservation
 GET    /api/v1/reservations                        # List (filtered, paginated)
 GET    /api/v1/reservations/:id                    # Get with guest/room/rate
@@ -539,6 +568,11 @@ PATCH  /api/v1/reservations/:id/check-out          # Check out
 POST   /api/v1/reservations/:id/express-checkout   # Express checkout
 PATCH  /api/v1/reservations/:id/cancel             # Cancel
 PATCH  /api/v1/reservations/:id/no-show            # Mark no-show
+POST   /api/v1/reservations/:id/notes              # Add a note
+GET    /api/v1/reservations/:id/notes              # List notes (with active count)
+PATCH  /api/v1/reservations/notes/:noteId          # Update a note
+DELETE /api/v1/reservations/notes/:noteId          # Delete a note
+POST   /api/v1/reservations/:id/messages           # Send a message to the guest
 ```
 </details>
 
@@ -558,6 +592,96 @@ POST   /api/v1/folios/:id/charges/:chargeId/reverse # Reverse charge
 POST   /api/v1/folios/:id/charges/lock             # Lock charges
 POST   /api/v1/folios/:id/transfer-charge          # Transfer charge
 POST   /api/v1/folios/:id/transfer-to-city-ledger  # Transfer to city ledger
+POST   /api/v1/folios/routing-rules                # Create a split-folio routing rule
+GET    /api/v1/folios/routing-rules                # List routing rules (by reservation)
+POST   /api/v1/folios/:id/move-transactions        # Move charges between folios
+```
+</details>
+
+<details>
+<summary><strong>House Accounts & Products</strong> — 11 endpoints</summary>
+
+```
+POST   /api/v1/products                            # Create retail product
+GET    /api/v1/products                            # List products
+GET    /api/v1/products/:id                         # Get product
+PATCH  /api/v1/products/:id                         # Update product
+POST   /api/v1/house-accounts                      # Open a house account
+GET    /api/v1/house-accounts                      # List house accounts
+GET    /api/v1/house-accounts/:id                   # Get house account
+POST   /api/v1/house-accounts/:id/close            # Close house account
+POST   /api/v1/house-accounts/:id/charges          # Post a charge
+POST   /api/v1/house-accounts/:id/payments         # Record a payment
+POST   /api/v1/house-accounts/:id/sell             # Sell a product (retail)
+```
+</details>
+
+<details>
+<summary><strong>Groups & Allotment</strong> — 16 endpoints</summary>
+
+```
+# Group Profiles
+POST   /api/v1/groups/profiles                     # Create group profile
+GET    /api/v1/groups/profiles                     # List group profiles
+GET    /api/v1/groups/profiles/:id                  # Get group profile
+PATCH  /api/v1/groups/profiles/:id                  # Update group profile
+POST   /api/v1/groups/profiles/:id/reservations    # Link a reservation to the group
+GET    /api/v1/groups/profiles/:id/folio            # Get the group (master) folio
+POST   /api/v1/groups/profiles/:id/invoice         # Generate a group invoice
+# Allotment Blocks
+POST   /api/v1/groups/blocks                        # Create allotment block
+GET    /api/v1/groups/blocks                        # List blocks
+POST   /api/v1/groups/blocks/process-cutoffs       # Release all expired auto-release blocks
+GET    /api/v1/groups/blocks/:id                     # Get block
+PATCH  /api/v1/groups/blocks/:id                     # Update block
+PUT    /api/v1/groups/blocks/:id/inventory          # Set per-date/room-type allotment
+GET    /api/v1/groups/blocks/:id/pickup             # Pickup vs. allotted
+POST   /api/v1/groups/blocks/:id/release            # Release block (free unsold rooms)
+POST   /api/v1/groups/blocks/:id/rooming-list       # Import rooming list
+```
+</details>
+
+<details>
+<summary><strong>Accounting — Deposits, A/R & GL Codes</strong> — 20 endpoints</summary>
+
+```
+# Deposit Ledger
+POST   /api/v1/deposits                            # Record a deposit (held liability)
+GET    /api/v1/deposits                            # List deposits (filtered)
+GET    /api/v1/deposits/:id                         # Get deposit
+POST   /api/v1/deposits/:id/apply                  # Apply deposit to folio (recognize)
+POST   /api/v1/deposits/:id/refund                 # Refund a refundable deposit
+POST   /api/v1/deposits/:id/forfeit                # Forfeit (non-refundable → revenue)
+# Accounts Receivable
+POST   /api/v1/ar/ledgers                          # Create A/R ledger
+GET    /api/v1/ar/ledgers                          # List A/R ledgers
+GET    /api/v1/ar/ledgers/:id                       # Get A/R ledger
+PATCH  /api/v1/ar/ledgers/:id                       # Update A/R ledger
+POST   /api/v1/ar/ledgers/:id/close                # Close A/R ledger
+POST   /api/v1/ar/transfer                          # Transfer folio balance to A/R (zero folio)
+POST   /api/v1/ar/transactions/:id/reverse         # Reverse a transfer (audit-safe)
+POST   /api/v1/ar/ledgers/:id/payments             # Record an A/R payment
+GET    /api/v1/ar/ledgers/:id/aging                # Aging buckets (0–30/31–60/61–90/90+)
+# Accounting Codes
+POST   /api/v1/accounting/codes                    # Create transaction/GL code
+GET    /api/v1/accounting/codes                    # List codes
+GET    /api/v1/accounting/codes/:id                 # Get code
+PATCH  /api/v1/accounting/codes/:id                 # Update code
+POST   /api/v1/accounting/codes/:id/archive        # Archive code
+```
+</details>
+
+<details>
+<summary><strong>Cashier — Cash Drawer</strong> — 7 endpoints</summary>
+
+```
+POST   /api/v1/cash/drawers                        # Create cash drawer
+GET    /api/v1/cash/drawers/:id                     # Get drawer
+POST   /api/v1/cash/sessions                       # Open a cashier shift session
+GET    /api/v1/cash/sessions/:id                    # Get session
+POST   /api/v1/cash/sessions/:id/movements         # Record cash movement
+POST   /api/v1/cash/sessions/:id/close             # Close shift (variance check)
+GET    /api/v1/cash/sessions/:id/report            # Cashier's report
 ```
 </details>
 
@@ -660,9 +784,11 @@ GET    /api/v1/payments/:id                        # Get payment
 POST   /api/v1/payments/:id/capture                # Capture authorized
 POST   /api/v1/payments/:id/void                   # Void payment
 POST   /api/v1/payments/:id/refund                 # Refund payment
+POST   /api/v1/payments/:id/correct                # Correct payment (void/refund/adjust)
 
-# Reports — 4 endpoints
+# Reports — 5 endpoints
 GET    /api/v1/reports/daily-revenue               # Daily revenue report
+GET    /api/v1/reports/trial-balance               # Daily trial balance (deposit/guest/A-R)
 GET    /api/v1/reports/occupancy                   # Occupancy report
 GET    /api/v1/reports/financial-summary            # Financial summary
 GET    /api/v1/reports/occupancy-trend              # Occupancy trend
@@ -794,7 +920,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (551 tests, 45 files)
+pnpm test             # Run all tests (691 tests, 61 files)
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```
