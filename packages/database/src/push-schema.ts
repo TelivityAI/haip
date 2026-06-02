@@ -758,6 +758,8 @@ async function main() {
     // add house_account_id. A row belongs to EITHER a folio OR a house account.
     `ALTER TABLE charges ALTER COLUMN folio_id DROP NOT NULL`,
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS house_account_id uuid`,
+    // Split-component tax charges link to their parent charge (self-FK).
+    `ALTER TABLE charges ADD COLUMN IF NOT EXISTS parent_charge_id uuid`,
     `ALTER TABLE payments ALTER COLUMN folio_id DROP NOT NULL`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS house_account_id uuid`,
     // Group linkage on reservations (KB 14.3) — added via ALTER to avoid a
