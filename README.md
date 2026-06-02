@@ -369,58 +369,70 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ## Quick Start
 
-### Prerequisites
+### 🚀 Try it in one command
 
-- Node.js ≥ 20
-- pnpm ≥ 9
-- Docker & Docker Compose
-
-### Run locally (development)
+The only prerequisite is **Docker**. No Node, no pnpm, no API keys, no config.
 
 ```bash
-# Clone the repository
-git clone https://github.com/telivity-otaip/haip.git
+git clone https://github.com/TelivityAI/haip.git
 cd haip
-
-# Start PostgreSQL + Redis + Keycloak
-docker compose up -d postgres redis keycloak
-
-# Install dependencies
-pnpm install
-
-# Copy environment config
-cp .env.example .env
-# Configure: KEYCLOAK_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-# Optional SMTP for guest emails: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
-
-# Build workspace packages (database + shared)
-pnpm build
-
-# Run database migrations (pushes schema to Postgres)
-pnpm --filter @telivityhaip/database run migrate
-
-# Seed demo data (Telivity Grand Hotel)
-pnpm --filter @telivityhaip/database run seed
-
-# Start the API (with hot reload)
-pnpm dev
-
-# In a separate terminal — start the dashboard
-pnpm --filter @telivityhaip/dashboard dev
-```
-
-- API: `http://localhost:3000`
-- Swagger docs: `http://localhost:3000/docs`
-- Dashboard: `http://localhost:5173`
-- Keycloak admin: `http://localhost:8080`
-
-### Run with Docker (production)
-
-```bash
 docker compose up
 ```
 
-This starts PostgreSQL, Redis, Keycloak, and the HAIP API + Dashboard in a single stack. The dashboard is served as static files by NestJS in production mode.
+That's it. Compose builds the image, initializes the database, **seeds a full demo
+hotel with the AI agents already running**, and serves everything at one URL:
+
+- **Dashboard:** `http://localhost:3000`
+- **Swagger / OpenAPI:** `http://localhost:3000/docs`
+
+The first run builds the image and can take a few minutes; subsequent starts are
+fast. A one-shot `init` container pushes the schema and seeds the demo before the
+API starts (idempotent — safe to re-run). Auth is **off by default** so you land
+straight in the app; to explore the Keycloak login/RBAC flow instead, run
+`docker compose --profile auth up` and set `AUTH_ENABLED=true`.
+
+> One-click cloud demo: see [Deploy to the cloud](#deploy-to-the-cloud) to spin up
+> a hosted instance with zero local setup.
+
+### Local development
+
+For hot-reload development against the source (requires **Node ≥ 20** and **pnpm ≥ 9**):
+
+```bash
+git clone https://github.com/TelivityAI/haip.git
+cd haip
+
+# Start only the infra (Postgres + Redis); add `keycloak` if testing auth
+docker compose up -d postgres redis
+
+pnpm install
+cp .env.example .env          # defaults work as-is — no keys needed for a demo
+
+pnpm build                    # build workspace packages
+pnpm --filter @telivityhaip/database run migrate   # push schema
+pnpm --filter @telivityhaip/database run seed       # seed demo data
+
+pnpm dev                                            # API with hot reload (:3000)
+pnpm --filter @telivityhaip/dashboard dev           # dashboard dev server (:5173)
+```
+
+- API: `http://localhost:3000` · Swagger: `http://localhost:3000/docs`
+- Dashboard (dev server, proxies `/api` → API): `http://localhost:5173`
+- Keycloak admin (only with `--profile auth`): `http://localhost:8080`
+
+> Payments default to `STRIPE_MODE=mock` and guest email to draft-only, so no
+> Stripe or SMTP credentials are required. Set real keys in `.env` only when you
+> want live payments/email.
+
+### Deploy to the cloud
+
+One-click deploy a hosted demo (provisions Postgres + Redis, builds, migrates, and
+seeds automatically) using the included [`render.yaml`](./render.yaml) blueprint:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/TelivityAI/haip)
+
+Any Docker host works too — the [`apps/api/Dockerfile`](./apps/api/Dockerfile)
+builds a single image serving both the API and the dashboard on port 3000.
 
 ### Run tests
 
@@ -449,16 +461,22 @@ The seed script creates a fully configured demo property with realistic data:
 
 | Entity | Count | Details |
 |--------|-------|---------|
-| Property | 1 | Telivity Grand Hotel — 4-star, 85 rooms, USD, America/New_York |
-| Room Types | 5 | Standard King, Standard Double, Deluxe King, Junior Suite, Executive Suite |
-| Rooms | 85 | Across 8 floors with real room numbers, 5 ADA-accessible rooms |
-| Rate Plans | 4 | BAR, AAA Discount (-15%), Corporate (-20%), Weekend Package |
-| Guests | 20 | Mix of VIP levels (standard through diamond), loyalty tiers |
-| Reservations | 30 | Spread across all statuses: confirmed, checked-in, checked-out, cancelled |
-| Folios | 15 | With charges: room revenue, F&B, minibar, parking |
-| Housekeeping Tasks | 12 | Checkout cleans, stayovers, deep cleans with checklists |
+| Property | 1 | Telivity Grand Hotel — 5-star, 40 rooms, Miami Beach, USD, America/New_York |
+| Room Types | 4 | Standard King, Deluxe Ocean View, Junior Suite, Penthouse Suite |
+| Rooms | 40 | Across 4 floors with real room numbers, mixed statuses, 2 ADA-accessible |
+| Rate Plans | 5 | BAR per room type + a seasonal promotional rate, with LOS/weekend restrictions |
+| Guests | 15 | Mix of VIP levels (none through diamond), international, loyalty tiers |
+| Reservations | 23 | Past, in-house, arrivals, future, no-show, and cancelled |
+| Folios | 16 | With charges (room, tax, minibar, spa) and payments |
+| Housekeeping Tasks | 18 | Checkout cleans, stayovers, deep cleans, inspections with checklists |
+| Tax Profiles | 4 | Miami Beach 13%, Barcelona IVA+tourist, Amsterdam BTW+tourist, Berlin split |
+| **AI Agents** | **12** | **Enabled in suggest mode — incl. the Revenue Manager orchestrator** |
+| **Agent Decisions** | **10** | **A live decision log: revenue strategy, pricing, forecast, overbooking…** |
+| **Guest Reviews** | **5** | **Two with AI-drafted responses, the rest awaiting action** |
 
-Use this data to explore the API and dashboard immediately after setup.
+Everything is populated on first boot, so the dashboard — including the AI layer
+(Revenue Manager, agent decision log, review responses) — is alive immediately,
+not empty. Use it to explore the API and dashboard right after `docker compose up`.
 
 ---
 
