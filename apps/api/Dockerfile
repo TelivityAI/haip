@@ -44,6 +44,9 @@ COPY --from=base /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=base /app/apps/dashboard/dist ./apps/dashboard/dist
 COPY --from=base /app/packages/database/dist ./packages/database/dist
 COPY --from=base /app/packages/database/package.json ./packages/database/
+# database's own node_modules (postgres, drizzle-orm) — needed so the
+# init container can run the compiled migrate/seed scripts standalone.
+COPY --from=base /app/packages/database/node_modules ./packages/database/node_modules
 COPY --from=base /app/packages/shared/dist ./packages/shared/dist
 COPY --from=base /app/packages/shared/package.json ./packages/shared/
 
