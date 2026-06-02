@@ -811,6 +811,232 @@ async function main() {
   ]);
 
   // -----------------------------------------------------------------------
+  // 12. AI layer — agent configs, decisions, and reviews
+  //     Makes the "AI agents as first-class citizens" story visible on a fresh
+  //     demo: agents enabled in suggest mode, a populated decision log (incl. the
+  //     Revenue Manager orchestrator), and reviews with drafted responses.
+  // -----------------------------------------------------------------------
+  const enabledAgents = [
+    'revenue_manager', 'pricing', 'demand_forecast', 'overbooking',
+    'channel_mix', 'group_pickup', 'review_response', 'guest_comms',
+    'cancellation', 'ar_collections', 'night_audit', 'housekeeping',
+  ] as const;
+
+  const agentConfigPresets: Record<string, Record<string, unknown>> = {
+    revenue_manager: { objective: 'goppar', variableCostPerRoom: 25, fcpar: 60, baselineAdr: null, horizonDays: 30 },
+    pricing: { maxAdjustmentPct: 30, revparTarget: 120, weekendPremiumPct: 15, pricingHorizonDays: 30 },
+    overbooking: { maxOverbookingPct: 5 },
+  };
+
+  await db.insert(schema.agentConfigs).values(
+    enabledAgents.map((agentType, i) => ({
+      id: sid('a6000001', i + 1),
+      propertyId,
+      agentType: agentType as any,
+      isEnabled: true,
+      mode: 'suggest' as const,
+      config: agentConfigPresets[agentType] ?? {},
+      lastRunAt: ts(0, 6, 0),
+    })),
+  );
+
+  // A realistic decision log spanning agents, statuses, and recent timestamps.
+  await db.insert(schema.agentDecisions).values([
+    {
+      id: sid('a6100001', 1),
+      propertyId,
+      agentType: 'revenue_manager' as any,
+      decisionType: 'revenue_strategy',
+      confidence: '0.88',
+      status: 'pending' as const,
+      createdAt: ts(0, 6, 5),
+      inputSnapshot: { objective: 'goppar', horizonDays: 30, baselineAdr: 289, forecastDays: 30 },
+      recommendation: {
+        objective: 'goppar',
+        horizonDays: 30,
+        summary: {
+          avgOccupancy: 0.78, peakDates: [dateStr(3), dateStr(4)], lowDates: [dateStr(16)],
+          raiseDates: 11, holdDates: 14, lowerDates: 5, minLosDates: 2,
+          projectedRevPAR: 231.4, projectedGOPPAR: 96.2,
+          guardrails: ['optimize_goppar_not_revenue_alone', 'discounting_is_last_resort', 'rate_grid_integrity_enforced'],
+        },
+        perDate: [
+          { date: dateStr(3), demandLevel: 'peak', priceDirection: 'raise', priceAdjustmentPct: 18, losControl: 'min_los', overbooking: 'zero' },
+          { date: dateStr(4), demandLevel: 'peak', priceDirection: 'raise', priceAdjustmentPct: 22, losControl: 'min_los', overbooking: 'zero' },
+          { date: dateStr(16), demandLevel: 'low', priceDirection: 'lower', priceAdjustmentPct: -10, losControl: 'none', overbooking: 'aggressive' },
+        ],
+      },
+    },
+    {
+      id: sid('a6100001', 2),
+      propertyId,
+      agentType: 'demand_forecast' as any,
+      decisionType: 'demand_forecast',
+      confidence: '0.81',
+      status: 'auto_executed' as const,
+      executedAt: ts(0, 6, 2),
+      createdAt: ts(0, 6, 1),
+      inputSnapshot: { historyDays: 365, totalRooms: 40, modelType: 'heuristic' },
+      recommendation: { forecastHorizon: 90, modelType: 'heuristic', summary: { avgOccupancy: 0.78, peakDates: [dateStr(3), dateStr(4)], lowDates: [dateStr(16)] } },
+    },
+    {
+      id: sid('a6100001', 3),
+      propertyId,
+      agentType: 'pricing' as any,
+      decisionType: 'rate_adjustment',
+      confidence: '0.83',
+      status: 'approved' as const,
+      executedAt: ts(-1, 9, 30),
+      createdAt: ts(-1, 9, 0),
+      inputSnapshot: { ratePlanCount: 5, forecastDays: 30 },
+      recommendation: {
+        summary: { totalAdjustments: 16, avgAdjustmentPct: 12.4, estimatedRevenueImpact: 4820 },
+        adjustments: [
+          { ratePlanId: sid('a3000001', 2), date: dateStr(3), currentRate: 289, recommendedRate: 341, adjustmentPct: 18, reason: 'demand_surge, weekend_premium' },
+          { ratePlanId: sid('a3000001', 2), date: dateStr(4), currentRate: 289, recommendedRate: 353, adjustmentPct: 22, reason: 'demand_surge' },
+        ],
+      },
+    },
+    {
+      id: sid('a6100001', 4),
+      propertyId,
+      agentType: 'overbooking' as any,
+      decisionType: 'overbooking_level',
+      confidence: '0.79',
+      status: 'pending' as const,
+      createdAt: ts(0, 6, 3),
+      inputSnapshot: { horizonDays: 14 },
+      recommendation: { date: dateStr(7), recommendedOverbooking: 2, expectedNoShows: 2.4, walkRisk: 'low' },
+    },
+    {
+      id: sid('a6100001', 5),
+      propertyId,
+      agentType: 'channel_mix' as any,
+      decisionType: 'channel_allocation',
+      confidence: '0.76',
+      status: 'approved' as const,
+      executedAt: ts(-2, 11, 0),
+      createdAt: ts(-2, 10, 30),
+      inputSnapshot: { channelsAnalyzed: 2 },
+      recommendation: { recommendations: [{ channel: 'Booking.com', action: 'shift_allocation', detail: 'net RevPAR higher on direct; trim OTA allotment 10%' }] },
+    },
+    {
+      id: sid('a6100001', 6),
+      propertyId,
+      agentType: 'group_pickup' as any,
+      decisionType: 'group_pickup_forecast',
+      confidence: '0.74',
+      status: 'pending' as const,
+      createdAt: ts(0, 6, 4),
+      inputSnapshot: { blocksAnalyzed: 1 },
+      recommendation: { block: 'Alumni Reunion', cutoffDate: dateStr(10), projectedPickup: 0.72, recommendation: 'partial_release', suggestedReleaseQty: 8 },
+    },
+    {
+      id: sid('a6100001', 7),
+      propertyId,
+      agentType: 'cancellation' as any,
+      decisionType: 'cancellation_risk',
+      confidence: '0.69',
+      status: 'pending' as const,
+      createdAt: ts(0, 7, 0),
+      inputSnapshot: { reservationsScored: 23 },
+      recommendation: { highRisk: 3, summary: 'OTA + no-deposit arrivals flagged for the coming weekend' },
+    },
+    {
+      id: sid('a6100001', 8),
+      propertyId,
+      agentType: 'ar_collections' as any,
+      decisionType: 'collection_priority',
+      confidence: '0.85',
+      status: 'pending' as const,
+      createdAt: ts(-1, 8, 0),
+      inputSnapshot: { ledgersAnalyzed: 4 },
+      recommendation: { highPriority: 1, action: 'send_final_notice', summary: 'one direct-bill ledger > 30 days overdue' },
+    },
+    {
+      id: sid('a6100001', 9),
+      propertyId,
+      agentType: 'review_response' as any,
+      decisionType: 'review_response_draft',
+      confidence: '0.9',
+      status: 'approved' as const,
+      executedAt: ts(-3, 13, 0),
+      createdAt: ts(-3, 12, 30),
+      inputSnapshot: { reviewId: sid('a6200001', 1), rating: 5 },
+      recommendation: { sentiment: 'positive', topics: ['staff', 'cleanliness'], style: 'friendly' },
+    },
+    {
+      id: sid('a6100001', 10),
+      propertyId,
+      agentType: 'night_audit' as any,
+      decisionType: 'anomaly_scan',
+      confidence: '0.82',
+      status: 'auto_executed' as const,
+      executedAt: ts(-1, 3, 0),
+      createdAt: ts(-1, 3, 0),
+      inputSnapshot: { foliosScanned: 16, shiftsScanned: 1 },
+      recommendation: { anomalies: 1, topAnomaly: { type: 'unposted_charge', severity: 'warning' } },
+    },
+  ]);
+
+  // Guest reviews — some already responded to (AI-drafted), some awaiting action.
+  await db.insert(schema.guestReviews).values([
+    {
+      id: sid('a6200001', 1),
+      propertyId,
+      source: 'google' as any,
+      guestName: 'Michael Chen',
+      rating: 5,
+      reviewText: 'Outstanding stay. The ocean-view room was spotless and the front-desk team upgraded us at check-in. Will be back.',
+      stayDate: dateStr(-12),
+      responseStatus: 'posted' as const,
+      responseText: 'Thank you so much, Michael! We are delighted the ocean-view room and our team made your stay memorable — we look forward to welcoming you back to Telivity Grand.',
+      respondedAt: ts(-10, 10, 0),
+    },
+    {
+      id: sid('a6200001', 2),
+      propertyId,
+      source: 'tripadvisor' as any,
+      guestName: 'Sofia Alvarez',
+      rating: 4,
+      reviewText: 'Great location and lovely pool. Check-in was a little slow on a busy evening, but the staff were friendly throughout.',
+      stayDate: dateStr(-9),
+      responseStatus: 'drafted' as const,
+      responseText: 'Thank you for the kind words, Sofia! We are glad you enjoyed the pool and location, and we are reviewing our evening check-in staffing to make arrivals quicker. We hope to see you again.',
+    },
+    {
+      id: sid('a6200001', 3),
+      propertyId,
+      source: 'booking_com' as any,
+      guestName: 'Tom Whitfield',
+      rating: 3,
+      reviewText: 'Comfortable bed and good breakfast, but the room AC was noisy at night. Decent value overall.',
+      stayDate: dateStr(-7),
+      responseStatus: 'pending' as const,
+    },
+    {
+      id: sid('a6200001', 4),
+      propertyId,
+      source: 'expedia' as any,
+      guestName: 'Yuki Tanaka',
+      rating: 5,
+      reviewText: 'Impeccable service and a beautiful suite. The concierge arranged everything perfectly.',
+      stayDate: dateStr(-5),
+      responseStatus: 'pending' as const,
+    },
+    {
+      id: sid('a6200001', 5),
+      propertyId,
+      source: 'google' as any,
+      guestName: 'Greta Hoffmann',
+      rating: 2,
+      reviewText: 'Nice property but we were charged for a minibar item we did not use. It was corrected at checkout but took a while.',
+      stayDate: dateStr(-3),
+      responseStatus: 'pending' as const,
+    },
+  ]);
+
+  // -----------------------------------------------------------------------
   // Done
   // -----------------------------------------------------------------------
   console.log('Seed complete.');
@@ -826,6 +1052,9 @@ async function main() {
   console.log('  Channels:      2 connections');
   console.log('  Webhooks:      1 subscription');
   console.log('  Tax Profiles:  4 (Miami Beach 13%, Barcelona IVA+tourist, Amsterdam BTW+tourist, Berlin split-component)');
+  console.log('  AI Agents:     12 enabled (suggest mode, incl. Revenue Manager orchestrator)');
+  console.log('  Agent Log:     10 decisions (RManager strategy, pricing, forecast, overbooking, ...)');
+  console.log('  Reviews:       5 (2 with AI-drafted responses)');
 
   await client.end();
 }

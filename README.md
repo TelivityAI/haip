@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
   <img src="https://img.shields.io/badge/Tests-551%20passing-brightgreen" alt="551 Tests Passing" />
-  <img src="https://img.shields.io/badge/AI%20Agents-9%20built--in-blueviolet" alt="9 AI Agents" />
+  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -36,7 +36,7 @@
 
 The hotel industry runs on closed-source, legacy PMS platforms that charge per-room fees, lock data behind proprietary APIs, and treat integrations as an afterthought. Hotels pay $5–15/room/month just for the privilege of managing their own operations.
 
-HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **11 built-in AI agents** that optimize revenue, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
+HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
 
 What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and learning loop. HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
@@ -80,6 +80,7 @@ graph TB
 
         subgraph AI["AI Agent Framework"]
             direction LR
+            RManager["Revenue Manager<br/>(Orchestrator)"]
             DemandAgent["Demand<br/>Forecasting"]
             PricingAgent["Dynamic<br/>Pricing"]
             ChannelMix["Channel-Mix<br/>Optimization"]
@@ -127,7 +128,7 @@ graph TB
 
 - **Multi-tenant from day one** — `property_id` on every table, designed for portfolio operators managing multiple hotels
 - **Event-driven** — Webhook events on every state change (`reservation.created`, `folio.charge_posted`, `room.status_changed`). Build anything on top.
-- **AI agents as first-class citizens** — 9 built-in agents with a common interface: `analyze() → recommend() → execute()`. Three operating modes: manual, suggest, autopilot. Decision logging for continuous learning.
+- **AI agents as first-class citizens** — 12 built-in agents with a common interface: `analyze() → recommend() → execute()`, coordinated by a Revenue Manager orchestrator. Three operating modes: manual, suggest, autopilot. Decision logging for continuous learning.
 - **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. Booking.com direct adapter + SiteMinder adapter for 450+ OTA reach
 - **Keycloak RBAC** — JWT authentication with role-based access control (admin, front_desk, housekeeping, revenue_manager). Guards on every endpoint.
 - **Compliance as infrastructure** — PCI tokenization (Stripe), GDPR audit trails, jurisdiction-based tax calculation, guest registration per jurisdiction. Not bolted on — built in.
@@ -137,7 +138,7 @@ graph TB
 
 ## AI Agents
 
-HAIP includes **11 built-in AI agents** — 4 for revenue management, 5 for operations intelligence, and 2 for guest engagement. Every agent follows the `HaipAgent` interface:
+HAIP includes **12 built-in AI agents** — 5 for revenue management (including the Revenue Manager orchestrator), 5 for operations intelligence, and 2 for guest engagement. Every agent follows the `HaipAgent` interface:
 
 ```
 analyze() → recommend() → execute() → recordOutcome() → train()
@@ -155,6 +156,7 @@ analyze() → recommend() → execute() → recordOutcome() → train()
 
 | Agent | What It Does |
 |-------|-------------|
+| **Revenue Manager (RManager)** | The revenue **orchestrator**. Runs the levers below in dependency order (demand first, then pricing, overbooking, channel mix, group pickup) and reconciles them into one coherent strategy grounded in established RM doctrine: optimizes **GOPPAR** (profit per available room) over raw revenue, moves price with demand band and booking pace, protects peak dates with length-of-stay controls and zero overbooking, keeps the rate grid internally consistent, evaluates group displacement on net contribution, and treats discounting as a last resort. Surfaces conflicts between levers and projects RevPAR/GOPPAR across the horizon. |
 | **Demand Forecasting** | Predicts future occupancy using weighted moving averages with day-of-week seasonality, booking pace, and last-minute demand signals. Heuristic model → statistical model progression. |
 | **Dynamic Pricing** | Calculates optimal room rates based on demand tier, booking pace, lead-time decay, and weekend premiums. Enforces floor/ceiling rate constraints. |
 | **Channel-Mix Optimization** | Ranks OTA channels by net revenue (gross × (1−commission) × (1−cancel_rate)). Recommends allocation shifts and stop-sell when occupancy exceeds thresholds. |
@@ -367,58 +369,70 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ## Quick Start
 
-### Prerequisites
+### 🚀 Try it in one command
 
-- Node.js ≥ 20
-- pnpm ≥ 9
-- Docker & Docker Compose
-
-### Run locally (development)
+The only prerequisite is **Docker**. No Node, no pnpm, no API keys, no config.
 
 ```bash
-# Clone the repository
-git clone https://github.com/telivity-otaip/haip.git
+git clone https://github.com/TelivityAI/haip.git
 cd haip
-
-# Start PostgreSQL + Redis + Keycloak
-docker compose up -d postgres redis keycloak
-
-# Install dependencies
-pnpm install
-
-# Copy environment config
-cp .env.example .env
-# Configure: KEYCLOAK_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-# Optional SMTP for guest emails: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
-
-# Build workspace packages (database + shared)
-pnpm build
-
-# Run database migrations (pushes schema to Postgres)
-pnpm --filter @telivityhaip/database run migrate
-
-# Seed demo data (Telivity Grand Hotel)
-pnpm --filter @telivityhaip/database run seed
-
-# Start the API (with hot reload)
-pnpm dev
-
-# In a separate terminal — start the dashboard
-pnpm --filter @telivityhaip/dashboard dev
-```
-
-- API: `http://localhost:3000`
-- Swagger docs: `http://localhost:3000/docs`
-- Dashboard: `http://localhost:5173`
-- Keycloak admin: `http://localhost:8080`
-
-### Run with Docker (production)
-
-```bash
 docker compose up
 ```
 
-This starts PostgreSQL, Redis, Keycloak, and the HAIP API + Dashboard in a single stack. The dashboard is served as static files by NestJS in production mode.
+That's it. Compose builds the image, initializes the database, **seeds a full demo
+hotel with the AI agents already running**, and serves everything at one URL:
+
+- **Dashboard:** `http://localhost:3000`
+- **Swagger / OpenAPI:** `http://localhost:3000/docs`
+
+The first run builds the image and can take a few minutes; subsequent starts are
+fast. A one-shot `init` container pushes the schema and seeds the demo before the
+API starts (idempotent — safe to re-run). Auth is **off by default** so you land
+straight in the app; to explore the Keycloak login/RBAC flow instead, run
+`docker compose --profile auth up` and set `AUTH_ENABLED=true`.
+
+> One-click cloud demo: see [Deploy to the cloud](#deploy-to-the-cloud) to spin up
+> a hosted instance with zero local setup.
+
+### Local development
+
+For hot-reload development against the source (requires **Node ≥ 20** and **pnpm ≥ 9**):
+
+```bash
+git clone https://github.com/TelivityAI/haip.git
+cd haip
+
+# Start only the infra (Postgres + Redis); add `keycloak` if testing auth
+docker compose up -d postgres redis
+
+pnpm install
+cp .env.example .env          # defaults work as-is — no keys needed for a demo
+
+pnpm build                    # build workspace packages
+pnpm --filter @telivityhaip/database run migrate   # push schema
+pnpm --filter @telivityhaip/database run seed       # seed demo data
+
+pnpm dev                                            # API with hot reload (:3000)
+pnpm --filter @telivityhaip/dashboard dev           # dashboard dev server (:5173)
+```
+
+- API: `http://localhost:3000` · Swagger: `http://localhost:3000/docs`
+- Dashboard (dev server, proxies `/api` → API): `http://localhost:5173`
+- Keycloak admin (only with `--profile auth`): `http://localhost:8080`
+
+> Payments default to `STRIPE_MODE=mock` and guest email to draft-only, so no
+> Stripe or SMTP credentials are required. Set real keys in `.env` only when you
+> want live payments/email.
+
+### Deploy to the cloud
+
+One-click deploy a hosted demo (provisions Postgres + Redis, builds, migrates, and
+seeds automatically) using the included [`render.yaml`](./render.yaml) blueprint:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/TelivityAI/haip)
+
+Any Docker host works too — the [`apps/api/Dockerfile`](./apps/api/Dockerfile)
+builds a single image serving both the API and the dashboard on port 3000.
 
 ### Run tests
 
@@ -447,16 +461,22 @@ The seed script creates a fully configured demo property with realistic data:
 
 | Entity | Count | Details |
 |--------|-------|---------|
-| Property | 1 | Telivity Grand Hotel — 4-star, 85 rooms, USD, America/New_York |
-| Room Types | 5 | Standard King, Standard Double, Deluxe King, Junior Suite, Executive Suite |
-| Rooms | 85 | Across 8 floors with real room numbers, 5 ADA-accessible rooms |
-| Rate Plans | 4 | BAR, AAA Discount (-15%), Corporate (-20%), Weekend Package |
-| Guests | 20 | Mix of VIP levels (standard through diamond), loyalty tiers |
-| Reservations | 30 | Spread across all statuses: confirmed, checked-in, checked-out, cancelled |
-| Folios | 15 | With charges: room revenue, F&B, minibar, parking |
-| Housekeeping Tasks | 12 | Checkout cleans, stayovers, deep cleans with checklists |
+| Property | 1 | Telivity Grand Hotel — 5-star, 40 rooms, Miami Beach, USD, America/New_York |
+| Room Types | 4 | Standard King, Deluxe Ocean View, Junior Suite, Penthouse Suite |
+| Rooms | 40 | Across 4 floors with real room numbers, mixed statuses, 2 ADA-accessible |
+| Rate Plans | 5 | BAR per room type + a seasonal promotional rate, with LOS/weekend restrictions |
+| Guests | 15 | Mix of VIP levels (none through diamond), international, loyalty tiers |
+| Reservations | 23 | Past, in-house, arrivals, future, no-show, and cancelled |
+| Folios | 16 | With charges (room, tax, minibar, spa) and payments |
+| Housekeeping Tasks | 18 | Checkout cleans, stayovers, deep cleans, inspections with checklists |
+| Tax Profiles | 4 | Miami Beach 13%, Barcelona IVA+tourist, Amsterdam BTW+tourist, Berlin split |
+| **AI Agents** | **12** | **Enabled in suggest mode — incl. the Revenue Manager orchestrator** |
+| **Agent Decisions** | **10** | **A live decision log: revenue strategy, pricing, forecast, overbooking…** |
+| **Guest Reviews** | **5** | **Two with AI-drafted responses, the rest awaiting action** |
 
-Use this data to explore the API and dashboard immediately after setup.
+Everything is populated on first boot, so the dashboard — including the AI layer
+(Revenue Manager, agent decision log, review responses) — is alive immediately,
+not empty. Use it to explore the API and dashboard right after `docker compose up`.
 
 ---
 

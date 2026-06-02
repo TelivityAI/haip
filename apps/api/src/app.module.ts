@@ -58,8 +58,10 @@ const imports: any[] = [
   GroupsModule,
 ];
 
-// Serve dashboard static files in production
-if (process.env['NODE_ENV'] === 'production') {
+// Serve the bundled dashboard as static files. Enabled in production, or
+// whenever SERVE_DASHBOARD=true — so the one-command demo can serve the UI at
+// the same origin as the API while keeping NODE_ENV=development (Swagger, etc.).
+if (process.env['NODE_ENV'] === 'production' || process.env['SERVE_DASHBOARD'] === 'true') {
   imports.push(
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'dashboard', 'dist'),

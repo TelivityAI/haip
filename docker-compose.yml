@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL — multi-tenant from day one
   postgres:
@@ -34,10 +32,15 @@ services:
       timeout: 5s
       retries: 5
 
-  # Keycloak — OIDC provider for authentication & RBAC
+  # Keycloak — OIDC provider for authentication & RBAC.
+  # Behind the `auth` profile: the default `docker compose up` runs auth-free
+  # (AUTH_ENABLED=false) for a fast, lean demo. Start it with:
+  #   docker compose --profile auth up
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
     container_name: haip-keycloak
+    profiles:
+      - auth
     command: start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: admin
@@ -61,14 +64,35 @@ services:
       retries: 10
       start_period: 30s
 
+  # One-shot DB init — pushes the schema and seeds the demo hotel, then exits.
+  # Runs the compiled scripts from the production image (no tsx/source needed).
+  # Idempotent: schema uses IF NOT EXISTS; seed skips if property 'TGH' exists.
+  init:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: haip-api
+    container_name: haip-init
+    command: sh -c "node packages/database/dist/push-schema.js && node packages/database/dist/seed.js"
+    environment:
+      DATABASE_URL: postgresql://haip:haip@postgres:5432/haip
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
   # HAIP API
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    image: haip-api
     container_name: haip-api
     environment:
       NODE_ENV: development
+      # Serve the bundled dashboard at the same origin as the API (port 3000),
+      # so the one-command demo has a single URL. (Auth stays off by default.)
+      SERVE_DASHBOARD: 'true'
       PORT: 3000
       DATABASE_URL: postgresql://haip:haip@postgres:5432/haip
       REDIS_URL: redis://redis:6379
@@ -94,6 +118,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      init:
+        condition: service_completed_successfully
     # For local dev, mount source and use watch mode
     # volumes:
     #   - ./apps/api/src:/app/apps/api/src
