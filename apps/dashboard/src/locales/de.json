@@ -1,0 +1,32 @@
+{
+  "nav": {
+    "tagline": "",
+    "mainNavigation": "",
+    "closeMenu": "",
+    "dashboard": "",
+    "frontDesk": "",
+    "reservations": "Reservierungen",
+    "guests": "Gäste",
+    "rooms": "Zimmer",
+    "housekeeping": "",
+    "foliosBilling": "",
+    "ratePlans": "",
+    "revenueManagement": "",
+    "nightAudit": "",
+    "reports": "",
+    "channels": "",
+    "communications": "",
+    "reviews": "",
+    "settings": ""
+  },
+  "header": {
+    "selectProperty": "Unterkunft auswählen",
+    "openMenu": "",
+    "notifications": "",
+    "logout": "",
+    "user": "",
+    "statusLive": "",
+    "statusOffline": "",
+    "language": "Sprache"
+  }
+}
