@@ -1,0 +1,28 @@
+{
+  "name": "@telivityhaip/haip-connect-gpt",
+  "version": "0.0.1",
+  "private": true,
+  "description": "ChatGPT Custom GPT gateway for HAIP — proxies the HAIP Connect API, serves a ChatGPT-importable OpenAPI 3.1 spec, and logs every tool call (PII-scrubbed) to Supabase.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@supabase/supabase-js": "^2.45.4",
+    "fastify": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}
