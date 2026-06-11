@@ -288,6 +288,7 @@ async function main() {
       service_date timestamptz NOT NULL,
       is_reversal boolean NOT NULL DEFAULT false,
       original_charge_id uuid,
+      parent_charge_id uuid REFERENCES charges(id),
       is_locked boolean NOT NULL DEFAULT false,
       locked_by_audit_date timestamp,
       posted_by uuid,
