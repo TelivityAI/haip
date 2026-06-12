@@ -12,6 +12,9 @@ export const WEBHOOK_EVENTS = {
   'reservation.checked_in': 'reservation.checked_in',
   'reservation.checked_out': 'reservation.checked_out',
   'reservation.no_show': 'reservation.no_show',
+  'reservation.note_added': 'reservation.note_added',
+  'reservation.message_sent': 'reservation.message_sent',
+  'reservation.bulk_action_completed': 'reservation.bulk_action_completed',
 
   // Folio events
   'folio.created': 'folio.created',
@@ -60,6 +63,44 @@ export const WEBHOOK_EVENTS = {
   'guest.communication_drafted': 'guest.communication_drafted',
   'guest.communication_sent': 'guest.communication_sent',
   'guest.review_response_drafted': 'guest.review_response_drafted',
+
+  // Deposit ledger events (KB 10)
+  'deposit.received': 'deposit.received',
+  'deposit.applied': 'deposit.applied',
+  'deposit.refunded': 'deposit.refunded',
+  'deposit.forfeited': 'deposit.forfeited',
+
+  // Accounts Receivable events (KB 11)
+  'ar.ledger_created': 'ar.ledger_created',
+  'ar.transfer_created': 'ar.transfer_created',
+  'ar.transfer_reversed': 'ar.transfer_reversed',
+  'ar.payment_recorded': 'ar.payment_recorded',
+
+  // Cash drawer / cashiering events (KB 12)
+  'cashdrawer.session_opened': 'cashdrawer.session_opened',
+  'cashdrawer.movement_recorded': 'cashdrawer.movement_recorded',
+  'cashdrawer.session_closed': 'cashdrawer.session_closed',
+
+  // House account events (KB 13)
+  'houseaccount.opened': 'houseaccount.opened',
+  'houseaccount.closed': 'houseaccount.closed',
+  'houseaccount.charge_posted': 'houseaccount.charge_posted',
+  'houseaccount.payment_recorded': 'houseaccount.payment_recorded',
+
+  // Split-folio events (KB 14.2)
+  'folio.transactions_moved': 'folio.transactions_moved',
+  'folio.routing_rule_created': 'folio.routing_rule_created',
+
+  // Payment correction matrix (KB 14.1)
+  'payment.corrected': 'payment.corrected',
+
+  // Groups & Allotment Engine (KB 14.3–14.7)
+  'group.profile_created': 'group.profile_created',
+  'group.block_created': 'group.block_created',
+  'group.inventory_set': 'group.inventory_set',
+  'group.block_released': 'group.block_released',
+  'group.rooming_list_imported': 'group.rooming_list_imported',
+  'group.reservation_linked': 'group.reservation_linked',
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;

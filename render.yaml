@@ -1,0 +1,54 @@
+# HAIP — Render Blueprint (one-click cloud demo)
+#
+# Deploy a fully-working HAIP demo (API + dashboard + AI agents, seeded) with no
+# local setup. Render provisions Postgres + Redis, builds the Docker image, runs
+# migrate+seed via preDeployCommand, then serves the app.
+#
+# Use the "Deploy to Render" button in the README, or:
+#   render blueprint launch   (Render CLI)
+#
+# Note: plan names/tiers change over time — adjust `plan:` values to match the
+# tiers available in your Render account if a deploy is rejected.
+
+services:
+  - type: web
+    name: haip-demo
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /api/v1/health
+    # Push schema + seed the demo hotel before each deploy goes live.
+    # Idempotent (schema IF NOT EXISTS; seed skips if property 'TGH' exists),
+    # so redeploys are safe. Runs in the built image (compiled dist, no tsx).
+    preDeployCommand: 'node packages/database/dist/push-schema.js && node packages/database/dist/seed.js'
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_DASHBOARD
+        value: 'true'
+      - key: PORT
+        value: '3000'
+      - key: AUTH_ENABLED
+        value: 'false'
+      - key: STRIPE_MODE
+        value: mock
+      - key: DATABASE_URL
+        fromDatabase:
+          name: haip-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: haip-redis
+          property: connectionString
+
+  - type: redis
+    name: haip-redis
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList: [] # only reachable from services in this blueprint
+
+databases:
+  - name: haip-postgres
+    plan: free

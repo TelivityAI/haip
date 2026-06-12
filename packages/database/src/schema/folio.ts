@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum, uniq
 import { properties } from './property.js';
 import { reservations, bookings } from './reservation.js';
 import { guests } from './guest.js';
+import { houseAccounts } from './house-account.js';
 
 /**
  * Folio types (KB 5.4):
@@ -84,7 +85,10 @@ export const chargeTypeEnum = pgEnum('charge_type', [
 export const charges = pgTable('charges', {
   id: uuid('id').primaryKey().defaultRandom(),
   propertyId: uuid('property_id').notNull().references(() => properties.id),
-  folioId: uuid('folio_id').notNull().references(() => folios.id),
+  // folioId is nullable: a charge belongs to EITHER a folio OR a house account
+  // (KB 13 — house accounts reuse the charges ledger but have no folio).
+  folioId: uuid('folio_id').references(() => folios.id),
+  houseAccountId: uuid('house_account_id').references(() => houseAccounts.id),
 
   type: chargeTypeEnum('type').notNull(),
   description: varchar('description', { length: 255 }).notNull(),
@@ -145,7 +149,10 @@ export const paymentStatusEnum = pgEnum('payment_status', [
 export const payments = pgTable('payments', {
   id: uuid('id').primaryKey().defaultRandom(),
   propertyId: uuid('property_id').notNull().references(() => properties.id),
-  folioId: uuid('folio_id').notNull().references(() => folios.id),
+  // folioId is nullable: a payment belongs to EITHER a folio OR a house account
+  // (KB 13 — house accounts reuse the payments ledger but have no folio).
+  folioId: uuid('folio_id').references(() => folios.id),
+  houseAccountId: uuid('house_account_id').references(() => houseAccounts.id),
 
   method: paymentMethodEnum('method').notNull(),
   status: paymentStatusEnum('status').notNull().default('pending'),

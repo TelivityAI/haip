@@ -34,6 +34,9 @@ drizzle/meta/
 kb/
 briefs/
 instructions/
+# Private research & planning artifacts (belt-and-suspenders, never tracked)
+**/research/
+*.private.md
 
 # Logs
 *.log

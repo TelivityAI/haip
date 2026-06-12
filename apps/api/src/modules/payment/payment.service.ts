@@ -412,6 +412,146 @@ export class PaymentService {
     return refund;
   }
 
+  /**
+   * Correction matrix (KB 14.1). Picks the LEGAL reversal op from payment state
+   * and (if an override is supplied) rejects an illegal op:
+   *
+   *  - `authorized` (uncaptured gateway hold)            → VOID
+   *  - `cash` within 24h void window                     → VOID (no gateway call)
+   *  - captured/settled/partially_refunded card payment  → REFUND only
+   *  - otherwise (cash past window, record-only tenders)  → ADJUST
+   *    (compensating negative adjustment charge on the folio)
+   *
+   * [ASSUMPTION KB 14.1] cash void window = 24h / same business day.
+   */
+  async correctPayment(
+    id: string,
+    propertyId: string,
+    opOverride?: 'void' | 'refund' | 'adjust',
+  ) {
+    const payment = await this.findById(id, propertyId);
+
+    const CASH_VOID_WINDOW_MS = 24 * 60 * 60 * 1000;
+    const isCard = CARD_METHODS.includes(payment.method);
+    const ageMs = Date.now() - new Date(payment.createdAt).getTime();
+    const cashWithinWindow =
+      payment.method === 'cash' && ageMs <= CASH_VOID_WINDOW_MS;
+
+    // Determine the single legal op from state.
+    let legalOp: 'void' | 'refund' | 'adjust';
+    if (payment.status === 'authorized') {
+      legalOp = 'void';
+    } else if (cashWithinWindow) {
+      legalOp = 'void';
+    } else if (
+      isCard &&
+      ['captured', 'settled', 'partially_refunded'].includes(payment.status)
+    ) {
+      legalOp = 'refund';
+    } else {
+      legalOp = 'adjust';
+    }
+
+    if (opOverride && opOverride !== legalOp) {
+      if (
+        opOverride === 'void' &&
+        isCard &&
+        ['captured', 'settled', 'partially_refunded'].includes(payment.status)
+      ) {
+        throw new BadRequestException(
+          'A captured card payment cannot be voided — it must be refunded (KB 14.1)',
+        );
+      }
+      throw new BadRequestException(
+        `Operation '${opOverride}' is not legal for payment ${id} in state '${payment.status}' (method '${payment.method}'). Legal op is '${legalOp}'.`,
+      );
+    }
+
+    const op = opOverride ?? legalOp;
+
+    if (op === 'void') {
+      // Gateway-backed void uses the two-phase voidPayment. Cash has no gateway:
+      // transition the row to 'voided' directly (no gateway call).
+      let result: any;
+      if (payment.status === 'authorized' && isCard) {
+        result = await this.voidPayment(id, propertyId);
+      } else {
+        const [voided] = await this.db
+          .update(payments)
+          .set({ status: 'voided', updatedAt: new Date() })
+          .where(
+            and(
+              eq(payments.id, id),
+              eq(payments.propertyId, propertyId),
+              eq(payments.status, payment.status),
+            ),
+          )
+          .returning();
+        if (!voided) {
+          throw new ConflictException(
+            `Payment ${id} is no longer in '${payment.status}' state — concurrent correction?`,
+          );
+        }
+        if (voided.folioId) {
+          await this.folioService.recalculateBalance(voided.folioId, propertyId);
+        }
+        await this.webhookService.emit(
+          'payment.failed',
+          'payment',
+          voided.id,
+          { folioId: voided.folioId, status: 'voided' },
+          propertyId,
+        );
+        result = voided;
+      }
+      await this.webhookService.emit(
+        'payment.corrected',
+        'payment',
+        id,
+        { op: 'void', method: payment.method },
+        propertyId,
+      );
+      return { op: 'void', payment: result };
+    }
+
+    if (op === 'refund') {
+      const result = await this.refundPayment(id, propertyId);
+      await this.webhookService.emit(
+        'payment.corrected',
+        'payment',
+        id,
+        { op: 'refund', method: payment.method },
+        propertyId,
+      );
+      return { op: 'refund', refund: result };
+    }
+
+    // op === 'adjust': post a compensating negative adjustment charge to the folio.
+    if (!payment.folioId) {
+      throw new BadRequestException(
+        `Cannot adjust payment ${id}: it is not linked to a folio`,
+      );
+    }
+    const adjustmentAmount = new Decimal(payment.amount).negated().toFixed(2);
+    const charge = await this.folioService.postCharge(payment.folioId, {
+      propertyId,
+      type: 'adjustment',
+      description: `Correction of payment ${id}`,
+      amount: adjustmentAmount,
+      currencyCode: payment.currencyCode,
+      serviceDate: new Date().toISOString(),
+      skipTaxCalculation: true,
+    });
+    await this.webhookService.emit(
+      'payment.corrected',
+      'payment',
+      id,
+      { op: 'adjust', method: payment.method, adjustmentAmount },
+      propertyId,
+    );
+    return { op: 'adjust', adjustment: charge };
+  }
+
   async findById(id: string, propertyId: string) {
     const [payment] = await this.db
       .select()

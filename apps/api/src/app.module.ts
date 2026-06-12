@@ -22,6 +22,10 @@ import { EventsModule } from './modules/events/events.module';
 import { TaxModule } from './modules/tax/tax.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AgentModule } from './modules/agent/agent.module';
+import { AccountingModule } from './modules/accounting/accounting.module';
+import { CashierModule } from './modules/cashier/cashier.module';
+import { HouseAccountModule } from './modules/house-account/house-account.module';
+import { GroupsModule } from './modules/groups/groups.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -48,10 +52,16 @@ const imports: any[] = [
   TaxModule,
   AuthModule,
   AgentModule,
+  AccountingModule,
+  CashierModule,
+  HouseAccountModule,
+  GroupsModule,
 ];
 
-// Serve dashboard static files in production
-if (process.env['NODE_ENV'] === 'production') {
+// Serve the bundled dashboard as static files. Enabled in production, or
+// whenever SERVE_DASHBOARD=true — so the one-command demo can serve the UI at
+// the same origin as the API while keeping NODE_ENV=development (Swagger, etc.).
+if (process.env['NODE_ENV'] === 'production' || process.env['SERVE_DASHBOARD'] === 'true') {
   imports.push(
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'dashboard', 'dist'),

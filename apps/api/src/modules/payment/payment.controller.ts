@@ -13,6 +13,7 @@ import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
+import { CorrectPaymentDto } from './dto/correct-payment.dto';
 
 @ApiTags('payments')
 @Controller('payments')
@@ -89,5 +90,16 @@ export class PaymentController {
     @Body() body: { amount?: string },
   ) {
     return this.paymentService.refundPayment(id, propertyId, body.amount);
+  }
+
+  @Post(':id/correct')
+  @Roles('admin', 'front_desk')
+  @ApiOperation({ summary: 'Correct a payment via the void/refund/adjust matrix (KB 14.1)' })
+  @ApiResponse({ status: 200, description: 'Payment corrected' })
+  correctPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CorrectPaymentDto,
+  ) {
+    return this.paymentService.correctPayment(id, dto.propertyId, dto.op);
   }
 }

@@ -13,14 +13,15 @@ export type AnomalyType =
   | 'unusual_charge'
   | 'missing_tax'
   | 'payment_mismatch'
-  | 'no_show_candidate';
+  | 'no_show_candidate'
+  | 'cash_variance_outlier';
 
 export type AnomalySeverity = 'critical' | 'warning' | 'info';
 
 export interface Anomaly {
   anomalyType: AnomalyType;
   severity: AnomalySeverity;
-  affectedEntity: { type: 'reservation' | 'folio' | 'guest'; id: string };
+  affectedEntity: { type: 'reservation' | 'folio' | 'guest' | 'cash_session'; id: string };
   description: string;
   suggestedAction: string;
   confidence: number;
@@ -85,10 +86,21 @@ export function getSeverity(type: AnomalyType): AnomalySeverity {
     case 'no_show_candidate':
     case 'unusual_charge':
       return 'warning';
+    case 'cash_variance_outlier':
+      return 'warning';
     case 'missing_registration':
     case 'duplicate_folio':
       return 'info';
   }
+}
+
+/**
+ * Detect a cash drawer variance anomaly (KB 12.4).
+ * `variance` is counted − expected, in currency units; a closed session is an
+ * outlier when the absolute variance exceeds `threshold`.
+ */
+export function isCashVarianceAnomaly(variance: number, threshold = 5): boolean {
+  return Math.abs(variance) > threshold;
 }
 
 /**
