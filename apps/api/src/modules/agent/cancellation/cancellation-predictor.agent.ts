@@ -1,6 +1,6 @@
 import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
 import { eq, and, gte, not, inArray } from 'drizzle-orm';
-import { reservations, guests, folios, payments, bookings } from '@telivityhaip/database';
+import { reservations, guests, folios, payments, bookings, depositLedgerEntries } from '@telivityhaip/database';
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
 import type {
@@ -17,6 +17,7 @@ import {
   heuristicCancelProbability,
   classifyRisk,
   aggregateByDate,
+  depositForfeitRisk,
   type ReservationRiskScore,
 } from './cancellation-predictor.models';
 
@@ -101,6 +102,33 @@ export class CancellationPredictorAgent implements HaipAgent, OnModuleInit {
       }
     }
 
+    // Held deposits (liability, not yet recognized — KB 10.2). Map reservationId → deposit info
+    // so we can estimate forfeit/refund exposure per at-risk reservation (KB 10.4).
+    const depositMap = new Map<string, { isRefundable: boolean; amount: number }>();
+    const heldDeposits = await this.db
+      .select({
+        reservationId: depositLedgerEntries.reservationId,
+        isRefundable: depositLedgerEntries.isRefundable,
+        amount: depositLedgerEntries.amount,
+      })
+      .from(depositLedgerEntries)
+      .where(
+        and(
+          eq(depositLedgerEntries.propertyId, propertyId),
+          eq(depositLedgerEntries.status, 'held' as any),
+        ),
+      );
+    for (const d of heldDeposits) {
+      if (!d.reservationId) continue;
+      const existing = depositMap.get(d.reservationId);
+      const amount = parseFloat(d.amount ?? '0');
+      // Aggregate multiple held deposits on one reservation; refundable if any are refundable.
+      depositMap.set(d.reservationId, {
+        isRefundable: (existing?.isRefundable ?? false) || Boolean(d.isRefundable),
+        amount: (existing?.amount ?? 0) + amount,
+      });
+    }
+
     return {
       agentType: this.agentType,
       propertyId,
@@ -110,13 +138,14 @@ export class CancellationPredictorAgent implements HaipAgent, OnModuleInit {
         guestMap: Object.fromEntries(guestMap),
         paymentMap: Object.fromEntries(paymentMap),
         repeatCounts: Object.fromEntries(repeatCounts),
+        depositMap: Object.fromEntries(depositMap),
         today,
       },
     };
   }
 
   async recommend(analysis: AgentAnalysis): Promise<AgentDecisionInput[]> {
-    const { activeReservations, guestMap, paymentMap, repeatCounts, today } =
+    const { activeReservations, guestMap, paymentMap, repeatCounts, depositMap, today } =
       analysis.signals as any;
 
     if (activeReservations.length === 0) return [];
@@ -147,14 +176,26 @@ export class CancellationPredictorAgent implements HaipAgent, OnModuleInit {
 
       const totalAmount = parseFloat(res.totalAmount ?? '0');
 
-      scores.push({
+      const score: ReservationRiskScore & { depositRisk?: ReturnType<typeof depositForfeitRisk> } = {
         reservationId: res.id,
         cancellationProbability: probability,
         riskLevel: classifyRisk(probability),
         riskFactors: factors,
         daysUntilArrival,
         revenueAtRisk: Math.round(totalAmount * probability),
-      });
+      };
+
+      // Attach deposit forfeit/refund exposure when this reservation has a held deposit (KB 10.4).
+      const heldDeposit = depositMap?.[res.id];
+      if (heldDeposit) {
+        score.depositRisk = depositForfeitRisk({
+          cancellationProbability: probability,
+          isRefundable: Boolean(heldDeposit.isRefundable),
+          depositAmount: Number(heldDeposit.amount ?? 0),
+        });
+      }
+
+      scores.push(score);
 
       arrivalDates.set(res.id, res.arrivalDate);
     }

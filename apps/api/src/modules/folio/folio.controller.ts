@@ -19,6 +19,8 @@ import { TransferChargeDto } from './dto/transfer-charge.dto';
 import { TransferCityLedgerDto } from './dto/transfer-city-ledger.dto';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { ListChargesDto } from './dto/list-charges.dto';
+import { CreateRoutingRuleDto } from './dto/create-routing-rule.dto';
+import { MoveTransactionsDto } from './dto/move-transactions.dto';
 
 @ApiTags('folios')
 @Controller('folios')
@@ -27,6 +29,30 @@ export class FolioController {
     private readonly folioService: FolioService,
     private readonly folioRoutingService: FolioRoutingService,
   ) {}
+
+  // --- Split-folio routing rules (KB 14.2) ---
+  // Declared before :id routes so the static 'routing-rules' path is not
+  // captured by the ':id' parameter.
+
+  @Post('routing-rules')
+  @Roles('admin', 'front_desk', 'night_auditor')
+  @ApiOperation({ summary: 'Create a split-folio routing rule (KB 14.2)' })
+  @ApiResponse({ status: 201, description: 'Routing rule created' })
+  createRoutingRule(@Body() dto: CreateRoutingRuleDto) {
+    return this.folioRoutingService.createRoutingRule(dto.propertyId, dto);
+  }
+
+  @Get('routing-rules')
+  @ApiOperation({ summary: 'List split-folio routing rules for a reservation' })
+  @ApiResponse({ status: 200, description: 'Routing rules' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  @ApiQuery({ name: 'reservationId', type: String })
+  listRoutingRules(
+    @Query('reservationId', ParseUUIDPipe) reservationId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.folioRoutingService.listRoutingRules(reservationId, propertyId);
+  }
 
   @Post()
   @Roles('admin', 'front_desk', 'night_auditor')
@@ -151,6 +177,22 @@ export class FolioController {
     @Body() dto: TransferChargeDto,
   ) {
     return this.folioService.transferCharge(id, propertyId, dto);
+  }
+
+  @Post(':id/move-transactions')
+  @Roles('admin', 'front_desk', 'night_auditor')
+  @ApiOperation({ summary: 'Move transactions to another folio (KB 14.2)' })
+  @ApiResponse({ status: 200, description: 'Transactions moved' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  moveTransactions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: MoveTransactionsDto,
+  ) {
+    return this.folioRoutingService.moveTransactions(propertyId, id, dto.toFolioId, {
+      chargeId: dto.chargeId,
+      chargeType: dto.chargeType,
+    });
   }
 
   @Post(':id/transfer-to-city-ledger')

@@ -35,6 +35,7 @@
     "decimal.js": "^10.4.3",
     "drizzle-orm": "^0.39.0",
     "eventemitter2": "^6.4.9",
+    "express": "^4.22.1",
     "fast-xml-parser": "^5.5.10",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.0.1",

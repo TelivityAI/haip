@@ -4,6 +4,7 @@ import {
   buildChargeProfiles,
   getSeverity,
   rankAnomalies,
+  isCashVarianceAnomaly,
   type Anomaly,
   type ChargeProfile,
 } from './night-audit-anomaly.models';
@@ -97,6 +98,34 @@ describe('getSeverity', () => {
 
   it('returns info for duplicate_folio', () => {
     expect(getSeverity('duplicate_folio')).toBe('info');
+  });
+
+  it('returns warning for cash_variance_outlier', () => {
+    expect(getSeverity('cash_variance_outlier')).toBe('warning');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isCashVarianceAnomaly
+// ---------------------------------------------------------------------------
+
+describe('isCashVarianceAnomaly', () => {
+  it('returns false when variance is within threshold', () => {
+    expect(isCashVarianceAnomaly(3)).toBe(false);
+    expect(isCashVarianceAnomaly(5)).toBe(false);
+  });
+
+  it('returns true when variance exceeds threshold', () => {
+    expect(isCashVarianceAnomaly(10)).toBe(true);
+  });
+
+  it('returns true for a large negative variance', () => {
+    expect(isCashVarianceAnomaly(-12)).toBe(true);
+  });
+
+  it('respects a custom threshold', () => {
+    expect(isCashVarianceAnomaly(8, 10)).toBe(false);
+    expect(isCashVarianceAnomaly(15, 10)).toBe(true);
   });
 });
 

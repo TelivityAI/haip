@@ -3,6 +3,7 @@ import {
   heuristicCancelProbability,
   classifyRisk,
   aggregateByDate,
+  depositForfeitRisk,
   type ReservationRiskScore,
 } from './cancellation-predictor.models';
 
@@ -141,5 +142,45 @@ describe('aggregateByDate', () => {
   it('handles empty scores', () => {
     const result = aggregateByDate([], new Map());
     expect(result.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// depositForfeitRisk
+// ---------------------------------------------------------------------------
+
+describe('depositForfeitRisk', () => {
+  it('classifies a refundable deposit with high cancel probability as likely_refund', () => {
+    const result = depositForfeitRisk({
+      cancellationProbability: 0.7,
+      isRefundable: true,
+      depositAmount: 200,
+    });
+    expect(result.refundLikelihood).toBe(0.7);
+    expect(result.forfeitLikelihood).toBe(0);
+    expect(result.classification).toBe('likely_refund');
+    expect(result.exposure).toBe(140); // 200 * 0.7
+  });
+
+  it('classifies a non-refundable deposit with high cancel probability as likely_forfeit', () => {
+    const result = depositForfeitRisk({
+      cancellationProbability: 0.8,
+      isRefundable: false,
+      depositAmount: 150,
+    });
+    expect(result.forfeitLikelihood).toBe(0.8);
+    expect(result.refundLikelihood).toBe(0);
+    expect(result.classification).toBe('likely_forfeit');
+    expect(result.exposure).toBe(120); // 150 * 0.8
+  });
+
+  it('classifies low probability as neutral', () => {
+    const result = depositForfeitRisk({
+      cancellationProbability: 0.2,
+      isRefundable: false,
+      depositAmount: 100,
+    });
+    expect(result.classification).toBe('neutral');
+    expect(result.exposure).toBe(20); // 100 * 0.2
   });
 });

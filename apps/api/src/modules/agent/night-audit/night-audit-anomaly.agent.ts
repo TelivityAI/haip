@@ -1,6 +1,6 @@
 import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
 import { eq, and, gte, lte, not, inArray } from 'drizzle-orm';
-import { reservations, folios, charges as chargesTable, guests } from '@telivityhaip/database';
+import { reservations, folios, charges as chargesTable, guests, cashDrawerSessions } from '@telivityhaip/database';
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
 import type {
@@ -19,6 +19,7 @@ import {
   rankAnomalies,
   buildChargeProfiles,
   isStatisticalOutlier,
+  isCashVarianceAnomaly,
 } from './night-audit-anomaly.models';
 
 @Injectable()
@@ -95,6 +96,21 @@ export class NightAuditAnomalyAgent implements HaipAgent, OnModuleInit {
       historicalCharges.map((c: any) => ({ type: c.type, amount: parseFloat(c.amount ?? '0') })),
     );
 
+    // Closed cash drawer sessions for this property — checked for variance outliers (KB 12.4).
+    const closedSessionsRaw = await this.db
+      .select({ id: cashDrawerSessions.id, variance: cashDrawerSessions.variance })
+      .from(cashDrawerSessions)
+      .where(
+        and(
+          eq(cashDrawerSessions.propertyId, propertyId),
+          eq(cashDrawerSessions.status, 'closed' as any),
+        ),
+      );
+    const closedSessions = closedSessionsRaw.map((s: any) => ({
+      id: s.id,
+      variance: Number(s.variance ?? 0),
+    }));
+
     return {
       agentType: this.agentType,
       propertyId,
@@ -105,13 +121,14 @@ export class NightAuditAnomalyAgent implements HaipAgent, OnModuleInit {
         openFolios,
         charges: folioChargeRows,
         chargeProfiles: Object.fromEntries(chargeProfiles),
+        closedSessions,
         today,
       },
     };
   }
 
   async recommend(analysis: AgentAnalysis): Promise<AgentDecisionInput[]> {
-    const { checkedIn, confirmed, openFolios, charges, chargeProfiles, today } =
+    const { checkedIn, confirmed, openFolios, charges, chargeProfiles, closedSessions, today } =
       analysis.signals as any;
 
     const anomalies: Anomaly[] = [];
@@ -245,6 +262,21 @@ export class NightAuditAnomalyAgent implements HaipAgent, OnModuleInit {
         suggestedAction: 'Contact guest or mark as no-show',
         confidence: 0.75,
       });
+    }
+
+    // Cash drawer variance outliers — closed sessions with material variance (KB 12.4)
+    for (const session of closedSessions ?? []) {
+      const variance = Number(session.variance ?? 0);
+      if (isCashVarianceAnomaly(variance)) {
+        anomalies.push({
+          anomalyType: 'cash_variance_outlier',
+          severity: getSeverity('cash_variance_outlier'),
+          affectedEntity: { type: 'cash_session', id: session.id },
+          description: `Cash drawer session closed with variance $${variance.toFixed(2)}`,
+          suggestedAction: 'Review cashier shift and recount drawer',
+          confidence: 0.9,
+        });
+      }
     }
 
     if (anomalies.length === 0) return [];
