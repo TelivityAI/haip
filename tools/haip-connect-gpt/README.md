@@ -27,7 +27,7 @@ ChatGPT  ──HTTPS──▶  this gateway  ──x-api-key──▶  HAIP Conn
 | `src/haip-connect-adapter.ts` | Uniform hotel methods → HTTP calls to `/api/v1/connect/*` |
 | `src/openapi.ts` | Builds the ChatGPT-importable OpenAPI 3.1 spec |
 | `src/app.ts` / `src/server.ts` | Fastify backend: actions + `/openapi.json` + `/health` + `/privacy` |
-| `src/events.ts` | Logs each tool call to Supabase (`haip_tool_calls`) |
+| `src/events.ts` | Logs each tool call to Postgres (`haip_tool_calls` in the haip-demo Supabase project) |
 | `src/scrub.ts` | PII redaction (for logs) + net-rate stripping (for responses) |
 | `src/pages.ts` | Inlined landing + privacy HTML (no disk reads — portable to serverless) |
 | `api/index.ts` | Vercel serverless entrypoint (wraps the same Fastify app) |
@@ -82,7 +82,7 @@ Set these environment variables on the Vercel project:
 - `HAIP_CONNECT_API_KEY` — matches HAIP's `CONNECT_API_KEY`
 - `PUBLIC_BASE_URL` — optional; the production domain for the OpenAPI server URL
   (auto-derived from the Vercel deployment domain if unset)
-- `SUPABASE_SERVICE_ROLE_KEY` — ligare project service-role key (logging; optional)
+- `TOOL_LOG_DATABASE_URL` — haip-demo Postgres connection string (logging; optional)
 
 > The gateway can also run as a plain long-running Node server (`npm run start`) or in a
 > container (`Dockerfile`) for non-serverless hosts — the core code is host-agnostic.

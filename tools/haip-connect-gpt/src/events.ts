@@ -1,14 +1,15 @@
 /**
- * Tool-call logging to Supabase (project: ligare, table: haip_tool_calls).
+ * Tool-call logging to the haip-demo Supabase project (table: haip_tool_calls).
  *
- * Mirrors the OTAIP/Ligare `ligare_tool_calls` schema so both products' training
- * data lives in the same Supabase project. Logging is best-effort: a failure here
- * (or missing credentials) never breaks the action response the GPT is waiting on.
+ * Writes via a direct Postgres connection (postgres-js) using TOOL_LOG_DATABASE_URL,
+ * so the gateway needs no Supabase service-role key. Logging is best-effort: a
+ * failure here (or a missing URL) never breaks the action response the GPT is
+ * waiting on.
  *
  * Callers MUST pass already-scrubbed request/response payloads (see scrub.ts).
  */
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import postgres from 'postgres';
 
 export interface ToolCallLog {
   tool: string;
@@ -20,41 +21,37 @@ export interface ToolCallLog {
   latencyMs: number;
 }
 
-let client: SupabaseClient | null = null;
+let sql: ReturnType<typeof postgres> | null = null;
 
-const url = process.env['SUPABASE_URL'];
-const serviceRoleKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+const url = process.env['TOOL_LOG_DATABASE_URL'];
 
-if (url && serviceRoleKey) {
-  client = createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+if (url) {
+  // Small pool: logging is fire-and-forget and must never starve the action path.
+  sql = postgres(url, { max: 2, connect_timeout: 10 });
 } else {
   // Surfaced once at startup so an operator notices logging is off in production.
-  console.warn(
-    '[events] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — tool-call logging is disabled.',
-  );
+  console.warn('[events] TOOL_LOG_DATABASE_URL not set — tool-call logging is disabled.');
 }
 
 export function isLoggingEnabled(): boolean {
-  return client !== null;
+  return sql !== null;
 }
 
 export async function logToolCall(entry: ToolCallLog): Promise<void> {
-  if (!client) return;
+  if (!sql) return;
   try {
-    const { error } = await client.from('haip_tool_calls').insert({
-      tool: entry.tool,
-      session_id: entry.sessionId,
-      request: entry.request,
-      response: entry.response,
-      status: entry.status,
-      error: entry.error ?? null,
-      latency_ms: entry.latencyMs,
-    });
-    if (error) {
-      console.warn('[events] failed to log tool call:', error.message);
-    }
+    await sql`
+      insert into haip_tool_calls (tool, session_id, request, response, status, error, latency_ms)
+      values (
+        ${entry.tool},
+        ${entry.sessionId},
+        ${sql.json(entry.request as never)},
+        ${sql.json(entry.response as never)},
+        ${entry.status},
+        ${entry.error ?? null},
+        ${entry.latencyMs}
+      )
+    `;
   } catch (err) {
     console.warn('[events] failed to log tool call:', (err as Error).message);
   }

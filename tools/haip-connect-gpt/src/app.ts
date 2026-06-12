@@ -106,9 +106,12 @@ function action(
     const sessionId = sessionFrom(req);
     const requestPayload = { params: req.params, query: req.query, body: req.body };
 
+    // logToolCall is awaited (not fire-and-forget): on serverless the instance
+    // can be frozen the moment the response is sent, which would drop the
+    // insert. It is still best-effort — logToolCall never throws.
     try {
       const result = await run(req);
-      void logToolCall({
+      await logToolCall({
         tool,
         sessionId,
         request: redactForLog(requestPayload),
@@ -123,7 +126,7 @@ function action(
         err instanceof UpstreamError
           ? (err.body ?? { error: 'upstream_error' })
           : { error: 'gateway_error', message: (err as Error).message };
-      void logToolCall({
+      await logToolCall({
         tool,
         sessionId,
         request: redactForLog(requestPayload),
