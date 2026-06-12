@@ -154,6 +154,27 @@ services:
     profiles:
       - channels
 
+  # MinIO — S3-compatible object storage for media uploads (optional).
+  # Behind the `storage` profile so the default `docker compose up` stays lean
+  # and runs on stock image URLs (no uploads). Enable with:
+  #   docker compose --profile storage up
+  # then set STORAGE_DRIVER=s3 and the S3_* vars on the api service.
+  minio:
+    image: minio/minio:latest
+    container_name: haip-minio
+    profiles:
+      - storage
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: haip
+      MINIO_ROOT_PASSWORD: haip_secret
+    ports:
+      - '9000:9000' # S3 API
+      - '9001:9001' # Web console
+    volumes:
+      - minio-data:/data
+
 volumes:
   postgres-data:
   redis-data:
+  minio-data:

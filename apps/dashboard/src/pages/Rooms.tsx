@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DoorOpen, LayoutGrid, List, Plus, X } from 'lucide-react';
+import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
+import MediaGallery from '../components/media/MediaGallery';
 
 interface Room {
   id: string;
@@ -294,6 +295,7 @@ function RoomTypeList() {
   const [code, setCode] = useState('');
   const [maxOcc, setMaxOcc] = useState(2);
   const [bedType, setBedType] = useState('king');
+  const [photoType, setPhotoType] = useState<RoomType | null>(null);
 
   const { data } = useQuery({
     queryKey: ['rooms', 'types', propertyId],
@@ -337,6 +339,7 @@ function RoomTypeList() {
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Max Occupancy</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Bed Type</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Rooms</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Photos</th>
             </tr>
           </thead>
           <tbody>
@@ -347,14 +350,25 @@ function RoomTypeList() {
                 <td className="px-4 py-3 text-sm text-telivity-slate">{t.maxOccupancy ?? '—'}</td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{t.bedType ?? '—'}</td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{t.roomCount ?? '—'}</td>
+                <td className="px-4 py-3 text-sm">
+                  <button onClick={() => setPhotoType(t)} className="flex items-center gap-1.5 text-telivity-teal hover:text-telivity-light-teal font-medium">
+                    <ImageIcon size={14} /> Manage
+                  </button>
+                </td>
               </tr>
             ))}
             {types.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No room types</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No room types</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {photoType && propertyId && (
+        <Modal open={!!photoType} onClose={() => setPhotoType(null)} title={`Photos — ${photoType.name}`}>
+          <MediaGallery propertyId={propertyId} ownerType="room_type" ownerId={photoType.id} />
+        </Modal>
+      )}
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Room Type">
         <div className="space-y-4">

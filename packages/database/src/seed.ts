@@ -125,6 +125,33 @@ async function main() {
   ]);
 
   // -----------------------------------------------------------------------
+  // 2b. Media — stock photos (Unsplash, license-clean) for the property and
+  //     each room type. URL-only (storage_key null); uploaded binaries are
+  //     never committed. One primary image per owner.
+  // -----------------------------------------------------------------------
+  const img = (photoId: string) =>
+    `https://images.unsplash.com/photo-${photoId}?auto=format&fit=crop&w=1600&q=80`;
+
+  await db.insert(schema.media).values([
+    // Property gallery
+    { id: sid('ed000001', 1), propertyId, ownerType: 'property' as const, ownerId: propertyId, url: img('1566073771259-6a8506099945'), category: 'hero' as const, caption: 'Telivity Grand Hotel — oceanfront facade', isPrimary: true, sortOrder: 0 },
+    { id: sid('ed000001', 2), propertyId, ownerType: 'property' as const, ownerId: propertyId, url: img('1551882547-ff40c63fe5fa'), category: 'exterior' as const, caption: 'Pool terrace at golden hour', sortOrder: 1 },
+    { id: sid('ed000001', 3), propertyId, ownerType: 'property' as const, ownerId: propertyId, url: img('1414235077428-338989a2e8c0'), category: 'dining' as const, caption: 'The Azure restaurant', sortOrder: 2 },
+    // Standard King
+    { id: sid('ed000001', 16), propertyId, ownerType: 'room_type' as const, ownerId: roomTypeIds.standard, url: img('1611892440504-42a792e24d32'), category: 'room' as const, caption: 'Standard King', isPrimary: true, sortOrder: 0 },
+    { id: sid('ed000001', 17), propertyId, ownerType: 'room_type' as const, ownerId: roomTypeIds.standard, url: img('1631049307264-da0ec9d70304'), category: 'room' as const, caption: 'Standard King — workspace', sortOrder: 1 },
+    // Deluxe Ocean View
+    { id: sid('ed000001', 32), propertyId, ownerType: 'room_type' as const, ownerId: roomTypeIds.deluxe, url: img('1582719478250-c89cae4dc85b'), category: 'room' as const, caption: 'Deluxe Ocean View', isPrimary: true, sortOrder: 0 },
+    { id: sid('ed000001', 33), propertyId, ownerType: 'room_type' as const, ownerId: roomTypeIds.deluxe, url: img('1590490360182-c33d57733427'), category: 'room' as const, caption: 'Deluxe — private balcony', sortOrder: 1 },
+    // Junior Suite
+    { id: sid('ed000001', 48), propertyId, ownerType: 'room_type' as const, ownerId: roomTypeIds.suite, url: img('1591088398332-8a7791972843'), category: 'room' as const, caption: 'Junior Suite living area', isPrimary: true, sortOrder: 0 },
+    { id: sid('ed000001', 49), propertyId, ownerType: 'room_type' as const, ownerId: roomTypeIds.suite, url: img('1618773928121-c32242e63f39'), category: 'room' as const, caption: 'Junior Suite bedroom', sortOrder: 1 },
+    // Penthouse Suite
+    { id: sid('ed000001', 64), propertyId, ownerType: 'room_type' as const, ownerId: roomTypeIds.penthouse, url: img('1596394516093-501ba68a0ba6'), category: 'room' as const, caption: 'Penthouse Suite', isPrimary: true, sortOrder: 0 },
+    { id: sid('ed000001', 65), propertyId, ownerType: 'room_type' as const, ownerId: roomTypeIds.penthouse, url: img('1582719508461-905c673771fd'), category: 'room' as const, caption: 'Penthouse terrace', sortOrder: 1 },
+  ]);
+
+  // -----------------------------------------------------------------------
   // 3. Rooms (40 across 4 floors, mixed statuses)
   // -----------------------------------------------------------------------
   type RoomStatus = 'vacant_clean' | 'vacant_dirty' | 'clean' | 'inspected' | 'guest_ready' | 'occupied' | 'out_of_order' | 'out_of_service';
@@ -1042,6 +1069,7 @@ async function main() {
   console.log('Seed complete.');
   console.log('  Property:      Telivity Grand Hotel (TGH)');
   console.log('  Room Types:    4');
+  console.log('  Media:         12 stock photos (property + room types)');
   console.log('  Rooms:         40 across 4 floors');
   console.log('  Guests:        15');
   console.log('  Reservations:  23 (past, in-house, arrivals, future, no-show, cancelled)');

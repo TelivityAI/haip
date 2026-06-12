@@ -43,6 +43,7 @@ async function bootstrap() {
     .addTag('room-types', 'Room type definitions')
     .addTag('reservations', 'Reservation lifecycle')
     .addTag('guests', 'Guest profiles')
+    .addTag('media', 'Images for properties, room types, and rooms')
     .addTag('folios', 'Billing and charges')
     .addTag('payments', 'Payment processing')
     .addTag('rate-plans', 'Rate plans and restrictions')

@@ -58,6 +58,9 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'group_type') THEN CREATE TYPE group_type AS ENUM ('corporate','travel_agent','wholesale','event','other'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'block_status') THEN CREATE TYPE block_status AS ENUM ('tentative','definite','released','cancelled'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'rooming_list_entry_status') THEN CREATE TYPE rooming_list_entry_status AS ENUM ('pending','created','error'); END IF; END $$`,
+    // Media (images for property / room types / rooms)
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'media_owner_type') THEN CREATE TYPE media_owner_type AS ENUM ('property','room_type','room'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'media_category') THEN CREATE TYPE media_category AS ENUM ('hero','exterior','room','amenity','dining','other'); END IF; END $$`,
   ];
 
   for (const e of enums) {
@@ -745,6 +748,29 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // media — polymorphic images for property / room types / rooms
+    `CREATE TABLE IF NOT EXISTS media (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      owner_type media_owner_type NOT NULL,
+      owner_id uuid NOT NULL,
+      url text NOT NULL,
+      storage_key varchar(512),
+      category media_category NOT NULL DEFAULT 'other',
+      caption varchar(500),
+      alt_text varchar(500),
+      sort_order integer NOT NULL DEFAULT 0,
+      is_primary boolean NOT NULL DEFAULT false,
+      width integer,
+      height integer,
+      content_type varchar(100),
+      file_size integer,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS media_owner_idx ON media (owner_type, owner_id)`,
+    `CREATE INDEX IF NOT EXISTS media_property_idx ON media (property_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS media_one_primary_per_owner ON media (owner_type, owner_id) WHERE is_primary = true`,
   ];
 
   for (const t of tables) {

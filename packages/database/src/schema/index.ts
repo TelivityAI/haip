@@ -8,6 +8,9 @@
 // Property
 export { properties } from './property.js';
 
+// Media (images for property / room types / rooms)
+export { mediaOwnerTypeEnum, mediaCategoryEnum, media } from './media.js';
+
 // Rooms & Room Types
 export { roomStatusEnum, roomTypes, rooms } from './room.js';
 

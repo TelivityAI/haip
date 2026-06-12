@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings as SettingsIcon, Building, Link2, Shield } from 'lucide-react';
+import { Settings as SettingsIcon, Building, Link2, Shield, Image as ImageIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
+import MediaGallery from '../components/media/MediaGallery';
 
 type Tab = 'property' | 'webhooks' | 'users';
 
@@ -112,6 +113,14 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
           {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
         </button>
         {updateMutation.isSuccess && <p className="text-sm text-telivity-dark-teal">Settings saved.</p>}
+      </div>
+
+      <div className="mt-8 border-t border-gray-100 pt-6">
+        <div className="flex items-center gap-2 mb-4">
+          <ImageIcon size={16} className="text-telivity-teal" />
+          <h2 className="text-sm font-semibold text-telivity-navy">Property Photos</h2>
+        </div>
+        <MediaGallery propertyId={propertyId} ownerType="property" ownerId={propertyId} />
       </div>
     </div>
   );
