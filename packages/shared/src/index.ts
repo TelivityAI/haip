@@ -101,6 +101,10 @@ export const WEBHOOK_EVENTS = {
   'group.block_released': 'group.block_released',
   'group.rooming_list_imported': 'group.rooming_list_imported',
   'group.reservation_linked': 'group.reservation_linked',
+
+  // Channel content events (descriptive content: photos, descriptions, amenities)
+  'property.content_updated': 'property.content_updated',
+  'roomtype.content_updated': 'roomtype.content_updated',
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;

@@ -4,6 +4,7 @@ import type {
   AvailabilityPushParams,
   RatePushParams,
   RestrictionPushParams,
+  ContentPushParams,
   ReservationPullParams,
   ConfirmReservationParams,
   CancelReservationParams,
@@ -24,6 +25,7 @@ export class MockChannelAdapter implements ChannelAdapter {
   readonly pushedAvailability: Map<string, any[]> = new Map();
   readonly pushedRates: Map<string, any[]> = new Map();
   readonly pushedRestrictions: Map<string, any[]> = new Map();
+  readonly pushedContent: Map<string, ContentPushParams> = new Map();
   readonly confirmedReservations: Map<string, string> = new Map();
   readonly cancelledReservations: Set<string> = new Set();
 
@@ -50,6 +52,15 @@ export class MockChannelAdapter implements ChannelAdapter {
     return {
       success: true,
       itemsSynced: params.items.length,
+      errors: [],
+    };
+  }
+
+  async pushContent(params: ContentPushParams): Promise<ChannelSyncResult> {
+    this.pushedContent.set(params.channelConnectionId, params);
+    return {
+      success: true,
+      itemsSynced: 1 + params.roomTypes.length,
       errors: [],
     };
   }

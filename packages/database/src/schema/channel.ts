@@ -86,3 +86,26 @@ export const ariSyncLogs = pgTable('ari_sync_logs', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Content Sync Log — tracks descriptive-content pushes (photos, descriptions,
+ * amenities) to channels. Mirrors ariSyncLogs but for the content API.
+ */
+export const contentSyncLogs = pgTable('content_sync_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  channelConnectionId: uuid('channel_connection_id').notNull().references(() => channelConnections.id),
+
+  direction: syncDirectionEnum('direction').notNull().default('push'),
+  action: varchar('action', { length: 50 }).notNull(), // 'content_push'
+
+  payload: jsonb('payload'),
+  response: jsonb('response'),
+
+  status: varchar('status', { length: 20 }).notNull(),
+  errorMessage: text('error_message'),
+
+  roomTypeId: uuid('room_type_id'),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

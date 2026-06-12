@@ -5,6 +5,7 @@ import type {
   AvailabilityPushParams,
   RatePushParams,
   RestrictionPushParams,
+  ContentPushParams,
   ReservationPullParams,
   ConfirmReservationParams,
   CancelReservationParams,
@@ -21,6 +22,7 @@ import {
   mapOtaReservationToHaip,
   buildReservationConfirmation,
 } from './booking-com.mapper';
+import { mapContentToOta } from './booking-com.content-mapper';
 
 @Injectable()
 export class BookingComAdapter implements ChannelAdapter {
@@ -81,6 +83,24 @@ export class BookingComAdapter implements ChannelAdapter {
     }
 
     return { success: true, itemsSynced: params.items.length, errors: [] };
+  }
+
+  async pushContent(params: ContentPushParams): Promise<ChannelSyncResult> {
+    const config = this.resolveConfig(params.connectionConfig);
+    const payload = mapContentToOta(config.hotelId, params);
+    const xml = buildOtaXml('OTA_HotelDescriptiveContentNotifRQ', payload);
+
+    const response = await this.sendRequest(config, 'OTA_HotelDescriptiveContentNotif', xml);
+
+    if (!response.success) {
+      return {
+        success: false,
+        itemsSynced: 0,
+        errors: response.errors.map((e) => ({ item: 'content', message: `[${e.code}] ${e.message}` })),
+      };
+    }
+
+    return { success: true, itemsSynced: 1 + params.roomTypes.length, errors: [] };
   }
 
   async pullReservations(params: ReservationPullParams): Promise<ChannelReservationResult> {

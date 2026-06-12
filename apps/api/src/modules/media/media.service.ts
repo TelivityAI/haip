@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Optional,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -13,6 +14,7 @@ import {
   auditLogs,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { WebhookService } from '../webhook/webhook.service';
 import { StorageService } from './storage/storage.service';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
@@ -33,11 +35,21 @@ export class MediaService {
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     private readonly storage: StorageService,
+    @Optional() private readonly webhook?: WebhookService,
   ) {}
 
   /** Whether the upload pipeline is available (drives the dashboard UI). */
   getConfig() {
     return { uploadEnabled: this.storage.configured };
+  }
+
+  /**
+   * Notify channel content sync that an owner's images changed (fire-and-forget).
+   * A photo edit IS a room-type/property content change.
+   */
+  private async emitContentChanged(ownerType: OwnerType, propertyId: string) {
+    const event = ownerType === 'property' ? 'property.content_updated' : 'roomtype.content_updated';
+    await this.webhook?.emit(event, ownerType, propertyId, { propertyId }, propertyId);
   }
 
   private async assertOwnerAtProperty(
@@ -136,6 +148,7 @@ export class MediaService {
       sortOrder: dto.sortOrder,
       isPrimary: dto.isPrimary ?? false,
     });
+    await this.emitContentChanged(dto.ownerType, dto.propertyId);
     return row;
   }
 
@@ -184,7 +197,7 @@ export class MediaService {
 
   async update(id: string, propertyId: string, dto: UpdateMediaDto) {
     const existing = await this.getOwned(id, propertyId);
-    return this.db.transaction(async (tx: any) => {
+    const result = await this.db.transaction(async (tx: any) => {
       if (dto.isPrimary === true) {
         await this.clearPrimary(
           tx,
@@ -207,6 +220,8 @@ export class MediaService {
       });
       return row;
     });
+    await this.emitContentChanged(existing.ownerType, propertyId);
+    return result;
   }
 
   async delete(id: string, propertyId: string) {
@@ -229,12 +244,13 @@ export class MediaService {
       entityId: id,
       description: 'media.deleted',
     });
+    await this.emitContentChanged(existing.ownerType, propertyId);
     return { deleted: true };
   }
 
   async setPrimary(id: string, propertyId: string) {
     const existing = await this.getOwned(id, propertyId);
-    return this.db.transaction(async (tx: any) => {
+    const result = await this.db.transaction(async (tx: any) => {
       await this.clearPrimary(
         tx,
         existing.ownerType,
@@ -248,11 +264,13 @@ export class MediaService {
         .returning();
       return row;
     });
+    await this.emitContentChanged(existing.ownerType, propertyId);
+    return result;
   }
 
   async reorder(dto: ReorderMediaDto) {
     await this.assertOwnerAtProperty(dto.ownerType, dto.ownerId, dto.propertyId);
-    return this.db.transaction(async (tx: any) => {
+    const result = await this.db.transaction(async (tx: any) => {
       for (const [i, mediaId] of dto.orderedIds.entries()) {
         await tx
           .update(media)
@@ -268,6 +286,8 @@ export class MediaService {
       }
       return this.findByOwner(dto.propertyId, dto.ownerType, dto.ownerId);
     });
+    await this.emitContentChanged(dto.ownerType, dto.propertyId);
+    return result;
   }
 
   async uploadAndCreate(
@@ -290,7 +310,7 @@ export class MediaService {
       contentType: file.mimetype,
       filename: file.originalname,
     });
-    return this.insertMedia({
+    const row = await this.insertMedia({
       propertyId: dto.propertyId,
       ownerType: dto.ownerType,
       ownerId: dto.ownerId,
@@ -303,5 +323,7 @@ export class MediaService {
       fileSize: file.size,
       isPrimary: false,
     });
+    await this.emitContentChanged(dto.ownerType, dto.propertyId);
+    return row;
   }
 }

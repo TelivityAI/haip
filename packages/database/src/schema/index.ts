@@ -74,6 +74,7 @@ export {
   syncDirectionEnum,
   channelConnections,
   ariSyncLogs,
+  contentSyncLogs,
 } from './channel.js';
 
 // Connect / Agent Subscriptions

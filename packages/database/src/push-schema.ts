@@ -428,6 +428,20 @@ async function main() {
       date_range_end date,
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // content_sync_logs — descriptive content (photos/descriptions/amenities) pushes
+    `CREATE TABLE IF NOT EXISTS content_sync_logs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      channel_connection_id uuid NOT NULL REFERENCES channel_connections(id),
+      direction sync_direction NOT NULL DEFAULT 'push',
+      action varchar(50) NOT NULL,
+      payload jsonb,
+      response jsonb,
+      status varchar(20) NOT NULL,
+      error_message text,
+      room_type_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
     // tax_profiles
     `CREATE TABLE IF NOT EXISTS tax_profiles (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

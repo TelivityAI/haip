@@ -1,13 +1,17 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, Optional, NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { properties } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { WebhookService } from '../webhook/webhook.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 
 @Injectable()
 export class PropertyService {
-  constructor(@Inject(DRIZZLE) private readonly db: any) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: any,
+    @Optional() private readonly webhookService?: WebhookService,
+  ) {}
 
   async create(dto: CreatePropertyDto) {
     const [property] = await this.db
@@ -41,6 +45,15 @@ export class PropertyService {
     if (!property) {
       throw new NotFoundException(`Property ${id} not found`);
     }
+    // Content (name/description/amenities) may have changed — notify channel
+    // content sync (fire-and-forget; listener pushes to OTAs).
+    await this.webhookService?.emit(
+      'property.content_updated',
+      'property',
+      id,
+      { propertyId: id },
+      id,
+    );
     return property;
   }
 }

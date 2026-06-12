@@ -636,7 +636,7 @@ async function main() {
     propertyId,
     channelCode: 'booking_com',
     channelName: 'Booking.com',
-    adapterType: 'ota_xml',
+    adapterType: 'booking_com',
     status: 'active',
     syncDirection: 'bidirectional',
     config: { hotelId: 'BDC-12345', apiKey: '***masked***' },
@@ -653,16 +653,24 @@ async function main() {
     lastSyncStatus: 'success',
   });
 
-  // Second channel — Expedia (inactive, for variety)
+  // Second channel — Expedia. Backed by the in-memory `mock` adapter (no real
+  // Expedia adapter exists yet), active with a room-type mapping so the demo's
+  // ARI/content pushes have a working channel that succeeds offline.
   await db.insert(schema.channelConnections).values({
     id: sid('a3000001', 2),
     propertyId,
     channelCode: 'expedia',
-    channelName: 'Expedia',
-    adapterType: 'ews',
-    status: 'pending_setup',
+    channelName: 'Expedia (demo)',
+    adapterType: 'mock',
+    status: 'active',
     syncDirection: 'push',
-    config: {},
+    config: { hotelId: 'EXP-67890' },
+    roomTypeMapping: [
+      { roomTypeId: roomTypeIds.standard, channelRoomCode: 'EXP_STD' },
+      { roomTypeId: roomTypeIds.deluxe, channelRoomCode: 'EXP_DLX' },
+      { roomTypeId: roomTypeIds.suite, channelRoomCode: 'EXP_STE' },
+      { roomTypeId: roomTypeIds.penthouse, channelRoomCode: 'EXP_PH' },
+    ],
     lastSyncAt: null,
   });
 

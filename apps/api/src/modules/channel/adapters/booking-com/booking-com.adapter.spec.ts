@@ -332,4 +332,37 @@ describe('BookingComAdapter', () => {
       expect(call[1].headers.Authorization).toBe(`Basic ${expectedAuth}`);
     });
   });
+
+  describe('pushContent', () => {
+    it('should send a descriptive-content OTA message with images and return success', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => successXml('OTA_HotelDescriptiveContentNotifRS'),
+      });
+
+      const result = await adapter.pushContent({
+        propertyId: 'p1',
+        channelConnectionId: 'cc1',
+        property: {
+          name: 'Telivity Grand',
+          description: 'Oceanfront',
+          starRating: 5,
+          images: [{ url: 'https://x/hero.jpg', category: 'hero', caption: 'H', isPrimary: true, sortOrder: 0 }],
+        },
+        roomTypes: [
+          {
+            channelRoomCode: 'SGL_KING',
+            name: 'Standard King',
+            maxOccupancy: 2,
+            images: [{ url: 'https://x/std.jpg', category: 'room', caption: null, isPrimary: true, sortOrder: 0 }],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      const sentBody = mockFetch.mock.calls[0]![1].body as string;
+      expect(sentBody).toContain('OTA_HotelDescriptiveContentNotifRQ');
+      expect(sentBody).toContain('https://x/std.jpg');
+    });
+  });
 });

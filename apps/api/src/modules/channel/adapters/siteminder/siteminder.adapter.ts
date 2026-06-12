@@ -5,6 +5,7 @@ import type {
   AvailabilityPushParams,
   RatePushParams,
   RestrictionPushParams,
+  ContentPushParams,
   ReservationPullParams,
   ConfirmReservationParams,
   CancelReservationParams,
@@ -20,6 +21,7 @@ import {
   mapSiteMinderReservationToHaip,
   buildNotifConfirmation,
 } from './siteminder.mapper';
+import { mapContentToOta } from './siteminder.content-mapper';
 
 @Injectable()
 export class SiteMinderAdapter implements ChannelAdapter {
@@ -119,6 +121,29 @@ export class SiteMinderAdapter implements ChannelAdapter {
     }
 
     return { success: true, itemsSynced: params.items.length, errors: [] };
+  }
+
+  async pushContent(params: ContentPushParams): Promise<ChannelSyncResult> {
+    const config = this.resolveConfig(params.connectionConfig);
+    const payload = mapContentToOta(config.hotelCode, params);
+    const soap = buildSoapEnvelope(
+      'OTA_HotelDescriptiveContentNotifRQ',
+      payload,
+      config.username,
+      config.password,
+    );
+
+    const response = await this.sendRequest(config, soap, 'OTA_HotelDescriptiveContentNotifRQ');
+
+    if (!response.success) {
+      return {
+        success: false,
+        itemsSynced: 0,
+        errors: response.errors.map((e) => ({ item: 'content', message: `[${e.code}] ${e.message}` })),
+      };
+    }
+
+    return { success: true, itemsSynced: 1 + params.roomTypes.length, errors: [] };
   }
 
   /**
