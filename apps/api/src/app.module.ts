@@ -27,6 +27,7 @@ import { AccountingModule } from './modules/accounting/accounting.module';
 import { CashierModule } from './modules/cashier/cashier.module';
 import { HouseAccountModule } from './modules/house-account/house-account.module';
 import { GroupsModule } from './modules/groups/groups.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -58,6 +59,7 @@ const imports: any[] = [
   CashierModule,
   HouseAccountModule,
   GroupsModule,
+  AdminModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or

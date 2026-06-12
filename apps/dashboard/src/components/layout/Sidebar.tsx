@@ -15,36 +15,41 @@ import {
   Mail,
   MessageSquare,
   Settings,
+  ShieldCheck,
   X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 /**
- * Nav items with optional role restrictions.
- * If roles is undefined, any authenticated user sees the item.
- * If roles is specified, user must have at least one matching role.
+ * Nav items gated by permission (preferred) with a role fallback.
+ * - If `permission` is set, the item shows when the user has that permission.
+ * - Else if `roles` is set, the item shows when the user has a matching role.
+ * - Else the item is always visible.
+ * When auth is disabled (demo), both hasPermission and hasRole return true.
  */
 const NAV_ITEMS: Array<{
   to: string;
   icon: typeof LayoutDashboard;
   label: string;
+  permission?: string;
   roles?: string[];
 }> = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/front-desk', icon: ConciergeBell, label: 'Front Desk', roles: ['admin', 'front_desk'] },
-  { to: '/reservations', icon: CalendarDays, label: 'Reservations', roles: ['admin', 'front_desk', 'readonly'] },
-  { to: '/guests', icon: Users, label: 'Guests', roles: ['admin', 'front_desk', 'readonly'] },
-  { to: '/rooms', icon: DoorOpen, label: 'Rooms' },
-  { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping', roles: ['admin', 'housekeeping', 'housekeeping_manager'] },
-  { to: '/folios', icon: Receipt, label: 'Folios & Billing', roles: ['admin', 'front_desk', 'night_auditor', 'readonly'] },
-  { to: '/rate-plans', icon: BadgeDollarSign, label: 'Rate Plans', roles: ['admin', 'front_desk', 'readonly'] },
-  { to: '/revenue', icon: TrendingUp, label: 'Revenue Management', roles: ['admin'] },
-  { to: '/night-audit', icon: Moon, label: 'Night Audit', roles: ['admin', 'night_auditor'] },
-  { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'night_auditor', 'readonly'] },
-  { to: '/channels', icon: Radio, label: 'Channels', roles: ['admin'] },
-  { to: '/communications', icon: Mail, label: 'Communications', roles: ['admin', 'front_desk'] },
-  { to: '/reviews', icon: MessageSquare, label: 'Reviews', roles: ['admin', 'front_desk'] },
-  { to: '/settings', icon: Settings, label: 'Settings', roles: ['admin'] },
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard', permission: 'dashboard.view' },
+  { to: '/front-desk', icon: ConciergeBell, label: 'Front Desk', permission: 'frontdesk.access' },
+  { to: '/reservations', icon: CalendarDays, label: 'Reservations', permission: 'reservations.read' },
+  { to: '/guests', icon: Users, label: 'Guests', permission: 'guests.read' },
+  { to: '/rooms', icon: DoorOpen, label: 'Rooms', permission: 'rooms.read' },
+  { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping', permission: 'housekeeping.read' },
+  { to: '/folios', icon: Receipt, label: 'Folios & Billing', permission: 'folios.read' },
+  { to: '/rate-plans', icon: BadgeDollarSign, label: 'Rate Plans', permission: 'rateplans.read' },
+  { to: '/revenue', icon: TrendingUp, label: 'Revenue Management', permission: 'revenue.manage' },
+  { to: '/night-audit', icon: Moon, label: 'Night Audit', permission: 'nightaudit.run' },
+  { to: '/reports', icon: BarChart3, label: 'Reports', permission: 'reports.view' },
+  { to: '/channels', icon: Radio, label: 'Channels', permission: 'channels.manage' },
+  { to: '/communications', icon: Mail, label: 'Communications', permission: 'communications.manage' },
+  { to: '/reviews', icon: MessageSquare, label: 'Reviews', permission: 'reviews.manage' },
+  { to: '/settings?tab=users', icon: ShieldCheck, label: 'Users & Roles', permission: 'admin.users.manage' },
+  { to: '/settings', icon: Settings, label: 'Settings', permission: 'settings.manage' },
 ];
 
 interface SidebarProps {
@@ -53,10 +58,12 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
-  const { hasRole } = useAuth();
+  const { hasRole, hasPermission } = useAuth();
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.roles || hasRole(...item.roles),
+  const visibleItems = NAV_ITEMS.filter((item) =>
+    item.permission
+      ? hasPermission(item.permission)
+      : !item.roles || hasRole(...item.roles),
   );
 
   return (

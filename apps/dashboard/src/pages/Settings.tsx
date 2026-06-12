@@ -1,16 +1,30 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings as SettingsIcon, Building, Link2, Shield, Image as ImageIcon } from 'lucide-react';
+import { Settings as SettingsIcon, Building, Link2, Shield, ShieldCheck, Image as ImageIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import MediaGallery from '../components/media/MediaGallery';
+import UserSettings from '../components/admin/UserSettings';
+import RolesSettings from '../components/admin/RolesSettings';
 
-type Tab = 'property' | 'webhooks' | 'users';
+type Tab = 'property' | 'users' | 'roles' | 'webhooks';
+
+const TABS: { key: Tab; label: string; icon: typeof Building }[] = [
+  { key: 'property', label: 'Property', icon: Building },
+  { key: 'users', label: 'Users', icon: Shield },
+  { key: 'roles', label: 'Roles', icon: ShieldCheck },
+  { key: 'webhooks', label: 'Webhooks', icon: Link2 },
+];
 
 export default function Settings() {
   const { propertyId } = useProperty();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>('property');
+  const [searchParams] = useSearchParams();
+  const initialTab = (searchParams.get('tab') as Tab) || 'property';
+  const [tab, setTab] = useState<Tab>(
+    TABS.some((t) => t.key === initialTab) ? initialTab : 'property',
+  );
 
   if (!propertyId) {
     return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
@@ -24,11 +38,7 @@ export default function Settings() {
       </div>
 
       <div className="flex gap-1 bg-white rounded-xl shadow-sm p-1 mb-4">
-        {([
-          { key: 'property' as const, label: 'Property', icon: Building },
-          { key: 'webhooks' as const, label: 'Webhooks', icon: Link2 },
-          { key: 'users' as const, label: 'Users', icon: Shield },
-        ]).map((t) => (
+        {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
@@ -43,8 +53,9 @@ export default function Settings() {
       </div>
 
       {tab === 'property' && <PropertySettings propertyId={propertyId} queryClient={queryClient} />}
+      {tab === 'users' && <UserSettings propertyId={propertyId} />}
+      {tab === 'roles' && <RolesSettings propertyId={propertyId} />}
       {tab === 'webhooks' && <WebhookSettings propertyId={propertyId} />}
-      {tab === 'users' && <UserSettings />}
     </div>
   );
 }
@@ -169,15 +180,3 @@ function WebhookSettings({ propertyId }: { propertyId: string }) {
   );
 }
 
-function UserSettings() {
-  return (
-    <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-      <Shield size={48} className="text-telivity-mid-grey mx-auto mb-4" />
-      <h2 className="text-lg font-semibold text-telivity-navy mb-2">User Management</h2>
-      <p className="text-sm text-telivity-mid-grey max-w-md mx-auto">
-        OAuth 2.0 / OpenID Connect integration is planned for a future phase.
-        User management, roles, and permissions will be available here once the auth module is implemented.
-      </p>
-    </div>
-  );
-}

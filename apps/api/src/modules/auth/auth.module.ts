@@ -5,6 +5,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './auth.guard';
 import { RolesGuard } from './roles.guard';
+import { PermissionsGuard } from './permissions.guard';
+import { PermissionsService } from './permissions.service';
 import { ApiKeyGuard } from './api-key.guard';
 import { WsAuthService } from './ws-auth.service';
 
@@ -45,15 +47,22 @@ import { WsAuthService } from './ws-auth.service';
       },
       inject: [ConfigService],
     },
-    // Global guards — applied to ALL endpoints
+    // Global guards — applied to ALL endpoints, in order:
+    // 1. JwtAuthGuard populates req.user, 2. RolesGuard checks @Roles(),
+    // 3. PermissionsGuard checks @RequirePermissions() (local authz). All three
+    // short-circuit to allow when AUTH_ENABLED=false.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
+    // Resolves effective permissions from the local RBAC tables. Exported so the
+    // admin module can reuse it.
+    PermissionsService,
     // WebSocket token verifier — used by gateways that cannot rely on
     // passport HTTP guards (e.g. EventsGateway). Registered always; the
     // gateway itself honours AUTH_ENABLED=false as a dev bypass.
     WsAuthService,
     ApiKeyGuard,
   ],
-  exports: [WsAuthService, ApiKeyGuard],
+  exports: [WsAuthService, ApiKeyGuard, PermissionsService],
 })
 export class AuthModule {}

@@ -152,6 +152,58 @@ async function main() {
   ]);
 
   // -----------------------------------------------------------------------
+  // 2c. RBAC — system roles, permission grants, demo users (local authz).
+  //     Permission keys MIRROR apps/api/src/modules/auth/permissions.catalog.ts
+  //     (the API is the source of truth; kept in sync intentionally).
+  // -----------------------------------------------------------------------
+  const ALL_PERMS = [
+    'dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write',
+    'guests.read', 'guests.write', 'rooms.read', 'rooms.write', 'media.manage',
+    'housekeeping.read', 'housekeeping.manage', 'folios.read', 'folios.manage',
+    'rateplans.read', 'rateplans.manage', 'revenue.manage', 'nightaudit.run',
+    'reports.view', 'channels.manage', 'communications.manage', 'reviews.manage',
+    'settings.manage', 'admin.users.manage', 'admin.roles.manage',
+  ];
+  const ROLE_DEFS: { key: string; name: string; perms: string[] }[] = [
+    { key: 'admin', name: 'Administrator', perms: ALL_PERMS },
+    { key: 'front_desk', name: 'Front Desk', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'folios.manage', 'rateplans.read', 'communications.manage', 'reviews.manage'] },
+    { key: 'housekeeping', name: 'Housekeeping', perms: ['dashboard.view', 'rooms.read', 'housekeeping.read'] },
+    { key: 'housekeeping_manager', name: 'Housekeeping Manager', perms: ['dashboard.view', 'rooms.read', 'rooms.write', 'housekeeping.read', 'housekeeping.manage'] },
+    { key: 'night_auditor', name: 'Night Auditor', perms: ['dashboard.view', 'reservations.read', 'folios.read', 'nightaudit.run', 'reports.view'] },
+    { key: 'readonly', name: 'Read Only', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'folios.read', 'rateplans.read', 'reports.view'] },
+  ];
+
+  const roleIdByKey: Record<string, string> = {};
+  await db.insert(schema.roles).values(
+    ROLE_DEFS.map((r, i) => {
+      const id = sid('ee000001', i + 1);
+      roleIdByKey[r.key] = id;
+      // System roles are global (propertyId null) and read-only in the admin UI.
+      return { id, propertyId: null, key: r.key, name: r.name, description: `Built-in ${r.name} role`, isSystem: true };
+    }),
+  );
+  await db.insert(schema.rolePermissions).values(
+    ROLE_DEFS.flatMap((r) =>
+      r.perms.map((permissionKey) => ({ propertyId, roleId: roleIdByKey[r.key]!, permissionKey })),
+    ),
+  );
+
+  const userDefs: { name: string; email: string; roleKey: string }[] = [
+    { name: 'Demo Admin', email: 'admin@telivitygrand.com', roleKey: 'admin' },
+    { name: 'Anna Schmidt', email: 'anna@telivitygrand.com', roleKey: 'front_desk' },
+    { name: 'Lena Novak', email: 'lena@telivitygrand.com', roleKey: 'housekeeping' },
+    { name: 'Marco Rossi', email: 'marco@telivitygrand.com', roleKey: 'housekeeping_manager' },
+    { name: 'Nadia Haddad', email: 'nadia@telivitygrand.com', roleKey: 'night_auditor' },
+  ];
+  const userIds = userDefs.map((_, i) => sid('ef000001', i + 1));
+  await db.insert(schema.users).values(
+    userDefs.map((u, i) => ({ id: userIds[i]!, propertyId, keycloakSub: null, email: u.email, name: u.name, status: 'active' as const })),
+  );
+  await db.insert(schema.userRoles).values(
+    userDefs.map((u, i) => ({ propertyId, userId: userIds[i]!, roleId: roleIdByKey[u.roleKey]! })),
+  );
+
+  // -----------------------------------------------------------------------
   // 3. Rooms (40 across 4 floors, mixed statuses)
   // -----------------------------------------------------------------------
   type RoomStatus = 'vacant_clean' | 'vacant_dirty' | 'clean' | 'inspected' | 'guest_ready' | 'occupied' | 'out_of_order' | 'out_of_service';
@@ -1070,6 +1122,7 @@ async function main() {
   console.log('  Property:      Telivity Grand Hotel (TGH)');
   console.log('  Room Types:    4');
   console.log('  Media:         12 stock photos (property + room types)');
+  console.log('  RBAC:          6 system roles, 5 demo users');
   console.log('  Rooms:         40 across 4 floors');
   console.log('  Guests:        15');
   console.log('  Reservations:  23 (past, in-house, arrivals, future, no-show, cancelled)');
