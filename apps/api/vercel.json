@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm --filter @telivityhaip/shared --filter @telivityhaip/database --filter @telivityhaip/api run build",
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+}

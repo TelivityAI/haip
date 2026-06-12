@@ -3,6 +3,13 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 
 export class SearchGuestsDto {
+  // The controller reads propertyId via @Query('propertyId', ParseUUIDPipe); it must ALSO be
+  // declared here or the global ValidationPipe (forbidNonWhitelisted) rejects the whole request.
+  @ApiPropertyOptional({ description: 'Tenant property id (validated by the controller)' })
+  @IsOptional()
+  @IsString()
+  propertyId?: string;
+
   @ApiPropertyOptional({ description: 'Search by name, email, or phone' })
   @IsOptional()
   @IsString()
