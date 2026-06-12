@@ -164,6 +164,10 @@ function toContentMedia(m: {
   caption: string | null;
   isPrimary: boolean;
   sortOrder: number;
+  contentType?: string | null;
+  width?: number | null;
+  height?: number | null;
+  fileSize?: number | null;
 }): ContentMediaItem {
   return {
     url: m.url,
@@ -171,5 +175,9 @@ function toContentMedia(m: {
     caption: m.caption,
     isPrimary: m.isPrimary,
     sortOrder: m.sortOrder,
+    contentType: m.contentType ?? null,
+    width: m.width ?? null,
+    height: m.height ?? null,
+    fileSize: m.fileSize ?? null,
   };
 }

@@ -311,12 +311,7 @@ describe('SiteMinderAdapter', () => {
   });
 
   describe('pushContent', () => {
-    it('should send a SOAP-wrapped descriptive-content message and return success', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        text: async () => soapSuccess('OTA_HotelDescriptiveContentNotifRS'),
-      });
-
+    it('returns unsupported without any network call (pmsXchange has no content API)', async () => {
       const result = await adapter.pushContent({
         propertyId: 'p1',
         channelConnectionId: 'cc1',
@@ -330,11 +325,10 @@ describe('SiteMinderAdapter', () => {
         ],
       });
 
-      expect(result.success).toBe(true);
-      const sentBody = mockFetch.mock.calls[0]![1].body as string;
-      expect(sentBody).toContain('soap:Envelope');
-      expect(sentBody).toContain('OTA_HotelDescriptiveContentNotifRQ');
-      expect(sentBody).toContain('https://x/dlx.jpg');
+      expect(result.success).toBe(false);
+      expect(result.itemsSynced).toBe(0);
+      expect(result.errors[0]!.message).toMatch(/not supported by SiteMinder/i);
+      expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 });

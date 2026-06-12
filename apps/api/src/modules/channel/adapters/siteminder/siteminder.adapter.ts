@@ -21,7 +21,6 @@ import {
   mapSiteMinderReservationToHaip,
   buildNotifConfirmation,
 } from './siteminder.mapper';
-import { mapContentToOta } from './siteminder.content-mapper';
 
 @Injectable()
 export class SiteMinderAdapter implements ChannelAdapter {
@@ -123,27 +122,25 @@ export class SiteMinderAdapter implements ChannelAdapter {
     return { success: true, itemsSynced: params.items.length, errors: [] };
   }
 
-  async pushContent(params: ContentPushParams): Promise<ChannelSyncResult> {
-    const config = this.resolveConfig(params.connectionConfig);
-    const payload = mapContentToOta(config.hotelCode, params);
-    const soap = buildSoapEnvelope(
-      'OTA_HotelDescriptiveContentNotifRQ',
-      payload,
-      config.username,
-      config.password,
-    );
-
-    const response = await this.sendRequest(config, soap, 'OTA_HotelDescriptiveContentNotifRQ');
-
-    if (!response.success) {
-      return {
-        success: false,
-        itemsSynced: 0,
-        errors: response.errors.map((e) => ({ item: 'content', message: `[${e.code}] ${e.message}` })),
-      };
-    }
-
-    return { success: true, itemsSynced: 1 + params.roomTypes.length, errors: [] };
+  /**
+   * SiteMinder pmsXchange does NOT support descriptive-content/photo push from a
+   * PMS — it carries only ARI + reservations. Property content and photos are
+   * managed in the SiteMinder extranet (partners pull/refresh, never push). So
+   * this is an explicit, honest no-op rather than a fabricated message.
+   * Ref: developer.siteminder.com/.../pmsxchange/api-reference.
+   */
+  async pushContent(_params: ContentPushParams): Promise<ChannelSyncResult> {
+    return {
+      success: false,
+      itemsSynced: 0,
+      errors: [
+        {
+          item: 'content',
+          message:
+            'Content push is not supported by SiteMinder pmsXchange; content is managed in the SiteMinder extranet.',
+        },
+      ],
+    };
   }
 
   /**

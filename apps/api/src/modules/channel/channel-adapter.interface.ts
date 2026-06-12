@@ -30,6 +30,12 @@ export interface ContentMediaItem {
   caption?: string | null;
   isPrimary: boolean;
   sortOrder: number;
+  // Optional metadata (present for uploaded media; null for external/stock URLs).
+  // Used by adapters to validate against per-OTA image limits.
+  contentType?: string | null;
+  width?: number | null;
+  height?: number | null;
+  fileSize?: number | null;
 }
 
 export interface ContentPushParams {
