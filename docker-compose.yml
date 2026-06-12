@@ -111,6 +111,10 @@ services:
       SITEMINDER_USERNAME: haip_test
       SITEMINDER_PASSWORD: test_password
       SITEMINDER_HOTEL_CODE: MOCK_SM_HOTEL
+      EXPEDIA_BASE_URL: https://services.expediapartnercentral.com
+      EXPEDIA_USERNAME: haip_test
+      EXPEDIA_PASSWORD: test_password
+      EXPEDIA_HOTEL_ID: MOCK_EXP_HOTEL
     ports:
       - '3000:3000'
     depends_on:

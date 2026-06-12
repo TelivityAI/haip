@@ -653,16 +653,16 @@ async function main() {
     lastSyncStatus: 'success',
   });
 
-  // Second channel — Expedia. Backed by the in-memory `mock` adapter (no real
-  // Expedia adapter exists yet), active with a room-type mapping so the demo's
-  // ARI/content pushes have a working channel that succeeds offline.
+  // Second channel — Expedia, using the real `expedia` adapter (EQC AR /
+  // Booking Notification / Image API). Left `pending_setup` so the offline,
+  // lean `docker compose up` demo doesn't fire real network calls to Expedia.
   await db.insert(schema.channelConnections).values({
     id: sid('a3000001', 2),
     propertyId,
     channelCode: 'expedia',
-    channelName: 'Expedia (demo)',
-    adapterType: 'mock',
-    status: 'active',
+    channelName: 'Expedia',
+    adapterType: 'expedia',
+    status: 'pending_setup',
     syncDirection: 'push',
     config: { hotelId: 'EXP-67890' },
     roomTypeMapping: [
@@ -672,6 +672,28 @@ async function main() {
       { roomTypeId: roomTypeIds.penthouse, channelRoomCode: 'EXP_PH' },
     ],
     lastSyncAt: null,
+  });
+
+  // Third channel — a `mock`-backed demo channel that is ACTIVE with a room-type
+  // mapping, so the offline demo's ARI/content pushes hit a working adapter and
+  // succeed (with the seeded stock photos in the payload) without any network.
+  await db.insert(schema.channelConnections).values({
+    id: sid('a3000001', 3),
+    propertyId,
+    channelCode: 'demo_channel',
+    channelName: 'Demo Channel (mock)',
+    adapterType: 'mock',
+    status: 'active',
+    syncDirection: 'push',
+    config: {},
+    roomTypeMapping: [
+      { roomTypeId: roomTypeIds.standard, channelRoomCode: 'DEMO_STD' },
+      { roomTypeId: roomTypeIds.deluxe, channelRoomCode: 'DEMO_DLX' },
+      { roomTypeId: roomTypeIds.suite, channelRoomCode: 'DEMO_STE' },
+      { roomTypeId: roomTypeIds.penthouse, channelRoomCode: 'DEMO_PH' },
+    ],
+    lastSyncAt: ts(-1, 2, 0),
+    lastSyncStatus: 'success',
   });
 
   // -----------------------------------------------------------------------

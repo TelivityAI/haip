@@ -12,13 +12,15 @@ import { MockChannelAdapter } from './adapters/mock.adapter';
 import { BookingComAdapter } from './adapters/booking-com/booking-com.adapter';
 import { BookingComInboundController } from './adapters/booking-com/booking-com-inbound.controller';
 import { SiteMinderAdapter } from './adapters/siteminder/siteminder.adapter';
+import { ExpediaAdapter } from './adapters/expedia/expedia.adapter';
+import { ExpediaInboundController } from './adapters/expedia/expedia-inbound.controller';
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { MediaModule } from '../media/media.module';
 
 @Module({
   imports: [ReservationModule, WebhookModule, MediaModule],
-  controllers: [ChannelController, BookingComInboundController],
+  controllers: [ChannelController, BookingComInboundController, ExpediaInboundController],
   providers: [
     ChannelService,
     AriService,
@@ -29,6 +31,7 @@ import { MediaModule } from '../media/media.module';
     MockChannelAdapter,
     BookingComAdapter,
     SiteMinderAdapter,
+    ExpediaAdapter,
   ],
   exports: [ChannelService, AriService, InboundReservationService],
 })
