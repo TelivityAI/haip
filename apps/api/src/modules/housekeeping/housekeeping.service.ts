@@ -47,7 +47,9 @@ export class HousekeepingService {
         type: dto.type,
         status: 'pending',
         priority: dto.priority ?? 0,
-        serviceDate: dto.serviceDate,
+        // serviceDate arrives as a YYYY-MM-DD string; the column is a timestamp, so Drizzle
+        // needs a Date (a raw string throws "value.toISOString is not a function").
+        serviceDate: new Date(dto.serviceDate),
         notes: dto.notes,
         checklist,
       })
