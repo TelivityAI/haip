@@ -58,6 +58,11 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'group_type') THEN CREATE TYPE group_type AS ENUM ('corporate','travel_agent','wholesale','event','other'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'block_status') THEN CREATE TYPE block_status AS ENUM ('tentative','definite','released','cancelled'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'rooming_list_entry_status') THEN CREATE TYPE rooming_list_entry_status AS ENUM ('pending','created','error'); END IF; END $$`,
+    // Media (images for property / room types / rooms)
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'media_owner_type') THEN CREATE TYPE media_owner_type AS ENUM ('property','room_type','room'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'media_category') THEN CREATE TYPE media_category AS ENUM ('hero','exterior','room','amenity','dining','other'); END IF; END $$`,
+    // RBAC (local authz + Keycloak login)
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_status') THEN CREATE TYPE user_status AS ENUM ('active','disabled','invited'); END IF; END $$`,
   ];
 
   for (const e of enums) {
@@ -424,6 +429,20 @@ async function main() {
       date_range_end date,
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // content_sync_logs — descriptive content (photos/descriptions/amenities) pushes
+    `CREATE TABLE IF NOT EXISTS content_sync_logs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      channel_connection_id uuid NOT NULL REFERENCES channel_connections(id),
+      direction sync_direction NOT NULL DEFAULT 'push',
+      action varchar(50) NOT NULL,
+      payload jsonb,
+      response jsonb,
+      status varchar(20) NOT NULL,
+      error_message text,
+      room_type_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
     // tax_profiles
     `CREATE TABLE IF NOT EXISTS tax_profiles (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -746,6 +765,70 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // media — polymorphic images for property / room types / rooms
+    `CREATE TABLE IF NOT EXISTS media (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      owner_type media_owner_type NOT NULL,
+      owner_id uuid NOT NULL,
+      url text NOT NULL,
+      storage_key varchar(512),
+      category media_category NOT NULL DEFAULT 'other',
+      caption varchar(500),
+      alt_text varchar(500),
+      sort_order integer NOT NULL DEFAULT 0,
+      is_primary boolean NOT NULL DEFAULT false,
+      width integer,
+      height integer,
+      content_type varchar(100),
+      file_size integer,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS media_owner_idx ON media (owner_type, owner_id)`,
+    `CREATE INDEX IF NOT EXISTS media_property_idx ON media (property_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS media_one_primary_per_owner ON media (owner_type, owner_id) WHERE is_primary = true`,
+    // RBAC — local users / roles / permissions
+    `CREATE TABLE IF NOT EXISTS users (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid REFERENCES properties(id),
+      keycloak_sub uuid,
+      email varchar(255) NOT NULL,
+      name varchar(255) NOT NULL,
+      status user_status NOT NULL DEFAULT 'active',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email)`,
+    `CREATE INDEX IF NOT EXISTS users_keycloak_sub_idx ON users (keycloak_sub)`,
+    `CREATE TABLE IF NOT EXISTS roles (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid REFERENCES properties(id),
+      key varchar(50) NOT NULL,
+      name varchar(100) NOT NULL,
+      description text,
+      is_system boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS roles_property_key_unique ON roles (property_id, key)`,
+    `CREATE TABLE IF NOT EXISTS role_permissions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      role_id uuid NOT NULL REFERENCES roles(id),
+      permission_key varchar(100) NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS role_permissions_role_perm_unique ON role_permissions (role_id, permission_key)`,
+    `CREATE TABLE IF NOT EXISTS user_roles (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      user_id uuid NOT NULL REFERENCES users(id),
+      role_id uuid NOT NULL REFERENCES roles(id),
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS user_roles_user_role_unique ON user_roles (user_id, role_id)`,
+    `CREATE INDEX IF NOT EXISTS user_roles_user_idx ON user_roles (user_id)`,
   ];
 
   for (const t of tables) {

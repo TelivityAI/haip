@@ -8,6 +8,18 @@
 // Property
 export { properties } from './property.js';
 
+// Media (images for property / room types / rooms)
+export { mediaOwnerTypeEnum, mediaCategoryEnum, media } from './media.js';
+
+// RBAC — local users, roles, permissions (local authz + Keycloak login)
+export {
+  userStatusEnum,
+  users,
+  roles,
+  rolePermissions,
+  userRoles,
+} from './rbac.js';
+
 // Rooms & Room Types
 export { roomStatusEnum, roomTypes, rooms } from './room.js';
 
@@ -62,6 +74,7 @@ export {
   syncDirectionEnum,
   channelConnections,
   ariSyncLogs,
+  contentSyncLogs,
 } from './channel.js';
 
 // Connect / Agent Subscriptions

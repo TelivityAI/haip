@@ -5,6 +5,7 @@ import type {
   AvailabilityPushParams,
   RatePushParams,
   RestrictionPushParams,
+  ContentPushParams,
   ReservationPullParams,
   ConfirmReservationParams,
   CancelReservationParams,
@@ -119,6 +120,27 @@ export class SiteMinderAdapter implements ChannelAdapter {
     }
 
     return { success: true, itemsSynced: params.items.length, errors: [] };
+  }
+
+  /**
+   * SiteMinder pmsXchange does NOT support descriptive-content/photo push from a
+   * PMS — it carries only ARI + reservations. Property content and photos are
+   * managed in the SiteMinder extranet (partners pull/refresh, never push). So
+   * this is an explicit, honest no-op rather than a fabricated message.
+   * Ref: developer.siteminder.com/.../pmsxchange/api-reference.
+   */
+  async pushContent(_params: ContentPushParams): Promise<ChannelSyncResult> {
+    return {
+      success: false,
+      itemsSynced: 0,
+      errors: [
+        {
+          item: 'content',
+          message:
+            'Content push is not supported by SiteMinder pmsXchange; content is managed in the SiteMinder extranet.',
+        },
+      ],
+    };
   }
 
   /**

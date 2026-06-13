@@ -332,4 +332,48 @@ describe('BookingComAdapter', () => {
       expect(call[1].headers.Authorization).toBe(`Basic ${expectedAuth}`);
     });
   });
+
+  describe('pushContent', () => {
+    it('submits photos as JSON to the pending-photos endpoint (not OTA XML)', async () => {
+      mockFetch.mockResolvedValue({ ok: true, text: async () => '{}' });
+
+      const result = await adapter.pushContent({
+        propertyId: 'p1',
+        channelConnectionId: 'cc1',
+        property: {
+          name: 'Telivity Grand',
+          description: 'Oceanfront',
+          starRating: 5,
+          images: [{ url: 'https://x/hero.jpg', category: 'hero', caption: 'H', isPrimary: true, sortOrder: 0 }],
+        },
+        roomTypes: [
+          {
+            channelRoomCode: 'SGL_KING',
+            name: 'Standard King',
+            maxOccupancy: 2,
+            images: [{ url: 'https://x/std.jpg', category: 'room', caption: null, isPrimary: true, sortOrder: 0 }],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      const photoCall = mockFetch.mock.calls.find((c) => String(c[0]).includes('/pending/photos'));
+      expect(photoCall).toBeDefined();
+      expect(photoCall![1].method).toBe('POST');
+      expect(photoCall![1].headers['Content-Type']).toBe('application/json');
+      const body = JSON.parse(photoCall![1].body as string);
+      expect(body.photos.map((p: any) => p.url)).toContain('https://x/std.jpg');
+    });
+
+    it('rejects non-jpeg/png images and reports them as errors', async () => {
+      mockFetch.mockResolvedValue({ ok: true, text: async () => '{}' });
+      const result = await adapter.pushContent({
+        propertyId: 'p1',
+        channelConnectionId: 'cc1',
+        property: { name: 'X', images: [{ url: 'https://x/bad.gif', category: 'hero', caption: null, isPrimary: true, sortOrder: 0 }] },
+        roomTypes: [],
+      });
+      expect(result.errors.some((e) => e.item.startsWith('photo:'))).toBe(true);
+    });
+  });
 });

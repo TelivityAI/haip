@@ -20,21 +20,28 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   roles: string[];
+  permissions: string[];
   isAuthenticated: boolean;
   isLoading: boolean;
   authEnabled: boolean;
   logout: () => void;
   hasRole: (...roles: string[]) => boolean;
+  hasPermission: (...permissions: string[]) => boolean;
+  /** Set the current user's effective permissions (fetched once a property is active). */
+  setPermissions: (permissions: string[]) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   roles: [],
+  permissions: [],
   isAuthenticated: false,
   isLoading: true,
   authEnabled: false,
   logout: () => {},
   hasRole: () => true,
+  hasPermission: () => true,
+  setPermissions: () => {},
 });
 
 export function useAuth() {
@@ -56,6 +63,7 @@ export function useAuth() {
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(AUTH_ENABLED);
 
   useEffect(() => {
@@ -133,17 +141,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user, roles],
   );
 
+  // Permission-based gating. When auth is disabled (demo), everything is granted.
+  const hasPermission = useCallback(
+    (...required: string[]) => {
+      if (!AUTH_ENABLED) return true;
+      return required.every((p) => permissions.includes(p));
+    },
+    [permissions],
+  );
+
   const value = useMemo<AuthContextType>(
     () => ({
       user,
       roles,
+      permissions,
       isAuthenticated: AUTH_ENABLED ? !!user : true,
       isLoading,
       authEnabled: AUTH_ENABLED,
       logout,
       hasRole,
+      hasPermission,
+      setPermissions,
     }),
-    [user, roles, isLoading, logout, hasRole],
+    [user, roles, permissions, isLoading, logout, hasRole, hasPermission],
   );
 
   if (isLoading) {

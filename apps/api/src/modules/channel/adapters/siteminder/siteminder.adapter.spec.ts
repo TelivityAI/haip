@@ -309,4 +309,26 @@ describe('SiteMinderAdapter', () => {
       expect(mockFetch).toHaveBeenCalledTimes(3);
     });
   });
+
+  describe('pushContent', () => {
+    it('returns unsupported without any network call (pmsXchange has no content API)', async () => {
+      const result = await adapter.pushContent({
+        propertyId: 'p1',
+        channelConnectionId: 'cc1',
+        property: { name: 'Telivity Grand', images: [] },
+        roomTypes: [
+          {
+            channelRoomCode: 'SM_DLX',
+            name: 'Deluxe',
+            images: [{ url: 'https://x/dlx.jpg', category: 'room', caption: null, isPrimary: true, sortOrder: 0 }],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.itemsSynced).toBe(0);
+      expect(result.errors[0]!.message).toMatch(/not supported by SiteMinder/i);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
 });

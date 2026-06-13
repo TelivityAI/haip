@@ -8,6 +8,7 @@ import { HealthModule } from './modules/health/health.module';
 import { PropertyModule } from './modules/property/property.module';
 import { RoomModule } from './modules/room/room.module';
 import { GuestModule } from './modules/guest/guest.module';
+import { MediaModule } from './modules/media/media.module';
 import { ReservationModule } from './modules/reservation/reservation.module';
 import { FolioModule } from './modules/folio/folio.module';
 import { RatePlanModule } from './modules/rate-plan/rate-plan.module';
@@ -26,6 +27,7 @@ import { AccountingModule } from './modules/accounting/accounting.module';
 import { CashierModule } from './modules/cashier/cashier.module';
 import { HouseAccountModule } from './modules/house-account/house-account.module';
 import { GroupsModule } from './modules/groups/groups.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -38,6 +40,7 @@ const imports: any[] = [
   PropertyModule,
   RoomModule,
   GuestModule,
+  MediaModule,
   ReservationModule,
   FolioModule,
   RatePlanModule,
@@ -56,6 +59,7 @@ const imports: any[] = [
   CashierModule,
   HouseAccountModule,
   GroupsModule,
+  AdminModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or

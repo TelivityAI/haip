@@ -11,10 +11,56 @@ export interface ChannelAdapter {
   pushAvailability(params: AvailabilityPushParams): Promise<ChannelSyncResult>;
   pushRates(params: RatePushParams): Promise<ChannelSyncResult>;
   pushRestrictions(params: RestrictionPushParams): Promise<ChannelSyncResult>;
+  pushContent(params: ContentPushParams): Promise<ChannelSyncResult>;
   pullReservations(params: ReservationPullParams): Promise<ChannelReservationResult>;
   confirmReservation(params: ConfirmReservationParams): Promise<ChannelSyncResult>;
   cancelReservation(params: CancelReservationParams): Promise<ChannelSyncResult>;
   testConnection(config: Record<string, unknown>): Promise<{ connected: boolean; message: string }>;
+}
+
+/**
+ * Descriptive content pushed to an OTA/channel: property and room-type marketing
+ * data (descriptions, amenities) plus images sourced from the media table.
+ * Distinct from ARI (availability/rates/inventory) — most channels expose a
+ * separate content/descriptive API for this.
+ */
+export interface ContentMediaItem {
+  url: string;
+  category: string;
+  caption?: string | null;
+  isPrimary: boolean;
+  sortOrder: number;
+  // Optional metadata (present for uploaded media; null for external/stock URLs).
+  // Used by adapters to validate against per-OTA image limits.
+  contentType?: string | null;
+  width?: number | null;
+  height?: number | null;
+  fileSize?: number | null;
+}
+
+export interface ContentPushParams {
+  propertyId: string;
+  channelConnectionId: string;
+  connectionConfig?: Record<string, unknown>;
+  property: {
+    name: string;
+    description?: string | null;
+    address?: string | null;
+    city?: string | null;
+    countryCode?: string | null;
+    starRating?: number | null;
+    amenities?: string[];
+    images: ContentMediaItem[];
+  };
+  roomTypes: Array<{
+    channelRoomCode: string;
+    name: string;
+    description?: string | null;
+    maxOccupancy?: number | null;
+    bedType?: string | null;
+    amenities?: string[];
+    images: ContentMediaItem[];
+  }>;
 }
 
 export interface AvailabilityPushParams {

@@ -13,11 +13,13 @@ import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { ChannelService } from './channel.service';
 import { AriService } from './ari.service';
+import { ContentSyncService } from './content-sync.service';
 import { InboundReservationService } from './inbound-reservation.service';
 import { RateParityService } from './rate-parity.service';
 import { CreateChannelConnectionDto } from './dto/create-channel-connection.dto';
 import { UpdateChannelConnectionDto } from './dto/update-channel-connection.dto';
 import { PushAriDto } from './dto/push-ari.dto';
+import { PushContentDto } from './dto/push-content.dto';
 import { InboundReservationDto } from './dto/inbound-reservation.dto';
 import { StopSellDto } from './dto/stop-sell.dto';
 
@@ -28,6 +30,7 @@ export class ChannelController {
   constructor(
     private readonly channelService: ChannelService,
     private readonly ariService: AriService,
+    private readonly contentSyncService: ContentSyncService,
     private readonly inboundReservationService: InboundReservationService,
     private readonly rateParityService: RateParityService,
   ) {}
@@ -136,6 +139,30 @@ export class ChannelController {
       dto.startDate,
       dto.endDate,
       dto.roomTypeId,
+    );
+  }
+
+  // --- Content Push ---
+
+  @Post('push/content')
+  @ApiOperation({ summary: 'Push descriptive content (photos, descriptions, amenities) to channels' })
+  async pushContent(@Body() dto: PushContentDto) {
+    return this.contentSyncService.pushContent(dto.propertyId, dto.channelConnectionId);
+  }
+
+  @Get('content-sync-logs/:channelConnectionId')
+  @ApiOperation({ summary: 'Get content-push logs for a channel connection' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'limit', required: false })
+  async getContentSyncLogs(
+    @Param('channelConnectionId', ParseUUIDPipe) channelConnectionId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.contentSyncService.getContentSyncLogs(
+      channelConnectionId,
+      propertyId,
+      limit ? parseInt(limit, 10) : undefined,
     );
   }
 
