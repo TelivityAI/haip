@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 
 /**
@@ -26,30 +27,31 @@ import { useAuth } from '../../context/AuthContext';
  * - Else if `roles` is set, the item shows when the user has a matching role.
  * - Else the item is always visible.
  * When auth is disabled (demo), both hasPermission and hasRole return true.
+ * `labelKey` is an i18n key resolved via t() at render — see src/locales/.
  */
 const NAV_ITEMS: Array<{
   to: string;
   icon: typeof LayoutDashboard;
-  label: string;
+  labelKey: string;
   permission?: string;
   roles?: string[];
 }> = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', permission: 'dashboard.view' },
-  { to: '/front-desk', icon: ConciergeBell, label: 'Front Desk', permission: 'frontdesk.access' },
-  { to: '/reservations', icon: CalendarDays, label: 'Reservations', permission: 'reservations.read' },
-  { to: '/guests', icon: Users, label: 'Guests', permission: 'guests.read' },
-  { to: '/rooms', icon: DoorOpen, label: 'Rooms', permission: 'rooms.read' },
-  { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping', permission: 'housekeeping.read' },
-  { to: '/folios', icon: Receipt, label: 'Folios & Billing', permission: 'folios.read' },
-  { to: '/rate-plans', icon: BadgeDollarSign, label: 'Rate Plans', permission: 'rateplans.read' },
-  { to: '/revenue', icon: TrendingUp, label: 'Revenue Management', permission: 'revenue.manage' },
-  { to: '/night-audit', icon: Moon, label: 'Night Audit', permission: 'nightaudit.run' },
-  { to: '/reports', icon: BarChart3, label: 'Reports', permission: 'reports.view' },
-  { to: '/channels', icon: Radio, label: 'Channels', permission: 'channels.manage' },
-  { to: '/communications', icon: Mail, label: 'Communications', permission: 'communications.manage' },
-  { to: '/reviews', icon: MessageSquare, label: 'Reviews', permission: 'reviews.manage' },
-  { to: '/settings?tab=users', icon: ShieldCheck, label: 'Users & Roles', permission: 'admin.users.manage' },
-  { to: '/settings', icon: Settings, label: 'Settings', permission: 'settings.manage' },
+  { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard', permission: 'dashboard.view' },
+  { to: '/front-desk', icon: ConciergeBell, labelKey: 'nav.frontDesk', permission: 'frontdesk.access' },
+  { to: '/reservations', icon: CalendarDays, labelKey: 'nav.reservations', permission: 'reservations.read' },
+  { to: '/guests', icon: Users, labelKey: 'nav.guests', permission: 'guests.read' },
+  { to: '/rooms', icon: DoorOpen, labelKey: 'nav.rooms', permission: 'rooms.read' },
+  { to: '/housekeeping', icon: Sparkles, labelKey: 'nav.housekeeping', permission: 'housekeeping.read' },
+  { to: '/folios', icon: Receipt, labelKey: 'nav.foliosBilling', permission: 'folios.read' },
+  { to: '/rate-plans', icon: BadgeDollarSign, labelKey: 'nav.ratePlans', permission: 'rateplans.read' },
+  { to: '/revenue', icon: TrendingUp, labelKey: 'nav.revenueManagement', permission: 'revenue.manage' },
+  { to: '/night-audit', icon: Moon, labelKey: 'nav.nightAudit', permission: 'nightaudit.run' },
+  { to: '/reports', icon: BarChart3, labelKey: 'nav.reports', permission: 'reports.view' },
+  { to: '/channels', icon: Radio, labelKey: 'nav.channels', permission: 'channels.manage' },
+  { to: '/communications', icon: Mail, labelKey: 'nav.communications', permission: 'communications.manage' },
+  { to: '/reviews', icon: MessageSquare, labelKey: 'nav.reviews', permission: 'reviews.manage' },
+  { to: '/settings?tab=users', icon: ShieldCheck, labelKey: 'nav.usersRoles', permission: 'admin.users.manage' },
+  { to: '/settings', icon: Settings, labelKey: 'nav.settings', permission: 'settings.manage' },
 ];
 
 interface SidebarProps {
@@ -59,6 +61,7 @@ interface SidebarProps {
 
 export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const { hasRole, hasPermission } = useAuth();
+  const { t } = useTranslation();
 
   const visibleItems = NAV_ITEMS.filter((item) =>
     item.permission
@@ -87,19 +90,19 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold tracking-wide">HAIP</h1>
-            <p className="text-xs text-telivity-mid-grey mt-0.5">Hotel AI Platform</p>
+            <p className="text-xs text-telivity-mid-grey mt-0.5">{t('nav.tagline')}</p>
           </div>
           <button
             onClick={onClose}
             className="lg:hidden p-1 rounded hover:bg-white/10"
-            aria-label="Close menu"
+            aria-label={t('nav.closeMenu')}
           >
             <X size={18} />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-3" role="navigation" aria-label="Main navigation">
-          {visibleItems.map(({ to, icon: Icon, label }) => (
+        <nav className="flex-1 overflow-y-auto py-3" role="navigation" aria-label={t('nav.mainNavigation')}>
+          {visibleItems.map(({ to, icon: Icon, labelKey }) => (
             <NavLink
               key={to}
               to={to}
@@ -114,7 +117,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               }
             >
               <Icon size={18} aria-hidden="true" />
-              {label}
+              {t(labelKey)}
             </NavLink>
           ))}
         </nav>

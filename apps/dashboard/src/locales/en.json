@@ -1,0 +1,33 @@
+{
+  "nav": {
+    "tagline": "Hotel AI Platform",
+    "mainNavigation": "Main navigation",
+    "closeMenu": "Close menu",
+    "dashboard": "Dashboard",
+    "frontDesk": "Front Desk",
+    "reservations": "Reservations",
+    "guests": "Guests",
+    "rooms": "Rooms",
+    "housekeeping": "Housekeeping",
+    "foliosBilling": "Folios & Billing",
+    "ratePlans": "Rate Plans",
+    "revenueManagement": "Revenue Management",
+    "nightAudit": "Night Audit",
+    "reports": "Reports",
+    "channels": "Channels",
+    "communications": "Communications",
+    "reviews": "Reviews",
+    "usersRoles": "Users & Roles",
+    "settings": "Settings"
+  },
+  "header": {
+    "selectProperty": "Select Property",
+    "openMenu": "Open menu",
+    "notifications": "Notifications",
+    "logout": "Logout",
+    "user": "user",
+    "statusLive": "Live",
+    "statusOffline": "Offline",
+    "language": "Language"
+  }
+}

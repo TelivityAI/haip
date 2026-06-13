@@ -41,3 +41,10 @@ instructions/
 # Logs
 *.log
 npm-debug.log*
+
+# Cloudbeds reference manual (private, do not commit)
+cloudbeds-guide/
+.vercel
+
+# Local IDE / Claude agent config (machine-specific paths; keep out of the public repo)
+.claude/

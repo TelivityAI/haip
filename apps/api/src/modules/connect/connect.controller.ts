@@ -26,7 +26,10 @@ import { ListPropertiesDto } from './dto/list-properties.dto';
 
 @ApiTags('Connect — OTAIP Agent API')
 @ApiSecurity('api-key')
-@Controller('api/v1/connect')
+// 'connect' + the global 'api/v1' prefix = /api/v1/connect/* (the documented
+// path). Hardcoding 'api/v1/connect' here doubled the prefix to
+// /api/v1/api/v1/connect/* because main.ts sets a global prefix.
+@Controller('connect')
 // @Public() skips the global JWT guard — the Connect API uses an API key
 // (x-api-key header) validated by ApiKeyGuard instead. Without this, every
 // endpoint below would be reachable unauthenticated.
