@@ -4,6 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/ui/Toast';
+import { useMediaList } from '../hooks/useMedia';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import MediaGallery from '../components/media/MediaGallery';
@@ -55,6 +58,172 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   out_of_order: ['vacant_dirty'],
   out_of_service: ['vacant_dirty'],
 };
+
+// ---- Room Detail Slide-Over ----
+function RoomDetailPanel({
+  room,
+  propertyId,
+  onClose,
+  onTransition,
+  transitioning,
+}: {
+  room: Room;
+  propertyId: string;
+  onClose: () => void;
+  onTransition: (newStatus: string) => void;
+  transitioning: boolean;
+}) {
+  const { hasRole } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  // Mirror each backend route's authorization so we never show controls that
+  // would 403: PATCH /rooms/:id allows admin/front_desk/housekeeping_manager,
+  // but every media route is admin-only. In the demo (auth off) hasRole
+  // returns true so admins see all editing controls.
+  const canManageAmenities = hasRole('admin', 'front_desk', 'housekeeping_manager');
+  const canManagePhotos = hasRole('admin');
+
+  // Main photo: the room's own primary, falling back to the room type's primary
+  // (rooms usually inherit their type's photos rather than having their own).
+  const { data: roomMedia = [] } = useMediaList(propertyId, 'room', room.id);
+  const { data: typeMedia = [] } = useMediaList(propertyId, 'room_type', room.roomTypeId);
+  const primaryImage =
+    roomMedia.find((m) => m.isPrimary) ?? roomMedia[0] ??
+    typeMedia.find((m) => m.isPrimary) ?? typeMedia[0] ?? null;
+
+  const [amenities, setAmenities] = useState<string[]>(room.amenities ?? []);
+  const [newAmenity, setNewAmenity] = useState('');
+  const [photosOpen, setPhotosOpen] = useState(false);
+  const dirty = JSON.stringify(amenities) !== JSON.stringify(room.amenities ?? []);
+
+  const saveAmenities = useMutation({
+    mutationFn: () => api.patch(`/v1/rooms/${room.id}`, { amenities }, { params: { propertyId } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      toast('success', 'Features updated');
+    },
+    onError: () => toast('error', 'Failed to update features'),
+  });
+
+  const addAmenity = () => {
+    const v = newAmenity.trim().toLowerCase().replace(/\s+/g, '_');
+    if (v && !amenities.includes(v)) setAmenities([...amenities, v]);
+    setNewAmenity('');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white shadow-xl overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between z-10">
+          <h2 className="text-lg font-semibold text-telivity-navy">Room {room.number}</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-telivity-light-grey"><X size={18} /></button>
+        </div>
+        <div className="p-6 space-y-5">
+          {/* Main photo */}
+          <div className="relative">
+            {primaryImage ? (
+              <img
+                src={primaryImage.url}
+                alt={primaryImage.altText ?? `Room ${room.number}`}
+                className="w-full h-40 object-cover rounded-xl border border-gray-100"
+              />
+            ) : (
+              <div className="w-full h-40 rounded-xl border border-dashed border-gray-200 bg-telivity-light-grey/40 flex flex-col items-center justify-center text-telivity-mid-grey">
+                <ImageIcon size={28} />
+                <span className="text-xs mt-1">No photo</span>
+              </div>
+            )}
+            {canManagePhotos && (
+              <button
+                onClick={() => setPhotosOpen(true)}
+                className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-white/90 backdrop-blur text-telivity-slate text-xs font-medium rounded-lg px-2.5 py-1.5 shadow-sm hover:bg-white"
+              >
+                <ImageIcon size={13} /> Manage photos
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <StatusBadge status={room.status} />
+            {room.isAccessible && <StatusBadge status="info" label="ADA" />}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><p className="text-xs text-telivity-mid-grey">Type</p><p className="text-sm font-medium">{room.roomTypeName ?? '—'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">Floor</p><p className="text-sm font-medium">{room.floor ?? '—'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">Building</p><p className="text-sm font-medium">{room.building ?? '—'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">Guest</p><p className="text-sm font-medium">{room.guestName ?? 'None'}</p></div>
+          </div>
+
+          {/* Status Transitions */}
+          <div>
+            <p className="text-xs font-medium text-telivity-mid-grey mb-2">Change Status</p>
+            <div className="flex flex-wrap gap-2">
+              {(VALID_TRANSITIONS[room.status] ?? []).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => onTransition(s)}
+                  disabled={transitioning}
+                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium hover:border-telivity-teal hover:bg-telivity-teal/5 transition-colors disabled:opacity-50"
+                >
+                  → {s.replace(/_/g, ' ')}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Features / amenities */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-telivity-mid-grey">Features</p>
+              {canManageAmenities && dirty && (
+                <button
+                  onClick={() => saveAmenities.mutate()}
+                  disabled={saveAmenities.isPending}
+                  className="text-xs font-semibold text-telivity-teal hover:text-telivity-light-teal disabled:opacity-50"
+                >
+                  {saveAmenities.isPending ? 'Saving…' : 'Save'}
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {amenities.map((f) => (
+                <span key={f} className="inline-flex items-center gap-1 bg-telivity-light-grey text-telivity-slate text-xs rounded-lg px-2 py-1">
+                  {f}
+                  {canManageAmenities && (
+                    <button onClick={() => setAmenities(amenities.filter((a) => a !== f))} className="text-telivity-mid-grey hover:text-telivity-orange" aria-label={`Remove ${f}`}>
+                      <X size={11} />
+                    </button>
+                  )}
+                </span>
+              ))}
+              {amenities.length === 0 && <span className="text-xs text-telivity-mid-grey">No features</span>}
+            </div>
+            {canManageAmenities && (
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={newAmenity}
+                  onChange={(e) => setNewAmenity(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAmenity(); } }}
+                  placeholder="Add a feature…"
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-telivity-teal"
+                />
+                <button onClick={addAmenity} disabled={!newAmenity.trim()} className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium hover:border-telivity-teal disabled:opacity-50">Add</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {canManagePhotos && (
+        <Modal open={photosOpen} onClose={() => setPhotosOpen(false)} title={`Photos — Room ${room.number}`}>
+          <MediaGallery propertyId={propertyId} ownerType="room" ownerId={room.id} canManage={canManagePhotos} />
+        </Modal>
+      )}
+    </div>
+  );
+}
 
 // ---- Room List / Rack ----
 function RoomList() {
@@ -207,55 +376,14 @@ function RoomList() {
 
       {/* Room Detail Slide-Over */}
       {detailRoom && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setDetailRoom(null)} />
-          <div className="relative w-full max-w-md bg-white shadow-xl overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-telivity-navy">Room {detailRoom.number}</h2>
-              <button onClick={() => setDetailRoom(null)} className="p-1 rounded hover:bg-telivity-light-grey"><X size={18} /></button>
-            </div>
-            <div className="p-6 space-y-5">
-              <div className="flex items-center gap-2">
-                <StatusBadge status={detailRoom.status} />
-                {detailRoom.isAccessible && <StatusBadge status="info" label="ADA" />}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><p className="text-xs text-telivity-mid-grey">Type</p><p className="text-sm font-medium">{detailRoom.roomTypeName ?? '—'}</p></div>
-                <div><p className="text-xs text-telivity-mid-grey">Floor</p><p className="text-sm font-medium">{detailRoom.floor ?? '—'}</p></div>
-                <div><p className="text-xs text-telivity-mid-grey">Building</p><p className="text-sm font-medium">{detailRoom.building ?? '—'}</p></div>
-                <div><p className="text-xs text-telivity-mid-grey">Guest</p><p className="text-sm font-medium">{detailRoom.guestName ?? 'None'}</p></div>
-              </div>
-
-              {/* Status Transitions */}
-              <div>
-                <p className="text-xs font-medium text-telivity-mid-grey mb-2">Change Status</p>
-                <div className="flex flex-wrap gap-2">
-                  {(VALID_TRANSITIONS[detailRoom.status] ?? []).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => statusMutation.mutate({ roomId: detailRoom.id, newStatus: s })}
-                      disabled={statusMutation.isPending}
-                      className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium hover:border-telivity-teal hover:bg-telivity-teal/5 transition-colors disabled:opacity-50"
-                    >
-                      → {s.replace(/_/g, ' ')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {detailRoom.amenities && detailRoom.amenities.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-telivity-mid-grey mb-2">Features</p>
-                  <div className="flex flex-wrap gap-1">
-                    {detailRoom.amenities.map((f) => (
-                      <span key={f} className="bg-telivity-light-grey text-telivity-slate text-xs rounded-lg px-2 py-1">{f}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <RoomDetailPanel
+          key={detailRoom.id}
+          room={detailRoom}
+          propertyId={propertyId}
+          onClose={() => setDetailRoom(null)}
+          onTransition={(s) => statusMutation.mutate({ roomId: detailRoom.id, newStatus: s })}
+          transitioning={statusMutation.isPending}
+        />
       )}
 
       {/* Create Room Modal */}
