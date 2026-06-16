@@ -36,7 +36,7 @@ export class HousekeepingService {
     let checklist = dto.checklist;
 
     if (!checklist) {
-      checklist = await this.generateChecklist(dto.type, dto.roomId);
+      checklist = await this.generateChecklist(dto.type, dto.roomId, dto.propertyId);
     }
 
     const [task] = await this.db
@@ -538,23 +538,27 @@ export class HousekeepingService {
     );
   }
 
-  private async generateChecklist(taskType: string, roomId: string) {
+  // propertyId is REQUIRED so the room/reservation reads below stay tenant-scoped:
+  // roomId comes from the request body, so without an `eq(...propertyId)` filter a
+  // caller at property A could pass a roomId from property B and leak that room's
+  // ADA status / next-guest VIP level (cross-tenant IDOR).
+  private async generateChecklist(taskType: string, roomId: string, propertyId: string) {
     const template = CHECKLIST_TEMPLATES[taskType];
     if (!template) return [];
 
     const items = template.map((item) => ({ ...item }));
 
-    // Check if room is ADA accessible
+    // Check if room is ADA accessible (scoped to the property)
     const [room] = await this.db
       .select({ isAccessible: rooms.isAccessible })
       .from(rooms)
-      .where(eq(rooms.id, roomId));
+      .where(and(eq(rooms.id, roomId), eq(rooms.propertyId, propertyId)));
 
     if (room?.isAccessible) {
       items.push(...ADA_EXTRA_ITEMS.map((item) => ({ ...item })));
     }
 
-    // Check if next guest is VIP
+    // Check if next guest is VIP (scoped to the property)
     const [nextReservation] = await this.db
       .select({ vipLevel: guests.vipLevel })
       .from(reservations)
@@ -562,6 +566,7 @@ export class HousekeepingService {
       .where(
         and(
           eq(reservations.roomId, roomId),
+          eq(reservations.propertyId, propertyId),
           inArray(reservations.status, ['confirmed', 'assigned'] as any),
         ),
       )

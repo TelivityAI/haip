@@ -4,7 +4,6 @@ import {
   Req,
   Res,
   Logger,
-  Headers,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { Public } from '../../../auth/public.decorator';
@@ -21,7 +20,11 @@ import {
  * Booking.com pushes reservation notifications as OTA XML to this endpoint.
  *
  * @Public() — no JWT required (Booking.com can't authenticate to our IdP).
- * Security is via Basic Auth verification in the request.
+ *
+ * NOTE: caller authentication for this webhook is design item C1 (per-OTA
+ * signature / Basic-Auth / IP-allowlist) and is NOT yet implemented — the
+ * endpoint is currently unauthenticated. Tenant ROUTING is enforced here by
+ * matching the OTA hotel code to a channel connection's config.hotelId.
  */
 @ApiTags('Channel Manager — Booking.com')
 @Controller('channels/inbound/booking-com')
@@ -44,7 +47,6 @@ export class BookingComInboundController {
   async receiveReservation(
     @Req() req: any,
     @Res() res: any,
-    @Headers('authorization') authHeader?: string,
   ) {
     try {
       // Read raw XML body
@@ -70,17 +72,23 @@ export class BookingComInboundController {
         return this.sendErrorXml(res, '400', 'No reservations in payload');
       }
 
-      // Find channel connection for booking_com
-      const connection = await this.findBookingComConnection();
-
-      if (!connection) {
-        this.logger.error('No active Booking.com channel connection found');
-        return this.sendErrorXml(res, '500', 'No active Booking.com connection configured');
-      }
-
-      // Process each reservation
+      // Process each reservation, routing each to the connection that matches its
+      // OTA hotel code. (Auth of the caller itself is tracked as design item C1 —
+      // this endpoint is not yet authenticated; see the class doc.)
       const results = [];
       for (const reservation of reservations) {
+        const connection = await this.findBookingComConnection(reservation.channelHotelId);
+        if (!connection) {
+          this.logger.error(
+            `Booking.com reservation ${reservation.externalConfirmation}: no connection matches hotelCode='${reservation.channelHotelId ?? '(missing)'}' — rejected`,
+          );
+          results.push({
+            externalConfirmation: reservation.externalConfirmation,
+            error: 'No matching channel connection for hotel code',
+            success: false,
+          });
+          continue;
+        }
         try {
           const result = await this.inboundReservationService.processInboundReservation(
             connection.id,
@@ -152,10 +160,17 @@ export class BookingComInboundController {
         return this.sendErrorXml(res, '400', 'Missing reservation ID in cancellation');
       }
 
-      // Build a cancellation ChannelReservation
-      const connection = await this.findBookingComConnection();
+      // Route the cancellation to the connection matching the OTA hotel code so a
+      // caller can't cancel another tenant's reservation by guessing its id.
+      const cancelHotelId =
+        (parsed.data as any).RoomStays?.RoomStay?.BasicPropertyInfo?.['@_HotelCode'] ??
+        (parsed.data as any).BasicPropertyInfo?.['@_HotelCode'] ??
+        (parsed.data as any)['@_HotelCode'];
+      const connection = await this.findBookingComConnection(
+        cancelHotelId != null ? String(cancelHotelId) : undefined,
+      );
       if (!connection) {
-        return this.sendErrorXml(res, '500', 'No active Booking.com connection configured');
+        return this.sendErrorXml(res, '400', 'No matching channel connection for hotel code');
       }
 
       // Process as cancellation through the standard flow
@@ -199,10 +214,17 @@ export class BookingComInboundController {
 
   // --- Private ---
 
-  private async findBookingComConnection() {
-    // Find first active Booking.com connection
+  /**
+   * Resolve the Booking.com connection for a given OTA hotel code. NEVER defaults
+   * to the first connection: with two tenants on Booking.com that would attribute
+   * the reservation/cancellation to an arbitrary property (confused-deputy).
+   */
+  private async findBookingComConnection(hotelId: string | undefined) {
+    if (!hotelId) return null;
     const connections = await this.channelService.findByAdapterType('booking_com');
-    return connections[0] ?? null;
+    return (
+      connections.find((c: any) => String((c.config ?? {}).hotelId ?? '') === hotelId) ?? null
+    );
   }
 
   private sendErrorXml(res: any, code: string, message: string) {

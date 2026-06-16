@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './auth.guard';
 import { RolesGuard } from './roles.guard';
+import { PropertyScopeGuard } from './property-scope.guard';
 import { PermissionsGuard } from './permissions.guard';
 import { PermissionsService } from './permissions.service';
 import { ApiKeyGuard } from './api-key.guard';
@@ -49,10 +50,12 @@ import { WsAuthService } from './ws-auth.service';
     },
     // Global guards — applied to ALL endpoints, in order:
     // 1. JwtAuthGuard populates req.user, 2. RolesGuard checks @Roles(),
-    // 3. PermissionsGuard checks @RequirePermissions() (local authz). All three
+    // 3. PropertyScopeGuard binds the principal to the request's propertyId,
+    // 4. PermissionsGuard checks @RequirePermissions() (local authz). All
     // short-circuit to allow when AUTH_ENABLED=false.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PropertyScopeGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
     // Resolves effective permissions from the local RBAC tables. Exported so the
     // admin module can reuse it.
