@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './auth.guard';
+import { PropertyAccessGuard } from './property-access.guard';
 import { RolesGuard } from './roles.guard';
 import { PermissionsGuard } from './permissions.guard';
 import { PermissionsService } from './permissions.service';
@@ -48,10 +49,13 @@ import { WsAuthService } from './ws-auth.service';
       inject: [ConfigService],
     },
     // Global guards — applied to ALL endpoints, in order:
-    // 1. JwtAuthGuard populates req.user, 2. RolesGuard checks @Roles(),
-    // 3. PermissionsGuard checks @RequirePermissions() (local authz). All three
-    // short-circuit to allow when AUTH_ENABLED=false.
+    // 1. JwtAuthGuard populates req.user, 2. PropertyAccessGuard enforces tenant
+    // membership on any route carrying a propertyId (the cross-tenant isolation
+    // boundary), 3. RolesGuard checks @Roles(), 4. PermissionsGuard checks
+    // @RequirePermissions() (local authz). All short-circuit to allow when
+    // AUTH_ENABLED=false.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PropertyAccessGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
     // Resolves effective permissions from the local RBAC tables. Exported so the
