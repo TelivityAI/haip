@@ -14,8 +14,9 @@ import type { AuthUser } from './current-user.decorator';
  * Global tenant-isolation guard.
  *
  * Runs after JwtAuthGuard (which populates req.user). For any request that
- * carries a `propertyId` (query param or body — the two conventions across the
- * API), it enforces that the authenticated caller is a member of that property
+ * carries a `propertyId` (path param e.g. /agents/:propertyId, query param, or
+ * request body — the three conventions across the API), it enforces that the
+ * authenticated caller is a member of that property
  * (or a platform admin). Without this, every property-scoped route is scoped
  * only by the *attacker-supplied* propertyId — a cross-tenant data leak.
  *
@@ -48,7 +49,10 @@ export class PropertyAccessGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const raw: unknown = request.query?.propertyId ?? request.body?.propertyId;
+    const raw: unknown =
+      request.params?.propertyId ??
+      request.query?.propertyId ??
+      request.body?.propertyId;
 
     // No propertyId → this route isn't property-scoped; nothing to enforce here.
     if (raw === undefined || raw === null) return true;

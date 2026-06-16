@@ -36,6 +36,17 @@ describe('PropertyAccessGuard', () => {
     expect(guard.canActivate(ctx(req))).toBe(true);
   });
 
+  // Path-param tenant routes (e.g. /agents/:propertyId/...) must be covered too.
+  it('DENIES a Hotel-A user requesting Hotel-B data via a :propertyId path param', () => {
+    const req = { user: { sub: 'u', roles: [], propertyIds: [A] }, params: { propertyId: B } };
+    expect(() => guard.canActivate(ctx(req))).toThrow(ForbiddenException);
+  });
+
+  it('allows a path-param propertyId the caller is a member of', () => {
+    const req = { user: { sub: 'u', roles: [], propertyIds: [A] }, params: { propertyId: A } };
+    expect(guard.canActivate(ctx(req))).toBe(true);
+  });
+
   it('denies cross-tenant via POST body, allows same-tenant via body', () => {
     const deny = { user: { sub: 'u', roles: [], propertyIds: [A] }, body: { propertyId: B } };
     expect(() => guard.canActivate(ctx(deny))).toThrow(ForbiddenException);
