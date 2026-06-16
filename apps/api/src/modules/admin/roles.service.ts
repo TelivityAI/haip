@@ -9,6 +9,7 @@ import { and, eq, or, isNull, inArray } from 'drizzle-orm';
 import { roles, rolePermissions, userRoles, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { isPermissionKey } from '../auth/permissions.catalog';
+import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 
@@ -64,7 +65,7 @@ export class RolesService {
     return row;
   }
 
-  async create(dto: CreateRoleDto) {
+  async create(dto: CreateRoleDto, actor?: AuditActor) {
     const [dupe] = await this.db
       .select({ id: roles.id })
       .from(roles)
@@ -89,11 +90,12 @@ export class RolesService {
       entityType: 'role',
       entityId: role.id,
       description: 'role.created',
+      ...actorFields(actor),
     });
     return { ...role, permissions: [] };
   }
 
-  async update(id: string, propertyId: string, dto: UpdateRoleDto) {
+  async update(id: string, propertyId: string, dto: UpdateRoleDto, actor?: AuditActor) {
     await this.getCustomRole(id, propertyId);
     const [role] = await this.db
       .update(roles)
@@ -106,11 +108,12 @@ export class RolesService {
       entityType: 'role',
       entityId: id,
       description: 'role.updated',
+      ...actorFields(actor),
     });
     return role;
   }
 
-  async delete(id: string, propertyId: string) {
+  async delete(id: string, propertyId: string, actor?: AuditActor) {
     await this.getCustomRole(id, propertyId);
     const [assigned] = await this.db
       .select({ id: userRoles.id })
@@ -131,12 +134,13 @@ export class RolesService {
         entityType: 'role',
         entityId: id,
         description: 'role.deleted',
+        ...actorFields(actor),
       });
     });
     return { deleted: true };
   }
 
-  async setPermissions(id: string, propertyId: string, permissionKeys: string[]) {
+  async setPermissions(id: string, propertyId: string, permissionKeys: string[], actor?: AuditActor) {
     await this.getCustomRole(id, propertyId);
     const invalid = permissionKeys.filter((k) => !isPermissionKey(k));
     if (invalid.length) {
@@ -158,6 +162,7 @@ export class RolesService {
         entityType: 'role',
         entityId: id,
         description: 'role.permissions_updated',
+        ...actorFields(actor),
       });
     });
     return { roleId: id, permissions: unique };

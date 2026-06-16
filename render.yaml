@@ -33,6 +33,12 @@ services:
         value: 'false'
       - key: STRIPE_MODE
         value: mock
+      # This is the intentional public demo: it runs with auth off and mock
+      # payments. The API refuses to boot in production with that config UNLESS
+      # this opt-in is set — which prevents an accidental insecure real deployment
+      # while keeping the demo green.
+      - key: HAIP_ALLOW_INSECURE
+        value: 'true'
       - key: DATABASE_URL
         fromDatabase:
           name: haip-postgres

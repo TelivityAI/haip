@@ -16,6 +16,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
+import { AuditActorCtx, type AuditActor } from '../../common/audit/audit-actor';
 import { PermissionsService } from '../auth/permissions.service';
 import { PERMISSIONS, ALL_PERMISSIONS } from '../auth/permissions.catalog';
 import { UsersService } from './users.service';
@@ -82,8 +83,8 @@ export class AdminController {
   @RequirePermissions('admin.users.manage')
   @ApiOperation({ summary: 'Create a local user' })
   @ApiResponse({ status: 201, description: 'User created' })
-  createUser(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+  createUser(@Body() dto: CreateUserDto, @AuditActorCtx() actor: AuditActor) {
+    return this.usersService.create(dto, actor);
   }
 
   @Patch('users/:id')
@@ -93,8 +94,9 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateUserDto,
+    @AuditActorCtx() actor: AuditActor,
   ) {
-    return this.usersService.update(id, propertyId, dto);
+    return this.usersService.update(id, propertyId, dto, actor);
   }
 
   @Delete('users/:id')
@@ -104,8 +106,9 @@ export class AdminController {
   disableUser(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @AuditActorCtx() actor: AuditActor,
   ) {
-    return this.usersService.disable(id, propertyId);
+    return this.usersService.disable(id, propertyId, actor);
   }
 
   @Put('users/:id/roles')
@@ -115,8 +118,9 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: AssignRolesDto,
+    @AuditActorCtx() actor: AuditActor,
   ) {
-    return this.usersService.assignRoles(id, propertyId, dto.roleIds);
+    return this.usersService.assignRoles(id, propertyId, dto.roleIds, actor);
   }
 
   @Get('users/:id/effective-permissions')
@@ -141,8 +145,8 @@ export class AdminController {
   @Post('roles')
   @RequirePermissions('admin.roles.manage')
   @ApiOperation({ summary: 'Create a custom role' })
-  createRole(@Body() dto: CreateRoleDto) {
-    return this.rolesService.create(dto);
+  createRole(@Body() dto: CreateRoleDto, @AuditActorCtx() actor: AuditActor) {
+    return this.rolesService.create(dto, actor);
   }
 
   @Patch('roles/:id')
@@ -152,8 +156,9 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateRoleDto,
+    @AuditActorCtx() actor: AuditActor,
   ) {
-    return this.rolesService.update(id, propertyId, dto);
+    return this.rolesService.update(id, propertyId, dto, actor);
   }
 
   @Delete('roles/:id')
@@ -163,8 +168,9 @@ export class AdminController {
   deleteRole(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @AuditActorCtx() actor: AuditActor,
   ) {
-    return this.rolesService.delete(id, propertyId);
+    return this.rolesService.delete(id, propertyId, actor);
   }
 
   @Put('roles/:id/permissions')
@@ -174,8 +180,9 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: SetRolePermissionsDto,
+    @AuditActorCtx() actor: AuditActor,
   ) {
-    return this.rolesService.setPermissions(id, propertyId, dto.permissionKeys);
+    return this.rolesService.setPermissions(id, propertyId, dto.permissionKeys, actor);
   }
 }
 

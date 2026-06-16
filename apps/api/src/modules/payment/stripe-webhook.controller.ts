@@ -10,7 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
@@ -138,7 +138,7 @@ export class StripeWebhookController {
     await this.db
       .update(payments)
       .set({ status: 'captured', processedAt: new Date(), updatedAt: new Date() })
-      .where(eq(payments.id, payment.id));
+      .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
 
     // Recalculate folio balance after payment state change
     await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
@@ -165,7 +165,7 @@ export class StripeWebhookController {
     await this.db
       .update(payments)
       .set({ status: 'failed', notes: errorMessage, updatedAt: new Date() })
-      .where(eq(payments.id, payment.id));
+      .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
 
     // Recalculate folio balance after payment state change
     await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
@@ -190,7 +190,7 @@ export class StripeWebhookController {
     await this.db
       .update(payments)
       .set({ status: 'voided', updatedAt: new Date() })
-      .where(eq(payments.id, payment.id));
+      .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
 
     // Recalculate folio balance after payment state change
     await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
@@ -223,7 +223,7 @@ export class StripeWebhookController {
     await this.db
       .update(payments)
       .set({ status, updatedAt: new Date() })
-      .where(eq(payments.id, payment.id));
+      .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
 
     // Recalculate folio balance after refund
     await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);

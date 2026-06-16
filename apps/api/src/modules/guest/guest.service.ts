@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { eq, ilike, or, and, sql, inArray } from 'drizzle-orm';
 import { guests, reservations, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { CreateGuestDto } from './dto/create-guest.dto';
 import { UpdateGuestDto } from './dto/update-guest.dto';
 import { SearchGuestsDto } from './dto/search-guests.dto';
@@ -109,7 +110,7 @@ export class GuestService {
     return guest;
   }
 
-  async delete(id: string, propertyId: string) {
+  async delete(id: string, propertyId: string, actor?: AuditActor) {
     // Bug 4: GDPR right-to-erasure. Hard DELETE fails on FK constraints from
     // bookings.guest_id / reservations.guest_id (operational/legal retention
     // requires we keep stay history). Instead, anonymize PII in place and
@@ -162,6 +163,7 @@ export class GuestService {
       entityType: 'guest',
       entityId: id,
       description: 'gdpr_erasure',
+      ...actorFields(actor),
     });
 
     return { deleted: true };

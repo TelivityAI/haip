@@ -3,9 +3,9 @@ import {
   IsUUID,
   IsOptional,
   IsArray,
-  IsUrl,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsSafeHttpUrl } from '../../../common/security/is-safe-url.validator';
 
 export class CreateSubscriptionDto {
   @ApiProperty()
@@ -22,7 +22,7 @@ export class CreateSubscriptionDto {
   subscriberName?: string;
 
   @ApiProperty({ example: 'https://otaip.example.com/webhooks/haip' })
-  @IsUrl()
+  @IsSafeHttpUrl({ requireHttps: true })
   callbackUrl!: string;
 
   @ApiProperty({ example: ['reservation.*', 'folio.charge_posted'] })

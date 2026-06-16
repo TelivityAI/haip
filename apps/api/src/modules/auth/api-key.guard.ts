@@ -6,6 +6,15 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { timingSafeEqual } from 'node:crypto';
+
+/** Constant-time string compare (avoids leaking the key via response timing). */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 /**
  * API-key guard for agent-facing endpoints (e.g. Connect API).
@@ -49,7 +58,7 @@ export class ApiKeyGuard implements CanActivate {
     const headerValue = req.headers['x-api-key'] ?? req.headers['X-API-Key' as any];
     const provided = Array.isArray(headerValue) ? headerValue[0] : headerValue;
 
-    if (!provided || !validKeys.includes(provided)) {
+    if (!provided || !validKeys.some((k) => safeEqual(k, provided))) {
       throw new UnauthorizedException('Invalid or missing API key');
     }
 

@@ -304,10 +304,16 @@ export class MediaService {
     if (!file) {
       throw new BadRequestException('No file uploaded (field "file")');
     }
+    // Verify the bytes actually are a JPEG/PNG/WebP — a forged Content-Type must
+    // not let an attacker store HTML/SVG that later executes from the CDN origin.
+    const detected = sniffImageType(file.buffer);
+    if (!detected) {
+      throw new BadRequestException('File is not a valid JPEG, PNG, or WebP image');
+    }
     await this.assertOwnerAtProperty(dto.ownerType, dto.ownerId, dto.propertyId);
     const { storageKey, url } = await this.storage.put(file.buffer, {
       propertyId: dto.propertyId,
-      contentType: file.mimetype,
+      contentType: detected, // store the sniffed type, not the client-supplied one
       filename: file.originalname,
     });
     const row = await this.insertMedia({
@@ -319,11 +325,37 @@ export class MediaService {
       category: dto.category,
       caption: dto.caption,
       altText: dto.altText,
-      contentType: file.mimetype,
+      contentType: detected,
       fileSize: file.size,
       isPrimary: false,
     });
     await this.emitContentChanged(dto.ownerType, dto.propertyId);
     return row;
   }
+}
+
+/**
+ * Identify an image by magic bytes (not the client-declared MIME). Returns the
+ * canonical content type for JPEG/PNG/WebP, or null if the bytes don't match —
+ * dependency-free so no risk of a forged Content-Type smuggling HTML/SVG.
+ */
+function sniffImageType(buf: Buffer): 'image/jpeg' | 'image/png' | 'image/webp' | null {
+  if (!buf || buf.length < 12) return null;
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+    buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  // WebP: "RIFF" .... "WEBP"
+  if (
+    buf.toString('ascii', 0, 4) === 'RIFF' &&
+    buf.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  return null;
 }

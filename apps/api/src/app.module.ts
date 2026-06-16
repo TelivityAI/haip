@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { RateLimitGuard } from './common/security/rate-limit.guard';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { PropertyModule } from './modules/property/property.module';
@@ -74,5 +76,11 @@ if (process.env['NODE_ENV'] === 'production' || process.env['SERVE_DASHBOARD'] =
   );
 }
 
-@Module({ imports })
+@Module({
+  imports,
+  providers: [
+    // Global, in-memory brute-force mitigation (interim, pre-C2). Runs first.
+    { provide: APP_GUARD, useClass: RateLimitGuard },
+  ],
+})
 export class AppModule {}

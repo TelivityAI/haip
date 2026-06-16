@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createHmac } from 'crypto';
 import { WebhookDeliveryService } from './webhook-delivery.service';
 
+// The SSRF URL guard does real DNS resolution (covered by its own spec); stub it
+// here so these tests exercise delivery logic without network.
+vi.mock('../../common/security/url-guard', () => ({
+  assertSafeOutboundUrl: vi.fn().mockResolvedValue(undefined),
+}));
+
 /**
  * Stateful mock DB that stores webhook_deliveries in memory so the service's
  * read-modify-write cycle actually works. Subscriptions are handed back from
