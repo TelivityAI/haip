@@ -62,14 +62,15 @@ export class PropertyAccessGuard implements CanActivate {
       throw new ForbiddenException('No authenticated user');
     }
 
-    // Fail closed: a propertyId is present, so it MUST resolve to string(s) the
-    // caller is a member of. Arrays (?propertyId=A&propertyId=B) must ALL pass —
-    // never let a non-string value slip through unchecked.
-    const ids = Array.isArray(raw) ? raw : [raw];
-    for (const pid of ids) {
-      if (typeof pid !== 'string' || !userCanAccessProperty(user, pid)) {
-        throw new ForbiddenException('Not a member of this property');
-      }
+    // Fail closed: a propertyId is present, so it MUST be a single string the
+    // caller is a member of. A non-scalar value (e.g. an array from a duplicated
+    // ?propertyId=A&propertyId=B) is anomalous and rejected outright — a
+    // property-scoped request never legitimately targets multiple tenants.
+    if (typeof raw !== 'string') {
+      throw new ForbiddenException('Invalid propertyId');
+    }
+    if (!userCanAccessProperty(user, raw)) {
+      throw new ForbiddenException('Not a member of this property');
     }
     return true;
   }

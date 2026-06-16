@@ -87,15 +87,14 @@ describe('PropertyAccessGuard', () => {
     expect(() => guard.canActivate(ctx(req))).toThrow(ForbiddenException);
   });
 
-  // Fail-closed: duplicate query params arrive as an array; an attacker must not
-  // be able to slip a foreign propertyId past the check by sending two.
-  it('denies an array propertyId containing a non-member tenant', () => {
-    const req = { user: { sub: 'u', roles: [], propertyIds: [A] }, query: { propertyId: [A, B] } };
-    expect(() => guard.canActivate(ctx(req))).toThrow(ForbiddenException);
-  });
-
-  it('allows an array propertyId where every entry is a member', () => {
-    const req = { user: { sub: 'u', roles: [], propertyIds: [A, B] }, query: { propertyId: [A, B] } };
-    expect(guard.canActivate(ctx(req))).toBe(true);
+  // Fail-closed: a property-scoped request never legitimately targets multiple
+  // tenants, so a non-scalar propertyId (duplicate ?propertyId=A&propertyId=B
+  // arrives as an array) is rejected outright — even if the caller is a member
+  // of every entry.
+  it('denies an array propertyId outright (non-scalar, fail closed)', () => {
+    const foreign = { user: { sub: 'u', roles: [], propertyIds: [A] }, query: { propertyId: [A, B] } };
+    expect(() => guard.canActivate(ctx(foreign))).toThrow(ForbiddenException);
+    const allMember = { user: { sub: 'u', roles: [], propertyIds: [A, B] }, query: { propertyId: [A, B] } };
+    expect(() => guard.canActivate(ctx(allMember))).toThrow(ForbiddenException);
   });
 });
