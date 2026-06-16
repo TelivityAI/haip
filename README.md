@@ -36,7 +36,7 @@
 
 The hotel industry runs on closed-source, legacy PMS platforms that charge per-room fees, lock data behind proprietary APIs, and treat integrations as an afterthought. Hotels pay $5–15/room/month just for the privilege of managing their own operations.
 
-HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
+HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, local user & role administration, media management for property and room photos, tax calculation engine, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
 
 What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and learning loop. HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
@@ -129,8 +129,9 @@ graph TB
 - **Multi-tenant from day one** — `property_id` on every table, designed for portfolio operators managing multiple hotels
 - **Event-driven** — Webhook events on every state change (`reservation.created`, `folio.charge_posted`, `room.status_changed`). Build anything on top.
 - **AI agents as first-class citizens** — 12 built-in agents with a common interface: `analyze() → recommend() → execute()`, coordinated by a Revenue Manager orchestrator. Three operating modes: manual, suggest, autopilot. Decision logging for continuous learning.
-- **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. Booking.com direct adapter + SiteMinder adapter for 450+ OTA reach
-- **Keycloak RBAC** — JWT authentication with role-based access control (admin, front_desk, housekeeping, revenue_manager). Guards on every endpoint.
+- **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. Booking.com + Expedia (EQC) direct adapters and a SiteMinder aggregator for 450+ OTA reach — distributing **both** ARI and descriptive content (photos/descriptions/amenities).
+- **Layered RBAC** — Keycloak JWT authentication **plus HAIP's own local users, roles & permissions**: a code-defined permission catalog, operator-defined custom roles, and guards (`@Roles` + `@RequirePermissions`) on every endpoint.
+- **Polymorphic media** — One image model for properties, room types & rooms; add by URL (zero infra) or upload to S3/MinIO, with one enforced primary per owner.
 - **Compliance as infrastructure** — PCI tokenization (Stripe), GDPR audit trails, jurisdiction-based tax calculation, guest registration per jurisdiction. Not bolted on — built in.
 - **Real-time dashboard** — WebSocket broadcasting per property. Room status changes, new reservations, AI agent decisions — all pushed instantly.
 
@@ -247,6 +248,14 @@ This creates a learning loop: each decision becomes training data for model impr
 - Connecting room support
 - ADA/accessible room tracking
 - Real-time status summary dashboard
+- Per-room photo and editable features/amenities from the room detail panel (primary image falls back to the room type's photo)
+
+### Media & Photos
+- Image management for **properties, room types, and rooms** — a polymorphic `media` model with a denormalized `property_id` on every row for multi-tenant scoping
+- Add images **by URL** (zero infra) or **upload files** to S3-compatible object storage (AWS S3 / MinIO) when configured — the driver is selected by env, so the default demo runs on stock URLs with no storage backend and no committed binaries
+- Per-owner ordering, captions, alt text, and categories (hero, exterior, room, amenity, dining), with a single enforced **primary** image per owner (partial unique index)
+- Dashboard photo galleries wired into Room Types, individual Rooms, and Property Settings — reorder, set-primary, and delete
+- Image mutations are admin-gated; reads are available to any authenticated user
 
 ### Guest Profiles
 - Full guest profiles with contact, preferences, and stay history
@@ -279,20 +288,22 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ### Channel Manager
 - ARI (Availability, Rates, Inventory) push to connected OTAs
+- **Content distribution** — push descriptive content (photos, descriptions, amenities) to OTAs via each adapter's content API, with content-sync logging and **auto-resync** when property or media content changes (`property.content_updated` / `roomtype.content_updated` events)
 - Channel connection management with credentials and mapping
 - Inbound reservation processing from OTA channels
 - Reservation pull from channels
 - Rate parity monitoring and enforcement
 - Rate override capabilities per channel
 - Stop-sell functionality
-- Sync logging for audit trails
+- Sync logging for audit trails (ARI **and** content pushes)
 
 #### OTA Adapters
 
 | Adapter | Type | Coverage |
 |---------|------|----------|
-| **Booking.com** | Direct integration | XML-based OTA protocol. Inbound reservation webhooks, cancellation handling, rate/availability push. Full test suite (31 tests). |
-| **SiteMinder** | Aggregator | REST/JSON adapter. Connect once, distribute to 450+ OTAs. ARI push, reservation pull, rate parity sync. |
+| **Booking.com** | Direct integration | OTA XML for ARI + inbound reservation webhooks/cancellations; JSON **Photo API** for content (photos with validation, plus room/property descriptions & amenities). |
+| **Expedia (EQC)** | Direct integration | EQC Availability & Rates (XML) for ARI, Booking Notification push for inbound reservations, and the **Image API** for content (with Expedia's own image limits). |
+| **SiteMinder** | Aggregator (pmsXchange) | SOAP / OTA XML. Connect once, distribute to 450+ OTAs — ARI push, reservation delivery, rate parity. (Content is managed in the SiteMinder extranet — no PMS content push.) |
 
 ### Payments (Stripe)
 - PCI DSS compliant — never stores raw card data
@@ -313,10 +324,18 @@ This creates a learning loop: each decision becomes training data for model impr
 ### Authentication & Authorization (Keycloak)
 - OAuth 2.0 / OpenID Connect via Keycloak identity provider
 - JWT validation with RS256 public key verification
-- Role-based access control (RBAC) with 4 roles: `admin`, `front_desk`, `housekeeping`, `revenue_manager`
-- `@Roles()` decorator on every controller
+- Keycloak roles (`admin`, `front_desk`, `housekeeping`, `revenue_manager`) **plus HAIP's own local roles & permissions** (see *Users, Roles & Permissions* below)
+- `@Roles()` and `@RequirePermissions()` decorators guard every controller
 - `@Public()` decorator for unauthenticated endpoints (health checks)
 - `@CurrentUser()` decorator for extracting authenticated user context
+
+### Users, Roles & Permissions (Admin Console)
+- **Local identity & authorization** layered on top of Keycloak login — HAIP owns its own `users`, `roles`, `role_permissions`, and `user_roles` tables (property-scoped, multi-tenant)
+- **Code-defined permission catalog** (e.g. `reservations.write`, `rooms.read`, `housekeeping.manage`, `channels.manage`, `media.manage`, `admin.users.manage`) mapped 1:1 to API capabilities and dashboard nav items
+- **Custom roles** — operators create roles and grant granular permissions via a permission matrix; built-in system roles are protected from edits/deletion
+- `PermissionsGuard` + `@RequirePermissions()` augment the Keycloak JWT guard; permissions drive both API authorization **and** which nav items/pages each user sees
+- **Admin console** in Settings: a **Users** tab (create/invite users, assign roles) and a **Roles** tab (permission matrix)
+- Works fully in the demo with `AUTH_ENABLED=false` (all permissions granted); binds to Keycloak subjects when auth is enabled
 
 ### Webhook Engine
 - Real-time webhook delivery on every entity state change
@@ -330,6 +349,8 @@ This creates a learning loop: each decision becomes training data for model impr
 - Night Audit page: AI anomaly detection section with severity-coded alerts
 - Communications page: email draft preview, send/approve workflow, delivery stats
 - Reviews page: add reviews, AI-drafted responses, edit/approve/mark-posted workflow, rating stats
+- Settings page: property settings with photo gallery, plus **Users & Roles administration** (user management + permission matrix)
+- Rooms & Room Types: photo galleries with primary/reorder, per-room editable features
 - Real-time updates via WebSocket (new reservations, room status changes, AI agent decisions)
 - Responsive layout with mobile sidebar drawer
 - Calendar view for reservations (day/week/month)
@@ -357,7 +378,7 @@ This creates a learning loop: each decision becomes training data for model impr
 | API Spec | OpenAPI 3.0 (auto-generated) | Swagger UI at `/docs` |
 | Auth | Keycloak (OAuth 2.0 / OIDC) | Identity provider, JWT, RBAC |
 | Payments | Stripe | PCI DSS compliant payment processing |
-| OTA Channels | Booking.com (XML) + SiteMinder (REST) | Direct + aggregated OTA connectivity |
+| OTA Channels | Booking.com + Expedia (EQC) direct + SiteMinder (pmsXchange) | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
 | Testing | Vitest (691 tests) | Unit and integration tests |
@@ -502,12 +523,15 @@ haip/
 │   │   │       │   ├── training/   # Agent training/learning utilities
 │   │   │       │   ├── interfaces/ # HaipAgent interface definition
 │   │   │       │   └── dto/        # Agent config + decision DTOs
-│   │   │       ├── auth/           # Keycloak JWT + RBAC guards
-│   │   │       ├── channel/        # Channel manager (ARI, rate parity)
+│   │   │       ├── admin/          # Local users, roles & permissions (admin console)
+│   │   │       ├── auth/           # Keycloak JWT + RBAC + permission guards
+│   │   │       ├── channel/        # Channel manager (ARI, content, rate parity)
 │   │   │       │   └── adapters/   # OTA channel adapters
-│   │   │       │       ├── booking-com/ # Booking.com XML adapter
-│   │   │       │       └── siteminder/  # SiteMinder REST adapter
+│   │   │       │       ├── booking-com/ # Booking.com (OTA XML + Photo API)
+│   │   │       │       ├── expedia/     # Expedia EQC (AR XML + Image API)
+│   │   │       │       └── siteminder/  # SiteMinder pmsXchange (SOAP/OTA XML)
 │   │   │       ├── connect/        # OTAIP agent API layer
+│   │   │       ├── media/          # Images for property / room types / rooms (URL + S3)
 │   │   │       ├── events/         # WebSocket gateway
 │   │   │       ├── folio/          # Folios, charges, routing, city ledger
 │   │   │       ├── guest/          # Guest profiles, VIP, preferences
