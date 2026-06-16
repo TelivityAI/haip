@@ -151,9 +151,13 @@ export class ChannelService {
 
   async updateSyncStatus(
     id: string,
+    propertyId: string,
     status: string,
     error?: string,
   ) {
+    // propertyId is part of the WHERE (not just the caller's responsibility): every
+    // property-scoped write must filter by propertyId so this stays safe even if a
+    // future caller passes a client-supplied connection id.
     await this.db
       .update(channelConnections)
       .set({
@@ -162,6 +166,6 @@ export class ChannelService {
         lastSyncError: error ?? null,
         updatedAt: new Date(),
       })
-      .where(eq(channelConnections.id, id));
+      .where(and(eq(channelConnections.id, id), eq(channelConnections.propertyId, propertyId)));
   }
 }

@@ -37,13 +37,25 @@ export class ExpediaInboundController {
       }
 
       const connections = await this.channelService.findByAdapterType('expedia');
-      const connection = connections[0];
-      if (!connection) {
+      if (connections.length === 0) {
         this.logger.error('No active Expedia channel connection found');
         return res.status(500).send('No active Expedia connection configured');
       }
 
       for (const reservation of reservations) {
+        // Route to the connection whose config.hotelId matches the booking's hotel.
+        // NEVER fall back to connections[0]: with two tenants on Expedia that would
+        // attribute the booking to an arbitrary property (confused-deputy).
+        const hotelId = reservation.channelHotelId;
+        const connection = hotelId
+          ? connections.find((c: any) => String((c.config ?? {}).hotelId ?? '') === hotelId)
+          : undefined;
+        if (!connection) {
+          this.logger.error(
+            `Expedia booking ${reservation.externalConfirmation}: no connection matches hotelId='${hotelId ?? '(missing)'}' — rejected`,
+          );
+          continue;
+        }
         try {
           await this.inboundReservationService.processInboundReservation(connection.id, reservation);
         } catch (error: any) {

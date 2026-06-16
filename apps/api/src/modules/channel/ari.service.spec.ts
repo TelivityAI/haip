@@ -154,7 +154,7 @@ describe('AriService', () => {
       await service.pushAvailability('prop-1', '2024-06-01', '2024-06-02');
 
       expect(mockDb.insert).toHaveBeenCalled(); // logSync
-      expect(mockChannelService.updateSyncStatus).toHaveBeenCalledWith('conn-1', 'success', undefined);
+      expect(mockChannelService.updateSyncStatus).toHaveBeenCalledWith('conn-1', 'prop-1', 'success', undefined);
     });
 
     it('should skip connections with no room type mapping', async () => {

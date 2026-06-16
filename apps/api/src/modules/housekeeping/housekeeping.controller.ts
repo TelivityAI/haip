@@ -14,6 +14,7 @@ import {
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { HousekeepingService } from './housekeeping.service';
+import { RoomService } from '../room/room.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { ListTasksDto } from './dto/list-tasks.dto';
@@ -25,7 +26,10 @@ import { InspectTaskDto } from './dto/inspect-task.dto';
 @ApiTags('housekeeping')
 @Controller('housekeeping')
 export class HousekeepingController {
-  constructor(private readonly housekeepingService: HousekeepingService) {}
+  constructor(
+    private readonly housekeepingService: HousekeepingService,
+    private readonly roomService: RoomService,
+  ) {}
 
   @Get('/dashboard')
   @ApiOperation({ summary: 'Get housekeeping dashboard' })
@@ -71,7 +75,10 @@ export class HousekeepingController {
   @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Create housekeeping task' })
   @HttpCode(HttpStatus.CREATED)
-  createTask(@Body() dto: CreateTaskDto) {
+  async createTask(@Body() dto: CreateTaskDto) {
+    // roomId is client-supplied — verify it belongs to the request's property (throws
+    // NotFound otherwise) so a caller can't attach a task to another tenant's room.
+    await this.roomService.findRoomById(dto.roomId, dto.propertyId);
     return this.housekeepingService.create(dto);
   }
 

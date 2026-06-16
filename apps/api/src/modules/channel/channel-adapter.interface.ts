@@ -121,6 +121,12 @@ export interface ReservationPullParams {
 export interface ChannelReservation {
   externalConfirmation: string;
   channelCode: string;
+  /**
+   * The OTA's hotel/property identifier from the inbound payload. Inbound webhook
+   * receivers MUST match this against a channel connection's `config.hotelId` to
+   * route the booking to the correct tenant — never default to the first connection.
+   */
+  channelHotelId?: string;
   guestFirstName: string;
   guestLastName: string;
   guestEmail?: string;
