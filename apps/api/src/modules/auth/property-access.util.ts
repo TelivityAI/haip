@@ -4,9 +4,12 @@ import type { AuthUser } from './current-user.decorator';
  * Platform-level roles that bypass property scoping — these operators may act
  * across tenants for support/ops. Keep this the single source of truth so the
  * HTTP PropertyAccessGuard and the WebSocket EventsGateway never drift.
+ *
+ * NOTE: `admin` is intentionally NOT here. In HAIP `admin` is a per-property
+ * built-in RBAC role (a hotel's own administrator), so it must remain scoped to
+ * that hotel's propertyIds — only genuine platform operators cross tenants.
  */
 export const PLATFORM_ROLES: ReadonlySet<string> = new Set([
-  'admin',
   'platform_admin',
   'superadmin',
 ]);

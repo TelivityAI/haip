@@ -54,9 +54,15 @@ describe('PropertyAccessGuard', () => {
     expect(guard.canActivate(ctx(ok))).toBe(true);
   });
 
-  it('lets platform admins cross tenants', () => {
-    const req = { user: { sub: 'a', roles: ['admin'], propertyIds: [A] }, query: { propertyId: B } };
+  it('lets genuine platform operators cross tenants', () => {
+    const req = { user: { sub: 'a', roles: ['platform_admin'], propertyIds: [A] }, query: { propertyId: B } };
     expect(guard.canActivate(ctx(req))).toBe(true);
+  });
+
+  // `admin` is a per-hotel role, NOT a platform role — it must NOT cross tenants.
+  it('does NOT let a per-property admin cross tenants', () => {
+    const req = { user: { sub: 'a', roles: ['admin'], propertyIds: [A] }, query: { propertyId: B } };
+    expect(() => guard.canActivate(ctx(req))).toThrow(ForbiddenException);
   });
 
   it('bypasses entirely when AUTH_ENABLED=false (sandbox/demo parity)', () => {

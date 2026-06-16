@@ -63,7 +63,12 @@ export class PropertyController {
   updateProperty(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePropertyDto,
+    @CurrentUser() user?: AuthUser,
   ) {
+    // `:id` is the tenant, so the guard can't scope this — check membership here.
+    if (user && !userCanAccessProperty(user, id)) {
+      throw new ForbiddenException('Not a member of this property');
+    }
     return this.propertyService.update(id, dto);
   }
 }
