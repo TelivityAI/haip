@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsUUID,
   IsEnum,
+  IsNumberString,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -24,7 +25,7 @@ export class CreatePaymentDto {
   method!: string;
 
   @ApiProperty({ example: '150.00' })
-  @IsString()
+  @IsNumberString({}, { message: 'amount must be a numeric decimal string' })
   @IsNotEmpty()
   amount!: string;
 

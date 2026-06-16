@@ -3,9 +3,28 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { json, raw } from 'express';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { securityHeaders } from './common/http/security-headers';
+import { assertSecureConfig } from './common/config/assert-secure-config';
+
+function corsOrigins(): boolean | string[] {
+  const raw = process.env['CORS_ORIGINS'];
+  if (!raw || raw.trim() === '') {
+    // No allowlist configured: in production default to same-origin only (no
+    // cross-origin); in dev allow everything for convenience.
+    return process.env['NODE_ENV'] === 'production' ? [] : true;
+  }
+  if (raw.trim() === '*') return true;
+  return raw.split(',').map((o) => o.trim()).filter(Boolean);
+}
 
 async function bootstrap() {
+  assertSecureConfig();
+
   const app = await NestFactory.create(AppModule);
+
+  // Security response headers (helmet-equivalent defaults).
+  app.use(securityHeaders());
 
   // Stripe webhook signature verification requires the exact raw request body.
   // Install raw-body middleware for the webhook path BEFORE the global JSON
@@ -26,8 +45,11 @@ async function bootstrap() {
     }),
   );
 
-  // CORS
-  app.enableCors();
+  // Map unhandled (non-HTTP) errors to a generic 500 — no stack/SQL leakage.
+  app.useGlobalFilters(new AllExceptionsFilter());
+
+  // CORS — explicit allowlist from CORS_ORIGINS (no longer wide-open).
+  app.enableCors({ origin: corsOrigins(), credentials: true });
 
   // OpenAPI / Swagger
   const config = new DocumentBuilder()

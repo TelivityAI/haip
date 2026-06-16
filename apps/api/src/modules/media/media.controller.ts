@@ -12,6 +12,7 @@ import {
   ParseUUIDPipe,
   UploadedFile,
   UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -68,7 +69,18 @@ export class MediaController {
 
   @Post('upload')
   @Roles('admin')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      // Cap upload size (DoS: the buffer is held in memory) and reject obvious
+      // non-images early. Content is additionally magic-byte checked in the
+      // service so a forged Content-Type can't smuggle HTML/SVG.
+      limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+      fileFilter: (_req, file, cb) => {
+        const ok = ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype);
+        cb(ok ? null : new BadRequestException('Only JPEG, PNG, or WebP images are allowed'), ok);
+      },
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload an image to object storage and attach it' })
   @ApiResponse({ status: 201, description: 'Media created from upload' })
