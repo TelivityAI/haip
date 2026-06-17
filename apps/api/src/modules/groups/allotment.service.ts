@@ -10,6 +10,7 @@ import {
   allotmentBlockInventory,
   groupProfiles,
   ratePlans,
+  roomTypes,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
@@ -148,6 +149,17 @@ export class AllotmentService {
       throw new BadRequestException(
         `Cannot set inventory on a ${block.status} block`,
       );
+    }
+    // FK ownership (security audit follow-on): the caller's roomTypeId must
+    // belong to this propertyId. Without this, a foreign room type id still
+    // inserts an allotment row (availability lookup just returns 0 sellable,
+    // and roomsAllotted=0 would pass — writing a cross-property FK).
+    const [rt] = await this.db
+      .select({ id: roomTypes.id })
+      .from(roomTypes)
+      .where(and(eq(roomTypes.id, dto.roomTypeId), eq(roomTypes.propertyId, propertyId)));
+    if (!rt) {
+      throw new BadRequestException(`room type ${dto.roomTypeId} not found in this property`);
     }
 
     // Sellable availability for that single night/room-type. The availability

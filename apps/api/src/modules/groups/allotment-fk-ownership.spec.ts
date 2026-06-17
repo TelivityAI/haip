@@ -68,4 +68,24 @@ describe('AllotmentService — cross-tenant FK ownership', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(db.insert).not.toHaveBeenCalled();
   });
+
+  // setInventory() previously wrote a cross-property allotmentBlockInventory row
+  // with a foreign roomTypeId — the availability lookup returned 0 sellable but
+  // a roomsAllotted=0 request would still pass and persist the bad FK.
+  it('setInventory rejects when dto.roomTypeId belongs to another property', async () => {
+    // findBlockById first (returns the block in propertyId A), THEN FK check on roomTypes (empty = foreign).
+    const db = mkDbSeq([
+      [{ id: 'blk-1', propertyId: A, status: 'tentative' }], // findBlockById
+      [],                                                     // roomTypes FK empty
+    ]);
+    const svc = await mkSvc(db);
+    await expect(
+      svc.setInventory('blk-1', A, {
+        stayDate: '2026-07-02',
+        roomTypeId: 'foreign-rt',
+        roomsAllotted: 0,
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(db.insert).not.toHaveBeenCalled();
+  });
 });

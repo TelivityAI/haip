@@ -1,6 +1,6 @@
-import { Injectable, Inject, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { bookings, reservations, guests, channelConnections } from '@telivityhaip/database';
+import { bookings, reservations, guests, channelConnections, roomTypes, ratePlans } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { ChannelService } from './channel.service';
 import { ChannelAdapterFactory } from './channel-adapter.factory';
@@ -104,6 +104,13 @@ export class InboundReservationService {
     // Resolve channel codes to PMS IDs (outside tx — pure lookups)
     const roomTypeId = this.resolveRoomTypeId(conn, reservation.channelRoomCode);
     const ratePlanId = this.resolveRatePlanId(conn, reservation.channelRateCode);
+
+    // FK ownership (security audit follow-on): the channel connection's
+    // roomTypeMapping/ratePlanMapping JSON is operator-supplied. A misconfigured
+    // (or maliciously edited) mapping could point at a foreign-tenant id. Verify
+    // BOTH resolved ids belong to THIS connection's propertyId before writing.
+    await this.assertSamePropertyFk(roomTypes, roomTypeId, propertyId, 'room type');
+    await this.assertSamePropertyFk(ratePlans, ratePlanId, propertyId, 'rate plan');
 
     // Calculate nights
     const arrival = new Date(reservation.arrivalDate);
@@ -219,6 +226,12 @@ export class InboundReservationService {
     // Resolve codes
     const roomTypeId = this.resolveRoomTypeId(conn, reservation.channelRoomCode);
     const ratePlanId = this.resolveRatePlanId(conn, reservation.channelRateCode);
+
+    // FK ownership (security audit follow-on): same as handleNewReservation —
+    // verify the operator-supplied channel mapping points at THIS connection's
+    // propertyId before mutating the reservation.
+    await this.assertSamePropertyFk(roomTypes, roomTypeId, propertyId, 'room type');
+    await this.assertSamePropertyFk(ratePlans, ratePlanId, propertyId, 'rate plan');
 
     const arrival = new Date(reservation.arrivalDate);
     const departure = new Date(reservation.departureDate);
@@ -458,6 +471,27 @@ export class InboundReservationService {
       );
     }
     return mapping.ratePlanId;
+  }
+
+  /**
+   * Verify a caller- or mapping-supplied FK row belongs to the SAME property as
+   * the channel connection. Mirrors the same check in ReservationService — the
+   * channel mapping JSON is operator-supplied and must not be allowed to point
+   * at another tenant's room type / rate plan.
+   */
+  private async assertSamePropertyFk(
+    table: { id: any; propertyId: any },
+    id: string,
+    propertyId: string,
+    label: string,
+  ): Promise<void> {
+    const [row] = await this.db
+      .select({ id: table.id })
+      .from(table)
+      .where(and(eq(table.id, id), eq(table.propertyId, propertyId)));
+    if (!row) {
+      throw new BadRequestException(`${label} ${id} not found in this property (channel mapping points at foreign tenant)`);
+    }
   }
 
   private generateConfirmationNumber(): string {
