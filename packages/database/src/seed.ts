@@ -11,7 +11,16 @@
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
 import * as schema from './schema/index.js';
+
+/**
+ * Fixed publishable booking-engine key for the demo property. The raw value is
+ * intentionally well-known (it ships in this public repo) so the one-command demo
+ * and CI can drive the booking engine without a generation step. Only its sha256
+ * hash is stored. Real deployments generate their own keys in the dashboard.
+ */
+const DEMO_BOOKING_KEY = 'pk_live_HAIPDEMO0000000000000000';
 
 const DATABASE_URL =
   process.env['DATABASE_URL'] ?? 'postgresql://haip:haip@localhost:5432/haip';
@@ -1148,6 +1157,27 @@ async function main() {
   // -----------------------------------------------------------------------
   // Done
   // -----------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Booking Engine — enable direct booking + a demo publishable key
+  // ---------------------------------------------------------------------------
+  await db.insert(schema.bookingEngineConfig).values({
+    propertyId,
+    isEnabled: true,
+    displayName: 'Telivity Grand Hotel',
+    primaryColor: '#0F172A',
+    accentColor: '#2563EB',
+    sellableRoomTypeIds: Object.values(roomTypeIds),
+    sellableRatePlanIds: [rpIds.stdBar, rpIds.dlxBar, rpIds.suiteBar, rpIds.phBar, rpIds.dlxPromo],
+    depositPolicy: { type: 'first_night', refundable: true },
+    autoConfirm: true,
+  });
+  await db.insert(schema.bookingEngineCredentials).values({
+    propertyId,
+    label: 'Demo website widget',
+    keyHash: createHash('sha256').update(DEMO_BOOKING_KEY).digest('hex'),
+    keyPrefix: DEMO_BOOKING_KEY.slice(0, 12),
+  });
+
   console.log('Seed complete.');
   console.log('  Property:      Telivity Grand Hotel (TGH)');
   console.log('  Room Types:    4');
@@ -1166,6 +1196,7 @@ async function main() {
   console.log('  AI Agents:     12 enabled (suggest mode, incl. Revenue Manager orchestrator)');
   console.log('  Agent Log:     10 decisions (RManager strategy, pricing, forecast, overbooking, ...)');
   console.log('  Reviews:       5 (2 with AI-drafted responses)');
+  console.log('  Booking Engine: enabled — demo key ' + DEMO_BOOKING_KEY);
 
   await client.end();
 }

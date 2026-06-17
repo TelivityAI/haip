@@ -39,7 +39,7 @@ export class ReservationService {
     private readonly webhookService: WebhookService,
   ) {}
 
-  async create(dto: CreateReservationDto) {
+  async create(dto: CreateReservationDto, opts?: { confirmationNumber?: string }) {
     // Check guest is not DNR
     const [guest] = await this.db
       .select()
@@ -64,8 +64,12 @@ export class ReservationService {
       throw new BadRequestException('Departure date must be after arrival date');
     }
 
-    // Generate confirmation number
-    const confirmationNumber = `HAIP-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
+    // Generate confirmation number. Callers that expose it to guests as a bearer
+    // credential (e.g. the booking engine) inject a high-entropy value instead of
+    // the default timestamp form, which is too low-entropy to be unguessable.
+    const confirmationNumber =
+      opts?.confirmationNumber ??
+      `HAIP-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
 
     // FK ownership (security audit #4): the caller supplies roomTypeId AND
     // ratePlanId in the DTO. Without scoping these to dto.propertyId, a caller

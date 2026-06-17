@@ -162,3 +162,10 @@ export {
   allotmentBlockInventory,
   roomingListEntries,
 } from './group.js';
+
+// Booking Engine — guest-facing direct booking (publishable keys + per-property config)
+export {
+  bookingEngineCredentials,
+  bookingEngineConfig,
+} from './booking-engine.js';
+export type { DepositPolicy } from './booking-engine.js';

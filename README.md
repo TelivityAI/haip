@@ -42,7 +42,7 @@ What makes HAIP different is that **AI agents are built into the architecture fr
 
 ### What HAIP is NOT
 
-HAIP is not a wrapper around another PMS. It's not a booking widget. It's not a SaaS dashboard with "AI" slapped on the marketing page. It's a real PMS with real hotel operations logic — night audits at 3am, folio routing rules, rate parity enforcement, guest registration compliance across jurisdictions.
+HAIP is not a wrapper around another PMS. It's not a SaaS dashboard with "AI" slapped on the marketing page. It's a real PMS with real hotel operations logic — night audits at 3am, folio routing rules, rate parity enforcement, guest registration compliance across jurisdictions. And it ships a **commission-free direct booking engine** so a hotel can take bookings straight from its own website — keeping the 15–25% an OTA would take.
 
 ---
 
@@ -193,6 +193,18 @@ This creates a learning loop: each decision becomes training data for model impr
 ---
 
 ## Features
+
+### Direct Booking Engine (commission-free)
+- A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
+- Authenticated by a per-property **publishable key** (`x-booking-key`): property-scoped, low-trust (it ships in client-side HTML), and restricted to search/quote/book and read-or-cancel-own-confirmation — it can never enumerate other reservations or tenants.
+- Reuses the existing availability, rate, tax, reservation, folio and payment engines — prices are **re-quoted server-side** (never trusts a client price), payments are classified as a **deposit** liability (KB §10.5), and `reservation.created` fires so the channel manager pushes updated availability everywhere.
+- **Embeddable widget app** (`apps/booking`) plus a dashboard **Settings → Booking Engine** tab to generate/rotate keys, choose sellable room types & rates, set branding, and configure the deposit policy.
+
+### Data Migration & Import
+- A generic **CSV import** on-ramp (`/api/v1/import/*`) for hotels switching from another PMS: upload a CSV, map columns, **dry-run** to validate, then commit — with **per-row error reporting** (one bad row never aborts the batch). Importers for guests, room types and rate plans, trivially extensible to more entities.
+
+### Accounting Export
+- Plain **CSV export** of the daily revenue journal and trial balance (`/api/v1/accounting-export/*`) to import into your own books (QuickBooks/Xero/spreadsheet) — no hosted connector required.
 
 ### Reservation Management
 - Full lifecycle state machine: `pending → confirmed → assigned → checked_in → stayover → due_out → checked_out`
