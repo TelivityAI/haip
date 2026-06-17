@@ -9,10 +9,11 @@ import {
   Query,
   Inject,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { eq, and, desc } from 'drizzle-orm';
-import { guestReviews } from '@telivityhaip/database';
+import { guestReviews, reservations } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
@@ -119,6 +120,18 @@ export class AgentController {
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: CreateReviewDto,
   ) {
+    // FK ownership (security audit follow-on): caller-supplied reservationId
+    // must belong to this propertyId. Without this, a review could be attached
+    // to a foreign tenant's reservation (cross-tenant FK write into guest_reviews).
+    if (dto.reservationId) {
+      const [r] = await this.db
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(and(eq(reservations.id, dto.reservationId), eq(reservations.propertyId, propertyId)));
+      if (!r) {
+        throw new BadRequestException(`reservation ${dto.reservationId} not found in this property`);
+      }
+    }
     const [review] = await this.db
       .insert(guestReviews)
       .values({

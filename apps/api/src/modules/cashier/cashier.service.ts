@@ -10,6 +10,7 @@ import {
   cashDrawers,
   cashDrawerSessions,
   cashMovements,
+  reservations,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
@@ -130,6 +131,19 @@ export class CashierService {
     const session = await this.findSessionById(sessionId, dto.propertyId);
     if (session.status !== 'open') {
       throw new BadRequestException('Cannot record a movement on a closed session');
+    }
+
+    // FK ownership (security audit follow-on): the cashier could pass a
+    // reservationId belonging to another property, attributing the movement
+    // (and any downstream reporting / audit trail) cross-tenant.
+    if (dto.reservationId) {
+      const [r] = await this.db
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(and(eq(reservations.id, dto.reservationId), eq(reservations.propertyId, dto.propertyId)));
+      if (!r) {
+        throw new BadRequestException(`reservation ${dto.reservationId} not found in this property`);
+      }
     }
 
     const [movement] = await this.db

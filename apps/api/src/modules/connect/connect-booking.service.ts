@@ -278,6 +278,18 @@ export class ConnectBookingService {
       const newRoomTypeId = dto.roomTypeId ?? reservation.roomTypeId;
       const newRatePlanId = dto.ratePlanId ?? reservation.ratePlanId;
 
+      // FK ownership (security audit follow-on): the caller (an OTAIP agent) could
+      // pass a roomTypeId / ratePlanId that belongs to another property. Verify
+      // both belong to the booking's property BEFORE the rate re-calculation and
+      // the reservation update.
+      if (dto.roomTypeId) {
+        const [rt] = await this.db
+          .select({ id: roomTypes.id })
+          .from(roomTypes)
+          .where(and(eq(roomTypes.id, newRoomTypeId), eq(roomTypes.propertyId, booking.propertyId)));
+        if (!rt) throw new BadRequestException(`room type ${newRoomTypeId} not found in this property`);
+      }
+
       // Re-check availability
       const availability = await this.availabilityService.searchAvailability(
         booking.propertyId,
@@ -294,14 +306,14 @@ export class ConnectBookingService {
         throw new BadRequestException('No availability for modified dates/room type');
       }
 
-      // Re-calculate rate
+      // Re-calculate rate — same-property scoped (was bare-id before).
       const [ratePlan] = await this.db
         .select()
         .from(ratePlans)
-        .where(eq(ratePlans.id, newRatePlanId));
+        .where(and(eq(ratePlans.id, newRatePlanId), eq(ratePlans.propertyId, booking.propertyId)));
 
       if (!ratePlan) {
-        throw new NotFoundException(`Rate plan ${newRatePlanId} not found`);
+        throw new NotFoundException(`Rate plan ${newRatePlanId} not found in this property`);
       }
 
       const arrival = new Date(newCheckIn);

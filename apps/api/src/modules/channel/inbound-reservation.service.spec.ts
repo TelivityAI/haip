@@ -42,17 +42,22 @@ describe('InboundReservationService', () => {
   };
 
   beforeEach(() => {
-    // Track which .from() table is being queried
+    // Track which .from() table is being queried.
+    // After the FK-ownership fix in inbound-reservation.service, handleNewReservation
+    // now runs TWO extra selects (roomTypes + ratePlans same-property checks) BEFORE
+    // the transaction. Each must return a row so the FK guard passes and we reach
+    // the actual booking/guest flow the test is asserting on.
     let selectCallCount = 0;
     mockDb = {
       select: vi.fn().mockImplementation(() => ({
         from: vi.fn().mockImplementation(() => ({
           where: vi.fn().mockImplementation(() => {
             selectCallCount++;
-            // Default: channelConnections lookup returns connection, bookings returns empty
             if (selectCallCount === 1) return Promise.resolve([mockConnection]);
             if (selectCallCount === 2) return Promise.resolve([]); // no existing booking (dedup check)
-            if (selectCallCount === 3) return Promise.resolve([]); // no existing guest by email
+            if (selectCallCount === 3) return Promise.resolve([{ id: 'rt-1' }]);  // roomTypes FK OK
+            if (selectCallCount === 4) return Promise.resolve([{ id: 'rp-1' }]);  // ratePlans FK OK
+            if (selectCallCount === 5) return Promise.resolve([]); // no existing guest by email
             return Promise.resolve([]);
           }),
         })),
@@ -217,14 +222,19 @@ describe('InboundReservationService', () => {
 
   describe('processInboundReservation - modified', () => {
     it('should update an existing reservation', async () => {
+      // After FK-ownership fix, handleModification runs 2 extra selects (roomTypes
+      // + ratePlans same-property checks). Sequence: connection, existing booking,
+      // existing reservation, roomTypes FK, ratePlans FK.
       let callCount = 0;
       mockDb.select.mockImplementation(() => ({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockImplementation(() => {
             callCount++;
-            if (callCount === 1) return Promise.resolve([mockConnection]); // connection
-            if (callCount === 2) return Promise.resolve([{ id: 'booking-1', confirmationNumber: 'CH-123' }]); // existing booking
-            if (callCount === 3) return Promise.resolve([{ id: 'res-1', bookingId: 'booking-1', guestId: 'guest-1' }]); // existing reservation
+            if (callCount === 1) return Promise.resolve([mockConnection]);
+            if (callCount === 2) return Promise.resolve([{ id: 'booking-1', confirmationNumber: 'CH-123' }]);
+            if (callCount === 3) return Promise.resolve([{ id: 'res-1', bookingId: 'booking-1', guestId: 'guest-1' }]);
+            if (callCount === 4) return Promise.resolve([{ id: 'rt-1' }]);  // roomTypes FK OK
+            if (callCount === 5) return Promise.resolve([{ id: 'rp-1' }]);  // ratePlans FK OK
             return Promise.resolve([]);
           }),
         }),
@@ -303,15 +313,19 @@ describe('InboundReservationService', () => {
 
   describe('guest resolution', () => {
     it('should find existing guest by email', async () => {
+      // After FK-ownership fix, handleNewReservation runs 2 extra selects (roomTypes
+      // + ratePlans FK checks) BEFORE the guest-by-email lookup.
       let callCount = 0;
       const existingGuest = { id: 'guest-existing', firstName: 'John', email: 'john@example.com' };
       mockDb.select.mockImplementation(() => ({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockImplementation(() => {
             callCount++;
-            if (callCount === 1) return Promise.resolve([mockConnection]); // connection
+            if (callCount === 1) return Promise.resolve([mockConnection]);
             if (callCount === 2) return Promise.resolve([]); // no existing booking
-            if (callCount === 3) return Promise.resolve([existingGuest]); // existing guest by email
+            if (callCount === 3) return Promise.resolve([{ id: 'rt-1' }]);  // roomTypes FK OK
+            if (callCount === 4) return Promise.resolve([{ id: 'rp-1' }]);  // ratePlans FK OK
+            if (callCount === 5) return Promise.resolve([existingGuest]);   // existing guest by email
             return Promise.resolve([]);
           }),
         }),

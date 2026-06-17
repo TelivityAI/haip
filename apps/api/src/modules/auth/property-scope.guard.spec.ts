@@ -5,12 +5,17 @@ import { PropertyScopeGuard } from './property-scope.guard';
 function ctx(request: any): ExecutionContext {
   return {
     switchToHttp: () => ({ getRequest: () => request }),
+    getHandler: () => undefined,
+    getClass: () => undefined,
   } as unknown as ExecutionContext;
 }
 
-function guardWith(authEnabled: string) {
+/** Build + invoke the guard with a given AUTH_ENABLED, request, and @Public flag. */
+function run(authEnabled: string, request: any, isPublic = false) {
   const config = { get: (_k: string, def?: string) => (authEnabled ?? def) } as any;
-  return new PropertyScopeGuard(config);
+  const reflector = { getAllAndOverride: () => isPublic } as any;
+  const guard = new PropertyScopeGuard(reflector, config);
+  return guard.canActivate(ctx(request));
 }
 
 const member = { sub: 'u1', email: 'u@x.com', name: 'U', roles: ['front_desk'], propertyIds: ['propA'] };
@@ -18,42 +23,47 @@ const admin = { sub: 'a1', email: 'a@x.com', name: 'A', roles: ['admin'], proper
 
 describe('PropertyScopeGuard', () => {
   it('bypasses entirely when AUTH_ENABLED=false', () => {
-    const guard = guardWith('false');
-    // foreign property, but auth off → allowed (demo)
-    expect(guard.canActivate(ctx({ user: member, query: { propertyId: 'propB' } }))).toBe(true);
+    expect(run('false', { user: member, query: { propertyId: 'propB' } })).toBe(true);
   });
 
   it('allows a member to access their own property', () => {
-    const guard = guardWith('true');
-    expect(guard.canActivate(ctx({ user: member, query: { propertyId: 'propA' } }))).toBe(true);
+    expect(run('true', { user: member, query: { propertyId: 'propA' } })).toBe(true);
   });
 
   it('rejects a non-member accessing a foreign property', () => {
-    const guard = guardWith('true');
-    expect(() => guard.canActivate(ctx({ user: member, query: { propertyId: 'propB' } }))).toThrow(
+    expect(() => run('true', { user: member, query: { propertyId: 'propB' } })).toThrow(
       ForbiddenException,
     );
   });
 
   it('reads propertyId from the body when not in the query', () => {
-    const guard = guardWith('true');
-    expect(() => guard.canActivate(ctx({ user: member, body: { propertyId: 'propB' } }))).toThrow(
+    expect(() => run('true', { user: member, body: { propertyId: 'propB' } })).toThrow(
       ForbiddenException,
     );
   });
 
   it('lets platform admins cross properties', () => {
-    const guard = guardWith('true');
-    expect(guard.canActivate(ctx({ user: admin, query: { propertyId: 'propZ' } }))).toBe(true);
+    expect(run('true', { user: admin, query: { propertyId: 'propZ' } })).toBe(true);
   });
 
   it('skips routes that carry no propertyId', () => {
-    const guard = guardWith('true');
-    expect(guard.canActivate(ctx({ user: member, query: {} }))).toBe(true);
+    expect(run('true', { user: member, query: {} })).toBe(true);
   });
 
-  it('skips @Public routes that have no authenticated user', () => {
-    const guard = guardWith('true');
-    expect(guard.canActivate(ctx({ query: { propertyId: 'propB' } }))).toBe(true);
+  it('skips @Public routes even when they carry a propertyId and no user', () => {
+    expect(run('true', { query: { propertyId: 'propB' } }, /* isPublic */ true)).toBe(true);
+  });
+
+  // --- fail-closed hardening (ported from PR #116) ---
+
+  it('FAILS CLOSED on a duplicated/array propertyId (?propertyId=A&propertyId=B)', () => {
+    // member IS a member of propA, but the array form must not bypass the check.
+    expect(() =>
+      run('true', { user: member, query: { propertyId: ['propA', 'propB'] } }),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('FAILS CLOSED on a non-public route with a propertyId but no authenticated user', () => {
+    expect(() => run('true', { query: { propertyId: 'propA' } })).toThrow(ForbiddenException);
   });
 });

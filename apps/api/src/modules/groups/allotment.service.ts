@@ -8,6 +8,9 @@ import { eq, and, sql, inArray, lt } from 'drizzle-orm';
 import {
   allotmentBlocks,
   allotmentBlockInventory,
+  groupProfiles,
+  ratePlans,
+  roomTypes,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
@@ -28,6 +31,25 @@ export class AllotmentService {
   async createBlock(dto: CreateBlockDto) {
     if (new Date(dto.endDate) <= new Date(dto.startDate)) {
       throw new BadRequestException('endDate must be after startDate');
+    }
+    // FK ownership (security audit follow-on): caller-supplied groupProfileId
+    // and (optional) ratePlanId must belong to dto.propertyId. Schema FK only
+    // constrains row id.
+    const [gp] = await this.db
+      .select({ id: groupProfiles.id })
+      .from(groupProfiles)
+      .where(and(eq(groupProfiles.id, dto.groupProfileId), eq(groupProfiles.propertyId, dto.propertyId)));
+    if (!gp) {
+      throw new BadRequestException(`group profile ${dto.groupProfileId} not found in this property`);
+    }
+    if (dto.ratePlanId) {
+      const [rp] = await this.db
+        .select({ id: ratePlans.id })
+        .from(ratePlans)
+        .where(and(eq(ratePlans.id, dto.ratePlanId), eq(ratePlans.propertyId, dto.propertyId)));
+      if (!rp) {
+        throw new BadRequestException(`rate plan ${dto.ratePlanId} not found in this property`);
+      }
     }
     const [block] = await this.db
       .insert(allotmentBlocks)
@@ -107,6 +129,18 @@ export class AllotmentService {
 
   async updateBlock(id: string, propertyId: string, dto: UpdateBlockDto) {
     await this.findBlockById(id, propertyId);
+    // FK ownership (security audit follow-on): updateBlock takes an optional
+    // ratePlanId. Without scoping to propertyId, a caller could redirect a block
+    // at a foreign tenant's rate plan.
+    if (dto.ratePlanId) {
+      const [rp] = await this.db
+        .select({ id: ratePlans.id })
+        .from(ratePlans)
+        .where(and(eq(ratePlans.id, dto.ratePlanId), eq(ratePlans.propertyId, propertyId)));
+      if (!rp) {
+        throw new BadRequestException(`rate plan ${dto.ratePlanId} not found in this property`);
+      }
+    }
     const [updated] = await this.db
       .update(allotmentBlocks)
       .set({ ...dto, updatedAt: new Date() })
@@ -127,6 +161,17 @@ export class AllotmentService {
       throw new BadRequestException(
         `Cannot set inventory on a ${block.status} block`,
       );
+    }
+    // FK ownership (security audit follow-on): the caller's roomTypeId must
+    // belong to this propertyId. Without this, a foreign room type id still
+    // inserts an allotment row (availability lookup just returns 0 sellable,
+    // and roomsAllotted=0 would pass — writing a cross-property FK).
+    const [rt] = await this.db
+      .select({ id: roomTypes.id })
+      .from(roomTypes)
+      .where(and(eq(roomTypes.id, dto.roomTypeId), eq(roomTypes.propertyId, propertyId)));
+    if (!rt) {
+      throw new BadRequestException(`room type ${dto.roomTypeId} not found in this property`);
     }
 
     // Sellable availability for that single night/room-type. The availability

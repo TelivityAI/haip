@@ -67,6 +67,13 @@ export class ReservationService {
     // Generate confirmation number
     const confirmationNumber = `HAIP-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
 
+    // FK ownership (security audit #4): the caller supplies roomTypeId AND
+    // ratePlanId in the DTO. Without scoping these to dto.propertyId, a caller
+    // at property A could reference property B's rate plan / room type and
+    // leak its details back on read. Verify same-property before any insert.
+    await this.assertSamePropertyFk(roomTypes, dto.roomTypeId, dto.propertyId, 'room type');
+    await this.assertSamePropertyFk(ratePlans, dto.ratePlanId, dto.propertyId, 'rate plan');
+
     // TOCTOU: availability check + insert run inside the same transaction so the
     // race window between "there's space" and "we wrote the booking" is minimized.
     // Postgres default isolation is READ COMMITTED, so concurrent txs can still
@@ -782,8 +789,17 @@ export class ReservationService {
       updates['nights'] = nights;
     }
 
-    if (dto.roomTypeId) updates['roomTypeId'] = dto.roomTypeId;
-    if (dto.ratePlanId) updates['ratePlanId'] = dto.ratePlanId;
+    // FK ownership (security audit #4): if the caller is moving the reservation
+    // to a different room type or rate plan, verify each FK belongs to the same
+    // tenant before the update.
+    if (dto.roomTypeId) {
+      await this.assertSamePropertyFk(roomTypes, dto.roomTypeId, propertyId, 'room type');
+      updates['roomTypeId'] = dto.roomTypeId;
+    }
+    if (dto.ratePlanId) {
+      await this.assertSamePropertyFk(ratePlans, dto.ratePlanId, propertyId, 'rate plan');
+      updates['ratePlanId'] = dto.ratePlanId;
+    }
     if (dto.totalAmount) updates['totalAmount'] = dto.totalAmount;
     if (dto.adults !== undefined) updates['adults'] = dto.adults;
     if (dto.children !== undefined) updates['children'] = dto.children;
@@ -1015,6 +1031,28 @@ export class ReservationService {
       `Cannot transition reservation from '${current.status}' to '${targetStatus}' ` +
       `(concurrent modification? expected one of: ${allowedFromStatuses.join(', ')})`,
     );
+  }
+
+  /**
+   * Verify a caller-supplied FK belongs to the SAME property as the request.
+   * Without this, a caller at property A could pass a rate-plan / room-type id
+   * from property B and the row would happily insert (the schema FK doesn't
+   * enforce same-property because the FK is on the row id alone). Closes the
+   * cross-tenant integrity hole flagged as #4 in the security audit.
+   */
+  private async assertSamePropertyFk(
+    table: { id: any; propertyId: any },
+    id: string,
+    propertyId: string,
+    label: string,
+  ): Promise<void> {
+    const [row] = await this.db
+      .select({ id: table.id })
+      .from(table)
+      .where(and(eq(table.id, id), eq(table.propertyId, propertyId)));
+    if (!row) {
+      throw new BadRequestException(`${label} ${id} not found in this property`);
+    }
   }
 
   private async findByIdRaw(id: string, propertyId: string) {
