@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { depositLedgerEntries } from '@telivityhaip/database';
+import { depositLedgerEntries, reservations, payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
@@ -34,6 +34,23 @@ export class DepositService {
   ) {}
 
   async recordDeposit(dto: RecordDepositDto) {
+    // FK ownership (security audit follow-on): caller-supplied reservationId
+    // and paymentId must belong to dto.propertyId. Schema FK only constrains
+    // the row id, so without this a deposit could be attached cross-tenant.
+    if (dto.reservationId) {
+      const [r] = await this.db
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(and(eq(reservations.id, dto.reservationId), eq(reservations.propertyId, dto.propertyId)));
+      if (!r) throw new BadRequestException(`reservation ${dto.reservationId} not found in this property`);
+    }
+    if (dto.paymentId) {
+      const [p] = await this.db
+        .select({ id: payments.id })
+        .from(payments)
+        .where(and(eq(payments.id, dto.paymentId), eq(payments.propertyId, dto.propertyId)));
+      if (!p) throw new BadRequestException(`payment ${dto.paymentId} not found in this property`);
+    }
     const [entry] = await this.db
       .insert(depositLedgerEntries)
       .values({

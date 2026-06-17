@@ -33,6 +33,19 @@ export class HousekeepingService {
   ) {}
 
   async create(dto: CreateTaskDto) {
+    // FK ownership (security audit #6): verify roomId belongs to dto.propertyId
+    // BEFORE generating the checklist or inserting the task. Without this, a
+    // caller at property A could create a housekeeping task pointing at a room
+    // in property B (and the checklist generator would happily read B's room
+    // metadata — though the inner generate() lookups are now also scoped).
+    const [room] = await this.db
+      .select({ id: rooms.id })
+      .from(rooms)
+      .where(and(eq(rooms.id, dto.roomId), eq(rooms.propertyId, dto.propertyId)));
+    if (!room) {
+      throw new BadRequestException(`room ${dto.roomId} not found in this property`);
+    }
+
     let checklist = dto.checklist;
 
     if (!checklist) {

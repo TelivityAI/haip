@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { ratePlans, rateRestrictions } from '@telivityhaip/database';
+import { ratePlans, rateRestrictions, roomTypes } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
@@ -19,6 +19,17 @@ export class RatePlanService {
   // --- Rate Plans ---
 
   async create(dto: CreateRatePlanDto) {
+    // FK ownership (security audit follow-on): roomTypeId is required on the
+    // DTO. Without scoping to dto.propertyId, a caller at property A could
+    // create a rate plan pointing at property B's room type. The existing
+    // derived-parent check below already scopes parentRatePlanId.
+    const [rt] = await this.db
+      .select({ id: roomTypes.id })
+      .from(roomTypes)
+      .where(and(eq(roomTypes.id, dto.roomTypeId), eq(roomTypes.propertyId, dto.propertyId)));
+    if (!rt) {
+      throw new BadRequestException(`room type ${dto.roomTypeId} not found in this property`);
+    }
     if (dto.type === 'derived') {
       if (!dto.parentRatePlanId || !dto.derivedAdjustmentType || !dto.derivedAdjustmentValue) {
         throw new BadRequestException(
@@ -72,6 +83,19 @@ export class RatePlanService {
   }
 
   async update(id: string, propertyId: string, dto: UpdateRatePlanDto) {
+    // FK ownership (security audit follow-on): UpdateRatePlanDto omits propertyId
+    // and roomTypeId but NOT parentRatePlanId. Without scoping that FK to the
+    // request's propertyId, a caller could re-parent a rate plan onto another
+    // tenant's chain. Verify before the update.
+    if (dto.parentRatePlanId) {
+      const [parent] = await this.db
+        .select({ id: ratePlans.id })
+        .from(ratePlans)
+        .where(and(eq(ratePlans.id, dto.parentRatePlanId), eq(ratePlans.propertyId, propertyId)));
+      if (!parent) {
+        throw new BadRequestException(`parent rate plan ${dto.parentRatePlanId} not found in this property`);
+      }
+    }
     const [ratePlan] = await this.db
       .update(ratePlans)
       .set({ ...dto, updatedAt: new Date() })

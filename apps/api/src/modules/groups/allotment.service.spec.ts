@@ -127,11 +127,9 @@ describe('AllotmentService', () => {
 
   describe('setInventory', () => {
     it('inserts a new inventory row within sellable availability', async () => {
-      // First select() returns the block; later selects (existing row lookup)
-      // also resolve to the same data, but no existing inv row in this path.
+      // After the FK-ownership fix in setInventory, the select sequence is now:
+      //   1=findBlockById → block, 2=roomTypes FK check → row, 3+=inventory lookup → empty.
       const db = createMockDb([mockBlock]);
-      // Make the "existing inventory" lookup return empty by overriding select
-      // to return block for first call, then [] for the inventory lookup.
       let call = 0;
       db.select = vi.fn().mockImplementation(() => ({
         from: vi.fn().mockReturnValue({
@@ -142,8 +140,9 @@ describe('AllotmentService', () => {
             orderBy: vi.fn().mockResolvedValue([]),
             then: (resolve: any) => {
               call++;
-              // call 1 = findBlockById -> block; subsequent = inventory lookup -> empty
-              return resolve(call === 1 ? [mockBlock] : []);
+              if (call === 1) return resolve([mockBlock]);          // findBlockById
+              if (call === 2) return resolve([{ id: 'rt-001' }]);   // roomTypes FK OK
+              return resolve([]);                                    // inventory lookup empty
             },
           }),
         }),
@@ -180,7 +179,9 @@ describe('AllotmentService', () => {
           where: vi.fn().mockReturnValue({
             then: (resolve: any) => {
               call++;
-              return resolve(call === 1 ? [mockBlock] : []);
+              if (call === 1) return resolve([mockBlock]);          // findBlockById
+              if (call === 2) return resolve([{ id: 'rt-001' }]);   // roomTypes FK OK
+              return resolve([]);                                    // existing inventory empty
             },
           }),
         }),

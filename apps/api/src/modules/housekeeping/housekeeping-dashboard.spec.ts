@@ -213,11 +213,21 @@ describe('HousekeepingService — Dashboard & Analytics', () => {
       { id: 'room-002' },
     ]);
     const db = createDashboardDb();
-    // Override select for duplicate check — return empty (no existing tasks)
+    // Each room iteration runs through the where→then mock (in order):
+    //   1) duplicate stayover check (empty),
+    //   2) FK ownership check on rooms in create() (audit #6 — must return a row),
+    //   3) ADA accessible lookup inside generateChecklist (empty).
+    // The VIP reservation lookup uses leftJoin and goes through a different path
+    // (still []). So the where.then path cycles every 3 calls.
+    let nWhere = 0;
     db.select = vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
-          then: (resolve: any) => resolve([]), // no existing stayover task
+          then: (resolve: any) => {
+            nWhere++;
+            const inRoom = ((nWhere - 1) % 3) + 1;
+            resolve(inRoom === 2 ? [{ id: 'room-fk' }] : []);
+          },
           orderBy: vi.fn().mockReturnValue({
             limit: vi.fn().mockReturnValue({
               then: (resolve: any) => resolve([]),

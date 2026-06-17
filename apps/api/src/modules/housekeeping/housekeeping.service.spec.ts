@@ -170,9 +170,11 @@ describe('HousekeepingService — CRUD', () => {
   });
 
   it('should create task with default checklist template when none provided', async () => {
-    // DB calls: 1=room lookup (isAccessible), 2=reservation+guest lookup (VIP), 3=insert
+    // DB calls: 1=FK ownership (room is same-property), 2=room lookup
+    // (isAccessible), 3=reservation+guest lookup (VIP), 4=insert
     const db = createMockDb({
       selectResult: [
+        [{ id: 'room-001' }],            // FK ownership check — room belongs to dto.propertyId
         [{ isAccessible: false }],       // room lookup
         [],                               // no incoming reservation
       ],
@@ -194,6 +196,7 @@ describe('HousekeepingService — CRUD', () => {
     const expectedChecklist = [...CHECKLIST_TEMPLATES.checkout, ...ADA_EXTRA_ITEMS];
     const db = createMockDb({
       selectResult: [
+        [{ id: 'room-001' }],       // FK ownership check (audit #6)
         [{ isAccessible: true }],   // room is ADA accessible
         [],                          // no incoming reservation
       ],
@@ -214,6 +217,7 @@ describe('HousekeepingService — CRUD', () => {
   it('should add VIP extra items when next guest is VIP', async () => {
     const db = createMockDb({
       selectResult: [
+        [{ id: 'room-001' }],              // FK ownership check (audit #6)
         [{ isAccessible: false }],         // room not accessible
         [{ vipLevel: 'gold' }],             // VIP guest incoming
       ],
