@@ -4,7 +4,9 @@ import {
   ExecutionContext,
   ForbiddenException,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import { IS_PUBLIC_KEY } from './public.decorator';
 import type { AuthUser } from './current-user.decorator';
 import { userCanAccessProperty } from './property-access';
 
@@ -20,38 +22,58 @@ import { userCanAccessProperty } from './property-access';
  * already does for socket events: a non-platform user must have the property in
  * their `property_ids` claim.
  *
- * - Bypassed entirely when `AUTH_ENABLED=false` (demo).
- * - Skips `@Public()` routes (no principal to scope — e.g. inbound OTA webhooks).
+ * Fail-closed: when a non-public route carries a `propertyId`, the request MUST
+ * have an authenticated member and the value MUST be a single string. A missing
+ * user, or a non-scalar value (e.g. an array from a duplicated
+ * `?propertyId=A&propertyId=B`), is rejected — never silently allowed.
+ *
+ * - Bypassed when `AUTH_ENABLED=false` (demo) or on `@Public()` routes (which
+ *   authenticate by their own mechanism — health, inbound OTA webhooks, connect).
  * - Skips routes that carry no `propertyId` (not property-scoped).
  * - Platform admins bypass (see `userCanAccessProperty`).
  */
 @Injectable()
 export class PropertyScopeGuard implements CanActivate {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly configService: ConfigService,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
+    // @Public routes authenticate by their own mechanism and may legitimately
+    // carry a propertyId with no JWT user — don't fail them closed here.
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) {
+      return true;
+    }
+
     const authEnabled = this.configService.get<string>('AUTH_ENABLED', 'true');
     if (authEnabled === 'false') {
       return true;
     }
 
     const request = context.switchToHttp().getRequest();
-    const user: AuthUser | undefined = request.user;
-    // Unauthenticated routes (e.g. @Public webhooks) carry no principal to scope;
-    // leave authentication of those to their own mechanism.
-    if (!user) {
-      return true;
-    }
-
-    const propertyId: unknown =
+    const raw: unknown =
       request.query?.propertyId ?? request.body?.propertyId ?? request.params?.propertyId;
     // Routes without a propertyId aren't property-scoped (e.g. global admin lists,
     // /properties). Nothing to enforce here.
-    if (!propertyId || typeof propertyId !== 'string') {
+    if (raw === undefined || raw === null) {
       return true;
     }
 
-    if (!userCanAccessProperty(user, propertyId)) {
+    const user: AuthUser | undefined = request.user;
+    if (!user) {
+      throw new ForbiddenException('No authenticated user');
+    }
+    // A duplicated query param (`?propertyId=A&propertyId=B`) parses to an array;
+    // reject anything non-scalar rather than skipping the membership check.
+    if (typeof raw !== 'string') {
+      throw new ForbiddenException('Invalid propertyId');
+    }
+    if (!userCanAccessProperty(user, raw)) {
       throw new ForbiddenException('You do not have access to this property');
     }
 
