@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
@@ -26,7 +27,7 @@ export class TaxController {
 
   @Get('profiles')
   @ApiOperation({ summary: 'List tax profiles for a property' })
-  listProfiles(@Query('propertyId') propertyId: string) {
+  listProfiles(@Query('propertyId', ParseUUIDPipe) propertyId: string) {
     return this.taxService.listProfiles(propertyId);
   }
 
@@ -39,7 +40,10 @@ export class TaxController {
 
   @Get('profiles/:id')
   @ApiOperation({ summary: 'Get tax profile with rules' })
-  getProfile(@Param('id') id: string, @Query('propertyId') propertyId: string) {
+  getProfile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
     return this.taxService.findProfileWithRules(id, propertyId);
   }
 
@@ -47,8 +51,8 @@ export class TaxController {
   @Roles('admin')
   @ApiOperation({ summary: 'Update a tax profile' })
   updateProfile(
-    @Param('id') id: string,
-    @Query('propertyId') propertyId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateTaxProfileDto,
   ) {
     return this.taxService.updateProfile(id, propertyId, dto);
@@ -60,8 +64,8 @@ export class TaxController {
   @Roles('admin')
   @ApiOperation({ summary: 'Add a tax rule to a profile' })
   createRule(
-    @Param('profileId') profileId: string,
-    @Query('propertyId') propertyId: string,
+    @Param('profileId', ParseUUIDPipe) profileId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: CreateTaxRuleDto,
   ) {
     return this.taxService.createRule(profileId, propertyId, dto);
@@ -71,9 +75,9 @@ export class TaxController {
   @Roles('admin')
   @ApiOperation({ summary: 'Update a tax rule' })
   updateRule(
-    @Param('profileId') profileId: string,
-    @Param('ruleId') ruleId: string,
-    @Query('propertyId') propertyId: string,
+    @Param('profileId', ParseUUIDPipe) profileId: string,
+    @Param('ruleId', ParseUUIDPipe) ruleId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateTaxRuleDto,
   ) {
     return this.taxService.updateRule(ruleId, profileId, propertyId, dto);
@@ -83,9 +87,9 @@ export class TaxController {
   @Roles('admin')
   @ApiOperation({ summary: 'Delete a tax rule' })
   deleteRule(
-    @Param('profileId') profileId: string,
-    @Param('ruleId') ruleId: string,
-    @Query('propertyId') propertyId: string,
+    @Param('profileId', ParseUUIDPipe) profileId: string,
+    @Param('ruleId', ParseUUIDPipe) ruleId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
   ) {
     return this.taxService.deleteRule(ruleId, profileId, propertyId);
   }

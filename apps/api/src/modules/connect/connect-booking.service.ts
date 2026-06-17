@@ -7,7 +7,7 @@ import { AvailabilityService } from '../reservation/availability.service';
 import { WebhookService } from '../webhook/webhook.service';
 import type { AgentBookDto } from './dto/agent-book.dto';
 import type { AgentModifyDto } from './dto/agent-modify.dto';
-import { randomUUID } from 'crypto';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class ConnectBookingService {
@@ -67,8 +67,10 @@ export class ConnectBookingService {
     const baseAmount = baseAmountDec.toNumber();
     const totalAmount = totalAmountDec.toNumber();
 
-    // 5. Generate confirmation number
-    const confirmationNumber = `HAIP-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
+    // 5. Generate confirmation number. High-entropy (128 bits from randomBytes,
+    // Crockford base32, no ambiguous chars) so it can't be enumerated/guessed —
+    // the confirmation number is itself a bearer credential for the booking.
+    const confirmationNumber = `HAIP-${generateConfirmationToken()}`;
 
     // 6. Create booking
     const [booking] = await this.db
@@ -532,4 +534,23 @@ export class ConnectBookingService {
       policyDescription: 'First night charge applies — cancelled within 24 hours of check-in.',
     };
   }
+}
+
+// Crockford base32 alphabet (no I/L/O/U — unambiguous when read/typed).
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/**
+ * 128 bits of cryptographic randomness (16 random bytes) rendered in Crockford
+ * base32. Unguessable — the confirmation number is a bearer credential for the
+ * booking, so it must not be enumerable (the old `timestamp-4hex` form had only
+ * ~16 bits of randomness).
+ */
+export function generateConfirmationToken(): string {
+  const bytes = randomBytes(16);
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    out += CROCKFORD[bytes[i]! & 0x1f];
+    out += CROCKFORD[(bytes[i]! >> 5) & 0x1f];
+  }
+  return out;
 }

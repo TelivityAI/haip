@@ -292,7 +292,22 @@ export class FolioService {
       throw new BadRequestException('Cannot post charge to a folio that is not open');
     }
 
-    if (dto.isReversal && dto.originalChargeId) {
+    // A negative/zero amount inverts or zeroes the folio balance. Only legitimate
+    // credit paths may go non-positive: an explicit `adjustment` charge or a
+    // reversal. Everything else must be strictly positive.
+    if (
+      new Decimal(dto.amount).lessThanOrEqualTo(0) &&
+      dto.type !== 'adjustment' &&
+      !dto.isReversal
+    ) {
+      throw new BadRequestException(
+        'Charge amount must be positive (negatives are only allowed for adjustments or reversals)',
+      );
+    }
+
+    // Validate originalChargeId WHENEVER supplied (not only for reversals) so a
+    // caller can't attach a dangling reference to another property's charge.
+    if (dto.originalChargeId) {
       const [original] = await db
         .select()
         .from(charges)
@@ -306,7 +321,7 @@ export class FolioService {
       if (!original) {
         throw new NotFoundException(`Original charge ${dto.originalChargeId} not found`);
       }
-      if (original.isLocked) {
+      if (dto.isReversal && original.isLocked) {
         throw new BadRequestException('Cannot reverse a locked charge');
       }
     }

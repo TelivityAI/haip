@@ -24,6 +24,7 @@ export class RateLimitGuard implements CanActivate {
   private readonly max: number;
   private readonly windowMs: number;
   private readonly disabled: boolean;
+  private readonly trustProxy: boolean;
 
   constructor(private readonly configService: ConfigService) {
     this.max = Number(this.configService.get('RATE_LIMIT_MAX', '300')) || 300;
@@ -31,6 +32,11 @@ export class RateLimitGuard implements CanActivate {
     this.disabled =
       process.env['NODE_ENV'] === 'test' ||
       this.configService.get<string>('RATE_LIMIT_DISABLED', 'false') === 'true';
+    // Only honor X-Forwarded-For behind a trusted proxy. Default OFF: otherwise a
+    // client rotates the header to get a fresh window every request and the limit
+    // is meaningless (it's the only brake on confirmation-number brute force).
+    this.trustProxy =
+      this.configService.get<string>('RATE_LIMIT_TRUST_PROXY', 'false') === 'true';
   }
 
   canActivate(context: ExecutionContext): boolean {
@@ -54,8 +60,11 @@ export class RateLimitGuard implements CanActivate {
   }
 
   private clientIp(req: any): string {
-    const fwd = req.headers?.['x-forwarded-for'];
-    if (typeof fwd === 'string' && fwd.length > 0) return fwd.split(',')[0]!.trim();
+    if (this.trustProxy) {
+      const fwd = req.headers?.['x-forwarded-for'];
+      if (typeof fwd === 'string' && fwd.length > 0) return fwd.split(',')[0]!.trim();
+    }
+    // Untrusted by default: use the real socket peer, which a client can't spoof.
     return req.ip ?? req.socket?.remoteAddress ?? 'unknown';
   }
 
