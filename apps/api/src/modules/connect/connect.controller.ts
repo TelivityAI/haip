@@ -54,7 +54,15 @@ export class ConnectController {
   @Post('search')
   @ApiOperation({ summary: 'Search properties with availability and rates (Agent 4.1)' })
   @ApiResponse({ status: 200, description: 'Search results with room types, rates, and nightly breakdown' })
-  async search(@Body() dto: AgentSearchDto) {
+  async search(@Body() dto: AgentSearchDto, @Req() req: any) {
+    // `AgentSearchDto.propertyId` is optional, so a property-scoped credential
+    // could otherwise omit it and the search service would enumerate across
+    // ALL active tenants. Pin to the credential's propertyId. (If the DTO does
+    // carry a propertyId, ConnectScopeGuard has already verified it matches.)
+    const principal = req.connect as ConnectPrincipal | undefined;
+    if (principal?.scope === 'property' && principal.propertyId) {
+      dto.propertyId = principal.propertyId;
+    }
     return this.searchService.search(dto);
   }
 
