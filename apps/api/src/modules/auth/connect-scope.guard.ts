@@ -5,7 +5,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   UnauthorizedException,
-  Optional,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { eq } from 'drizzle-orm';
@@ -31,9 +31,13 @@ import type { ConnectPrincipal } from './api-key.guard';
  */
 @Injectable()
 export class ConnectScopeGuard implements CanActivate {
+  // `db` is required: the booking-by-confirmation ownership check would otherwise
+  // silently degrade to "allow" if DRIZZLE went missing — that would not be
+  // fail-closed. DatabaseModule is @Global() so this resolves in every prod wiring;
+  // tests inject an explicit mock.
   constructor(
     private readonly configService: ConfigService,
-    @Optional() @Inject(DRIZZLE) private readonly db?: any,
+    @Inject(DRIZZLE) private readonly db: any,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -54,11 +58,13 @@ export class ConnectScopeGuard implements CanActivate {
       throw new ForbiddenException('Property-scoped credential is missing a propertyId');
     }
 
-    // params.id is used by /connect/properties/:id (where :id IS the propertyId).
-    const paramId = req.params?.id;
-    if (typeof paramId === 'string' && this.looksLikeUuid(paramId) && paramId !== scopedPropertyId) {
-      throw new ForbiddenException('Credential is not scoped to this property');
-    }
+    // NB: `params.id` is intentionally NOT enforced as a propertyId here. Several
+    // routes share a `:id` segment with completely different semantics — e.g.
+    // `/connect/subscriptions/:id` (subscription UUID) and `/connect/properties/:id`
+    // (property UUID). The `/connect/properties/:id` membership check is enforced
+    // INSIDE that controller method via `userCanAccessConnectProperty`, where the
+    // route semantics are known. Subscription routes already carry `?propertyId=`
+    // which IS enforced below.
 
     const qProp = req.query?.propertyId;
     if (typeof qProp === 'string' && qProp !== scopedPropertyId) {
@@ -77,27 +83,24 @@ export class ConnectScopeGuard implements CanActivate {
       throw new ForbiddenException('Invalid propertyId');
     }
 
-    // Booking-by-confirmation routes — resolve and verify.
+    // Booking-by-confirmation routes — resolve and verify ownership. Fails
+    // closed: if DRIZZLE is somehow not wired, refuse rather than allow.
     const confirmation = req.params?.confirmationNumber;
-    if (typeof confirmation === 'string' && confirmation.length > 0 && this.db) {
+    if (typeof confirmation === 'string' && confirmation.length > 0) {
+      if (!this.db) {
+        throw new InternalServerErrorException('Database not wired — refusing to validate booking ownership');
+      }
       const rows = await this.db
         .select({ propertyId: bookings.propertyId })
         .from(bookings)
         .where(eq(bookings.confirmationNumber, confirmation));
       const booking = rows?.[0];
-      if (!booking) {
-        // Don't leak existence; treat as forbidden.
-        throw new ForbiddenException('Credential is not scoped to this booking');
-      }
-      if (booking.propertyId !== scopedPropertyId) {
+      if (!booking || booking.propertyId !== scopedPropertyId) {
+        // Don't leak existence — same error in both cases.
         throw new ForbiddenException('Credential is not scoped to this booking');
       }
     }
 
     return true;
-  }
-
-  private looksLikeUuid(s: string): boolean {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
   }
 }

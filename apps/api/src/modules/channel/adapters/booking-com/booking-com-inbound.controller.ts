@@ -103,6 +103,7 @@ export class BookingComInboundController {
       // hotel code.
       const authHeader = (req.headers?.['authorization'] ?? req.headers?.['Authorization']) as string | undefined;
       const results = [];
+      let authFailures = 0;
       for (const reservation of reservations) {
         const connection = await this.findBookingComConnection(reservation.channelHotelId);
         if (!connection) {
@@ -120,6 +121,7 @@ export class BookingComInboundController {
           this.logger.warn(
             `Booking.com reservation ${reservation.externalConfirmation}: Basic-Auth verification failed for connection ${connection.id} — rejected`,
           );
+          authFailures++;
           results.push({
             externalConfirmation: reservation.externalConfirmation,
             error: 'Unauthorized — caller credentials did not match channel connection',
@@ -161,6 +163,11 @@ export class BookingComInboundController {
         return res.status(200).send(responseXml);
       }
 
+      // If every failure was an auth failure, surface that cleanly as 401 so
+      // the caller (and ops dashboards) see the real cause, not a generic 500.
+      if (authFailures > 0 && authFailures === results.length) {
+        return this.sendErrorXml(res, '401', 'Unauthorized — caller credentials did not match channel connection');
+      }
       return this.sendErrorXml(res, '500', 'Failed to process all reservations');
     } catch (error: any) {
       this.logger.error(`Booking.com inbound error: ${error.message}`, error.stack);

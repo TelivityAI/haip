@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 /**
  * Per-connection inbound authentication (closes CRITICAL #3 from the security audit).
@@ -24,17 +24,16 @@ export interface InboundHmacAuth {
   secret: string;
 }
 
-/** Constant-time string compare — never short-circuit on length mismatch leak. */
-function safeEqualStr(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
-}
-
-/** Constant-time hex compare. Used for HMAC signature comparison. */
-function safeEqualHex(a: string, b: string): boolean {
-  return safeEqualStr(a.toLowerCase(), b.toLowerCase());
+/**
+ * Constant-time string compare that does NOT leak the length difference.
+ * Hashes both sides with sha256 first, then compares the fixed-size digests
+ * with `timingSafeEqual`. (A naive `length` check before `timingSafeEqual`
+ * would let an attacker probe the secret length via response timing.)
+ */
+function constantTimeEqualStr(a: string, b: string): boolean {
+  const ha = createHash('sha256').update(a, 'utf8').digest();
+  const hb = createHash('sha256').update(b, 'utf8').digest();
+  return timingSafeEqual(ha, hb);
 }
 
 /**
@@ -60,7 +59,10 @@ export function verifyBasicAuth(
   if (idx < 0) return false;
   const user = decoded.slice(0, idx);
   const pass = decoded.slice(idx + 1);
-  return safeEqualStr(user, stored.username) && safeEqualStr(pass, stored.password);
+  // Evaluate BOTH comparisons so timing doesn't reveal whether username matched.
+  const userOk = constantTimeEqualStr(user, stored.username);
+  const passOk = constantTimeEqualStr(pass, stored.password);
+  return userOk && passOk;
 }
 
 /**
@@ -75,11 +77,11 @@ export function verifyHmacSignature(
 ): boolean {
   if (!stored?.secret) return false;
   if (typeof signatureHeader !== 'string' || !signatureHeader) return false;
-  const provided = signatureHeader.trim().replace(/^sha256=/i, '');
+  const provided = signatureHeader.trim().replace(/^sha256=/i, '').toLowerCase();
   if (!/^[0-9a-f]+$/i.test(provided)) return false;
   const expected = createHmac('sha256', stored.secret).update(rawBody).digest('hex');
-  if (provided.length !== expected.length) return false;
-  return safeEqualHex(provided, expected);
+  // Hash both sides to a fixed-size digest so a length difference doesn't leak via timing.
+  return constantTimeEqualStr(provided, expected);
 }
 
 /** Extract `inboundAuth` from a channel connection's `config` jsonb safely. */

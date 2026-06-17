@@ -65,13 +65,16 @@ describe('ConnectScopeGuard', () => {
     await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('DENIES /connect/properties/:id when :id is a foreign tenant UUID', async () => {
-    const req: any = { connect: { scope: 'property', propertyId: A }, params: { id: B } };
-    await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('allows /connect/properties/:id when :id is the scoped tenant', async () => {
-    const req: any = { connect: { scope: 'property', propertyId: A }, params: { id: A } };
+  // The guard intentionally does NOT enforce `params.id` (it would over-deny on
+  // /subscriptions/:id where `:id` is a subscription UUID, not a propertyId).
+  // The /connect/properties/:id check lives in the controller method instead.
+  it('does NOT block on params.id alone — subscription :id is allowed through', async () => {
+    const subscriptionId = 'cccccccc-0000-4000-c000-000000000003';
+    const req: any = {
+      connect: { scope: 'property', propertyId: A },
+      params: { id: subscriptionId },
+      query: { propertyId: A },
+    };
     await expect(guard.canActivate(ctx(req))).resolves.toBe(true);
   });
 

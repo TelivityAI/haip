@@ -10,6 +10,7 @@ import {
   Req,
   ParseUUIDPipe,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse, ApiSecurity } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
@@ -71,7 +72,15 @@ export class ConnectController {
 
   @Get('properties/:id')
   @ApiOperation({ summary: 'Get detailed property content (Agent 4.2, 4.3)' })
-  async getProperty(@Param('id', ParseUUIDPipe) id: string) {
+  async getProperty(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
+    // `:id` IS the tenant on this route — ConnectScopeGuard intentionally does
+    // NOT enforce `params.id` (it would over-deny on /subscriptions/:id where
+    // `:id` is a subscription UUID). Enforce membership here where the route
+    // semantics are explicit.
+    const principal = req.connect as ConnectPrincipal | undefined;
+    if (principal?.scope === 'property' && principal.propertyId !== id) {
+      throw new ForbiddenException('Credential is not scoped to this property');
+    }
     return this.contentService.getPropertyDetail(id);
   }
 
