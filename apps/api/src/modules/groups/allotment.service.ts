@@ -129,6 +129,18 @@ export class AllotmentService {
 
   async updateBlock(id: string, propertyId: string, dto: UpdateBlockDto) {
     await this.findBlockById(id, propertyId);
+    // FK ownership (security audit follow-on): updateBlock takes an optional
+    // ratePlanId. Without scoping to propertyId, a caller could redirect a block
+    // at a foreign tenant's rate plan.
+    if (dto.ratePlanId) {
+      const [rp] = await this.db
+        .select({ id: ratePlans.id })
+        .from(ratePlans)
+        .where(and(eq(ratePlans.id, dto.ratePlanId), eq(ratePlans.propertyId, propertyId)));
+      if (!rp) {
+        throw new BadRequestException(`rate plan ${dto.ratePlanId} not found in this property`);
+      }
+    }
     const [updated] = await this.db
       .update(allotmentBlocks)
       .set({ ...dto, updatedAt: new Date() })

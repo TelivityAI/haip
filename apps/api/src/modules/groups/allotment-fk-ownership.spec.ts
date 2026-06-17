@@ -19,6 +19,7 @@ function mkDbSeq(rows: any[][]) {
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'blk-1' }]) }),
     }),
+    update: vi.fn(),
   };
 }
 
@@ -67,6 +68,20 @@ describe('AllotmentService — cross-tenant FK ownership', () => {
       } as any),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  // updateBlock was the same anti-pattern — accepting dto.ratePlanId without
+  // verifying same-property, redirecting a block at a foreign tenant's plan.
+  it('updateBlock rejects when dto.ratePlanId belongs to another property', async () => {
+    const db = mkDbSeq([
+      [{ id: 'blk-1', propertyId: A, status: 'tentative' }], // findBlockById
+      [],                                                     // ratePlans FK empty
+    ]);
+    const svc = await mkSvc(db);
+    await expect(
+      svc.updateBlock('blk-1', A, { ratePlanId: 'foreign-rp' } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(db.update).not.toHaveBeenCalled();
   });
 
   // setInventory() previously wrote a cross-property allotmentBlockInventory row

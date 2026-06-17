@@ -96,4 +96,19 @@ describe('InboundReservationService — channel mapping FK ownership', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(db.transaction).not.toHaveBeenCalled();
   });
+
+  // Codex re-audit follow-up: handleModification has the same FK check but no test.
+  it('handleModification REJECTS when mapping points at a foreign roomTypeId', async () => {
+    // 1) existing reservation lookup → row in same property; 2) roomTypes FK → empty (foreign).
+    const db = mkDbSeq([
+      [{ id: 'r-1', propertyId: A, bookingId: 'b-1' }],
+      [],
+    ]);
+    const svc = await mkSvc(db);
+    await expect(
+      (svc as any).handleModification(conn, reservation, { id: 'b-1' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    // The reservations update MUST NOT have run.
+    expect(db.update).not.toHaveBeenCalled();
+  });
 });
