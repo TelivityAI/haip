@@ -82,19 +82,24 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     // 1) Per-property credential lookup (sha256 hash compare via DB).
+    //    NB: the lookup is NOT pre-filtered by `is_active=true` so we can
+    //    distinguish "no such credential" (fall through to env) from "credential
+    //    exists but revoked" (TERMINAL reject — must not be silently re-
+    //    authorized by a matching `CONNECT_API_KEY`). Closes a misconfiguration
+    //    footgun flagged in the security re-audit.
     if (this.db) {
       const keyHash = hashConnectKey(provided);
       const rows = await this.db
         .select()
         .from(connectCredentials)
-        .where(
-          and(
-            eq(connectCredentials.keyHash, keyHash),
-            eq(connectCredentials.isActive, true),
-          ),
-        );
+        .where(eq(connectCredentials.keyHash, keyHash));
       const cred = rows?.[0];
-      if (cred && !cred.revokedAt) {
+      if (cred) {
+        if (cred.isActive === false || cred.revokedAt) {
+          // The operator KNOWS this key — and revoked it. Don't let any other
+          // path (platform env) reauthorize it.
+          throw new UnauthorizedException('API key has been revoked');
+        }
         req.connect = {
           scope: 'property',
           propertyId: cred.propertyId,

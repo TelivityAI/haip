@@ -54,8 +54,11 @@ describe('ApiKeyGuard', () => {
     expect(req.connect).toEqual({ scope: 'property', propertyId: 'prop-A', credentialId: 'cred-1' });
   });
 
-  it('rejects a revoked credential and falls through (then 401 if no env match)', async () => {
-    const raw = 'rk_revoked';
+  it('TERMINAL-rejects a revoked credential — env fallback must NOT reauthorize as platform', async () => {
+    // The footgun Codex flagged: a revoked per-property key whose RAW value also
+    // happens to equal CONNECT_API_KEY used to silently re-auth as platform. It
+    // must now fail hard regardless of env.
+    const raw = 'rk_revoked_and_also_in_env';
     db.select.mockReturnValue({
       from: () => ({
         where: () =>
@@ -70,8 +73,36 @@ describe('ApiKeyGuard', () => {
           ]),
       }),
     });
+    config.get = vi.fn().mockImplementation((k: string, def?: string) =>
+      k === 'AUTH_ENABLED' ? 'true' : k === 'CONNECT_API_KEY' ? raw : def,
+    );
     const req: any = { headers: { 'x-api-key': raw } };
     await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(req.connect).toBeUndefined();
+  });
+
+  it('TERMINAL-rejects an inactive (isActive=false) credential — env fallback must NOT reauthorize', async () => {
+    const raw = 'rk_inactive';
+    db.select.mockReturnValue({
+      from: () => ({
+        where: () =>
+          Promise.resolve([
+            {
+              id: 'cred-i',
+              propertyId: 'prop-A',
+              keyHash: hashConnectKey(raw),
+              isActive: false,
+              revokedAt: null,
+            },
+          ]),
+      }),
+    });
+    config.get = vi.fn().mockImplementation((k: string, def?: string) =>
+      k === 'AUTH_ENABLED' ? 'true' : k === 'CONNECT_API_KEY' ? raw : def,
+    );
+    const req: any = { headers: { 'x-api-key': raw } };
+    await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(req.connect).toBeUndefined();
   });
 
   it('falls back to CONNECT_API_KEY (platform) when no DB row matches', async () => {
