@@ -1,12 +1,16 @@
 import {
   Injectable,
+  Inject,
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
-  InternalServerErrorException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { eq, and } from 'drizzle-orm';
+import { connectCredentials } from '@telivityhaip/database';
+import { DRIZZLE } from '../../database/database.module';
 
 /** Constant-time string compare (avoids leaking the key via response timing). */
 function safeEqual(a: string, b: string): boolean {
@@ -16,52 +20,108 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ab, bb);
 }
 
+/** sha256(rawKey) → 64-char hex digest (matches `connect_credentials.key_hash`). */
+export function hashConnectKey(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex');
+}
+
 /**
- * API-key guard for agent-facing endpoints (e.g. Connect API).
+ * Authenticated principal attached to the request by the Connect API key guard.
  *
- * Reads `x-api-key` from the request headers and validates it against the
- * comma-separated list in `CONNECT_API_KEY`. Pairs with `@Public()` on the
- * controller so JWT is skipped but the API key is still required.
+ * - `scope='property'`: a tenant-bound credential from `connect_credentials`. The
+ *   caller may ONLY act on `propertyId`; `ConnectScopeGuard` enforces that.
+ * - `scope='platform'`: the legacy `CONNECT_API_KEY` env value (trusted server-side
+ *   key, e.g. the demo gateway). Cross-tenant by design — bypasses scope checks.
+ */
+export interface ConnectPrincipal {
+  scope: 'property' | 'platform';
+  propertyId?: string;
+  credentialId?: string;
+}
+
+/**
+ * API-key guard for agent-facing endpoints (`/api/v1/connect/*`).
  *
- * Fail-closed semantics:
- *  - When `AUTH_ENABLED !== 'false'` (prod/default) and `CONNECT_API_KEY` is
- *    missing or empty, requests are rejected with 500 rather than silently
- *    letting everyone in.
- *  - When `AUTH_ENABLED === 'false'` (dev/test), the guard is a no-op so
- *    existing dev workflows and tests are not broken.
+ * Resolves the `x-api-key` header to a `ConnectPrincipal` and attaches it to
+ * `req.connect`. Lookup order:
+ *   1. sha256(key) matches a `connect_credentials.key_hash` (active, not revoked)
+ *      → `{ scope:'property', propertyId, credentialId }`.
+ *   2. Constant-time match against the comma-separated env `CONNECT_API_KEY`
+ *      → `{ scope:'platform' }`.
+ *   3. Otherwise → 401.
+ *
+ * Fail-closed: when `AUTH_ENABLED!=='false'` and there is no DB row AND no env
+ * value, the request is rejected. `AUTH_ENABLED='false'` is a no-op (dev/demo).
+ *
+ * Closes CRITICAL #2 from the security audit (was: single global key, no tenant
+ * binding — any key holder could read/write any tenant's Connect data).
  */
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    @Optional() @Inject(DRIZZLE) private readonly db?: any,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const authEnabled = this.configService.get<string>('AUTH_ENABLED', 'true');
     if (authEnabled === 'false') {
+      // Sandbox/demo parity with the other guards — also attach a platform
+      // principal so downstream code that reads req.connect doesn't NPE.
+      const req = context.switchToHttp().getRequest<any>();
+      req.connect = { scope: 'platform' } as ConnectPrincipal;
       return true;
     }
 
+    const req = context.switchToHttp().getRequest<{ headers: Record<string, string | string[] | undefined>; connect?: ConnectPrincipal }>();
+    const headerValue = req.headers['x-api-key'] ?? req.headers['X-API-Key' as any];
+    const provided = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+
+    if (!provided || typeof provided !== 'string') {
+      throw new UnauthorizedException('Invalid or missing API key');
+    }
+
+    // 1) Per-property credential lookup (sha256 hash compare via DB).
+    //    NB: the lookup is NOT pre-filtered by `is_active=true` so we can
+    //    distinguish "no such credential" (fall through to env) from "credential
+    //    exists but revoked" (TERMINAL reject — must not be silently re-
+    //    authorized by a matching `CONNECT_API_KEY`). Closes a misconfiguration
+    //    footgun flagged in the security re-audit.
+    if (this.db) {
+      const keyHash = hashConnectKey(provided);
+      const rows = await this.db
+        .select()
+        .from(connectCredentials)
+        .where(eq(connectCredentials.keyHash, keyHash));
+      const cred = rows?.[0];
+      if (cred) {
+        if (cred.isActive === false || cred.revokedAt) {
+          // The operator KNOWS this key — and revoked it. Don't let any other
+          // path (platform env) reauthorize it.
+          throw new UnauthorizedException('API key has been revoked');
+        }
+        req.connect = {
+          scope: 'property',
+          propertyId: cred.propertyId,
+          credentialId: cred.id,
+        };
+        return true;
+      }
+    }
+
+    // 2) Legacy platform key (cross-tenant, trusted server-side caller).
     const configured = this.configService.get<string>('CONNECT_API_KEY');
-    const validKeys = (configured ?? '')
+    const platformKeys = (configured ?? '')
       .split(',')
       .map((k) => k.trim())
       .filter((k) => k.length > 0);
 
-    if (validKeys.length === 0) {
-      // Fail closed — don't let requests through just because the operator
-      // forgot to set a key. Matches the AUTH_ENABLED secure-by-default pattern.
-      throw new InternalServerErrorException(
-        'CONNECT_API_KEY is not configured — refusing to accept Connect API requests',
-      );
+    if (platformKeys.some((k) => safeEqual(k, provided))) {
+      req.connect = { scope: 'platform' };
+      return true;
     }
 
-    const req = context.switchToHttp().getRequest<{ headers: Record<string, string | string[] | undefined> }>();
-    const headerValue = req.headers['x-api-key'] ?? req.headers['X-API-Key' as any];
-    const provided = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-
-    if (!provided || !validKeys.some((k) => safeEqual(k, provided))) {
-      throw new UnauthorizedException('Invalid or missing API key');
-    }
-
-    return true;
+    // 3) No match anywhere → fail closed.
+    throw new UnauthorizedException('Invalid or missing API key');
   }
 }

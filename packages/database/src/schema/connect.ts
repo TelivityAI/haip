@@ -60,3 +60,24 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
 });
+
+/**
+ * Connect API credentials — tenant-bound API keys for the /api/v1/connect/* surface.
+ *
+ * Each row binds an opaque API key (stored as sha256 hash — NEVER plaintext) to a
+ * single propertyId. The ApiKeyGuard hashes the presented key and looks it up here;
+ * if found the request runs in scope='property' (cross-tenant denied by ConnectScopeGuard).
+ * The legacy `CONNECT_API_KEY` env var is still accepted as scope='platform' for
+ * trusted server-side callers (the demo gateway) and may target any tenant by design.
+ */
+export const connectCredentials = pgTable('connect_credentials', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  label: varchar('label', { length: 200 }).notNull(),
+  // sha256(raw key), hex-encoded. Raw key shown to the operator ONCE on creation.
+  keyHash: varchar('key_hash', { length: 64 }).notNull().unique(),
+  isActive: boolean('is_active').notNull().default(true),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+});

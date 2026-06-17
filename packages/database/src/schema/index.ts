@@ -82,6 +82,7 @@ export {
   agentWebhookSubscriptions,
   webhookDeliveryStatusEnum,
   webhookDeliveries,
+  connectCredentials,
 } from './connect.js';
 
 // Tax
