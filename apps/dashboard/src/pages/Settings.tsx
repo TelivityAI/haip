@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings as SettingsIcon, Building, Link2, Shield, ShieldCheck, Image as ImageIcon } from 'lucide-react';
+import { Settings as SettingsIcon, Building, Link2, Shield, ShieldCheck, Image as ImageIcon, Globe } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import MediaGallery from '../components/media/MediaGallery';
 import UserSettings from '../components/admin/UserSettings';
 import RolesSettings from '../components/admin/RolesSettings';
+import BookingEngineSettings from '../components/admin/BookingEngineSettings';
 
-type Tab = 'property' | 'users' | 'roles' | 'webhooks';
+type Tab = 'property' | 'users' | 'roles' | 'webhooks' | 'booking-engine';
 
 const TABS: { key: Tab; label: string; icon: typeof Building }[] = [
   { key: 'property', label: 'Property', icon: Building },
   { key: 'users', label: 'Users', icon: Shield },
   { key: 'roles', label: 'Roles', icon: ShieldCheck },
   { key: 'webhooks', label: 'Webhooks', icon: Link2 },
+  { key: 'booking-engine', label: 'Booking Engine', icon: Globe },
 ];
 
 export default function Settings() {
@@ -56,6 +58,7 @@ export default function Settings() {
       {tab === 'users' && <UserSettings propertyId={propertyId} />}
       {tab === 'roles' && <RolesSettings propertyId={propertyId} />}
       {tab === 'webhooks' && <WebhookSettings propertyId={propertyId} />}
+      {tab === 'booking-engine' && <BookingEngineSettings propertyId={propertyId} />}
     </div>
   );
 }

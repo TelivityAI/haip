@@ -20,6 +20,7 @@ const Channels = lazy(() => import('./pages/Channels'));
 const Communications = lazy(() => import('./pages/Communications'));
 const Reviews = lazy(() => import('./pages/Reviews'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Import = lazy(() => import('./pages/Import'));
 
 export default function App() {
   useRealtimeInvalidation();
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="/communications" element={<Communications />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/settings/*" element={<Settings />} />
+            <Route path="/import" element={<Import />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>

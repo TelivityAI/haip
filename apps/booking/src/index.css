@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Contain the widget so an embedding host page styles it predictably. */
+.haip-booking {
+  font-family: 'Montserrat', Arial, Helvetica, sans-serif;
+  color: #23273d;
+  line-height: 1.5;
+}
