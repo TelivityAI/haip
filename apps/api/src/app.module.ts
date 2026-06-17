@@ -33,6 +33,9 @@ import { AdminModule } from './modules/admin/admin.module';
 import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
 import { ImportModule } from './modules/import/import.module';
 import { AccountingExportModule } from './modules/accounting-export/accounting-export.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PosModule } from './modules/pos/pos.module';
+import { DoorLockModule } from './modules/door-lock/door-lock.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -68,6 +71,9 @@ const imports: any[] = [
   BookingEngineModule,
   ImportModule,
   AccountingExportModule,
+  NotificationsModule,
+  PosModule,
+  DoorLockModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or

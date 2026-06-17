@@ -105,6 +105,10 @@ export const WEBHOOK_EVENTS = {
   // Channel content events (descriptive content: photos, descriptions, amenities)
   'property.content_updated': 'property.content_updated',
   'roomtype.content_updated': 'roomtype.content_updated',
+
+  // Door-lock / access-control events (outbound to lock vendors)
+  'door.access_granted': 'door.access_granted',
+  'door.access_revoked': 'door.access_revoked',
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;
