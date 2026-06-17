@@ -38,6 +38,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { key: 'communications.manage', label: 'Guest communications', group: 'Communications', navKey: '/communications' },
   { key: 'reviews.manage', label: 'Manage reviews', group: 'Reviews', navKey: '/reviews' },
   { key: 'settings.manage', label: 'Manage property settings', group: 'Settings', navKey: '/settings' },
+  { key: 'bookingengine.manage', label: 'Manage the direct booking engine', group: 'Settings' },
   { key: 'admin.users.manage', label: 'Manage users', group: 'Administration', navKey: '/admin/users' },
   { key: 'admin.roles.manage', label: 'Manage roles & permissions', group: 'Administration' },
 ] as const;
