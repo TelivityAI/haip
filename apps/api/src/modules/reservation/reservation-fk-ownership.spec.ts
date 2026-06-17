@@ -107,6 +107,20 @@ describe('ReservationService — cross-tenant FK ownership (audit #4)', () => {
     expect(db.insert).not.toHaveBeenCalled();
   });
 
+  it('modify() rejects when dto.roomTypeId belongs to another property', async () => {
+    const db = mkDbSeq([
+      // 1) findByIdRaw → reservation in propertyId A
+      [{ id: 'r-1', propertyId: A, status: 'confirmed', arrivalDate: '2026-07-01', departureDate: '2026-07-03', roomTypeId: 'rt-1' }],
+      // 2) FK check on roomTypes → empty (foreign)
+      [],
+    ]);
+    const svc = await mkService(db);
+    await expect(
+      svc.modify('r-1', A, { roomTypeId: 'foreign-room-type' } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
   it('modify() rejects when dto.ratePlanId belongs to another property', async () => {
     const db = mkDbSeq([
       // 1) findByIdRaw → reservation in propertyId A

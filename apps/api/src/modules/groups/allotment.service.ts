@@ -8,6 +8,8 @@ import { eq, and, sql, inArray, lt } from 'drizzle-orm';
 import {
   allotmentBlocks,
   allotmentBlockInventory,
+  groupProfiles,
+  ratePlans,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
@@ -28,6 +30,25 @@ export class AllotmentService {
   async createBlock(dto: CreateBlockDto) {
     if (new Date(dto.endDate) <= new Date(dto.startDate)) {
       throw new BadRequestException('endDate must be after startDate');
+    }
+    // FK ownership (security audit follow-on): caller-supplied groupProfileId
+    // and (optional) ratePlanId must belong to dto.propertyId. Schema FK only
+    // constrains row id.
+    const [gp] = await this.db
+      .select({ id: groupProfiles.id })
+      .from(groupProfiles)
+      .where(and(eq(groupProfiles.id, dto.groupProfileId), eq(groupProfiles.propertyId, dto.propertyId)));
+    if (!gp) {
+      throw new BadRequestException(`group profile ${dto.groupProfileId} not found in this property`);
+    }
+    if (dto.ratePlanId) {
+      const [rp] = await this.db
+        .select({ id: ratePlans.id })
+        .from(ratePlans)
+        .where(and(eq(ratePlans.id, dto.ratePlanId), eq(ratePlans.propertyId, dto.propertyId)));
+      if (!rp) {
+        throw new BadRequestException(`rate plan ${dto.ratePlanId} not found in this property`);
+      }
     }
     const [block] = await this.db
       .insert(allotmentBlocks)

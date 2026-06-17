@@ -174,7 +174,13 @@ describe('RatePlanService', () => {
   describe('create', () => {
     it('should reject derived rate without parent', async () => {
       const mockDb = {
-        select: vi.fn(),
+        // FK ownership check on roomTypes now runs first — return a row so
+        // we proceed to the derived-without-parent BadRequest path.
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([{ id: 'rt-001' }]),
+          }),
+        }),
         insert: vi.fn(),
         update: vi.fn(),
         delete: vi.fn(),
