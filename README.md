@@ -941,15 +941,21 @@ All webhook events are simultaneously broadcast via WebSocket to clients subscri
 
 ---
 
-## Compliance (Built In, Not Bolted On)
+## Security & Compliance (Built In, Not Bolted On)
 
-| Requirement | How HAIP Handles It |
-|-------------|-------------------|
+HAIP is multi-tenant by construction, and isolation is enforced **in depth** — at the request boundary *and* the data layer — so a bug in one place isn't a breach.
+
+| Area | How HAIP Handles It |
+|------|-------------------|
+| **Tenant isolation** | `property_id` on every table. A global guard binds each authenticated request to the `propertyId` it targets (fail-closed), and every property-scoped query independently filters by `propertyId`. Caller-supplied foreign keys are verified to belong to the tenant before any write. |
+| **Authentication & authorization** | Keycloak OIDC (RS256 JWT) **plus** HAIP's own local users/roles/permissions; `@Roles` + `@RequirePermissions` guards on every endpoint. The Connect (agent) API uses per-property API credentials stored as hashes; inbound OTA webhooks are authenticated per connection (Basic-Auth / HMAC). |
+| **Input & transport hardening** | Strict DTO validation (incl. positive-amount checks on monetary fields and UUID-validated ids), an origin **CORS allowlist**, security response headers, **SSRF protection** on outbound webhooks, and rate limiting. The API **refuses to boot with insecure defaults in production** (auth off / mock payments) unless explicitly opted in for the demo. |
 | **PCI DSS** | Never stores raw card data. Stripe tokenization via PaymentIntents. Payments table stores token + last four + brand. |
-| **GDPR** | Audit trail on every data modification, consent tracking fields, data retention and deletion APIs. |
+| **GDPR** | Audit trail (with actor) on every data modification, consent tracking fields, data retention and right-to-erasure APIs. |
 | **Guest Registration** | Configurable per jurisdiction. ID verification fields. EU police reporting interface planned. |
 | **Tax Calculation** | Jurisdiction-based tax engine. Inclusive/exclusive handling. Sales, occupancy, tourism, and VAT tax types. Per-property rules with exemption support. |
-| **Authentication** | Keycloak OIDC with JWT validation. Role-based access control on every endpoint. No credential storage in application. |
+
+> Security is treated as ongoing work: the codebase is reviewed continuously and hardened as it matures. Before production use, pair it with your own deployment review and a Keycloak configured to issue the `property_ids` claim.
 
 ---
 
