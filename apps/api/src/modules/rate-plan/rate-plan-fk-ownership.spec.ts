@@ -7,6 +7,24 @@ import { DRIZZLE } from '../../database/database.module';
 const A = 'aaaaaaaa-0000-4000-a000-000000000001';
 
 describe('RatePlanService — cross-tenant FK ownership', () => {
+  it('update() rejects when dto.parentRatePlanId belongs to another property', async () => {
+    const db: any = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }), // foreign
+      }),
+      update: vi.fn(),
+    };
+    const mod = await Test.createTestingModule({
+      providers: [RatePlanService, { provide: DRIZZLE, useValue: db }],
+    }).compile();
+    const svc = mod.get(RatePlanService);
+
+    await expect(
+      svc.update('rp-1', A, { parentRatePlanId: 'foreign-rp' } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
   it('rejects when dto.roomTypeId belongs to another property', async () => {
     const db: any = {
       select: vi.fn().mockReturnValue({
