@@ -1,6 +1,6 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { roomingListEntries } from '@telivityhaip/database';
+import { roomingListEntries, roomTypes } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { ReservationService } from '../reservation/reservation.service';
@@ -31,6 +31,27 @@ export class RoomingListService {
     const results: any[] = [];
 
     for (const entry of dto.entries) {
+      // FK ownership (security audit follow-on): the caller-supplied entry.roomTypeId
+      // must belong to this property before we insert. Schema FK only constrains
+      // the row id — without this, a foreign roomTypeId would persist a
+      // cross-property FK in rooming_list_entries.
+      if (entry.roomTypeId) {
+        const [rt] = await this.db
+          .select({ id: roomTypes.id })
+          .from(roomTypes)
+          .where(and(eq(roomTypes.id, entry.roomTypeId), eq(roomTypes.propertyId, propertyId)));
+        if (!rt) {
+          // Record the bad row as an error and skip — matches the rest of the
+          // batch's per-row error handling rather than aborting the whole import.
+          results.push({
+            guestName: entry.guestName,
+            status: 'error',
+            error: `room type ${entry.roomTypeId} not found in this property`,
+          });
+          errors++;
+          continue;
+        }
+      }
       // Insert the entry as pending first so it is always recorded.
       const [row] = await this.db
         .insert(roomingListEntries)

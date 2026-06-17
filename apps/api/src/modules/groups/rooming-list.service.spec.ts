@@ -18,9 +18,15 @@ const mockBlock = {
 
 function createMockDb() {
   // Each insert returns a fresh entry row; updates resolve.
+  // FK-ownership check on roomTypes runs before insert per row — return a row so
+  // the existing tests reach the booking-creation path under test.
   let entrySeq = 0;
   return {
-    select: vi.fn(),
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ id: 'rt-1' }]),
+      }),
+    }),
     insert: vi.fn().mockImplementation(() => ({
       values: vi.fn().mockReturnValue({
         returning: vi.fn().mockImplementation(() => {
