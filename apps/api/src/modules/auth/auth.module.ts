@@ -9,6 +9,7 @@ import { PropertyScopeGuard } from './property-scope.guard';
 import { PermissionsGuard } from './permissions.guard';
 import { PermissionsService } from './permissions.service';
 import { ApiKeyGuard } from './api-key.guard';
+import { ConnectScopeGuard } from './connect-scope.guard';
 import { WsAuthService } from './ws-auth.service';
 
 /**
@@ -65,7 +66,8 @@ import { WsAuthService } from './ws-auth.service';
     // gateway itself honours AUTH_ENABLED=false as a dev bypass.
     WsAuthService,
     ApiKeyGuard,
+    ConnectScopeGuard,
   ],
-  exports: [WsAuthService, ApiKeyGuard, PermissionsService],
+  exports: [WsAuthService, ApiKeyGuard, ConnectScopeGuard, PermissionsService],
 })
 export class AuthModule {}

@@ -7,12 +7,14 @@ import {
   Body,
   Param,
   Query,
+  Req,
   ParseUUIDPipe,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse, ApiSecurity } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
-import { ApiKeyGuard } from '../auth/api-key.guard';
+import { ApiKeyGuard, type ConnectPrincipal } from '../auth/api-key.guard';
+import { ConnectScopeGuard } from '../auth/connect-scope.guard';
 import { ConnectSearchService } from './connect-search.service';
 import { ConnectContentService } from './connect-content.service';
 import { ConnectBookingService } from './connect-booking.service';
@@ -31,10 +33,12 @@ import { ListPropertiesDto } from './dto/list-properties.dto';
 // /api/v1/api/v1/connect/* because main.ts sets a global prefix.
 @Controller('connect')
 // @Public() skips the global JWT guard — the Connect API uses an API key
-// (x-api-key header) validated by ApiKeyGuard instead. Without this, every
-// endpoint below would be reachable unauthenticated.
+// (x-api-key header) validated by ApiKeyGuard instead. ConnectScopeGuard then
+// enforces tenant isolation for property-scoped credentials (the platform
+// CONNECT_API_KEY env value is cross-tenant by design — used by the demo
+// gateway and other trusted server-side callers).
 @Public()
-@UseGuards(ApiKeyGuard)
+@UseGuards(ApiKeyGuard, ConnectScopeGuard)
 export class ConnectController {
   constructor(
     private readonly searchService: ConnectSearchService,
@@ -55,7 +59,13 @@ export class ConnectController {
 
   @Get('properties')
   @ApiOperation({ summary: 'List all properties (Agent 4.2 background sync)' })
-  async listProperties(@Query() dto: ListPropertiesDto) {
+  async listProperties(@Query() dto: ListPropertiesDto, @Req() req: any) {
+    const principal = req.connect as ConnectPrincipal | undefined;
+    if (principal?.scope === 'property' && principal.propertyId) {
+      // Property-scoped credentials only ever see their one tenant.
+      const detail = await this.contentService.getPropertyDetail(principal.propertyId);
+      return detail ? [detail] : [];
+    }
     return this.contentService.listProperties(dto.limit, dto.offset);
   }
 

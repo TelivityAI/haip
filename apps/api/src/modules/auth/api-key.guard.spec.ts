@@ -1,36 +1,101 @@
-import { describe, it, expect } from 'vitest';
-import { UnauthorizedException, InternalServerErrorException, type ExecutionContext } from '@nestjs/common';
-import { ApiKeyGuard } from './api-key.guard';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { UnauthorizedException } from '@nestjs/common';
+import { ApiKeyGuard, hashConnectKey } from './api-key.guard';
 
-function ctx(apiKey?: string): ExecutionContext {
+function ctx(req: any) {
   return {
-    switchToHttp: () => ({ getRequest: () => ({ headers: apiKey ? { 'x-api-key': apiKey } : {} }) }),
-  } as unknown as ExecutionContext;
-}
-
-function guard(env: Record<string, string | undefined>) {
-  const cfg = { get: (k: string, d?: string) => env[k] ?? d } as any;
-  return new ApiKeyGuard(cfg);
+    switchToHttp: () => ({ getRequest: () => req }),
+  } as any;
 }
 
 describe('ApiKeyGuard', () => {
-  it('bypasses when AUTH_ENABLED=false', () => {
-    expect(guard({ AUTH_ENABLED: 'false' }).canActivate(ctx())).toBe(true);
+  let config: any;
+  let db: any;
+  let guard: ApiKeyGuard;
+
+  beforeEach(() => {
+    config = { get: vi.fn().mockReturnValue('true') }; // AUTH_ENABLED=true
+    db = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    };
+    guard = new ApiKeyGuard(config, db);
   });
 
-  it('fails closed when no key is configured', () => {
-    expect(() => guard({ AUTH_ENABLED: 'true', CONNECT_API_KEY: '' }).canActivate(ctx('x'))).toThrow(
-      InternalServerErrorException,
+  it('AUTH_ENABLED=false → no-op allow, attaches platform principal', async () => {
+    config.get.mockReturnValue('false');
+    const req: any = { headers: {} };
+    await expect(guard.canActivate(ctx(req))).resolves.toBe(true);
+    expect(req.connect).toEqual({ scope: 'platform' });
+  });
+
+  it('rejects when no x-api-key header is provided', async () => {
+    const req = { headers: {} };
+    await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('attaches scope=property when key matches a connect_credentials row', async () => {
+    const raw = 'rk_secret_AAA';
+    const cred = {
+      id: 'cred-1',
+      propertyId: 'prop-A',
+      keyHash: hashConnectKey(raw),
+      isActive: true,
+      revokedAt: null,
+    };
+    db.select.mockReturnValue({
+      from: () => ({ where: () => Promise.resolve([cred]) }),
+    });
+    const req: any = { headers: { 'x-api-key': raw } };
+    await expect(guard.canActivate(ctx(req))).resolves.toBe(true);
+    expect(req.connect).toEqual({ scope: 'property', propertyId: 'prop-A', credentialId: 'cred-1' });
+  });
+
+  it('rejects a revoked credential and falls through (then 401 if no env match)', async () => {
+    const raw = 'rk_revoked';
+    db.select.mockReturnValue({
+      from: () => ({
+        where: () =>
+          Promise.resolve([
+            {
+              id: 'cred-r',
+              propertyId: 'prop-A',
+              keyHash: hashConnectKey(raw),
+              isActive: true,
+              revokedAt: new Date(),
+            },
+          ]),
+      }),
+    });
+    const req: any = { headers: { 'x-api-key': raw } };
+    await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('falls back to CONNECT_API_KEY (platform) when no DB row matches', async () => {
+    config.get = vi.fn().mockImplementation((k: string, def?: string) =>
+      k === 'AUTH_ENABLED' ? 'true' : k === 'CONNECT_API_KEY' ? 'platform-key-xyz' : def,
     );
+    const req: any = { headers: { 'x-api-key': 'platform-key-xyz' } };
+    await expect(guard.canActivate(ctx(req))).resolves.toBe(true);
+    expect(req.connect).toEqual({ scope: 'platform' });
   });
 
-  it('accepts a valid key (constant-time compare)', () => {
-    expect(guard({ AUTH_ENABLED: 'true', CONNECT_API_KEY: 'k1,k2' }).canActivate(ctx('k2'))).toBe(true);
+  it('rejects an unknown key (no DB row, no env match)', async () => {
+    config.get = vi.fn().mockImplementation((k: string, def?: string) =>
+      k === 'AUTH_ENABLED' ? 'true' : k === 'CONNECT_API_KEY' ? 'platform-key-xyz' : def,
+    );
+    const req: any = { headers: { 'x-api-key': 'totally-wrong' } };
+    await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('rejects an invalid or missing key', () => {
-    const g = guard({ AUTH_ENABLED: 'true', CONNECT_API_KEY: 'k1' });
-    expect(() => g.canActivate(ctx('nope'))).toThrow(UnauthorizedException);
-    expect(() => g.canActivate(ctx())).toThrow(UnauthorizedException);
+  it('rejects when DB has no match and CONNECT_API_KEY env is unset (fail closed)', async () => {
+    config.get = vi.fn().mockImplementation((k: string, def?: string) =>
+      k === 'AUTH_ENABLED' ? 'true' : k === 'CONNECT_API_KEY' ? undefined : def,
+    );
+    const req: any = { headers: { 'x-api-key': 'anything' } };
+    await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

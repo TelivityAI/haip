@@ -24,7 +24,10 @@ describe('ExpediaInboundController — tenant routing', () => {
   beforeEach(() => {
     inbound = { processInboundReservation: vi.fn().mockResolvedValue({ confirmationNumber: 'PMS1' }) };
     channel = { findByAdapterType: vi.fn() };
-    controller = new ExpediaInboundController(inbound as any, channel as any);
+    // AUTH_ENABLED=false keeps these routing tests focused on routing (the HMAC
+    // verification is exercised by inbound-auth.util.spec + new HMAC tests below).
+    const config = { get: vi.fn().mockReturnValue('false') } as any;
+    controller = new ExpediaInboundController(inbound as any, channel as any, config);
   });
 
   it('routes a booking to the connection whose config.hotelId matches', async () => {

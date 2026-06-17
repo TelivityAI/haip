@@ -5,6 +5,7 @@ import {
   Res,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { Public } from '../../../auth/public.decorator';
 import { InboundReservationService } from '../../inbound-reservation.service';
@@ -14,6 +15,11 @@ import {
   mapOtaReservationToHaip,
   buildReservationConfirmation,
 } from './booking-com.mapper';
+import {
+  verifyBasicAuth,
+  getInboundAuth,
+  type InboundBasicAuth,
+} from '../inbound-auth.util';
 
 /**
  * Inbound webhook receiver for Booking.com push notifications.
@@ -21,10 +27,12 @@ import {
  *
  * @Public() — no JWT required (Booking.com can't authenticate to our IdP).
  *
- * NOTE: caller authentication for this webhook is design item C1 (per-OTA
- * signature / Basic-Auth / IP-allowlist) and is NOT yet implemented — the
- * endpoint is currently unauthenticated. Tenant ROUTING is enforced here by
- * matching the OTA hotel code to a channel connection's config.hotelId.
+ * Caller authentication: Basic Auth verified against the resolved channel
+ * connection's `config.inboundAuth = { username, password }` (per-tenant). The
+ * routing is by `hotelId` and the auth is verified against that same connection,
+ * so a request authenticated for tenant A cannot inject reservations for tenant B
+ * even if it knows tenant B's hotel code. Closes CRITICAL #3 from the audit.
+ * `AUTH_ENABLED=false` is a no-op so the existing demo stack still works.
  */
 @ApiTags('Channel Manager — Booking.com')
 @Controller('channels/inbound/booking-com')
@@ -35,7 +43,23 @@ export class BookingComInboundController {
   constructor(
     private readonly inboundReservationService: InboundReservationService,
     private readonly channelService: ChannelService,
+    private readonly configService: ConfigService,
   ) {}
+
+  private get authEnabled(): boolean {
+    return this.configService.get<string>('AUTH_ENABLED', 'true') !== 'false';
+  }
+
+  /**
+   * Verify that the incoming request presents Basic-Auth credentials matching
+   * the resolved connection's stored `inboundAuth`. Fails closed when auth is
+   * required but creds are missing/invalid.
+   */
+  private isAuthorizedFor(connection: any, authHeader: string | undefined): boolean {
+    if (!this.authEnabled) return true;
+    const stored = getInboundAuth<InboundBasicAuth>(connection.config);
+    return verifyBasicAuth(authHeader, stored);
+  }
 
   /**
    * Receive reservation push from Booking.com (OTA_HotelResNotif).
@@ -73,8 +97,11 @@ export class BookingComInboundController {
       }
 
       // Process each reservation, routing each to the connection that matches its
-      // OTA hotel code. (Auth of the caller itself is tracked as design item C1 —
-      // this endpoint is not yet authenticated; see the class doc.)
+      // OTA hotel code AND verifying the caller's Basic-Auth against THAT
+      // connection's stored credentials. A request authenticated for tenant A
+      // therefore can't inject reservations for tenant B even if it knows B's
+      // hotel code.
+      const authHeader = (req.headers?.['authorization'] ?? req.headers?.['Authorization']) as string | undefined;
       const results = [];
       for (const reservation of reservations) {
         const connection = await this.findBookingComConnection(reservation.channelHotelId);
@@ -85,6 +112,17 @@ export class BookingComInboundController {
           results.push({
             externalConfirmation: reservation.externalConfirmation,
             error: 'No matching channel connection for hotel code',
+            success: false,
+          });
+          continue;
+        }
+        if (!this.isAuthorizedFor(connection, authHeader)) {
+          this.logger.warn(
+            `Booking.com reservation ${reservation.externalConfirmation}: Basic-Auth verification failed for connection ${connection.id} — rejected`,
+          );
+          results.push({
+            externalConfirmation: reservation.externalConfirmation,
+            error: 'Unauthorized — caller credentials did not match channel connection',
             success: false,
           });
           continue;
@@ -173,6 +211,15 @@ export class BookingComInboundController {
         return this.sendErrorXml(res, '400', 'No matching channel connection for hotel code');
       }
 
+      // Authenticate the caller against the resolved connection's stored creds.
+      const cancelAuthHeader = (req.headers?.['authorization'] ?? req.headers?.['Authorization']) as string | undefined;
+      if (!this.isAuthorizedFor(connection, cancelAuthHeader)) {
+        this.logger.warn(
+          `Booking.com cancellation ${externalConfirmation}: Basic-Auth verification failed for connection ${connection.id}`,
+        );
+        return this.sendErrorXml(res, '401', 'Unauthorized');
+      }
+
       // Process as cancellation through the standard flow
       await this.inboundReservationService.processInboundReservation(
         connection.id,
@@ -234,7 +281,9 @@ export class BookingComInboundController {
       },
     });
     res.set('Content-Type', 'application/xml');
-    return res.status(code === '400' ? 400 : 500).send(xml);
+    // Honor the actual code (401/400/500…) — previously 401 was silently downgraded to 500.
+    const httpStatus = /^[0-9]+$/.test(code) ? parseInt(code, 10) : 500;
+    return res.status(httpStatus).send(xml);
   }
 
   private readRawBody(req: any): Promise<string> {
