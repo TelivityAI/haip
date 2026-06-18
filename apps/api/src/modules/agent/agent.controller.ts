@@ -66,6 +66,21 @@ export class AgentController {
     return this.agentService.runAgent(propertyId, agentType, { triggeredBy: 'manual' });
   }
 
+  @Post(':propertyId/:agentType/train')
+  @ApiOperation({ summary: 'Train an agent on this property history (writes modelState)' })
+  async trainAgent(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+    @Param('agentType') agentType: string,
+  ) {
+    return this.agentService.trainAgent(propertyId, agentType);
+  }
+
+  @Post(':propertyId/train-all')
+  @ApiOperation({ summary: 'Train every enabled agent for a property (cron this nightly)' })
+  async trainAll(@Param('propertyId', ParseUUIDPipe) propertyId: string) {
+    return this.agentService.trainAll(propertyId);
+  }
+
   @Get(':propertyId/:agentType/decisions')
   @ApiOperation({ summary: 'Get decision history for an agent' })
   @ApiQuery({ name: 'limit', required: false })

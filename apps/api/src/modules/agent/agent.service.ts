@@ -439,6 +439,56 @@ export class AgentService {
       .limit(limit);
   }
 
+  /**
+   * Train one agent on this property's own history. The agent computes its
+   * calibrated parameters; we persist them into `agent_configs.modelState.learned`
+   * and stamp `lastTrainedAt`. `analyze()` then uses the learned params instead of
+   * the cold-start defaults — the real per-property learning loop.
+   */
+  async trainAgent(propertyId: string, agentType: string) {
+    this.validateAgentType(agentType);
+    const agent = this.getAgentImpl(agentType);
+    const config = await this.getOrCreateConfig(propertyId, agentType);
+
+    const result = await agent.train(propertyId);
+
+    await this.db
+      .update(agentConfigs)
+      .set({
+        modelState: {
+          learned: result.metrics ?? {},
+          modelVersion: result.modelVersion,
+          dataPoints: result.dataPoints,
+          trainedAt: new Date().toISOString(),
+        },
+        lastTrainedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(agentConfigs.id, config.id));
+
+    return result;
+  }
+
+  /** Train every enabled agent for a property (the nightly job hits this). */
+  async trainAll(propertyId: string) {
+    const configs = await this.db
+      .select()
+      .from(agentConfigs)
+      .where(and(eq(agentConfigs.propertyId, propertyId), eq(agentConfigs.isEnabled, true)));
+
+    const results: Array<{ agentType: string; success: boolean; dataPoints?: number; error?: string }> = [];
+    for (const c of configs) {
+      if (!this.agents.has(c.agentType)) continue;
+      try {
+        const r = await this.trainAgent(propertyId, c.agentType);
+        results.push({ agentType: c.agentType, success: r.success, dataPoints: r.dataPoints });
+      } catch (e: any) {
+        results.push({ agentType: c.agentType, success: false, error: e?.message });
+      }
+    }
+    return { trained: results.length, results };
+  }
+
   /** Get agent performance metrics. */
   async getPerformance(propertyId: string, agentType: string) {
     this.validateAgentType(agentType);
