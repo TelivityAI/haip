@@ -77,6 +77,10 @@ export const agentDecisions = pgTable('agent_decisions', {
   executedAt: timestamp('executed_at', { withTimezone: true }),
   outcome: jsonb('outcome'),
   outcomeRecordedAt: timestamp('outcome_recorded_at', { withTimezone: true }),
+  // HAIP AI's grounded rationale + suggestions for this decision. Generated on
+  // demand (only for decisions a human reviews) and cached here. null = not yet
+  // explained or the model was unavailable (UI falls back to the raw decision).
+  explanation: jsonb('explanation'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 

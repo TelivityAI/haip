@@ -53,8 +53,14 @@ describe('ConnectBookingService', () => {
     };
 
     mockWebhookService = { emit: vi.fn().mockResolvedValue(undefined) };
+    const mockRatePlanService = { assertSellable: vi.fn().mockResolvedValue(undefined) };
 
-    service = new ConnectBookingService(mockDb, mockAvailabilityService, mockWebhookService);
+    service = new ConnectBookingService(
+      mockDb,
+      mockAvailabilityService,
+      mockWebhookService,
+      mockRatePlanService as any,
+    );
   });
 
   describe('book', () => {

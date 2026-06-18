@@ -22,8 +22,9 @@ export interface DateAggregate {
   reservationCount: number;
 }
 
-// Base cancel rates by booking source
-const SOURCE_CANCEL_RATES: Record<string, number> = {
+// Default cancel rates by booking source (the cold-start prior, used before the
+// agent has learned this property's own rates via train()).
+export const SOURCE_CANCEL_RATES: Record<string, number> = {
   ota: 0.25,
   gds: 0.18,
   agent: 0.15,
@@ -35,7 +36,38 @@ const SOURCE_CANCEL_RATES: Record<string, number> = {
 };
 
 /**
- * Heuristic cancellation prediction — works with zero history.
+ * Calibrate per-source cancellation rates from THIS property's history.
+ *
+ * Empirical-Bayes smoothing toward the default prior so sparse segments don't
+ * overfit: rate = (cancelled + prior·k) / (total + k). With lots of data the
+ * learned rate dominates; with little, it stays near the prior. This is the
+ * "learning" — deterministic statistics over the hotel's own outcomes, no LLM.
+ */
+export function calibrateSourceRates(
+  history: Array<{ source: string | null; cancelled: boolean }>,
+  prior: Record<string, number> = SOURCE_CANCEL_RATES,
+  priorWeight = 20,
+): Record<string, number> {
+  const totals = new Map<string, { n: number; c: number }>();
+  for (const h of history) {
+    const src = h.source ?? 'direct';
+    const t = totals.get(src) ?? { n: 0, c: 0 };
+    t.n += 1;
+    if (h.cancelled) t.c += 1;
+    totals.set(src, t);
+  }
+  const out: Record<string, number> = { ...prior };
+  for (const [src, t] of totals) {
+    const p = prior[src] ?? 0.15;
+    out[src] = (t.c + p * priorWeight) / (t.n + priorWeight);
+  }
+  return out;
+}
+
+/**
+ * Heuristic cancellation prediction — works with zero history. Pass `rates` to
+ * use this property's learned per-source rates (from `calibrateSourceRates`);
+ * defaults to the cold-start prior.
  */
 export function heuristicCancelProbability(params: {
   bookingSource: string;
@@ -44,10 +76,12 @@ export function heuristicCancelProbability(params: {
   isVip: boolean;
   leadTimeDays: number;
   daysUntilArrival: number;
+  rates?: Record<string, number>;
 }): { probability: number; factors: string[] } {
   const { bookingSource, hasDeposit, isRepeatGuest, isVip, leadTimeDays, daysUntilArrival } = params;
+  const rates = params.rates ?? SOURCE_CANCEL_RATES;
 
-  let prob = SOURCE_CANCEL_RATES[bookingSource] ?? 0.15;
+  let prob = rates[bookingSource] ?? 0.15;
   const factors: string[] = [];
 
   // Booking source

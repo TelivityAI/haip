@@ -8,9 +8,10 @@ import { ConnectInsightsService } from './connect-insights.service';
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { AuthModule } from '../auth/auth.module';
+import { RatePlanModule } from '../rate-plan/rate-plan.module';
 
 @Module({
-  imports: [ReservationModule, WebhookModule, AuthModule],
+  imports: [ReservationModule, WebhookModule, AuthModule, RatePlanModule],
   controllers: [ConnectController],
   providers: [
     ConnectSearchService,

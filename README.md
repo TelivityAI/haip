@@ -38,7 +38,7 @@ The hotel industry runs on closed-source, legacy PMS platforms that charge per-r
 
 HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, a **full commission-free direct booking engine** (guest-facing widget + public booking API) so hotels take reservations straight from their own website, Stripe payment processing, Keycloak authentication, local user & role administration, media management for property and room photos, tax calculation engine, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. It even ships a **ChatGPT gateway** so guests can search and book a room by chatting. All open source under Apache 2.0.
 
-What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and learning loop. HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
+What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and per-property calibration (deterministic engines that learn each hotel's own rates from its history — not LLMs pretending to be agents). HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
 ### What HAIP is NOT
 
@@ -167,7 +167,7 @@ analyze() → recommend() → execute() → recordOutcome() → train()
 
 | Agent | What It Does |
 |-------|-------------|
-| **Night Audit Anomaly Detection** | Scans checked-in reservations, folios, and closed cashier shifts for 11 anomaly types: unposted charges, missing tax, payment mismatches, stale check-ins, duplicate folios, unusual charges, and cash-drawer variance outliers (z-score > 2.5 statistical outlier detection). Ranked by severity (critical/warning/info) and confidence. |
+| **Night Audit Anomaly Detection** | Scans checked-in reservations, folios, and closed cashier shifts for 8 anomaly types: unposted charges, missing tax, payment mismatches, stale check-ins, duplicate folios, no-show candidates, unusual charges, and cash-drawer variance outliers (z-score > 2.5 statistical outlier detection). Ranked by severity (critical/warning/info) and confidence. |
 | **Housekeeping Optimization** | Builds workload-balanced cleaning schedules. Prioritizes VIP and early check-in rooms, groups by floor for route efficiency, estimates cleaning times by task type (checkout 30min, stayover 20min, deep clean 60min, suite 45min). |
 | **Cancellation Prediction** | Scores every active reservation with a cancellation probability based on booking source (OTA 25% base vs direct 8%), deposit status, repeat guest history, VIP level, lead time, and days until arrival. Adds **deposit-forfeit risk** scoring on held deposits (likely-forfeit vs likely-refund exposure). Aggregates risk by date for overbooking decisions. |
 | **A/R Collections Prioritization** | Ranks open Accounts Receivable ledgers by collection priority — weighing outstanding balance, days overdue beyond payment terms, and open transfer count — into low/medium/high risk tiers with a recommended action (monitor, send reminder, send final notice). |
@@ -180,15 +180,36 @@ analyze() → recommend() → execute() → recordOutcome() → train()
 | **Guest Communication** | Template-based lifecycle emails triggered by reservation events: confirmation, pre-arrival (3 days), day-of arrival, welcome (on check-in), post-stay, and win-back (90 days). Repeat vs first-time guest personalization. GDPR opt-out enforcement — unsubscribed guests get no marketing emails. Duplicate prevention via decision log. Configurable SMTP transport (defaults to draft-only). |
 | **Review Response** | Drafts professional responses to guest reviews entered by staff. Keyword-based topic extraction across 10 categories (cleanliness, staff, value, noise, food, wifi, etc.). Sentiment classification from rating (1-2 negative, 3 mixed, 4-5 positive). Three response styles (formal/friendly/casual). Matches guests to reservations for stay-specific references. Template-based assembly — no LLM freeform text, no hallucination risk. |
 
-### Decision Logging
+### Decision Logging & per-property calibration
 
-Every agent decision is persisted:
-- **Input snapshot** — what the agent saw when it made the decision
-- **Recommendation** — what the agent suggested
-- **Outcome** — what happened after (approved/rejected/auto-executed)
-- **Performance metrics** — accuracy, revenue impact, approval rate
+Every agent decision is persisted (input snapshot, recommendation, confidence, outcome)
+as an audit trail. On top of that, agents **calibrate to each property's own history**:
+running `train()` recomputes an agent's parameters from that hotel's real outcomes and
+stores them in `agent_configs.modelState`, which `analyze()` then uses instead of the
+cold-start defaults.
 
-This creates a learning loop: each decision becomes training data for model improvement.
+> **What this is — and isn't (read this).** The agents are **deterministic decision
+> engines**, not LLMs — that's the point: they're the auditable guardrail. "Learning" here
+> means **statistical calibration from your hotel's own data** (e.g. the cancellation agent
+> learns this property's real cancel rates by booking source), not a neural net. Today the
+> cancellation agent calibrates for real; the other history-rich agents follow the same
+> pattern. The customer-comms and review-response agents are deterministic templates (no
+> LLM, no hallucination) and do **not** "learn."
+
+#### What learns vs. what's deterministic
+
+| Agent | Today |
+|---|---|
+| Cancellation Predictor | **Calibrates** per-property cancel rates by source from history |
+| Demand · Overbooking · Channel Mix | Deterministic; same calibration pattern is the roadmap |
+| Pricing · Revenue Manager · Group Pickup · AR · Housekeeping · Night Audit | Deterministic math/rules |
+| Guest Comms · Review Response | Deterministic templates (no LLM) |
+
+**HAIP AI (optional):** a small **local** model (via Ollama) can add a plain-language
+*explanation + suggestions* layer over any agent decision — strictly grounded in that
+agent's numbers, with the deterministic agent vetoing anything unsupported. It never
+executes; approval always runs the agent's own recommendation. Off by default
+(`HAIP_AI_ENABLED`); the PMS works fully without it.
 
 ---
 
@@ -291,7 +312,7 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ### Night Audit & Reporting
 - Automated night audit: room revenue posting, no-show processing, rate validation, day close
-- AI anomaly detection: 11 anomaly types (incl. cash-drawer variance) with severity ranking and confidence scores
+- AI anomaly detection: 8 anomaly types (incl. cash-drawer variance) with severity ranking and confidence scores
 - Daily revenue reports with department breakdown
 - Occupancy reports with ADR (Average Daily Rate) and RevPAR
 - Financial summaries with revenue categories

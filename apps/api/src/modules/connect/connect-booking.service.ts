@@ -5,6 +5,7 @@ import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } f
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { RatePlanService } from '../rate-plan/rate-plan.service';
 import type { AgentBookDto } from './dto/agent-book.dto';
 import type { AgentModifyDto } from './dto/agent-modify.dto';
 import { randomBytes } from 'crypto';
@@ -15,6 +16,7 @@ export class ConnectBookingService {
     @Inject(DRIZZLE) private readonly db: any,
     private readonly availabilityService: AvailabilityService,
     private readonly webhookService: WebhookService,
+    private readonly ratePlanService: RatePlanService,
   ) {}
 
   /**
@@ -53,6 +55,10 @@ export class ConnectBookingService {
     if (!ratePlan) {
       throw new NotFoundException(`Rate plan ${dto.ratePlanId} not found or inactive`);
     }
+
+    // 2b. Enforce rate restrictions (stop-sell / CTA / CTD / min-max LOS). Without
+    // this, an agent/LLM booking via the Connect API could land on a closed date.
+    await this.ratePlanService.assertSellable(dto.propertyId, dto.ratePlanId, dto.checkIn, dto.checkOut);
 
     // 3. Find or create guest
     const guest = await this.findOrCreateGuest(dto);

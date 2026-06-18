@@ -48,3 +48,13 @@ cloudbeds-guide/
 
 # Local IDE / Claude agent config (machine-specific paths; keep out of the public repo)
 .claude/
+
+# HAIP AI model-build pipeline — THE MOAT, never commit.
+# Data-gen scripts, teacher prompts/weights, QLoRA config, generated dataset, eval
+# harness, model weights. Only the final product ships (integration code +
+# THIRD_PARTY_LICENSES credits + an Ollama pull reference); the recipe stays private.
+model-build/
+*.gguf
+*.safetensors
+training-data/
+*.dataset.jsonl

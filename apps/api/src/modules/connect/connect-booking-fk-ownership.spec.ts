@@ -5,6 +5,7 @@ import { ConnectBookingService } from './connect-booking.service';
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { RatePlanService } from '../rate-plan/rate-plan.service';
 
 /**
  * Cross-tenant FK ownership for ConnectBookingService.modify — flagged by the
@@ -42,6 +43,7 @@ describe('ConnectBookingService — modify cross-tenant FK ownership', () => {
         { provide: DRIZZLE, useValue: db },
         { provide: AvailabilityService, useValue: { searchAvailability: vi.fn().mockResolvedValue([]) } },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: RatePlanService, useValue: { assertSellable: vi.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
     const svc = mod.get(ConnectBookingService);
