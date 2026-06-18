@@ -176,6 +176,9 @@ export class BookingEngineService {
       throw new ForbiddenException('Direct booking is not enabled for this property');
     }
     this.assertSellable(config, dto.roomTypeId, dto.ratePlanId);
+    // Enforce rate restrictions (stop-sell / CTA / CTD / min-max LOS). SEARCH only
+    // surfaces these — the BOOK path is the real gate against booking a closed date.
+    await this.ratePlanService.assertSellable(propertyId, dto.ratePlanId, dto.checkIn, dto.checkOut);
 
     // 1. Authoritative server-side re-quote — never trust a client-supplied price.
     const quote = await this.quote(propertyId, {
