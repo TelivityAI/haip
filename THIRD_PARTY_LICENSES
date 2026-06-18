@@ -1,0 +1,35 @@
+THIRD-PARTY NOTICES & ATTRIBUTION
+=================================
+
+HAIP is licensed under the Apache License 2.0 (see ./LICENSE).
+
+No third-party model weights are redistributed in this repository. "HAIP AI" is
+an optional, local model distributed separately as a GGUF you load into Ollama.
+
+
+HAIP AI was developed using Gemma 4 E4B, Qwen 3.5-4B and Mistral.
+
+Additional distillation done using:
+
+• Gemma 4 31B — Google DeepMind
+  License: Gemma Terms of Use — https://ai.google.dev/gemma/terms
+
+• gpt-oss-120b — OpenAI
+  License: Apache License 2.0
+  https://huggingface.co/openai/gpt-oss-120b
+
+• Kimi K2.6 — Moonshot AI
+  License: Modified MIT License
+  https://huggingface.co/moonshotai
+
+• Qwen3.6-35B-A3B — Alibaba (Qwen)
+  License: Apache License 2.0
+  https://huggingface.co/Qwen
+
+• GLM-5.2 — Z.ai / Zhipu AI
+  License: MIT License
+  https://huggingface.co/zai-org
+
+
+Trademarks are the property of their respective owners and are used here for
+attribution only.
