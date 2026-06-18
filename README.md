@@ -36,7 +36,7 @@
 
 The hotel industry runs on closed-source, legacy PMS platforms that charge per-room fees, lock data behind proprietary APIs, and treat integrations as an afterthought. Hotels pay $5–15/room/month just for the privilege of managing their own operations.
 
-HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, local user & role administration, media management for property and room photos, tax calculation engine, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. It even ships a **ChatGPT gateway** so guests can search and book a room by chatting. All open source under Apache 2.0.
+HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, a **full commission-free direct booking engine** (guest-facing widget + public booking API) so hotels take reservations straight from their own website, Stripe payment processing, Keycloak authentication, local user & role administration, media management for property and room photos, tax calculation engine, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. It even ships a **ChatGPT gateway** so guests can search and book a room by chatting. All open source under Apache 2.0.
 
 What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and learning loop. HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
@@ -424,6 +424,7 @@ hotel with the AI agents already running**, and serves everything at one URL:
 
 - **Dashboard:** `http://localhost:3000`
 - **Swagger / OpenAPI:** `http://localhost:3000/docs`
+- **Guest booking widget preview:** `http://localhost:3000/booking-preview.html` — every screen of the commission-free direct booking flow, branded with the demo hotel's data. The live, embeddable widget lives in `apps/booking` (drop-in `<script>` for any hotel website).
 
 The first run builds the image and can take a few minutes; subsequent starts are
 fast. A one-shot `init` container pushes the schema and seeds the demo before the

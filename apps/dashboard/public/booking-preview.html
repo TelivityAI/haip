@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HAIP Direct Booking Widget — Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  body { background:#e5e7eb; font-family: Montserrat, Arial, Helvetica, sans-serif; }
+  /* Branding comes from the hotel's booking-engine config (seed: Telivity Grand Hotel) */
+  .haip-booking { font-family: Montserrat, Arial, Helvetica, sans-serif; --haip-primary:#0F172A; --haip-accent:#2563EB; }
+  .line-clamp-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  /* browser-window chrome around each screen so it reads as "live on the hotel's site" */
+  .frame { border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(15,23,42,.18); border:1px solid #d1d5db; background:#fff; }
+  .frame-bar { display:flex; align-items:center; gap:8px; padding:10px 14px; background:#f3f4f6; border-bottom:1px solid #e5e7eb; }
+  .dot { width:11px; height:11px; border-radius:50%; display:inline-block; }
+  .url { margin-left:10px; font-size:12px; color:#6b7280; background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:3px 10px; }
+  .caption { font-size:13px; font-weight:600; color:#334155; margin:0 0 8px 2px; }
+  .caption span { color:#64748b; font-weight:500; }
+  .wrap { max-width:880px; margin:0 auto; padding:32px 16px 64px; }
+  .pagehead { max-width:880px; margin:0 auto; padding:36px 16px 8px; }
+  .snippet { background:#0F172A; color:#e2e8f0; border-radius:10px; padding:16px 18px; font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; overflow:auto; }
+  .snippet .tok { color:#7dd3fc; }
+  .stack > * + * { margin-top:40px; }
+  .note { max-width:880px; margin:0 auto 0; padding:0 16px; }
+  .note-inner { background:#fffbeb; border:1px solid #fcd34d; color:#92400e; border-radius:10px; padding:12px 16px; font-size:13px; }
+</style>
+</head>
+<body>
+
+<div class="pagehead">
+  <h1 style="font-size:24px;font-weight:700;color:#0f172a;margin:0 0 6px">HAIP Direct Booking Widget — how it looks live</h1>
+  <p style="color:#475569;font-size:14px;margin:0 0 16px">
+    Branding, room types, rates and the refundable first-night deposit below are the actual
+    seeded demo data for <strong>Telivity Grand Hotel</strong> (Miami Beach). This is the
+    commission-free booking flow a guest sees once a hotel drops two lines onto its own site:
+  </p>
+  <div class="snippet">&lt;div <span class="tok">id</span>=<span style="color:#86efac">"haip-booking"</span> <span class="tok">data-booking-key</span>=<span style="color:#86efac">"pk_live_HAIPDEMO0000000000000000"</span>&gt;&lt;/div&gt;
+&lt;script <span class="tok">src</span>=<span style="color:#86efac">"https://app.telivitygrand.com/booking/embed.js"</span>&gt;&lt;/script&gt;</div>
+</div>
+
+<div class="note">
+  <div class="note-inner">
+    <strong>Static preview.</strong> These are non-interactive snapshots of each screen for a quick look.
+    To click through the real, working widget, run it from <code>apps/booking</code>
+    (<code>pnpm --filter @telivityhaip/booking dev</code>) against the demo API.
+  </div>
+</div>
+
+<div class="wrap stack">
+
+  <!-- ============================ 1 · SEARCH ============================ -->
+  <section>
+    <p class="caption">1 · Search <span>— guest picks dates &amp; occupancy (dates pre-filled to tomorrow)</span></p>
+    <div class="frame">
+      <div class="frame-bar"><span class="dot" style="background:#f87171"></span><span class="dot" style="background:#fbbf24"></span><span class="dot" style="background:#34d399"></span><span class="url">telivitygrandhotel.com/book</span></div>
+      <div class="haip-booking bg-gray-50">
+        <header class="border-b border-gray-200 bg-white" style="border-top-width:4px;border-top-color:var(--haip-primary)">
+          <div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+            <a class="text-lg font-semibold text-gray-900">Telivity Grand Hotel</a>
+            <a class="text-sm" style="color:var(--haip-accent)">Manage booking</a>
+          </div>
+        </header>
+        <main class="mx-auto max-w-3xl px-4 py-6">
+          <form class="space-y-4 rounded-md border border-gray-200 bg-white p-6">
+            <h1 class="text-xl font-semibold text-gray-900">Find a room</h1>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Check-in</span>
+                <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value="2026-06-19" /></label>
+              <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Check-out</span>
+                <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value="2026-06-21" /></label>
+              <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Adults</span>
+                <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value="2" /></label>
+              <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Children</span>
+                <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value="0" /></label>
+            </div>
+            <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Promo code</span>
+              <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" placeholder="optional" /></label>
+            <button class="inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white" style="background-color:var(--haip-primary)">Search availability</button>
+          </form>
+        </main>
+        <footer class="mx-auto max-w-3xl px-4 py-6 text-center text-xs text-gray-400">Commission-free direct booking · Powered by HAIP</footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ 2 · RESULTS ============================ -->
+  <section>
+    <p class="caption">2 · Results <span>— available room types with the lowest nightly rate</span></p>
+    <div class="frame">
+      <div class="frame-bar"><span class="dot" style="background:#f87171"></span><span class="dot" style="background:#fbbf24"></span><span class="dot" style="background:#34d399"></span><span class="url">telivitygrandhotel.com/book#/results</span></div>
+      <div class="haip-booking bg-gray-50">
+        <header class="border-b border-gray-200 bg-white" style="border-top-width:4px;border-top-color:var(--haip-primary)">
+          <div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+            <a class="text-lg font-semibold text-gray-900">Telivity Grand Hotel</a>
+            <a class="text-sm" style="color:var(--haip-accent)">Manage booking</a>
+          </div>
+        </header>
+        <main class="mx-auto max-w-3xl px-4 py-6">
+          <div class="mb-1 flex items-center justify-between">
+            <h1 class="text-xl font-semibold text-gray-900">Available rooms</h1>
+            <button class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900">Change dates</button>
+          </div>
+          <p class="mb-4 text-sm text-gray-500">2026-06-19 → 2026-06-21 · 2 adults, 0 children</p>
+          <ul class="space-y-3">
+            <!-- Standard King -->
+            <li class="flex flex-col gap-4 rounded-md border border-gray-200 bg-white p-4 sm:flex-row">
+              <div class="h-32 w-full shrink-0 overflow-hidden rounded bg-gray-100 sm:w-48">
+                <img class="h-full w-full object-cover" src="https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=1600&q=80" alt="Standard King" /></div>
+              <div class="flex flex-1 flex-col">
+                <h2 class="font-semibold text-gray-900">Standard King</h2>
+                <p class="mt-1 line-clamp-2 text-sm text-gray-500">30 m² · king bed · WiFi, TV, minibar, in-room safe.</p>
+                <div class="mt-auto flex items-end justify-between pt-3">
+                  <div><span class="text-xs text-gray-400">from</span><div class="text-lg font-semibold text-gray-900">$189.00</div></div>
+                  <button class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white" style="background-color:var(--haip-primary)">Select</button>
+                </div>
+              </div>
+            </li>
+            <!-- Deluxe Ocean View -->
+            <li class="flex flex-col gap-4 rounded-md border border-gray-200 bg-white p-4 sm:flex-row">
+              <div class="h-32 w-full shrink-0 overflow-hidden rounded bg-gray-100 sm:w-48">
+                <img class="h-full w-full object-cover" src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1600&q=80" alt="Deluxe Ocean View" /></div>
+              <div class="flex flex-1 flex-col">
+                <h2 class="font-semibold text-gray-900">Deluxe Ocean View</h2>
+                <p class="mt-1 line-clamp-2 text-sm text-gray-500">42 m² · king bed · private balcony &amp; ocean view · breakfast included.</p>
+                <div class="mt-auto flex items-end justify-between pt-3">
+                  <div><span class="text-xs text-gray-400">from</span><div class="text-lg font-semibold text-gray-900">$239.00</div></div>
+                  <button class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white" style="background-color:var(--haip-primary)">Select</button>
+                </div>
+              </div>
+            </li>
+            <!-- Junior Suite -->
+            <li class="flex flex-col gap-4 rounded-md border border-gray-200 bg-white p-4 sm:flex-row">
+              <div class="h-32 w-full shrink-0 overflow-hidden rounded bg-gray-100 sm:w-48">
+                <img class="h-full w-full object-cover" src="https://images.unsplash.com/photo-1591088398332-8a7791972843?auto=format&fit=crop&w=1600&q=80" alt="Junior Suite" /></div>
+              <div class="flex flex-1 flex-col">
+                <h2 class="font-semibold text-gray-900">Junior Suite</h2>
+                <p class="mt-1 line-clamp-2 text-sm text-gray-500">55 m² · living area · ocean view · espresso machine · breakfast included.</p>
+                <div class="mt-auto flex items-end justify-between pt-3">
+                  <div><span class="text-xs text-gray-400">from</span><div class="text-lg font-semibold text-gray-900">$429.00</div></div>
+                  <button class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white" style="background-color:var(--haip-primary)">Select</button>
+                </div>
+              </div>
+            </li>
+            <!-- Penthouse Suite -->
+            <li class="flex flex-col gap-4 rounded-md border border-gray-200 bg-white p-4 sm:flex-row">
+              <div class="h-32 w-full shrink-0 overflow-hidden rounded bg-gray-100 sm:w-48">
+                <img class="h-full w-full object-cover" src="https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?auto=format&fit=crop&w=1600&q=80" alt="Penthouse Suite" /></div>
+              <div class="flex flex-1 flex-col">
+                <h2 class="font-semibold text-gray-900">Penthouse Suite</h2>
+                <p class="mt-1 line-clamp-2 text-sm text-gray-500">95 m² · private terrace · jacuzzi · dining area · half board.</p>
+                <div class="mt-auto flex items-end justify-between pt-3">
+                  <div><span class="text-xs text-gray-400">from</span><div class="text-lg font-semibold text-gray-900">$799.00</div></div>
+                  <button class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white" style="background-color:var(--haip-primary)">Select</button>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </main>
+        <footer class="mx-auto max-w-3xl px-4 py-6 text-center text-xs text-gray-400">Commission-free direct booking · Powered by HAIP</footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ 3 · ROOM / RATE ============================ -->
+  <section>
+    <p class="caption">3 · Room &amp; rate <span>— pick a rate plan; live price breakdown with the refundable deposit</span></p>
+    <div class="frame">
+      <div class="frame-bar"><span class="dot" style="background:#f87171"></span><span class="dot" style="background:#fbbf24"></span><span class="dot" style="background:#34d399"></span><span class="url">telivitygrandhotel.com/book#/room</span></div>
+      <div class="haip-booking bg-gray-50">
+        <header class="border-b border-gray-200 bg-white" style="border-top-width:4px;border-top-color:var(--haip-primary)">
+          <div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+            <a class="text-lg font-semibold text-gray-900">Telivity Grand Hotel</a>
+            <a class="text-sm" style="color:var(--haip-accent)">Manage booking</a>
+          </div>
+        </header>
+        <main class="mx-auto max-w-3xl space-y-4 px-4 py-6">
+          <button class="inline-flex items-center justify-center rounded-md py-1 text-sm font-semibold text-gray-600 hover:text-gray-900">← Back to rooms</button>
+          <h1 class="text-xl font-semibold text-gray-900">Deluxe Ocean View</h1>
+          <div class="space-y-2">
+            <button class="flex w-full items-center justify-between rounded-md border border-gray-900 bg-gray-50 p-4 text-left transition">
+              <div><div class="font-medium text-gray-900">Deluxe BAR</div>
+                <div class="mt-1 text-xs text-gray-500">Free cancellation until 24h before arrival · breakfast included</div></div>
+              <div class="text-right"><div class="font-semibold text-gray-900">$578.00</div><div class="text-xs text-gray-400">total</div></div>
+            </button>
+            <button class="flex w-full items-center justify-between rounded-md border border-gray-200 bg-white p-4 text-left transition hover:border-gray-400">
+              <div><div class="font-medium text-gray-900">Deluxe Summer Promo</div>
+                <div class="mt-1 text-xs text-gray-500">Non-refundable · save 17% · breakfast included</div></div>
+              <div class="text-right"><div class="font-semibold text-gray-900">$478.00</div><div class="text-xs text-gray-400">total</div></div>
+            </button>
+          </div>
+          <!-- PriceBreakdown -->
+          <div class="rounded-md border border-gray-200 bg-white p-4 text-sm">
+            <div class="mb-3 font-semibold text-gray-900">2 nights</div>
+            <ul class="space-y-1">
+              <li class="flex justify-between text-gray-600"><span>2026-06-19</span><span>$289.00<span class="text-gray-400"> + $37.57 tax</span></span></li>
+              <li class="flex justify-between text-gray-600"><span>2026-06-20</span><span>$289.00<span class="text-gray-400"> + $37.57 tax</span></span></li>
+            </ul>
+            <div class="mt-3 space-y-1 border-t border-gray-100 pt-3">
+              <div class="flex justify-between text-gray-600"><span>Room</span><span>$578.00</span></div>
+              <div class="flex justify-between text-gray-600"><span>Taxes &amp; fees</span><span>$75.14</span></div>
+              <div class="flex justify-between font-semibold text-gray-900"><span>Total</span><span>$653.14</span></div>
+              <div class="flex justify-between text-gray-600"><span>Deposit due now (refundable)</span><span>$289.00</span></div>
+            </div>
+          </div>
+          <button class="inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white" style="background-color:var(--haip-primary)">Continue to guest details</button>
+        </main>
+        <footer class="mx-auto max-w-3xl px-4 py-6 text-center text-xs text-gray-400">Commission-free direct booking · Powered by HAIP</footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ 4 · GUEST DETAILS ============================ -->
+  <section>
+    <p class="caption">4 · Guest details</p>
+    <div class="frame">
+      <div class="frame-bar"><span class="dot" style="background:#f87171"></span><span class="dot" style="background:#fbbf24"></span><span class="dot" style="background:#34d399"></span><span class="url">telivitygrandhotel.com/book#/guest</span></div>
+      <div class="haip-booking bg-gray-50">
+        <header class="border-b border-gray-200 bg-white" style="border-top-width:4px;border-top-color:var(--haip-primary)">
+          <div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+            <a class="text-lg font-semibold text-gray-900">Telivity Grand Hotel</a>
+            <a class="text-sm" style="color:var(--haip-accent)">Manage booking</a>
+          </div>
+        </header>
+        <main class="mx-auto max-w-3xl space-y-4 px-4 py-6">
+          <button class="inline-flex items-center justify-center py-1 text-sm font-semibold text-gray-600 hover:text-gray-900">← Back</button>
+          <h1 class="text-xl font-semibold text-gray-900">Guest details</h1>
+          <form class="space-y-4 rounded-md border border-gray-200 bg-white p-6">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">First name *</span>
+                <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value="Maria" /></label>
+              <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Last name *</span>
+                <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value="Alvarez" /></label>
+            </div>
+            <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Email *</span>
+              <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value="maria.alvarez@example.com" /></label>
+            <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Phone</span>
+              <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value="+1 305 555 0142" /></label>
+            <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Special requests</span>
+              <textarea rows="3" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">High floor, away from elevator if possible.</textarea></label>
+            <button class="inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white" style="background-color:var(--haip-primary)">Continue to payment</button>
+          </form>
+        </main>
+        <footer class="mx-auto max-w-3xl px-4 py-6 text-center text-xs text-gray-400">Commission-free direct booking · Powered by HAIP</footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ 5 · PAYMENT ============================ -->
+  <section>
+    <p class="caption">5 · Payment <span>— Stripe card element when configured; demo mode shown here</span></p>
+    <div class="frame">
+      <div class="frame-bar"><span class="dot" style="background:#f87171"></span><span class="dot" style="background:#fbbf24"></span><span class="dot" style="background:#34d399"></span><span class="url">telivitygrandhotel.com/book#/payment</span></div>
+      <div class="haip-booking bg-gray-50">
+        <header class="border-b border-gray-200 bg-white" style="border-top-width:4px;border-top-color:var(--haip-primary)">
+          <div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+            <a class="text-lg font-semibold text-gray-900">Telivity Grand Hotel</a>
+            <a class="text-sm" style="color:var(--haip-accent)">Manage booking</a>
+          </div>
+        </header>
+        <main class="mx-auto max-w-3xl space-y-4 px-4 py-6">
+          <button class="inline-flex items-center justify-center py-1 text-sm font-semibold text-gray-600 hover:text-gray-900">← Back</button>
+          <h1 class="text-xl font-semibold text-gray-900">Payment</h1>
+          <div class="rounded-md border border-gray-200 bg-white p-4 text-sm">
+            <div class="mb-3 font-semibold text-gray-900">2 nights</div>
+            <div class="space-y-1">
+              <div class="flex justify-between font-semibold text-gray-900"><span>Total</span><span>$653.14</span></div>
+              <div class="flex justify-between text-gray-600"><span>Deposit due now (refundable)</span><span>$289.00</span></div>
+            </div>
+          </div>
+          <div class="rounded-md border border-gray-200 bg-white p-6">
+            <p class="mb-2 text-sm text-gray-600">Deposit due now: <strong>$289.00</strong></p>
+            <p class="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">Demo mode — no live card processing. A placeholder payment token will be used.</p>
+            <button class="inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white" style="background-color:var(--haip-primary)">Pay (demo) &amp; confirm booking</button>
+          </div>
+        </main>
+        <footer class="mx-auto max-w-3xl px-4 py-6 text-center text-xs text-gray-400">Commission-free direct booking · Powered by HAIP</footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ 6 · CONFIRMATION ============================ -->
+  <section>
+    <p class="caption">6 · Confirmation</p>
+    <div class="frame">
+      <div class="frame-bar"><span class="dot" style="background:#f87171"></span><span class="dot" style="background:#fbbf24"></span><span class="dot" style="background:#34d399"></span><span class="url">telivitygrandhotel.com/book#/confirmation</span></div>
+      <div class="haip-booking bg-gray-50">
+        <header class="border-b border-gray-200 bg-white" style="border-top-width:4px;border-top-color:var(--haip-primary)">
+          <div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+            <a class="text-lg font-semibold text-gray-900">Telivity Grand Hotel</a>
+            <a class="text-sm" style="color:var(--haip-accent)">Manage booking</a>
+          </div>
+        </header>
+        <main class="mx-auto max-w-3xl space-y-4 px-4 py-6">
+          <div class="rounded-md border border-green-200 bg-green-50 p-6 text-center">
+            <p class="text-sm font-medium text-green-700">Booking confirmed</p>
+            <p class="mt-2 text-3xl font-bold tracking-wide text-gray-900">HAIP-7F3A9C2B</p>
+            <p class="mt-1 text-sm text-gray-600">Keep this confirmation number to manage your booking.</p>
+          </div>
+          <div class="rounded-md border border-gray-200 bg-white p-6 text-sm">
+            <div class="flex justify-between border-b border-gray-100 py-2"><span class="text-gray-500">Status</span><span class="text-right font-medium text-gray-900">Confirmed</span></div>
+            <div class="flex justify-between border-b border-gray-100 py-2"><span class="text-gray-500">Room</span><span class="text-right font-medium text-gray-900">Deluxe Ocean View</span></div>
+            <div class="flex justify-between border-b border-gray-100 py-2"><span class="text-gray-500">Dates</span><span class="text-right font-medium text-gray-900">2026-06-19 → 2026-06-21</span></div>
+            <div class="flex justify-between border-b border-gray-100 py-2"><span class="text-gray-500">Total</span><span class="text-right font-medium text-gray-900">$653.14</span></div>
+            <div class="flex justify-between border-b border-gray-100 py-2"><span class="text-gray-500">Deposit paid</span><span class="text-right font-medium text-gray-900">$289.00</span></div>
+            <div class="flex justify-between py-2"><span class="text-gray-500">Cancellation</span><span class="text-right font-medium text-gray-900">Free until 24h before arrival</span></div>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <button class="inline-flex items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50">Manage this booking</button>
+            <button class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white" style="background-color:var(--haip-primary)">Book another stay</button>
+          </div>
+        </main>
+        <footer class="mx-auto max-w-3xl px-4 py-6 text-center text-xs text-gray-400">Commission-free direct booking · Powered by HAIP</footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ 7 · MANAGE BOOKING ============================ -->
+  <section>
+    <p class="caption">7 · Manage booking <span>— guest self-service lookup &amp; cancel (bearer = confirmation number)</span></p>
+    <div class="frame">
+      <div class="frame-bar"><span class="dot" style="background:#f87171"></span><span class="dot" style="background:#fbbf24"></span><span class="dot" style="background:#34d399"></span><span class="url">telivitygrandhotel.com/book#/manage</span></div>
+      <div class="haip-booking bg-gray-50">
+        <header class="border-b border-gray-200 bg-white" style="border-top-width:4px;border-top-color:var(--haip-primary)">
+          <div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+            <a class="text-lg font-semibold text-gray-900">Telivity Grand Hotel</a>
+            <a class="text-sm" style="color:var(--haip-accent)">Manage booking</a>
+          </div>
+        </header>
+        <main class="mx-auto max-w-3xl space-y-4 px-4 py-6">
+          <h1 class="text-xl font-semibold text-gray-900">Manage your booking</h1>
+          <form class="space-y-4 rounded-md border border-gray-200 bg-white p-6">
+            <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Confirmation number *</span>
+              <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value="HAIP-7F3A9C2B" /></label>
+            <label class="block"><span class="mb-1 block text-sm font-medium text-gray-700">Email</span>
+              <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value="maria.alvarez@example.com" /></label>
+            <button class="inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white" style="background-color:var(--haip-primary)">Find booking</button>
+          </form>
+          <div class="rounded-md border border-gray-200 bg-white p-6 text-sm">
+            <div class="flex justify-between border-b border-gray-100 py-2"><span class="text-gray-500">Confirmation</span><span class="text-right font-medium text-gray-900">HAIP-7F3A9C2B</span></div>
+            <div class="flex justify-between border-b border-gray-100 py-2"><span class="text-gray-500">Guest</span><span class="text-right font-medium text-gray-900">Maria Alvarez</span></div>
+            <div class="flex justify-between border-b border-gray-100 py-2"><span class="text-gray-500">Status</span><span class="text-right font-medium text-gray-900">Confirmed</span></div>
+            <div class="flex justify-between border-b border-gray-100 py-2"><span class="text-gray-500">Room</span><span class="text-right font-medium text-gray-900">Deluxe Ocean View</span></div>
+            <div class="flex justify-between border-b border-gray-100 py-2"><span class="text-gray-500">Check-in → out</span><span class="text-right font-medium text-gray-900">2026-06-19 → 2026-06-21</span></div>
+            <div class="flex justify-between py-2"><span class="text-gray-500">Total</span><span class="text-right font-medium text-gray-900">$653.14</span></div>
+          </div>
+          <button class="inline-flex w-full items-center justify-center rounded-md border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">Cancel booking</button>
+        </main>
+        <footer class="mx-auto max-w-3xl px-4 py-6 text-center text-xs text-gray-400">Commission-free direct booking · Powered by HAIP</footer>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
