@@ -74,7 +74,13 @@ describe('AgentService.explainDecision (HAIP AI)', () => {
       numbers: { occupancy: 0.87, demandLevel: 'peak', recommendedAdjustmentPct: 12 },
     });
     expect(db.update).toHaveBeenCalledOnce(); // cached on the row
-    expect(out.explanation).toEqual(result);
+    // guarded shape: supported figures (87%, +12%) keep grounded=true; suggestion kept
+    expect(out.explanation).toMatchObject({
+      rationale: result.rationale,
+      suggestions: ['Min-LOS 2'],
+      grounded: true,
+      model: 'haip-ai',
+    });
     expect(out.fromCache).toBe(false);
   });
 

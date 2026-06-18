@@ -4,6 +4,7 @@ import { agentConfigs, agentDecisions, agentTrainingSnapshots, auditLogs } from 
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { LlmService } from '../llm/llm.service';
+import { groundExplanation } from '../llm/grounding';
 import type {
   HaipAgent,
   AgentContext,
@@ -46,23 +47,30 @@ export class AgentService {
       return { explanation: cached, model: cached.model, fromCache: true };
     }
 
+    const numbers = (decision.recommendation ?? {}) as Record<string, unknown>;
     const result = await this.llm.explain({
       agentType: decision.agentType,
       decisionType: decision.decisionType,
       // The deterministic agent's own output is the ONLY ground truth.
-      numbers: (decision.recommendation ?? {}) as Record<string, unknown>,
+      numbers,
     });
 
     if (!result) {
       return { explanation: null, model: null, fromCache: false };
     }
 
+    // Anti-hallucination guard: drop suggestions asserting figures the agent's
+    // numbers don't support, and flag the rationale if it does. (Execution itself
+    // never uses this text — approval runs the agent's own recommendation.)
+    const guarded = groundExplanation(numbers, result);
+    const explanation = { ...guarded, model: result.model };
+
     await this.db
       .update(agentDecisions)
-      .set({ explanation: result })
+      .set({ explanation })
       .where(and(eq(agentDecisions.id, decisionId), eq(agentDecisions.propertyId, propertyId)));
 
-    return { explanation: result, model: result.model, fromCache: false };
+    return { explanation, model: result.model, fromCache: false };
   }
 
   /** Register an agent implementation. Called by sub-agents on init. */
