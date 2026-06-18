@@ -11,7 +11,7 @@ import {
   ParseUUIDPipe,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { eq, and, desc } from 'drizzle-orm';
 import { guestReviews, reservations } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
@@ -100,6 +100,20 @@ export class AgentController {
     @CurrentUser() user?: AuthUser,
   ) {
     return this.agentService.rejectDecision(propertyId, id, user?.sub, dto.reason);
+  }
+
+  @Post(':propertyId/decisions/:id/explain')
+  @ApiOperation({
+    summary: 'HAIP AI: grounded plain-language rationale + suggestions for a decision',
+  })
+  @ApiResponse({ status: 201, description: 'Explanation (or {explanation:null} if the model is off)' })
+  @ApiQuery({ name: 'force', required: false, description: 'Regenerate even if cached' })
+  async explainDecision(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('force') force?: string,
+  ) {
+    return this.agentService.explainDecision(propertyId, id, force === 'true');
   }
 
   @Get(':propertyId/:agentType/performance')

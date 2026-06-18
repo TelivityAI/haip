@@ -520,8 +520,11 @@ async function main() {
       executed_at timestamptz,
       outcome jsonb,
       outcome_recorded_at timestamptz,
+      explanation jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // HAIP AI explanation column (idempotent for DBs predating this column)
+    `ALTER TABLE agent_decisions ADD COLUMN IF NOT EXISTS explanation jsonb`,
     // agent_training_snapshots
     `CREATE TABLE IF NOT EXISTS agent_training_snapshots (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

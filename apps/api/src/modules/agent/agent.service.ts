@@ -3,6 +3,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { agentConfigs, agentDecisions, agentTrainingSnapshots, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
+import { LlmService } from '../llm/llm.service';
 import type {
   HaipAgent,
   AgentContext,
@@ -23,7 +24,46 @@ export class AgentService {
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     private readonly webhookService: WebhookService,
+    private readonly llm: LlmService,
   ) {}
+
+  /**
+   * Generate (or return cached) HAIP AI explanation + suggestions for one decision.
+   * Grounded: the model sees ONLY the decision's recommendation numbers. On-demand
+   * so the model is invoked only for decisions a human actually reviews; the result
+   * is cached on `agent_decisions.explanation`.
+   *
+   * Returns `{ explanation: null, model: null }` when the model is disabled or
+   * unavailable — callers fall back to showing the raw decision.
+   */
+  async explainDecision(propertyId: string, decisionId: string, force = false) {
+    const decision = await this.getDecisionById(decisionId, propertyId);
+
+    const cached = decision.explanation as
+      | { rationale: string; suggestions: string[]; model: string }
+      | null;
+    if (cached && !force) {
+      return { explanation: cached, model: cached.model, fromCache: true };
+    }
+
+    const result = await this.llm.explain({
+      agentType: decision.agentType,
+      decisionType: decision.decisionType,
+      // The deterministic agent's own output is the ONLY ground truth.
+      numbers: (decision.recommendation ?? {}) as Record<string, unknown>,
+    });
+
+    if (!result) {
+      return { explanation: null, model: null, fromCache: false };
+    }
+
+    await this.db
+      .update(agentDecisions)
+      .set({ explanation: result })
+      .where(and(eq(agentDecisions.id, decisionId), eq(agentDecisions.propertyId, propertyId)));
+
+    return { explanation: result, model: result.model, fromCache: false };
+  }
 
   /** Register an agent implementation. Called by sub-agents on init. */
   registerAgent(agent: HaipAgent) {
