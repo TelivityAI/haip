@@ -1,5 +1,15 @@
 # HAIP — Render Blueprint (one-click cloud demo)
 #
+# ⚠️  DEMO ONLY — NOT A SECURE PRODUCTION TEMPLATE. ⚠️
+# This blueprint runs with AUTH_ENABLED=false + HAIP_ALLOW_INSECURE=true + mock
+# payments so the public demo is browsable with zero setup. That means EVERY API
+# endpoint (incl. /api/v1/connect/*) is reachable WITHOUT authentication. Do NOT
+# point real guest/PII or live payments at a deployment using these values.
+# For a real deployment: remove HAIP_ALLOW_INSECURE, set AUTH_ENABLED=true with a
+# configured Keycloak, set STRIPE_MODE=live/test with real keys, and set a strong
+# CONNECT_API_KEY. (The API refuses to boot production-like with auth off UNLESS
+# HAIP_ALLOW_INSECURE=true — so removing that line is the intended hardening step.)
+#
 # Deploy a fully-working HAIP demo (API + dashboard + AI agents, seeded) with no
 # local setup. Render provisions Postgres + Redis, builds the Docker image, runs
 # migrate+seed via preDeployCommand, then serves the app.

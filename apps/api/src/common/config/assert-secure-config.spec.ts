@@ -14,6 +14,10 @@ describe('assertSecureConfig', () => {
     expect(() => assertSecureConfig({ NODE_ENV: 'production', AUTH_ENABLED: 'true', STRIPE_MODE: 'mock' } as any)).toThrow(/STRIPE_MODE=mock/);
   });
 
+  it('also refuses to boot in staging with AUTH disabled (not just production)', () => {
+    expect(() => assertSecureConfig({ NODE_ENV: 'staging', AUTH_ENABLED: 'false', STRIPE_MODE: 'live' } as any)).toThrow(/AUTH_ENABLED=false/);
+  });
+
   it('allows the explicit insecure opt-in (public demo)', () => {
     expect(() =>
       assertSecureConfig({ NODE_ENV: 'production', AUTH_ENABLED: 'false', STRIPE_MODE: 'mock', HAIP_ALLOW_INSECURE: 'true' } as any),
