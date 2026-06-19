@@ -439,13 +439,28 @@ export class ConnectBookingService {
   // --- Private Helpers ---
 
   private async findOrCreateGuest(dto: AgentBookDto) {
-    // Try to find by email
+    // Try to find by email — but ONLY reuse a guest that is already linked to
+    // THIS property via an existing reservation. The `guests` row is cross-property
+    // by design, yet a bare email match would let one tenant attach to (and later,
+    // via modify(), overwrite) another tenant's guest profile. Scope reuse to the
+    // requesting property; otherwise create a fresh row (CLAUDE.md guest rule).
     if (dto.guestEmail) {
-      const [existing] = await this.db
+      const matches = await this.db
         .select()
         .from(guests)
         .where(eq(guests.email, dto.guestEmail));
-      if (existing) return existing;
+      for (const candidate of matches) {
+        const links = await this.db
+          .select({ id: reservations.id })
+          .from(reservations)
+          .where(
+            and(
+              eq(reservations.guestId, candidate.id),
+              eq(reservations.propertyId, dto.propertyId),
+            ),
+          );
+        if (links.length > 0) return candidate;
+      }
     }
 
     // Create new guest

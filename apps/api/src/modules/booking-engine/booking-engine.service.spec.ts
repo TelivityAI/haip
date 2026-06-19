@@ -24,6 +24,7 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
   const ratePlan = {
     calculateDerivedRate: vi.fn().mockResolvedValue({ effectiveRate: 100, currency: 'USD' }),
     assertSellable: vi.fn().mockResolvedValue(undefined),
+    findById: vi.fn().mockResolvedValue({ id: RP, roomTypeId: RT, currencyCode: 'USD' }),
   };
   const tax = { calculateTaxes: vi.fn().mockResolvedValue([{ amount: '10.00' }]) };
   const guest = { create: vi.fn().mockResolvedValue({ id: 'guest-1' }) };
@@ -153,5 +154,23 @@ describe('BookingEngineService.book', () => {
     const { svc } = makeService();
     const { paymentToken, ...noToken } = bookDto as any;
     await expect(svc.book(PROP, noToken)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects a rate plan that belongs to a different room type (price-tampering guard)', async () => {
+    // Attacker pairs a pricey room type with a cheap room's rate plan. Both are
+    // individually sellable, but the rate plan is bound to a DIFFERENT room type.
+    const { svc, ratePlan } = makeService();
+    ratePlan.findById.mockResolvedValue({ id: RP, roomTypeId: 'rt000000-0000-4000-a000-0000000000ff', currencyCode: 'USD' });
+    await expect(svc.book(PROP, bookDto as any)).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('BookingEngineService.quote — rate/room pairing', () => {
+  it('rejects a rate plan that does not belong to the requested room type', async () => {
+    const { svc, ratePlan } = makeService();
+    ratePlan.findById.mockResolvedValue({ id: RP, roomTypeId: 'rt000000-0000-4000-a000-0000000000ff', currencyCode: 'USD' });
+    await expect(
+      svc.quote(PROP, { roomTypeId: RT, ratePlanId: RP, checkIn: '2026-07-01', checkOut: '2026-07-03', adults: 2 } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

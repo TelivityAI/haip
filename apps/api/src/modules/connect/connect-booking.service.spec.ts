@@ -107,8 +107,9 @@ describe('ConnectBookingService', () => {
           where: vi.fn().mockImplementation(() => {
             selectCallCount++;
             if (selectCallCount === 1) return Promise.resolve([mockRatePlan]);
-            if (selectCallCount === 2) return Promise.resolve([existingGuest]); // guest found!
-            if (selectCallCount === 3) return Promise.resolve([{ settings: {} }]);
+            if (selectCallCount === 2) return Promise.resolve([existingGuest]); // guest found by email
+            if (selectCallCount === 3) return Promise.resolve([{ id: 'res-existing' }]); // linked at THIS property → reuse
+            if (selectCallCount === 4) return Promise.resolve([{ settings: {} }]);
             return Promise.resolve([]);
           }),
         }),
@@ -142,6 +143,53 @@ describe('ConnectBookingService', () => {
       expect(result.success).toBe(true);
       // Only 2 inserts (booking + reservation), not 3 (guest skipped)
       expect(insertCount).toBe(2);
+    });
+
+    it('should NOT reuse a guest from another property (cross-tenant PII guard)', async () => {
+      let selectCallCount = 0;
+      const foreignGuest = { id: 'guest-foreign', firstName: 'John', lastName: 'Smith', email: 'john@example.com' };
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            if (selectCallCount === 1) return Promise.resolve([mockRatePlan]); // rate plan
+            if (selectCallCount === 2) return Promise.resolve([foreignGuest]); // email matches a guest...
+            if (selectCallCount === 3) return Promise.resolve([]); // ...but NO reservation link at this property
+            if (selectCallCount === 4) return Promise.resolve([{ settings: {} }]); // property settings
+            return Promise.resolve([]);
+          }),
+        }),
+      }));
+
+      let insertCount = 0;
+      mockDb.insert.mockImplementation(() => ({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockImplementation(() => {
+            insertCount++;
+            if (insertCount === 1) return Promise.resolve([{ id: 'guest-new', firstName: 'John', lastName: 'Smith' }]);
+            if (insertCount === 2) return Promise.resolve([{ id: 'booking-1', confirmationNumber: 'HAIP-X' }]);
+            if (insertCount === 3) return Promise.resolve([{ id: 'res-1', status: 'confirmed' }]);
+            return Promise.resolve([{}]);
+          }),
+        }),
+      }));
+
+      const result = await service.book({
+        propertyId: 'prop-1',
+        roomTypeId: 'rt-1',
+        ratePlanId: 'rp-1',
+        checkIn: '2024-06-01',
+        checkOut: '2024-06-03',
+        guestFirstName: 'John',
+        guestLastName: 'Smith',
+        guestEmail: 'john@example.com',
+        adults: 2,
+      });
+
+      expect(result.success).toBe(true);
+      // A fresh guest row is created (guest + booking + reservation = 3 inserts),
+      // NOT linked to the foreign-property guest.
+      expect(insertCount).toBe(3);
     });
 
     it('should reject booking when no availability', async () => {

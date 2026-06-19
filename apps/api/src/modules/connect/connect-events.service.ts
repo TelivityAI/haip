@@ -14,6 +14,17 @@ export class ConnectEventsService {
   ) {}
 
   /**
+   * Strip the HMAC `secret` before a subscription row leaves the service.
+   * The secret is used server-side to sign webhook deliveries; returning it in
+   * API responses would let any caller forge signed deliveries to that
+   * subscriber. Callers supply the secret at creation and must retain their own copy.
+   */
+  private redactSecret<T extends { secret?: unknown }>(row: T): Omit<T, 'secret'> {
+    const { secret: _secret, ...rest } = row;
+    return rest;
+  }
+
+  /**
    * Create an event subscription for an OTAIP agent.
    */
   async createSubscription(dto: CreateSubscriptionDto) {
@@ -29,14 +40,14 @@ export class ConnectEventsService {
       })
       .returning();
 
-    return subscription;
+    return this.redactSecret(subscription);
   }
 
   /**
    * List subscriptions for a property.
    */
   async listSubscriptions(propertyId: string) {
-    return this.db
+    const rows = await this.db
       .select()
       .from(agentWebhookSubscriptions)
       .where(
@@ -45,6 +56,7 @@ export class ConnectEventsService {
           eq(agentWebhookSubscriptions.isActive, true),
         ),
       );
+    return rows.map((row: any) => this.redactSecret(row));
   }
 
   /**
