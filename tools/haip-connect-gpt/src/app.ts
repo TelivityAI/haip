@@ -31,11 +31,6 @@ export interface AppOptions {
    * internet who finds the URL can drive the Connect API. Configure via GATEWAY_API_KEY.
    */
   gatewayApiKey?: string;
-  /**
-   * Explicit opt-out that leaves the action routes public (the unauthenticated
-   * demo). Mirrors HAIP_ALLOW_INSECURE — secure-by-default otherwise.
-   */
-  allowPublic?: boolean;
 }
 
 /** Public routes that never require a caller credential. */
@@ -64,16 +59,18 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.register(cors, { origin: true });
 
-  // Require a caller credential on every non-public route. The gateway proxies
-  // requests with HAIP's privileged upstream `x-api-key`, so an unauthenticated
-  // gateway is an open door to the Connect API. Fail-closed: if no key is
-  // configured and `allowPublic` was not explicitly set, refuse action routes.
+  // Caller auth on the action routes. This is a demo/template gateway, so it is
+  // OPEN by default — the public demo shows hotels how to connect their own GPT
+  // with zero setup. A real deployment locks it down simply by setting
+  // GATEWAY_API_KEY: when a key is configured it is REQUIRED (Authorization:
+  // Bearer <key> or x-api-key), validated timing-safe. The gateway holds HAIP's
+  // upstream Connect key, so anyone enabling this in production should set a key.
   app.addHook('onRequest', async (req, reply) => {
+    if (!opts.gatewayApiKey) return; // no key configured → open (demo posture)
     const path = (req.url.split('?')[0] ?? req.url).replace(/\/+$/, '') || '/';
     if (PUBLIC_PATHS.has(path)) return;
-    if (opts.allowPublic) return;
     const provided = extractCredential(req);
-    if (!opts.gatewayApiKey || !provided || !timingSafeEqualStr(provided, opts.gatewayApiKey)) {
+    if (!provided || !timingSafeEqualStr(provided, opts.gatewayApiKey)) {
       reply.code(401).send({ error: 'unauthorized', message: 'A valid gateway credential is required.' });
     }
   });
