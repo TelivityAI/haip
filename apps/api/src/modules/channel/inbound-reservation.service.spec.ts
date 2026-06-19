@@ -372,4 +372,15 @@ describe('InboundReservationService', () => {
       expect(result.guestId).toBe('guest-1');
     });
   });
+
+  describe('confirmation number entropy', () => {
+    it('generates a high-entropy, non-time-derived confirmation number', () => {
+      const gen = () => (service as any).generateConfirmationNumber() as string;
+      const n = gen();
+      // 128-bit Crockford token (CH- + 32 chars), not `CH-<timestamp>-<4 random>`.
+      expect(n).toMatch(/^CH-[0-9A-Z]{32}$/);
+      const many = new Set(Array.from({ length: 200 }, gen));
+      expect(many.size).toBe(200);
+    });
+  });
 });

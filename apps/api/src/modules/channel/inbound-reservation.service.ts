@@ -6,6 +6,7 @@ import { ChannelService } from './channel.service';
 import { ChannelAdapterFactory } from './channel-adapter.factory';
 import { AriService } from './ari.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { generateConfirmationToken } from '../connect/connect-booking.service';
 import type { ChannelReservation } from './channel-adapter.interface';
 
 @Injectable()
@@ -485,9 +486,9 @@ export class InboundReservationService {
   }
 
   private generateConfirmationNumber(): string {
-    const prefix = 'CH';
-    const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    return `${prefix}-${timestamp}-${random}`;
+    // The confirmation number is a bearer credential for the booking, so it must
+    // be unguessable. The previous `Date.now()`-based value with 4 Math.random
+    // chars was enumerable; reuse the shared 128-bit CSPRNG token (Crockford b32).
+    return `CH-${generateConfirmationToken()}`;
   }
 }
