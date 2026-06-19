@@ -15,6 +15,7 @@ import type {
 import type { SiteMinderConfig } from './siteminder.config';
 import { DEFAULT_SITEMINDER_CONFIG } from './siteminder.config';
 import { buildSoapEnvelope, parseSoapResponse } from './siteminder.soap';
+import { assertSafeChannelEndpoint } from '../../../../common/security/url-guard';
 import {
   mapAvailabilityToOta,
   mapRatesToOta,
@@ -261,6 +262,7 @@ export class SiteMinderAdapter implements ChannelAdapter {
     soapAction: string,
   ): Promise<ReturnType<typeof parseSoapResponse>> {
     const url = config.baseUrl;
+    await assertSafeChannelEndpoint(url); // SSRF: baseUrl is tenant-supplied
     const timeoutMs = config.timeoutMs ?? 30_000;
     const maxRetries = config.maxRetries ?? 3;
 
@@ -278,6 +280,7 @@ export class SiteMinderAdapter implements ChannelAdapter {
             SOAPAction: soapAction,
           },
           body: soapXml,
+          redirect: 'manual', // don't follow a redirect to an internal host (SSRF)
           signal: controller.signal,
         });
 

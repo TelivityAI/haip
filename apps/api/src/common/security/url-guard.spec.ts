@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { isPrivateIp, isLiterallySafeHttpUrl, assertSafeOutboundUrl, UnsafeUrlError } from './url-guard';
+import { describe, it, expect, afterEach } from 'vitest';
+import {
+  isPrivateIp,
+  isLiterallySafeHttpUrl,
+  assertSafeOutboundUrl,
+  assertSafeChannelEndpoint,
+  UnsafeUrlError,
+} from './url-guard';
 
 describe('isPrivateIp', () => {
   it.each([
@@ -48,5 +54,38 @@ describe('assertSafeOutboundUrl', () => {
   });
   it('allows a public literal IP over https', async () => {
     await expect(assertSafeOutboundUrl('https://1.1.1.1/', { requireHttps: true })).resolves.toBeUndefined();
+  });
+});
+
+describe('assertSafeChannelEndpoint', () => {
+  const prevEnv = process.env['NODE_ENV'];
+  const prevAllow = process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'];
+  afterEach(() => {
+    process.env['NODE_ENV'] = prevEnv;
+    if (prevAllow === undefined) delete process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'];
+    else process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'] = prevAllow;
+  });
+
+  it('blocks an internal/metadata host in production', async () => {
+    process.env['NODE_ENV'] = 'production';
+    delete process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'];
+    await expect(assertSafeChannelEndpoint('http://169.254.169.254/latest/meta-data/')).rejects.toBeInstanceOf(UnsafeUrlError);
+  });
+
+  it('allows a public host in production', async () => {
+    process.env['NODE_ENV'] = 'production';
+    delete process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'];
+    await expect(assertSafeChannelEndpoint('https://1.1.1.1/ota')).resolves.toBeUndefined();
+  });
+
+  it('allows private hosts outside production (local mock OTA servers)', async () => {
+    process.env['NODE_ENV'] = 'test';
+    await expect(assertSafeChannelEndpoint('http://127.0.0.1:8080/ota')).resolves.toBeUndefined();
+  });
+
+  it('allows private hosts in production when explicitly opted in', async () => {
+    process.env['NODE_ENV'] = 'production';
+    process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'] = 'true';
+    await expect(assertSafeChannelEndpoint('http://10.0.0.5/ota')).resolves.toBeUndefined();
   });
 });
