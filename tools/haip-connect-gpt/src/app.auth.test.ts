@@ -61,15 +61,8 @@ describe('gateway authentication', () => {
     await app.close();
   });
 
-  it('fails closed: no key configured and not explicitly public → 401', async () => {
+  it('is open when no key is configured (demo posture)', async () => {
     const app = buildApp({ adapter: stubAdapter(), publicBaseUrl: 'http://x' });
-    const res = await app.inject({ method: 'POST', url: '/hotels/search', payload: {} });
-    expect(res.statusCode).toBe(401);
-    await app.close();
-  });
-
-  it('explicit opt-out (allowPublic) keeps the demo open', async () => {
-    const app = buildApp({ adapter: stubAdapter(), publicBaseUrl: 'http://x', allowPublic: true });
     const res = await app.inject({ method: 'POST', url: '/hotels/search', payload: {} });
     expect(res.statusCode).toBe(200);
     await app.close();

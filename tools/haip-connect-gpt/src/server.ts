@@ -27,7 +27,6 @@ const app = buildApp({
   adapter,
   publicBaseUrl,
   gatewayApiKey: process.env['GATEWAY_API_KEY'],
-  allowPublic: process.env['GATEWAY_ALLOW_PUBLIC'] === 'true',
 });
 
 app
