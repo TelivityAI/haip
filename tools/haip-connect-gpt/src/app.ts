@@ -8,6 +8,7 @@
 
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
+import { timingSafeEqual } from 'node:crypto';
 import {
   HaipConnectAdapter,
   UpstreamError,
@@ -23,6 +24,38 @@ import { indexHtml, privacyHtml } from './pages.js';
 export interface AppOptions {
   adapter: HaipConnectAdapter;
   publicBaseUrl: string;
+  /**
+   * Credential the caller (the ChatGPT Action) must present to reach the action
+   * routes — sent as `Authorization: Bearer <key>` or `x-api-key`. The gateway
+   * holds HAIP's privileged upstream Connect key, so without this anyone on the
+   * internet who finds the URL can drive the Connect API. Configure via GATEWAY_API_KEY.
+   */
+  gatewayApiKey?: string;
+  /**
+   * Explicit opt-out that leaves the action routes public (the unauthenticated
+   * demo). Mirrors HAIP_ALLOW_INSECURE — secure-by-default otherwise.
+   */
+  allowPublic?: boolean;
+}
+
+/** Public routes that never require a caller credential. */
+const PUBLIC_PATHS = new Set(['/health', '/openapi.json', '/', '/privacy']);
+
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
+/** Extract the caller credential from `Authorization: Bearer` or `x-api-key`. */
+function extractCredential(req: FastifyRequest): string | null {
+  const auth = req.headers['authorization'];
+  if (typeof auth === 'string' && auth.startsWith('Bearer ')) return auth.slice(7).trim();
+  const key = req.headers['x-api-key'];
+  if (typeof key === 'string') return key;
+  if (Array.isArray(key)) return key[0] ?? null;
+  return null;
 }
 
 export function buildApp(opts: AppOptions): FastifyInstance {
@@ -30,6 +63,20 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   const app = Fastify({ logger: true });
 
   app.register(cors, { origin: true });
+
+  // Require a caller credential on every non-public route. The gateway proxies
+  // requests with HAIP's privileged upstream `x-api-key`, so an unauthenticated
+  // gateway is an open door to the Connect API. Fail-closed: if no key is
+  // configured and `allowPublic` was not explicitly set, refuse action routes.
+  app.addHook('onRequest', async (req, reply) => {
+    const path = (req.url.split('?')[0] ?? req.url).replace(/\/+$/, '') || '/';
+    if (PUBLIC_PATHS.has(path)) return;
+    if (opts.allowPublic) return;
+    const provided = extractCredential(req);
+    if (!opts.gatewayApiKey || !provided || !timingSafeEqualStr(provided, opts.gatewayApiKey)) {
+      reply.code(401).send({ error: 'unauthorized', message: 'A valid gateway credential is required.' });
+    }
+  });
 
   app.get('/health', async () => ({
     status: 'ok',

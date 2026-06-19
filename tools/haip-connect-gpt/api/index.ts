@@ -33,6 +33,8 @@ const publicBaseUrl =
 const app = buildApp({
   adapter: new HaipConnectAdapter({ baseUrl, apiKey }),
   publicBaseUrl,
+  gatewayApiKey: process.env['GATEWAY_API_KEY'],
+  allowPublic: process.env['GATEWAY_ALLOW_PUBLIC'] === 'true',
 });
 const ready = app.ready();
 
