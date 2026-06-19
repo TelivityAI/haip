@@ -326,6 +326,7 @@ describe('InboundReservationService', () => {
             if (callCount === 3) return Promise.resolve([{ id: 'rt-1' }]);  // roomTypes FK OK
             if (callCount === 4) return Promise.resolve([{ id: 'rp-1' }]);  // ratePlans FK OK
             if (callCount === 5) return Promise.resolve([existingGuest]);   // existing guest by email
+            if (callCount === 6) return Promise.resolve([{ id: 'res-link' }]); // linked at THIS property → reuse
             return Promise.resolve([]);
           }),
         }),
@@ -344,6 +345,42 @@ describe('InboundReservationService', () => {
       const result = await service.processInboundReservation('conn-1', reservation);
 
       expect(result.guestId).toBe('guest-existing');
+    });
+
+    it('should NOT reuse a guest with no reservation link at this property', async () => {
+      let callCount = 0;
+      const foreignGuest = { id: 'guest-foreign', firstName: 'John', email: 'john@example.com' };
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            callCount++;
+            if (callCount === 1) return Promise.resolve([mockConnection]);
+            if (callCount === 2) return Promise.resolve([]); // no existing booking
+            if (callCount === 3) return Promise.resolve([{ id: 'rt-1' }]); // roomTypes FK OK
+            if (callCount === 4) return Promise.resolve([{ id: 'rp-1' }]); // ratePlans FK OK
+            if (callCount === 5) return Promise.resolve([foreignGuest]); // email matches a guest...
+            if (callCount === 6) return Promise.resolve([]); // ...but NO reservation link at this property
+            return Promise.resolve([]);
+          }),
+        }),
+      }));
+
+      const reservation = makeReservation();
+      const result = await service.processInboundReservation('conn-1', reservation);
+
+      // A fresh guest row is created (beforeEach insert mock → 'guest-1'), not the foreign one.
+      expect(result.guestId).toBe('guest-1');
+    });
+  });
+
+  describe('confirmation number entropy', () => {
+    it('generates a high-entropy, non-time-derived confirmation number', () => {
+      const gen = () => (service as any).generateConfirmationNumber() as string;
+      const n = gen();
+      // 128-bit Crockford token (CH- + 32 chars), not `CH-<timestamp>-<4 random>`.
+      expect(n).toMatch(/^CH-[0-9A-Z]{32}$/);
+      const many = new Set(Array.from({ length: 200 }, gen));
+      expect(many.size).toBe(200);
     });
   });
 });

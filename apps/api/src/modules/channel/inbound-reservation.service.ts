@@ -6,6 +6,7 @@ import { ChannelService } from './channel.service';
 import { ChannelAdapterFactory } from './channel-adapter.factory';
 import { AriService } from './ari.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { generateConfirmationToken } from '../connect/connect-booking.service';
 import type { ChannelReservation } from './channel-adapter.interface';
 
 @Injectable()
@@ -122,7 +123,7 @@ export class InboundReservationService {
 
     // Atomically create guest + booking + reservation so we never end up with a half-written record.
     const { guest, booking, pmsReservation } = await this.db.transaction(async (tx: any) => {
-      const guest = await this.findOrCreateGuestTx(tx, reservation);
+      const guest = await this.findOrCreateGuestTx(tx, reservation, propertyId);
 
       const [booking] = await tx
         .insert(bookings)
@@ -398,13 +399,28 @@ export class InboundReservationService {
     return existing ?? null;
   }
 
-  private async findOrCreateGuestTx(tx: any, reservation: ChannelReservation) {
+  private async findOrCreateGuestTx(tx: any, reservation: ChannelReservation, propertyId: string) {
+    // Reuse a guest by email ONLY when that guest is already linked to THIS
+    // property via an existing reservation. A bare cross-property email match
+    // would let an inbound OTA push attach to (and corrupt) another tenant's
+    // guest profile. Otherwise create a fresh row (CLAUDE.md guest rule).
     if (reservation.guestEmail) {
-      const [existing] = await tx
+      const matches = await tx
         .select()
         .from(guests)
         .where(eq(guests.email, reservation.guestEmail));
-      if (existing) return existing;
+      for (const candidate of matches) {
+        const links = await tx
+          .select({ id: reservations.id })
+          .from(reservations)
+          .where(
+            and(
+              eq(reservations.guestId, candidate.id),
+              eq(reservations.propertyId, propertyId),
+            ),
+          );
+        if (links.length > 0) return candidate;
+      }
     }
     const [guest] = await tx
       .insert(guests)
@@ -415,31 +431,6 @@ export class InboundReservationService {
         phone: reservation.guestPhone ?? null,
       })
       .returning();
-    return guest;
-  }
-
-  private async findOrCreateGuest(reservation: ChannelReservation) {
-    // Try to find existing guest by email
-    if (reservation.guestEmail) {
-      const [existing] = await this.db
-        .select()
-        .from(guests)
-        .where(eq(guests.email, reservation.guestEmail));
-
-      if (existing) return existing;
-    }
-
-    // Create new guest
-    const [guest] = await this.db
-      .insert(guests)
-      .values({
-        firstName: reservation.guestFirstName,
-        lastName: reservation.guestLastName,
-        email: reservation.guestEmail ?? null,
-        phone: reservation.guestPhone ?? null,
-      })
-      .returning();
-
     return guest;
   }
 
@@ -495,9 +486,9 @@ export class InboundReservationService {
   }
 
   private generateConfirmationNumber(): string {
-    const prefix = 'CH';
-    const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    return `${prefix}-${timestamp}-${random}`;
+    // The confirmation number is a bearer credential for the booking, so it must
+    // be unguessable. The previous `Date.now()`-based value with 4 Math.random
+    // chars was enumerable; reuse the shared 128-bit CSPRNG token (Crockford b32).
+    return `CH-${generateConfirmationToken()}`;
   }
 }

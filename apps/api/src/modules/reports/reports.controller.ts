@@ -6,9 +6,14 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
+import { RequirePermissions } from '../auth/permissions.decorator';
 
 @ApiTags('reports')
 @Controller('reports')
+// Financial / occupancy reports are management data. Without this, RolesGuard and
+// PermissionsGuard default-allow any authenticated user (e.g. housekeeping) for a
+// property they belong to. PermissionsGuard enforces this for every route below.
+@RequirePermissions('reports.view')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 

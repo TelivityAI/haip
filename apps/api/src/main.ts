@@ -74,14 +74,20 @@ async function bootstrap() {
     .addTag('health', 'System health checks')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
+  // Expose the Swagger UI everywhere except production (it maps the full API
+  // surface for an attacker). The public demo can opt back in with SWAGGER_ENABLED=true.
+  const serveDocs =
+    process.env['NODE_ENV'] !== 'production' || process.env['SWAGGER_ENABLED'] === 'true';
+  if (serveDocs) {
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('docs', app, document);
+  }
 
   const port = process.env['PORT'] ?? 3000;
   await app.listen(port);
 
   console.log(`HAIP API running on http://localhost:${port}`);
-  console.log(`OpenAPI docs at http://localhost:${port}/docs`);
+  if (serveDocs) console.log(`OpenAPI docs at http://localhost:${port}/docs`);
 }
 
 bootstrap();

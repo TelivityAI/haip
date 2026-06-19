@@ -147,6 +147,10 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
             'X-HAIP-Event-Type': delivery.eventType,
           },
           body,
+          // The pre-flight assertSafeOutboundUrl only validates the FIRST URL.
+          // Without this, a 302 to http://169.254.169.254/… would be followed to
+          // an internal host, defeating the SSRF guard.
+          redirect: 'manual',
           signal: controller.signal,
         });
         statusCode = resp.status;

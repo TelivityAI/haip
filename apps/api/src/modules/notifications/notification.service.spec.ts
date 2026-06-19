@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { HttpException } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { ConsoleSmsProvider } from './providers/console-sms.provider';
 import { TwilioSmsProvider } from './providers/twilio-sms.provider';
@@ -50,5 +51,31 @@ describe('NotificationService', () => {
     expect(entityType).toBe('notification');
     expect(data).toMatchObject({ channel: 'sms', provider: 'console', success: false });
     expect(propertyId).toBe(PROPERTY_ID);
+  });
+
+  describe('per-property SMS quota (toll-fraud / spam guard)', () => {
+    const prev = process.env['SMS_RATE_LIMIT_MAX'];
+    beforeEach(() => { process.env['SMS_RATE_LIMIT_MAX'] = '2'; });
+    afterEach(() => {
+      if (prev === undefined) delete process.env['SMS_RATE_LIMIT_MAX'];
+      else process.env['SMS_RATE_LIMIT_MAX'] = prev;
+    });
+
+    it('throttles SMS for a property beyond the configured limit', async () => {
+      const twilio = { isConfigured: () => false } as unknown as TwilioSmsProvider;
+      const service = new NotificationService(twilio, consoleProvider, webhooks as any);
+      await service.sendSms(PROPERTY_ID, '+15551230000', 'hi');
+      await service.sendSms(PROPERTY_ID, '+15551230000', 'hi');
+      await expect(service.sendSms(PROPERTY_ID, '+15551230000', 'hi')).rejects.toBeInstanceOf(HttpException);
+    });
+
+    it('counts the quota independently per property', async () => {
+      const twilio = { isConfigured: () => false } as unknown as TwilioSmsProvider;
+      const service = new NotificationService(twilio, consoleProvider, webhooks as any);
+      await service.sendSms(PROPERTY_ID, '+15551230000', 'hi');
+      await service.sendSms(PROPERTY_ID, '+15551230000', 'hi');
+      // A different property still has quota.
+      await expect(service.sendSms('22222222-2222-2222-2222-222222222222', '+15551230000', 'hi')).resolves.toBeDefined();
+    });
   });
 });

@@ -88,6 +88,22 @@ export async function assertSafeOutboundUrl(
   }
 }
 
+/**
+ * SSRF guard for outbound OTA channel-adapter requests. The endpoint base URL
+ * comes from tenant-supplied channel-connection config, so a property admin could
+ * point it at an internal/metadata host and trigger a server-side fetch. Block
+ * private targets in production. Local/dev (docker mock OTA servers on private
+ * hosts) is allowed unless explicitly locked down, mirroring the project's
+ * NODE_ENV / opt-in posture (cf. HAIP_ALLOW_INSECURE).
+ */
+export async function assertSafeChannelEndpoint(raw: string): Promise<void> {
+  const enforce =
+    process.env['NODE_ENV'] === 'production' &&
+    process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'] !== 'true';
+  if (!enforce) return;
+  await assertSafeOutboundUrl(raw);
+}
+
 /** Sync, literal-only check for DTO validation (no DNS). */
 export function isLiterallySafeHttpUrl(raw: string, opts: { requireHttps?: boolean } = {}): boolean {
   let url: URL;

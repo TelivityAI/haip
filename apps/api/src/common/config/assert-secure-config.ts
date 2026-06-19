@@ -8,7 +8,12 @@
  * process.env at startup.
  */
 export function assertSecureConfig(env: NodeJS.ProcessEnv = process.env): void {
-  if (env['NODE_ENV'] !== 'production') return;
+  // Enforce for any production-like environment, not just NODE_ENV=production —
+  // a host run as 'staging' must not silently boot with auth off either. Local
+  // dev/test ('development', 'test', or unset) stays permissive.
+  const nodeEnv = env['NODE_ENV'];
+  const productionLike = nodeEnv === 'production' || nodeEnv === 'staging';
+  if (!productionLike) return;
   if (env['HAIP_ALLOW_INSECURE'] === 'true') return;
   const problems: string[] = [];
   if (env['AUTH_ENABLED'] === 'false') problems.push('AUTH_ENABLED=false');

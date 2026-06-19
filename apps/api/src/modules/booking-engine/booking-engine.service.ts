@@ -98,6 +98,16 @@ export class BookingEngineService {
     const config = await this.configService.getPublicConfig(propertyId);
     this.assertSellable(config, dto.roomTypeId, dto.ratePlanId);
 
+    // Price-tampering guard: `roomTypeId` and `ratePlanId` arrive as two
+    // independent client-supplied ids. `assertSellable` only checks each id is
+    // individually sellable, so a caller could pair a pricey room type with a
+    // cheap room's rate plan and be charged the cheap rate. Each rate plan is
+    // bound to exactly one room type — enforce that they match.
+    const ratePlanRow = await this.ratePlanService.findById(dto.ratePlanId, propertyId);
+    if (ratePlanRow.roomTypeId !== dto.roomTypeId) {
+      throw new BadRequestException('Rate plan does not apply to the selected room type');
+    }
+
     const nights = this.nightsBetween(dto.checkIn, dto.checkOut);
 
     // Re-confirm availability for the requested room type.

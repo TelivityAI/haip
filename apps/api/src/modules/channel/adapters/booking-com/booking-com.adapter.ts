@@ -15,6 +15,7 @@ import type {
 import type { BookingComConfig } from './booking-com.config';
 import { DEFAULT_BOOKING_COM_CONFIG } from './booking-com.config';
 import { buildOtaXml, parseOtaXml } from './booking-com.xml';
+import { assertSafeChannelEndpoint } from '../../../../common/security/url-guard';
 import {
   mapAvailabilityToOta,
   mapRatesToOta,
@@ -158,6 +159,7 @@ export class BookingComAdapter implements ChannelAdapter {
     body: unknown,
   ): Promise<{ ok: boolean; status: number; error?: string; data?: unknown }> {
     const url = `${config.baseUrl.replace(/\/$/, '')}${path}`;
+    await assertSafeChannelEndpoint(url); // SSRF: baseUrl is tenant-supplied
     const auth = Buffer.from(`${config.username}:${config.password}`).toString('base64');
     const timeoutMs = config.timeoutMs ?? 30_000;
     const maxRetries = config.maxRetries ?? 3;
@@ -171,6 +173,7 @@ export class BookingComAdapter implements ChannelAdapter {
           method,
           headers: { 'Content-Type': 'application/json', Authorization: `Basic ${auth}` },
           body: JSON.stringify(body),
+          redirect: 'manual', // don't follow a redirect to an internal host (SSRF)
           signal: controller.signal,
         });
         clearTimeout(timer);
@@ -307,6 +310,7 @@ export class BookingComAdapter implements ChannelAdapter {
     xml: string,
   ): Promise<ReturnType<typeof parseOtaXml>> {
     const url = `${config.baseUrl}/${endpoint}`;
+    await assertSafeChannelEndpoint(url); // SSRF: baseUrl is tenant-supplied
     const auth = Buffer.from(`${config.username}:${config.password}`).toString('base64');
     const timeoutMs = config.timeoutMs ?? 30_000;
     const maxRetries = config.maxRetries ?? 3;
@@ -325,6 +329,7 @@ export class BookingComAdapter implements ChannelAdapter {
             Authorization: `Basic ${auth}`,
           },
           body: xml,
+          redirect: 'manual', // don't follow a redirect to an internal host (SSRF)
           signal: controller.signal,
         });
 
