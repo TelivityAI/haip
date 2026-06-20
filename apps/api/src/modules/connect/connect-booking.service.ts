@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
@@ -263,15 +263,52 @@ export class ConnectBookingService {
     const previousAmountDec = new Decimal(reservation.totalAmount);
     const previousAmount = previousAmountDec.toNumber();
 
-    // Handle guest detail updates
+    // Handle guest detail updates. The `guests` row is cross-property by design,
+    // so overwriting it in place would corrupt the profile as seen by OTHER
+    // properties that share this guest. Only mutate in place when the guest is
+    // NOT linked to any other property; otherwise fork a property-local copy and
+    // repoint this reservation, leaving the shared row untouched.
     if (dto.guestFirstName || dto.guestLastName) {
       const guestUpdate: Record<string, any> = {};
       if (dto.guestFirstName) guestUpdate['firstName'] = dto.guestFirstName;
       if (dto.guestLastName) guestUpdate['lastName'] = dto.guestLastName;
-      await this.db
-        .update(guests)
-        .set(guestUpdate)
-        .where(eq(guests.id, reservation.guestId));
+
+      const otherPropertyLinks = await this.db
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.guestId, reservation.guestId),
+            ne(reservations.propertyId, booking.propertyId),
+          ),
+        );
+
+      if (otherPropertyLinks.length > 0) {
+        const [current] = await this.db
+          .select()
+          .from(guests)
+          .where(eq(guests.id, reservation.guestId));
+        const [forked] = await this.db
+          .insert(guests)
+          .values({
+            firstName: guestUpdate['firstName'] ?? current?.firstName,
+            lastName: guestUpdate['lastName'] ?? current?.lastName,
+            email: current?.email ?? null,
+            phone: current?.phone ?? null,
+            loyaltyNumber: current?.loyaltyNumber ?? null,
+          })
+          .returning();
+        await this.db
+          .update(reservations)
+          .set({ guestId: forked.id, updatedAt: new Date() })
+          .where(eq(reservations.id, reservation.id));
+        reservation.guestId = forked.id;
+      } else {
+        await this.db
+          .update(guests)
+          .set(guestUpdate)
+          .where(eq(guests.id, reservation.guestId));
+      }
     }
 
     // Handle simple field updates
