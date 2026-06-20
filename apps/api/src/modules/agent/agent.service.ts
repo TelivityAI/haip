@@ -1,10 +1,10 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
 import { agentConfigs, agentDecisions, agentTrainingSnapshots, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { LlmService } from '../llm/llm.service';
-import { groundExplanation } from '../llm/grounding';
+import { groundExplanation, numericPayload } from '../llm/grounding';
 import type {
   HaipAgent,
   AgentContext,
@@ -20,6 +20,7 @@ const VALID_AGENT_TYPES = [
 
 @Injectable()
 export class AgentService {
+  private readonly logger = new Logger(AgentService.name);
   private agents: Map<string, HaipAgent> = new Map();
 
   constructor(
@@ -48,11 +49,15 @@ export class AgentService {
     }
 
     const numbers = (decision.recommendation ?? {}) as Record<string, unknown>;
+    // Strip every free-form string to numeric leaves before the prompt: the
+    // model must see ONLY numbers, never attacker-influenced text (guest names,
+    // review/email bodies) that could inject instructions into the explanation.
+    const promptNumbers = (numericPayload(numbers) ?? {}) as Record<string, unknown>;
     const result = await this.llm.explain({
       agentType: decision.agentType,
       decisionType: decision.decisionType,
-      // The deterministic agent's own output is the ONLY ground truth.
-      numbers,
+      // The deterministic agent's own numeric output is the ONLY ground truth.
+      numbers: promptNumbers,
     });
 
     if (!result) {
@@ -63,6 +68,17 @@ export class AgentService {
     // numbers don't support, and flag the rationale if it does. (Execution itself
     // never uses this text — approval runs the agent's own recommendation.)
     const guarded = groundExplanation(numbers, result);
+
+    // Fail closed: if the rationale asserts a figure the decision doesn't
+    // support, suppress the whole explanation rather than displaying (or
+    // caching) a labelled hallucination. Caller falls back to the raw decision.
+    if (!guarded.grounded) {
+      this.logger.warn(
+        `HAIP AI rationale failed grounding for decision ${decisionId} — suppressed`,
+      );
+      return { explanation: null, model: null, fromCache: false };
+    }
+
     const explanation = { ...guarded, model: result.model };
 
     await this.db
