@@ -97,9 +97,11 @@ export async function assertSafeOutboundUrl(
  * NODE_ENV / opt-in posture (cf. HAIP_ALLOW_INSECURE).
  */
 export async function assertSafeChannelEndpoint(raw: string): Promise<void> {
-  const enforce =
-    process.env['NODE_ENV'] === 'production' &&
-    process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'] !== 'true';
+  // Enforce for any production-like environment (production OR staging), matching
+  // assertSecureConfig — staging is internet-adjacent and must not allow SSRF either.
+  const nodeEnv = process.env['NODE_ENV'];
+  const productionLike = nodeEnv === 'production' || nodeEnv === 'staging';
+  const enforce = productionLike && process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'] !== 'true';
   if (!enforce) return;
   await assertSafeOutboundUrl(raw);
 }

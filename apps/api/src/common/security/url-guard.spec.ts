@@ -88,4 +88,10 @@ describe('assertSafeChannelEndpoint', () => {
     process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'] = 'true';
     await expect(assertSafeChannelEndpoint('http://10.0.0.5/ota')).resolves.toBeUndefined();
   });
+
+  it('also blocks internal hosts in staging (production-like)', async () => {
+    process.env['NODE_ENV'] = 'staging';
+    delete process.env['CHANNEL_ALLOW_PRIVATE_ENDPOINTS'];
+    await expect(assertSafeChannelEndpoint('http://169.254.169.254/latest/meta-data/')).rejects.toBeInstanceOf(UnsafeUrlError);
+  });
 });

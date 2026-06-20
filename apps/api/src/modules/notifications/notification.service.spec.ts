@@ -69,6 +69,26 @@ describe('NotificationService', () => {
       await expect(service.sendSms(PROPERTY_ID, '+15551230000', 'hi')).rejects.toBeInstanceOf(HttpException);
     });
 
+    it('still enforces with a default limit when the env value is invalid (no fail-open)', async () => {
+      process.env['SMS_RATE_LIMIT_MAX'] = 'not-a-number';
+      process.env['SMS_RATE_LIMIT_WINDOW_MS'] = 'garbage';
+      const twilio = { isConfigured: () => false } as unknown as TwilioSmsProvider;
+      const service = new NotificationService(twilio, consoleProvider, webhooks as any);
+      // Default limit is 60 → the 61st send for one property must be throttled.
+      for (let i = 0; i < 60; i++) await service.sendSms(PROPERTY_ID, '+15551230000', 'hi');
+      await expect(service.sendSms(PROPERTY_ID, '+15551230000', 'hi')).rejects.toBeInstanceOf(HttpException);
+      delete process.env['SMS_RATE_LIMIT_WINDOW_MS'];
+    });
+
+    it('treats an explicit 0 limit as disabled', async () => {
+      process.env['SMS_RATE_LIMIT_MAX'] = '0';
+      const twilio = { isConfigured: () => false } as unknown as TwilioSmsProvider;
+      const service = new NotificationService(twilio, consoleProvider, webhooks as any);
+      for (let i = 0; i < 5; i++) {
+        await expect(service.sendSms(PROPERTY_ID, '+15551230000', 'hi')).resolves.toBeDefined();
+      }
+    });
+
     it('counts the quota independently per property', async () => {
       const twilio = { isConfigured: () => false } as unknown as TwilioSmsProvider;
       const service = new NotificationService(twilio, consoleProvider, webhooks as any);
