@@ -30,8 +30,9 @@ export interface LlmExplanation {
  *   The PMS never depends on the model being present.
  *
  * Env:
- * - `OLLAMA_BASE_URL` (default `http://localhost:11434`)
- * - `HAIP_AI_MODEL`   (default `haip-ai`)
+ * - `OLLAMA_BASE_URL`   (default `http://localhost:11434`)
+ * - `HAIP_AI_MODEL`     (default `haip-ai`)
+ * - `HAIP_AI_TIMEOUT_MS`(default `10000`) — abort the call after this long
  */
 @Injectable()
 export class LlmService {
@@ -40,6 +41,13 @@ export class LlmService {
   private readonly model = process.env['HAIP_AI_MODEL'] ?? 'haip-ai';
   /** Explicit opt-in so the model is never called unless the operator enabled it. */
   private readonly enabled = process.env['HAIP_AI_ENABLED'] === 'true';
+  /** Abort a stalled model call so a hung Ollama can't pin a request open. */
+  private readonly timeoutMs = (() => {
+    const n = Number(process.env['HAIP_AI_TIMEOUT_MS'] ?? '10000');
+    return Number.isFinite(n) && n > 0 ? n : 10000;
+  })();
+  /** Reject absurd response bodies before parsing (a misconfigured/SSRF'd URL). */
+  private static readonly MAX_RESPONSE_BYTES = 256 * 1024;
 
   isConfigured(): boolean {
     return this.enabled;
@@ -63,10 +71,13 @@ export class LlmService {
       `Agent: ${input.agentType}\nDecision: ${input.decisionType}\n` +
       `Numbers:\n${JSON.stringify(input.numbers)}`;
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const res = await fetch(`${this.baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           model: this.model,
           stream: false,
@@ -84,6 +95,15 @@ export class LlmService {
         return null;
       }
 
+      // Best-effort body cap: if the server advertises an oversized body, bail
+      // before buffering it. (A lying Content-Length is still bounded by the
+      // abort timeout above.)
+      const declared = Number(res.headers?.get?.('content-length') ?? '');
+      if (Number.isFinite(declared) && declared > LlmService.MAX_RESPONSE_BYTES) {
+        this.logger.warn('HAIP AI response too large — falling back to raw decision');
+        return null;
+      }
+
       const body = (await res.json()) as { message?: { content?: string } };
       const content = body?.message?.content;
       if (!content) return null;
@@ -95,8 +115,11 @@ export class LlmService {
       }
       return { ...parsed, model: this.model };
     } catch (err: any) {
-      this.logger.warn(`HAIP AI unreachable (${err?.message}) — falling back to raw decision`);
+      const reason = err?.name === 'AbortError' ? `timed out after ${this.timeoutMs}ms` : err?.message;
+      this.logger.warn(`HAIP AI unreachable (${reason}) — falling back to raw decision`);
       return null;
+    } finally {
+      clearTimeout(timer);
     }
   }
 

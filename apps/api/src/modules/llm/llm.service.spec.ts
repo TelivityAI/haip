@@ -20,6 +20,7 @@ describe('LlmService', () => {
     delete process.env['HAIP_AI_ENABLED'];
     delete process.env['OLLAMA_BASE_URL'];
     delete process.env['HAIP_AI_MODEL'];
+    delete process.env['HAIP_AI_TIMEOUT_MS'];
   });
 
   afterEach(() => {
@@ -75,6 +76,35 @@ describe('LlmService', () => {
     process.env['HAIP_AI_ENABLED'] = 'true';
     vi.spyOn(globalThis, 'fetch' as any).mockRejectedValue(new Error('ECONNREFUSED'));
     await expect(makeService().explain(INPUT)).resolves.toBeNull();
+  });
+
+  it('aborts and returns null when the model hangs past the timeout', async () => {
+    process.env['HAIP_AI_ENABLED'] = 'true';
+    process.env['HAIP_AI_TIMEOUT_MS'] = '5';
+    // Never resolves on its own — only rejects (AbortError) when the signal fires.
+    vi.spyOn(globalThis, 'fetch' as any).mockImplementation(
+      (_url: string, opts: any) =>
+        new Promise((_resolve, reject) => {
+          opts.signal.addEventListener('abort', () => {
+            const e = new Error('aborted');
+            e.name = 'AbortError';
+            reject(e);
+          });
+        }),
+    );
+    await expect(makeService().explain(INPUT)).resolves.toBeNull();
+  });
+
+  it('falls back to null when the response body is oversized (Content-Length)', async () => {
+    process.env['HAIP_AI_ENABLED'] = 'true';
+    const jsonSpy = vi.fn();
+    vi.spyOn(globalThis, 'fetch' as any).mockResolvedValue({
+      ok: true,
+      headers: { get: (h: string) => (h.toLowerCase() === 'content-length' ? String(2 * 1024 * 1024) : null) },
+      json: jsonSpy,
+    } as any);
+    expect(await makeService().explain(INPUT)).toBeNull();
+    expect(jsonSpy).not.toHaveBeenCalled(); // bailed before buffering the body
   });
 
   it('extracts JSON even when wrapped in stray prose', async () => {
