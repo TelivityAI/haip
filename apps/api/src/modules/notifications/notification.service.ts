@@ -35,9 +35,14 @@ export class NotificationService {
   // numbers (toll fraud / spam relay). Tunable via env.
   private readonly smsHits = new Map<string, { count: number; resetAt: number }>();
   private assertSmsQuota(propertyId: string): void {
-    const max = Number(process.env['SMS_RATE_LIMIT_MAX'] ?? 60);
-    const windowMs = Number(process.env['SMS_RATE_LIMIT_WINDOW_MS'] ?? 3_600_000);
-    if (!Number.isFinite(max) || max <= 0) return; // disabled
+    // Robust parsing: an INVALID env value falls back to the safe default (the
+    // limiter stays ON — no fail-open on config drift). Only an explicit, valid
+    // value <= 0 disables it.
+    const rawMax = Number(process.env['SMS_RATE_LIMIT_MAX']);
+    const max = Number.isFinite(rawMax) ? rawMax : 60;
+    if (max <= 0) return; // explicitly disabled by the operator
+    const rawWindow = Number(process.env['SMS_RATE_LIMIT_WINDOW_MS']);
+    const windowMs = Number.isFinite(rawWindow) && rawWindow > 0 ? rawWindow : 3_600_000;
     const now = Date.now();
     const entry = this.smsHits.get(propertyId);
     if (!entry || now >= entry.resetAt) {
