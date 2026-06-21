@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { rooms, roomTypes } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
@@ -43,6 +43,16 @@ export class RoomService {
   // --- Rooms ---
 
   async createRoom(dto: CreateRoomDto) {
+    // FK ownership (security audit #5): verify the caller's roomTypeId belongs
+    // to dto.propertyId before insert. Schema FK alone permits cross-tenant
+    // links because it only constrains row id.
+    const [rt] = await this.db
+      .select({ id: roomTypes.id })
+      .from(roomTypes)
+      .where(and(eq(roomTypes.id, dto.roomTypeId), eq(roomTypes.propertyId, dto.propertyId)));
+    if (!rt) {
+      throw new BadRequestException(`room type ${dto.roomTypeId} not found in this property`);
+    }
     const [room] = await this.db.insert(rooms).values(dto).returning();
     return room;
   }

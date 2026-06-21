@@ -18,6 +18,7 @@ import {
   EXPEDIA_AR_NS,
   EXPEDIA_BC_NS,
 } from './expedia.config';
+import { assertSafeChannelEndpoint } from '../../../../common/security/url-guard';
 import { buildExpediaXml, parseExpediaResponse } from './expedia.xml';
 import {
   mapAvailabilityToExpedia,
@@ -182,6 +183,7 @@ export class ExpediaAdapter implements ChannelAdapter {
     url: string,
     init: RequestInit,
   ): Promise<{ ok: boolean; status: number; text: string; error?: string }> {
+    await assertSafeChannelEndpoint(url); // SSRF: baseUrl is tenant-supplied
     const timeoutMs = config.timeoutMs ?? 30_000;
     const maxRetries = config.maxRetries ?? 3;
     let lastError: Error | null = null;
@@ -189,7 +191,7 @@ export class ExpediaAdapter implements ChannelAdapter {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
-        const res = await fetch(url, { ...init, signal: controller.signal });
+        const res = await fetch(url, { ...init, redirect: 'manual', signal: controller.signal });
         clearTimeout(timer);
         const text = await res.text();
         if (!res.ok) {

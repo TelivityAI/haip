@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { RateLimitGuard } from './common/security/rate-limit.guard';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { PropertyModule } from './modules/property/property.module';
@@ -28,6 +30,13 @@ import { CashierModule } from './modules/cashier/cashier.module';
 import { HouseAccountModule } from './modules/house-account/house-account.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
+import { ImportModule } from './modules/import/import.module';
+import { AccountingExportModule } from './modules/accounting-export/accounting-export.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PosModule } from './modules/pos/pos.module';
+import { DoorLockModule } from './modules/door-lock/door-lock.module';
+import { LlmModule } from './modules/llm/llm.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -60,6 +69,13 @@ const imports: any[] = [
   HouseAccountModule,
   GroupsModule,
   AdminModule,
+  BookingEngineModule,
+  ImportModule,
+  AccountingExportModule,
+  NotificationsModule,
+  PosModule,
+  DoorLockModule,
+  LlmModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or
@@ -74,5 +90,11 @@ if (process.env['NODE_ENV'] === 'production' || process.env['SERVE_DASHBOARD'] =
   );
 }
 
-@Module({ imports })
+@Module({
+  imports,
+  providers: [
+    // Global, in-memory brute-force mitigation (interim, pre-C2). Runs first.
+    { provide: APP_GUARD, useClass: RateLimitGuard },
+  ],
+})
 export class AppModule {}

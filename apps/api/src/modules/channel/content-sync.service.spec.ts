@@ -30,7 +30,7 @@ function createMockDb() {
 const PROP = 'p1';
 const property = { id: PROP, name: 'Grand', description: 'd', addressLine1: 'a', city: 'c', countryCode: 'US', starRating: 5 };
 const rt = { id: 'rt1', name: 'Standard', description: 'sd', maxOccupancy: 2, bedType: 'king', amenities: ['wifi'] };
-const conn = { id: 'cc1', adapterType: 'mock', config: {}, roomTypeMapping: [{ roomTypeId: 'rt1', channelRoomCode: 'EXP_STD' }] };
+const conn = { id: 'cc1', propertyId: 'p1', adapterType: 'mock', config: {}, roomTypeMapping: [{ roomTypeId: 'rt1', channelRoomCode: 'EXP_STD' }] };
 
 function setup(overrides: { roomTypeRows?: any[]; propertyRows?: any[] } = {}) {
   const mock = createMockDb();
@@ -73,7 +73,7 @@ describe('ContentSyncService', () => {
     const log = s.mock.inserted.find((r) => r.table === contentSyncLogs);
     expect(log?.values.action).toBe('content_push');
     expect(log?.values.status).toBe('success');
-    expect(s.channelService.updateSyncStatus).toHaveBeenCalledWith('cc1', 'success', undefined);
+    expect(s.channelService.updateSyncStatus).toHaveBeenCalledWith('cc1', 'p1', 'success', undefined);
   });
 
   it('skips room-type mappings whose room type is not at the property', async () => {

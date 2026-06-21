@@ -9,6 +9,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsMoneyString } from '../../../common/validation/is-money-string.validator';
 
 export class CreateReservationDto {
   @ApiProperty()
@@ -36,7 +37,7 @@ export class CreateReservationDto {
   ratePlanId!: string;
 
   @ApiProperty({ example: '799.96' })
-  @IsString()
+  @IsMoneyString({ allowZero: true }) // non-negative; 0 allowed for comp rooms
   totalAmount!: string;
 
   @ApiProperty({ example: 'USD' })

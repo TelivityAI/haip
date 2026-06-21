@@ -15,6 +15,7 @@ import type {
 } from '../interfaces/haip-agent.interface';
 import {
   heuristicCancelProbability,
+  calibrateSourceRates,
   classifyRisk,
   aggregateByDate,
   depositForfeitRisk,
@@ -36,6 +37,11 @@ export class CancellationPredictorAgent implements HaipAgent, OnModuleInit {
 
   async analyze(propertyId: string, _context?: AgentContext): Promise<AgentAnalysis> {
     const today = new Date().toISOString().split('T')[0]!;
+
+    // Per-property learned cancel rates (from train()); falls back to the cold-start
+    // prior inside heuristicCancelProbability when the agent hasn't trained yet.
+    const config = await this.agentService.getOrCreateConfig(propertyId, this.agentType);
+    const learnedRates = (config?.modelState as any)?.learned as Record<string, number> | undefined;
 
     // Get active reservations (confirmed, pending) joined with their booking so we can
     // see the real booking source. `source` lives on `bookings`, not on `reservations`.
@@ -140,12 +146,13 @@ export class CancellationPredictorAgent implements HaipAgent, OnModuleInit {
         repeatCounts: Object.fromEntries(repeatCounts),
         depositMap: Object.fromEntries(depositMap),
         today,
+        learnedRates,
       },
     };
   }
 
   async recommend(analysis: AgentAnalysis): Promise<AgentDecisionInput[]> {
-    const { activeReservations, guestMap, paymentMap, repeatCounts, depositMap, today } =
+    const { activeReservations, guestMap, paymentMap, repeatCounts, depositMap, today, learnedRates } =
       analysis.signals as any;
 
     if (activeReservations.length === 0) return [];
@@ -172,6 +179,7 @@ export class CancellationPredictorAgent implements HaipAgent, OnModuleInit {
         isVip,
         leadTimeDays,
         daysUntilArrival,
+        rates: learnedRates,
       });
 
       const totalAmount = parseFloat(res.totalAmount ?? '0');
@@ -239,8 +247,33 @@ export class CancellationPredictorAgent implements HaipAgent, OnModuleInit {
 
   async recordOutcome(_decisionId: string, _outcome: AgentOutcome): Promise<void> {}
 
-  async train(_propertyId: string): Promise<TrainingResult> {
-    return { success: true, dataPoints: 0, modelVersion: 'cancellation-predictor-v1', metrics: {} };
+  /**
+   * Learn this property's per-source cancellation rates from its own booking
+   * history (last ~365 days), smoothed toward the default prior. AgentService
+   * persists the returned `metrics` into `agent_configs.modelState.learned`,
+   * which `analyze()` then uses instead of the cold-start defaults.
+   */
+  async train(propertyId: string): Promise<TrainingResult> {
+    const since = new Date(Date.now() - 365 * 86_400_000).toISOString().split('T')[0]!;
+    const rows = await this.db
+      .select({ status: reservations.status, source: bookings.source })
+      .from(reservations)
+      .leftJoin(bookings, eq(reservations.bookingId, bookings.id))
+      .where(and(eq(reservations.propertyId, propertyId), gte(reservations.arrivalDate, since)));
+
+    const history = rows.map((r: any) => ({
+      source: r.source ?? null,
+      cancelled: r.status === 'cancelled' || r.status === 'no_show',
+    }));
+    const learned = calibrateSourceRates(history);
+
+    return {
+      success: true,
+      dataPoints: history.length,
+      modelVersion: 'cancellation-predictor-v2',
+      // Stored by AgentService into modelState.learned and read back by analyze().
+      metrics: learned,
+    };
   }
 
   getDefaultConfig(): Record<string, unknown> {

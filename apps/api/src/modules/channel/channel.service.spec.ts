@@ -164,7 +164,7 @@ describe('ChannelService', () => {
       const updateChain = { where: vi.fn().mockResolvedValue(undefined) };
       mockDb.chain.set.mockReturnValue(updateChain);
 
-      await service.updateSyncStatus('conn-1', 'success');
+      await service.updateSyncStatus('conn-1', 'prop-1', 'success');
 
       expect(mockDb.db.update).toHaveBeenCalled();
     });
@@ -173,7 +173,7 @@ describe('ChannelService', () => {
       const updateChain = { where: vi.fn().mockResolvedValue(undefined) };
       mockDb.chain.set.mockReturnValue(updateChain);
 
-      await service.updateSyncStatus('conn-1', 'failed', 'Timeout');
+      await service.updateSyncStatus('conn-1', 'prop-1', 'failed', 'Timeout');
 
       expect(mockDb.chain.set).toHaveBeenCalledWith(
         expect.objectContaining({ lastSyncError: 'Timeout' }),

@@ -190,9 +190,16 @@ export function mapOtaReservationToHaip(
       ? new Date(createDateStr)
       : new Date();
 
+    // OTA hotel code — routes the reservation to the right tenant's connection.
+    const channelHotelId =
+      roomStay.BasicPropertyInfo?.['@_HotelCode'] ??
+      (hotelRes as any).BasicPropertyInfo?.['@_HotelCode'] ??
+      (hotelRes as any).RoomStays?.RoomStay?.BasicPropertyInfo?.['@_HotelCode'];
+
     reservations.push({
       externalConfirmation,
       channelCode: 'booking_com',
+      channelHotelId: channelHotelId != null ? String(channelHotelId) : undefined,
       guestFirstName,
       guestLastName,
       guestEmail,

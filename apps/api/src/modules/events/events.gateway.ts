@@ -12,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { WsAuthService } from '../auth/ws-auth.service';
 import type { AuthUser } from '../auth/current-user.decorator';
+import { userCanAccessProperty } from '../auth/property-access';
 
 /**
  * Events gateway — real-time PMS event broadcasts.
@@ -143,12 +144,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private userCanAccessProperty(user: AuthUser, propertyId: string): boolean {
-    // Platform-level roles that bypass property scoping (same intent as the
-    // HTTP RolesGuard — admins can cross tenants for ops).
-    const platformRoles = new Set(['admin', 'platform_admin', 'superadmin']);
-    if (user.roles?.some((r) => platformRoles.has(r))) return true;
-
-    const allowed = user.propertyIds ?? [];
-    return allowed.includes(propertyId);
+    // Shared with the HTTP PropertyScopeGuard so socket and REST scoping can't drift.
+    return userCanAccessProperty(user, propertyId);
   }
 }

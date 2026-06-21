@@ -1,13 +1,14 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { RatePlanService } from '../rate-plan/rate-plan.service';
 import type { AgentBookDto } from './dto/agent-book.dto';
 import type { AgentModifyDto } from './dto/agent-modify.dto';
-import { randomUUID } from 'crypto';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class ConnectBookingService {
@@ -15,6 +16,7 @@ export class ConnectBookingService {
     @Inject(DRIZZLE) private readonly db: any,
     private readonly availabilityService: AvailabilityService,
     private readonly webhookService: WebhookService,
+    private readonly ratePlanService: RatePlanService,
   ) {}
 
   /**
@@ -54,6 +56,10 @@ export class ConnectBookingService {
       throw new NotFoundException(`Rate plan ${dto.ratePlanId} not found or inactive`);
     }
 
+    // 2b. Enforce rate restrictions (stop-sell / CTA / CTD / min-max LOS). Without
+    // this, an agent/LLM booking via the Connect API could land on a closed date.
+    await this.ratePlanService.assertSellable(dto.propertyId, dto.ratePlanId, dto.checkIn, dto.checkOut);
+
     // 3. Find or create guest
     const guest = await this.findOrCreateGuest(dto);
 
@@ -67,8 +73,10 @@ export class ConnectBookingService {
     const baseAmount = baseAmountDec.toNumber();
     const totalAmount = totalAmountDec.toNumber();
 
-    // 5. Generate confirmation number
-    const confirmationNumber = `HAIP-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
+    // 5. Generate confirmation number. High-entropy (128 bits from randomBytes,
+    // Crockford base32, no ambiguous chars) so it can't be enumerated/guessed —
+    // the confirmation number is itself a bearer credential for the booking.
+    const confirmationNumber = `HAIP-${generateConfirmationToken()}`;
 
     // 6. Create booking
     const [booking] = await this.db
@@ -255,15 +263,52 @@ export class ConnectBookingService {
     const previousAmountDec = new Decimal(reservation.totalAmount);
     const previousAmount = previousAmountDec.toNumber();
 
-    // Handle guest detail updates
+    // Handle guest detail updates. The `guests` row is cross-property by design,
+    // so overwriting it in place would corrupt the profile as seen by OTHER
+    // properties that share this guest. Only mutate in place when the guest is
+    // NOT linked to any other property; otherwise fork a property-local copy and
+    // repoint this reservation, leaving the shared row untouched.
     if (dto.guestFirstName || dto.guestLastName) {
       const guestUpdate: Record<string, any> = {};
       if (dto.guestFirstName) guestUpdate['firstName'] = dto.guestFirstName;
       if (dto.guestLastName) guestUpdate['lastName'] = dto.guestLastName;
-      await this.db
-        .update(guests)
-        .set(guestUpdate)
-        .where(eq(guests.id, reservation.guestId));
+
+      const otherPropertyLinks = await this.db
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.guestId, reservation.guestId),
+            ne(reservations.propertyId, booking.propertyId),
+          ),
+        );
+
+      if (otherPropertyLinks.length > 0) {
+        const [current] = await this.db
+          .select()
+          .from(guests)
+          .where(eq(guests.id, reservation.guestId));
+        const [forked] = await this.db
+          .insert(guests)
+          .values({
+            firstName: guestUpdate['firstName'] ?? current?.firstName,
+            lastName: guestUpdate['lastName'] ?? current?.lastName,
+            email: current?.email ?? null,
+            phone: current?.phone ?? null,
+            loyaltyNumber: current?.loyaltyNumber ?? null,
+          })
+          .returning();
+        await this.db
+          .update(reservations)
+          .set({ guestId: forked.id, updatedAt: new Date() })
+          .where(eq(reservations.id, reservation.id));
+        reservation.guestId = forked.id;
+      } else {
+        await this.db
+          .update(guests)
+          .set(guestUpdate)
+          .where(eq(guests.id, reservation.guestId));
+      }
     }
 
     // Handle simple field updates
@@ -277,6 +322,18 @@ export class ConnectBookingService {
       const newCheckOut = dto.checkOut ?? reservation.departureDate;
       const newRoomTypeId = dto.roomTypeId ?? reservation.roomTypeId;
       const newRatePlanId = dto.ratePlanId ?? reservation.ratePlanId;
+
+      // FK ownership (security audit follow-on): the caller (an OTAIP agent) could
+      // pass a roomTypeId / ratePlanId that belongs to another property. Verify
+      // both belong to the booking's property BEFORE the rate re-calculation and
+      // the reservation update.
+      if (dto.roomTypeId) {
+        const [rt] = await this.db
+          .select({ id: roomTypes.id })
+          .from(roomTypes)
+          .where(and(eq(roomTypes.id, newRoomTypeId), eq(roomTypes.propertyId, booking.propertyId)));
+        if (!rt) throw new BadRequestException(`room type ${newRoomTypeId} not found in this property`);
+      }
 
       // Re-check availability
       const availability = await this.availabilityService.searchAvailability(
@@ -294,14 +351,14 @@ export class ConnectBookingService {
         throw new BadRequestException('No availability for modified dates/room type');
       }
 
-      // Re-calculate rate
+      // Re-calculate rate — same-property scoped (was bare-id before).
       const [ratePlan] = await this.db
         .select()
         .from(ratePlans)
-        .where(eq(ratePlans.id, newRatePlanId));
+        .where(and(eq(ratePlans.id, newRatePlanId), eq(ratePlans.propertyId, booking.propertyId)));
 
       if (!ratePlan) {
-        throw new NotFoundException(`Rate plan ${newRatePlanId} not found`);
+        throw new NotFoundException(`Rate plan ${newRatePlanId} not found in this property`);
       }
 
       const arrival = new Date(newCheckIn);
@@ -419,13 +476,28 @@ export class ConnectBookingService {
   // --- Private Helpers ---
 
   private async findOrCreateGuest(dto: AgentBookDto) {
-    // Try to find by email
+    // Try to find by email — but ONLY reuse a guest that is already linked to
+    // THIS property via an existing reservation. The `guests` row is cross-property
+    // by design, yet a bare email match would let one tenant attach to (and later,
+    // via modify(), overwrite) another tenant's guest profile. Scope reuse to the
+    // requesting property; otherwise create a fresh row (CLAUDE.md guest rule).
     if (dto.guestEmail) {
-      const [existing] = await this.db
+      const matches = await this.db
         .select()
         .from(guests)
         .where(eq(guests.email, dto.guestEmail));
-      if (existing) return existing;
+      for (const candidate of matches) {
+        const links = await this.db
+          .select({ id: reservations.id })
+          .from(reservations)
+          .where(
+            and(
+              eq(reservations.guestId, candidate.id),
+              eq(reservations.propertyId, dto.propertyId),
+            ),
+          );
+        if (links.length > 0) return candidate;
+      }
     }
 
     // Create new guest
@@ -520,4 +592,23 @@ export class ConnectBookingService {
       policyDescription: 'First night charge applies — cancelled within 24 hours of check-in.',
     };
   }
+}
+
+// Crockford base32 alphabet (no I/L/O/U — unambiguous when read/typed).
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/**
+ * 128 bits of cryptographic randomness (16 random bytes) rendered in Crockford
+ * base32. Unguessable — the confirmation number is a bearer credential for the
+ * booking, so it must not be enumerable (the old `timestamp-4hex` form had only
+ * ~16 bits of randomness).
+ */
+export function generateConfirmationToken(): string {
+  const bytes = randomBytes(16);
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    out += CROCKFORD[bytes[i]! & 0x1f];
+    out += CROCKFORD[(bytes[i]! >> 5) & 0x1f];
+  }
+  return out;
 }

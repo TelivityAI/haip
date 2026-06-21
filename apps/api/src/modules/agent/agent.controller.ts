@@ -9,10 +9,11 @@ import {
   Query,
   Inject,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { eq, and, desc } from 'drizzle-orm';
-import { guestReviews } from '@telivityhaip/database';
+import { guestReviews, reservations } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
@@ -65,6 +66,21 @@ export class AgentController {
     return this.agentService.runAgent(propertyId, agentType, { triggeredBy: 'manual' });
   }
 
+  @Post(':propertyId/:agentType/train')
+  @ApiOperation({ summary: 'Train an agent on this property history (writes modelState)' })
+  async trainAgent(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+    @Param('agentType') agentType: string,
+  ) {
+    return this.agentService.trainAgent(propertyId, agentType);
+  }
+
+  @Post(':propertyId/train-all')
+  @ApiOperation({ summary: 'Train every enabled agent for a property (cron this nightly)' })
+  async trainAll(@Param('propertyId', ParseUUIDPipe) propertyId: string) {
+    return this.agentService.trainAll(propertyId);
+  }
+
   @Get(':propertyId/:agentType/decisions')
   @ApiOperation({ summary: 'Get decision history for an agent' })
   @ApiQuery({ name: 'limit', required: false })
@@ -101,6 +117,20 @@ export class AgentController {
     return this.agentService.rejectDecision(propertyId, id, user?.sub, dto.reason);
   }
 
+  @Post(':propertyId/decisions/:id/explain')
+  @ApiOperation({
+    summary: 'HAIP AI: grounded plain-language rationale + suggestions for a decision',
+  })
+  @ApiResponse({ status: 201, description: 'Explanation (or {explanation:null} if the model is off)' })
+  @ApiQuery({ name: 'force', required: false, description: 'Regenerate even if cached' })
+  async explainDecision(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('force') force?: string,
+  ) {
+    return this.agentService.explainDecision(propertyId, id, force === 'true');
+  }
+
   @Get(':propertyId/:agentType/performance')
   @ApiOperation({ summary: 'Get agent performance metrics' })
   async getPerformance(
@@ -119,6 +149,18 @@ export class AgentController {
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: CreateReviewDto,
   ) {
+    // FK ownership (security audit follow-on): caller-supplied reservationId
+    // must belong to this propertyId. Without this, a review could be attached
+    // to a foreign tenant's reservation (cross-tenant FK write into guest_reviews).
+    if (dto.reservationId) {
+      const [r] = await this.db
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(and(eq(reservations.id, dto.reservationId), eq(reservations.propertyId, propertyId)));
+      if (!r) {
+        throw new BadRequestException(`reservation ${dto.reservationId} not found in this property`);
+      }
+    }
     const [review] = await this.db
       .insert(guestReviews)
       .values({

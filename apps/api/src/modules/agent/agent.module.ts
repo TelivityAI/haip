@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AgentController } from './agent.controller';
 import { AgentService } from './agent.service';
 import { WebhookModule } from '../webhook/webhook.module';
+import { LlmModule } from '../llm/llm.module';
 import { DemandForecastAgent } from './demand/demand.agent';
 import { DynamicPricingAgent } from './pricing/pricing.agent';
 import { ChannelMixAgent } from './channel-mix/channel-mix.agent';
@@ -17,7 +18,7 @@ import { RevenueManagerAgent } from './revenue-manager/revenue-manager.agent';
 import { EmailService } from './guest-comms/email.service';
 
 @Module({
-  imports: [WebhookModule],
+  imports: [WebhookModule, LlmModule],
   controllers: [AgentController],
   providers: [
     AgentService,

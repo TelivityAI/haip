@@ -3,6 +3,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { AgentService } from './agent.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { LlmService } from '../llm/llm.service';
 import { DRIZZLE } from '../../database/database.module';
 import type { HaipAgent, AgentAnalysis, AgentDecisionInput } from './interfaces/haip-agent.interface';
 
@@ -129,6 +130,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -145,6 +147,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -161,6 +164,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -175,6 +179,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -194,6 +199,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -215,6 +221,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: mockEmit } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -241,6 +248,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -259,6 +267,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -275,6 +284,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -293,6 +303,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -314,6 +325,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -341,6 +353,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);
@@ -359,6 +372,7 @@ describe('AgentService', () => {
         AgentService,
         { provide: DRIZZLE, useValue: db },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
       ],
     }).compile();
     const service = module.get(AgentService);

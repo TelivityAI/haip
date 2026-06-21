@@ -23,7 +23,11 @@ const port = Number(process.env['PORT'] ?? 8080);
 const publicBaseUrl = process.env['PUBLIC_BASE_URL'] ?? `http://localhost:${port}`;
 
 const adapter = new HaipConnectAdapter({ baseUrl, apiKey });
-const app = buildApp({ adapter, publicBaseUrl });
+const app = buildApp({
+  adapter,
+  publicBaseUrl,
+  gatewayApiKey: process.env['GATEWAY_API_KEY'],
+});
 
 app
   .listen({ port, host: '0.0.0.0' })

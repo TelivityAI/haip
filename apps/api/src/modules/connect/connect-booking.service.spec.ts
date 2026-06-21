@@ -53,8 +53,14 @@ describe('ConnectBookingService', () => {
     };
 
     mockWebhookService = { emit: vi.fn().mockResolvedValue(undefined) };
+    const mockRatePlanService = { assertSellable: vi.fn().mockResolvedValue(undefined) };
 
-    service = new ConnectBookingService(mockDb, mockAvailabilityService, mockWebhookService);
+    service = new ConnectBookingService(
+      mockDb,
+      mockAvailabilityService,
+      mockWebhookService,
+      mockRatePlanService as any,
+    );
   });
 
   describe('book', () => {
@@ -101,8 +107,9 @@ describe('ConnectBookingService', () => {
           where: vi.fn().mockImplementation(() => {
             selectCallCount++;
             if (selectCallCount === 1) return Promise.resolve([mockRatePlan]);
-            if (selectCallCount === 2) return Promise.resolve([existingGuest]); // guest found!
-            if (selectCallCount === 3) return Promise.resolve([{ settings: {} }]);
+            if (selectCallCount === 2) return Promise.resolve([existingGuest]); // guest found by email
+            if (selectCallCount === 3) return Promise.resolve([{ id: 'res-existing' }]); // linked at THIS property → reuse
+            if (selectCallCount === 4) return Promise.resolve([{ settings: {} }]);
             return Promise.resolve([]);
           }),
         }),
@@ -136,6 +143,53 @@ describe('ConnectBookingService', () => {
       expect(result.success).toBe(true);
       // Only 2 inserts (booking + reservation), not 3 (guest skipped)
       expect(insertCount).toBe(2);
+    });
+
+    it('should NOT reuse a guest from another property (cross-tenant PII guard)', async () => {
+      let selectCallCount = 0;
+      const foreignGuest = { id: 'guest-foreign', firstName: 'John', lastName: 'Smith', email: 'john@example.com' };
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            if (selectCallCount === 1) return Promise.resolve([mockRatePlan]); // rate plan
+            if (selectCallCount === 2) return Promise.resolve([foreignGuest]); // email matches a guest...
+            if (selectCallCount === 3) return Promise.resolve([]); // ...but NO reservation link at this property
+            if (selectCallCount === 4) return Promise.resolve([{ settings: {} }]); // property settings
+            return Promise.resolve([]);
+          }),
+        }),
+      }));
+
+      let insertCount = 0;
+      mockDb.insert.mockImplementation(() => ({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockImplementation(() => {
+            insertCount++;
+            if (insertCount === 1) return Promise.resolve([{ id: 'guest-new', firstName: 'John', lastName: 'Smith' }]);
+            if (insertCount === 2) return Promise.resolve([{ id: 'booking-1', confirmationNumber: 'HAIP-X' }]);
+            if (insertCount === 3) return Promise.resolve([{ id: 'res-1', status: 'confirmed' }]);
+            return Promise.resolve([{}]);
+          }),
+        }),
+      }));
+
+      const result = await service.book({
+        propertyId: 'prop-1',
+        roomTypeId: 'rt-1',
+        ratePlanId: 'rp-1',
+        checkIn: '2024-06-01',
+        checkOut: '2024-06-03',
+        guestFirstName: 'John',
+        guestLastName: 'Smith',
+        guestEmail: 'john@example.com',
+        adults: 2,
+      });
+
+      expect(result.success).toBe(true);
+      // A fresh guest row is created (guest + booking + reservation = 3 inserts),
+      // NOT linked to the foreign-property guest.
+      expect(insertCount).toBe(3);
     });
 
     it('should reject booking when no availability', async () => {
@@ -363,6 +417,71 @@ describe('ConnectBookingService', () => {
 
       expect(result.success).toBe(true);
       expect(mockAvailabilityService.searchAvailability).toHaveBeenCalled();
+    });
+
+    it('forks a property-local guest on name change when the guest is shared with another property', async () => {
+      let selectCallCount = 0;
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            if (selectCallCount === 1) return Promise.resolve([{ id: 'booking-1', propertyId: 'prop-1' }]);
+            if (selectCallCount === 2) return Promise.resolve([{
+              id: 'res-1', bookingId: 'booking-1', guestId: 'guest-shared',
+              status: 'confirmed', totalAmount: '399.98',
+              arrivalDate: '2024-06-01', departureDate: '2024-06-03',
+            }]);
+            if (selectCallCount === 3) return Promise.resolve([{ id: 'res-other' }]); // guest linked at ANOTHER property
+            if (selectCallCount === 4) return Promise.resolve([{ id: 'guest-shared', firstName: 'John', lastName: 'Smith', email: 'j@x.com' }]);
+            return Promise.resolve([]);
+          }),
+        }),
+      }));
+
+      let insertCount = 0;
+      mockDb.insert.mockImplementation(() => ({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockImplementation(() => {
+            insertCount++;
+            return Promise.resolve([{ id: 'guest-forked', firstName: 'Johnny', lastName: 'Smith' }]);
+          }),
+        }),
+      }));
+
+      const result = await service.modify('HAIP-123', { guestFirstName: 'Johnny' });
+
+      expect(result.success).toBe(true);
+      // A shared guest must NOT be overwritten in place — a property-local copy is forked.
+      expect(insertCount).toBe(1);
+    });
+
+    it('updates the guest in place on name change when the guest is NOT shared', async () => {
+      let selectCallCount = 0;
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            if (selectCallCount === 1) return Promise.resolve([{ id: 'booking-1', propertyId: 'prop-1' }]);
+            if (selectCallCount === 2) return Promise.resolve([{
+              id: 'res-1', bookingId: 'booking-1', guestId: 'guest-1',
+              status: 'confirmed', totalAmount: '399.98',
+              arrivalDate: '2024-06-01', departureDate: '2024-06-03',
+            }]);
+            if (selectCallCount === 3) return Promise.resolve([]); // no other-property links → not shared
+            return Promise.resolve([]);
+          }),
+        }),
+      }));
+
+      let insertCount = 0;
+      mockDb.insert.mockImplementation(() => ({
+        values: vi.fn().mockReturnValue({ returning: vi.fn().mockImplementation(() => { insertCount++; return Promise.resolve([{ id: 'x' }]); }) }),
+      }));
+
+      const result = await service.modify('HAIP-123', { guestFirstName: 'Johnny' });
+
+      expect(result.success).toBe(true);
+      expect(insertCount).toBe(0); // updated in place, no fork
     });
 
     it('should reject modification of cancelled reservation', async () => {

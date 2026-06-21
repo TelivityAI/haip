@@ -13,6 +13,7 @@ describe('ConnectEventsService', () => {
     subscriberName: 'OTAIP Booking Agent',
     callbackUrl: 'https://otaip.example.com/webhooks',
     events: ['reservation.*', 'folio.charge_posted'],
+    secret: 'whsec_supersecret',
     isActive: true,
     failureCount: 0,
   };
@@ -55,6 +56,18 @@ describe('ConnectEventsService', () => {
       expect(result.id).toBe('sub-1');
       expect(result.subscriberId).toBe('otaip-agent-v1');
     });
+
+    it('never returns the HMAC secret in the response', async () => {
+      const result = await service.createSubscription({
+        propertyId: 'prop-1',
+        subscriberId: 'otaip-agent-v1',
+        callbackUrl: 'https://otaip.example.com/webhooks',
+        events: ['reservation.*'],
+        secret: 'whsec_supersecret',
+      } as any);
+
+      expect((result as any).secret).toBeUndefined();
+    });
   });
 
   describe('listSubscriptions', () => {
@@ -69,6 +82,18 @@ describe('ConnectEventsService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]!.subscriberId).toBe('otaip-agent-v1');
+    });
+
+    it('never returns the HMAC secret in listed subscriptions', async () => {
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([mockSubscription]),
+        }),
+      }));
+
+      const result = await service.listSubscriptions('prop-1');
+
+      expect((result[0] as any).secret).toBeUndefined();
     });
   });
 

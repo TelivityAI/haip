@@ -4,8 +4,8 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
-import { ratePlans, rateRestrictions } from '@telivityhaip/database';
+import { eq, and, lte, gte } from 'drizzle-orm';
+import { ratePlans, rateRestrictions, roomTypes } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
@@ -16,9 +16,85 @@ import { UpdateRateRestrictionDto } from './dto/update-rate-restriction.dto';
 export class RatePlanService {
   constructor(@Inject(DRIZZLE) private readonly db: any) {}
 
+  /**
+   * Enforce rate-plan restrictions for a stay [checkIn, checkOut). Throws 400 if
+   * the plan is not sellable: stop-sell (closed), closed-to-arrival on the
+   * check-in date, closed-to-departure on the check-out date, or a min/max
+   * length-of-stay violation.
+   *
+   * The BOOK path MUST call this. SEARCH only *surfaces* restrictions (it doesn't
+   * hard-block CTA/CTD), so without this guard a direct create-reservation call —
+   * including one driven by an LLM — could book a date the hotel marked unbookable.
+   */
+  async assertSellable(
+    propertyId: string,
+    ratePlanId: string,
+    checkIn: string,
+    checkOut: string,
+  ): Promise<void> {
+    const nights = Math.ceil(
+      (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86_400_000,
+    );
+    if (!(nights > 0)) {
+      throw new BadRequestException('Check-out must be after check-in');
+    }
+
+    // Restrictions overlapping the stay (scoped by property — multi-tenancy).
+    const restrictions = await this.db
+      .select()
+      .from(rateRestrictions)
+      .where(
+        and(
+          eq(rateRestrictions.propertyId, propertyId),
+          eq(rateRestrictions.ratePlanId, ratePlanId),
+          lte(rateRestrictions.startDate, checkOut),
+          gte(rateRestrictions.endDate, checkIn),
+        ),
+      );
+
+    // A restriction row "covers" a date when its range includes it (ISO dates compare lexically).
+    const covers = (r: any, date: string) => r.startDate <= date && r.endDate >= date;
+
+    if (restrictions.some((r: any) => r.isClosed)) {
+      throw new BadRequestException('Rate plan is closed (stop-sell) for the selected dates');
+    }
+    if (restrictions.some((r: any) => r.closedToArrival && covers(r, checkIn))) {
+      throw new BadRequestException('Rate plan is closed to arrival on the check-in date');
+    }
+    if (restrictions.some((r: any) => r.closedToDeparture && covers(r, checkOut))) {
+      throw new BadRequestException('Rate plan is closed to departure on the check-out date');
+    }
+
+    const minLos = restrictions.reduce(
+      (m: number | undefined, r: any) => (r.minLos ? Math.max(m ?? 0, r.minLos) : m),
+      undefined,
+    );
+    const maxLos = restrictions.reduce(
+      (m: number | undefined, r: any) => (r.maxLos ? Math.min(m ?? Infinity, r.maxLos) : m),
+      undefined,
+    );
+    if (minLos && nights < minLos) {
+      throw new BadRequestException(`Minimum length of stay is ${minLos} night(s)`);
+    }
+    if (maxLos && maxLos !== Infinity && nights > maxLos) {
+      throw new BadRequestException(`Maximum length of stay is ${maxLos} night(s)`);
+    }
+  }
+
   // --- Rate Plans ---
 
   async create(dto: CreateRatePlanDto) {
+    // FK ownership (security audit follow-on): roomTypeId is required on the
+    // DTO. Without scoping to dto.propertyId, a caller at property A could
+    // create a rate plan pointing at property B's room type. The existing
+    // derived-parent check below already scopes parentRatePlanId.
+    const [rt] = await this.db
+      .select({ id: roomTypes.id })
+      .from(roomTypes)
+      .where(and(eq(roomTypes.id, dto.roomTypeId), eq(roomTypes.propertyId, dto.propertyId)));
+    if (!rt) {
+      throw new BadRequestException(`room type ${dto.roomTypeId} not found in this property`);
+    }
     if (dto.type === 'derived') {
       if (!dto.parentRatePlanId || !dto.derivedAdjustmentType || !dto.derivedAdjustmentValue) {
         throw new BadRequestException(
@@ -72,6 +148,19 @@ export class RatePlanService {
   }
 
   async update(id: string, propertyId: string, dto: UpdateRatePlanDto) {
+    // FK ownership (security audit follow-on): UpdateRatePlanDto omits propertyId
+    // and roomTypeId but NOT parentRatePlanId. Without scoping that FK to the
+    // request's propertyId, a caller could re-parent a rate plan onto another
+    // tenant's chain. Verify before the update.
+    if (dto.parentRatePlanId) {
+      const [parent] = await this.db
+        .select({ id: ratePlans.id })
+        .from(ratePlans)
+        .where(and(eq(ratePlans.id, dto.parentRatePlanId), eq(ratePlans.propertyId, propertyId)));
+      if (!parent) {
+        throw new BadRequestException(`parent rate plan ${dto.parentRatePlanId} not found in this property`);
+      }
+    }
     const [ratePlan] = await this.db
       .update(ratePlans)
       .set({ ...dto, updatedAt: new Date() })

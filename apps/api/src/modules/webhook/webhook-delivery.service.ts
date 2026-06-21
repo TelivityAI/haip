@@ -9,6 +9,7 @@ import { createHmac } from 'crypto';
 import { eq, and, lte, or, isNull } from 'drizzle-orm';
 import { webhookDeliveries, agentWebhookSubscriptions } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { assertSafeOutboundUrl } from '../../common/security/url-guard';
 
 // Exponential backoff schedule in milliseconds: 30s, 2m, 10m, 1h, 6h.
 const RETRY_SCHEDULE_MS = [
@@ -130,6 +131,10 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
     let ok = false;
 
     try {
+      // SSRF guard: re-validate the callback URL (incl. DNS resolution) right
+      // before the request so a stored or rebinding URL can't reach internal
+      // addresses (metadata, localhost, RFC1918).
+      await assertSafeOutboundUrl(subscription.callbackUrl, { requireHttps: true });
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
       try {
@@ -142,6 +147,10 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
             'X-HAIP-Event-Type': delivery.eventType,
           },
           body,
+          // The pre-flight assertSafeOutboundUrl only validates the FIRST URL.
+          // Without this, a 302 to http://169.254.169.254/… would be followed to
+          // an internal host, defeating the SSRF guard.
+          redirect: 'manual',
           signal: controller.signal,
         });
         statusCode = resp.status;

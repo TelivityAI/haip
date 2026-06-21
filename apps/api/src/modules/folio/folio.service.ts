@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { folios, charges, payments } from '@telivityhaip/database';
+import { folios, charges, payments, reservations, bookings } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { TaxService } from '../tax/tax.service';
@@ -27,6 +27,24 @@ export class FolioService {
 
   async create(dto: CreateFolioDto, tx?: any) {
     const db = tx ?? this.db;
+    // FK ownership (security audit follow-on): the caller supplies reservationId
+    // and bookingId in the DTO. Without scoping these to dto.propertyId, a caller
+    // at property A could attach a folio to property B's reservation/booking.
+    // (Guest is intentionally cross-property by design per CLAUDE.md.)
+    if (dto.reservationId) {
+      const [r] = await db
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(and(eq(reservations.id, dto.reservationId), eq(reservations.propertyId, dto.propertyId)));
+      if (!r) throw new BadRequestException(`reservation ${dto.reservationId} not found in this property`);
+    }
+    if (dto.bookingId) {
+      const [b] = await db
+        .select({ id: bookings.id })
+        .from(bookings)
+        .where(and(eq(bookings.id, dto.bookingId), eq(bookings.propertyId, dto.propertyId)));
+      if (!b) throw new BadRequestException(`booking ${dto.bookingId} not found in this property`);
+    }
     const folioNumber = await this.generateFolioNumber(dto.propertyId, tx);
     const [folio] = await db
       .insert(folios)
@@ -274,7 +292,22 @@ export class FolioService {
       throw new BadRequestException('Cannot post charge to a folio that is not open');
     }
 
-    if (dto.isReversal && dto.originalChargeId) {
+    // A negative/zero amount inverts or zeroes the folio balance. Only legitimate
+    // credit paths may go non-positive: an explicit `adjustment` charge or a
+    // reversal. Everything else must be strictly positive.
+    if (
+      new Decimal(dto.amount).lessThanOrEqualTo(0) &&
+      dto.type !== 'adjustment' &&
+      !dto.isReversal
+    ) {
+      throw new BadRequestException(
+        'Charge amount must be positive (negatives are only allowed for adjustments or reversals)',
+      );
+    }
+
+    // Validate originalChargeId WHENEVER supplied (not only for reversals) so a
+    // caller can't attach a dangling reference to another property's charge.
+    if (dto.originalChargeId) {
       const [original] = await db
         .select()
         .from(charges)
@@ -288,7 +321,7 @@ export class FolioService {
       if (!original) {
         throw new NotFoundException(`Original charge ${dto.originalChargeId} not found`);
       }
-      if (original.isLocked) {
+      if (dto.isReversal && original.isLocked) {
         throw new BadRequestException('Cannot reverse a locked charge');
       }
     }

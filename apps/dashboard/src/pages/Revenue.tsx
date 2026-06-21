@@ -108,6 +108,48 @@ function RevenueDashboard({ agents }: { agents: AgentStatus[] }) {
 }
 
 // ---------------------------------------------------------------------------
+// HAIP AI — grounded explanation for a single decision (lazy, on expand)
+// ---------------------------------------------------------------------------
+
+function HaipAiExplanation({ propertyId, decisionId }: { propertyId: string; decisionId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['decision-explain', propertyId, decisionId],
+    queryFn: async () => {
+      const res = await api.post(`/v1/agents/${propertyId}/decisions/${decisionId}/explain`);
+      return res.data?.data ?? res.data;
+    },
+    staleTime: Infinity,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="mb-2 flex items-center gap-1 text-xs text-telivity-mid-grey">
+        <Brain size={12} className="text-telivity-teal" /> HAIP AI is analyzing…
+      </div>
+    );
+  }
+
+  const explanation = data?.explanation;
+  if (!explanation) return null; // model off/unavailable → raw recommendation only
+
+  return (
+    <div className="mb-3 rounded-lg border border-telivity-teal/30 bg-telivity-teal/5 p-3">
+      <div className="mb-1 flex items-center gap-1 text-xs font-semibold text-telivity-teal">
+        <Brain size={13} /> HAIP AI
+      </div>
+      <p className="text-sm text-telivity-navy">{explanation.rationale}</p>
+      {explanation.suggestions?.length > 0 && (
+        <ul className="mt-2 list-inside list-disc space-y-0.5 text-xs text-telivity-slate">
+          {explanation.suggestions.map((s: string, i: number) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // AI Recommendations (pending decisions table)
 // ---------------------------------------------------------------------------
 
@@ -213,6 +255,7 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
                 </div>
                 {expandedId === d.id && (
                   <div className="mt-3 bg-gray-50 rounded-lg p-3">
+                    <HaipAiExplanation propertyId={propertyId} decisionId={d.id} />
                     <pre className="text-xs text-telivity-slate whitespace-pre-wrap overflow-x-auto">
                       {JSON.stringify(d.recommendation, null, 2)}
                     </pre>

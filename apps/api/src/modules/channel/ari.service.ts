@@ -98,6 +98,7 @@ export class AriService {
       await this.logSync(propertyId, conn.id, 'push', 'availability_push', items, result, startDate, endDate);
       await this.channelService.updateSyncStatus(
         conn.id,
+        conn.propertyId,
         result.success ? 'success' : 'failed',
         result.errors.length > 0 ? result.errors[0]!.message : undefined,
       );
@@ -213,6 +214,7 @@ export class AriService {
       const overallSuccess = rateResult.success && restrictionResult.success;
       await this.channelService.updateSyncStatus(
         conn.id,
+        conn.propertyId,
         overallSuccess ? 'success' : 'failed',
         [...rateResult.errors, ...restrictionResult.errors].map((e) => e.message).join('; ') || undefined,
       );

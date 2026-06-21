@@ -102,6 +102,7 @@ export class ContentSyncService {
       await this.logSync(propertyId, conn.id, params, result);
       await this.channelService.updateSyncStatus(
         conn.id,
+        conn.propertyId,
         result.success ? 'success' : 'failed',
         result.errors.length > 0 ? result.errors[0]!.message : undefined,
       );

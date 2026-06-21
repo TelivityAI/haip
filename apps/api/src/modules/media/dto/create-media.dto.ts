@@ -6,11 +6,11 @@ import {
   IsEnum,
   IsInt,
   IsBoolean,
-  IsUrl,
   MaxLength,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsSafeHttpUrl } from '../../../common/security/is-safe-url.validator';
 
 export const MEDIA_OWNER_TYPES = ['property', 'room_type', 'room'] as const;
 export const MEDIA_CATEGORIES = [
@@ -36,7 +36,7 @@ export class CreateMediaDto {
   ownerId!: string;
 
   @ApiProperty({ example: 'https://images.example.com/hero.jpg' })
-  @IsUrl({ require_tld: false })
+  @IsSafeHttpUrl()
   @MaxLength(2048)
   url!: string;
 

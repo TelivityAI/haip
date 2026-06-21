@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Settings,
   ShieldCheck,
+  Upload,
   X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -51,6 +52,7 @@ const NAV_ITEMS: Array<{
   { to: '/communications', icon: Mail, labelKey: 'nav.communications', permission: 'communications.manage' },
   { to: '/reviews', icon: MessageSquare, labelKey: 'nav.reviews', permission: 'reviews.manage' },
   { to: '/settings?tab=users', icon: ShieldCheck, labelKey: 'nav.usersRoles', permission: 'admin.users.manage' },
+  { to: '/import', icon: Upload, labelKey: 'nav.import', permission: 'settings.manage' },
   { to: '/settings', icon: Settings, labelKey: 'nav.settings', permission: 'settings.manage' },
 ];
 

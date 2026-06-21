@@ -1,8 +1,10 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
 import { agentConfigs, agentDecisions, agentTrainingSnapshots, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
+import { LlmService } from '../llm/llm.service';
+import { groundExplanation, numericPayload } from '../llm/grounding';
 import type {
   HaipAgent,
   AgentContext,
@@ -18,12 +20,74 @@ const VALID_AGENT_TYPES = [
 
 @Injectable()
 export class AgentService {
+  private readonly logger = new Logger(AgentService.name);
   private agents: Map<string, HaipAgent> = new Map();
 
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     private readonly webhookService: WebhookService,
+    private readonly llm: LlmService,
   ) {}
+
+  /**
+   * Generate (or return cached) HAIP AI explanation + suggestions for one decision.
+   * Grounded: the model sees ONLY the decision's recommendation numbers. On-demand
+   * so the model is invoked only for decisions a human actually reviews; the result
+   * is cached on `agent_decisions.explanation`.
+   *
+   * Returns `{ explanation: null, model: null }` when the model is disabled or
+   * unavailable — callers fall back to showing the raw decision.
+   */
+  async explainDecision(propertyId: string, decisionId: string, force = false) {
+    const decision = await this.getDecisionById(decisionId, propertyId);
+
+    const cached = decision.explanation as
+      | { rationale: string; suggestions: string[]; model: string }
+      | null;
+    if (cached && !force) {
+      return { explanation: cached, model: cached.model, fromCache: true };
+    }
+
+    const numbers = (decision.recommendation ?? {}) as Record<string, unknown>;
+    // Strip every free-form string to numeric leaves before the prompt: the
+    // model must see ONLY numbers, never attacker-influenced text (guest names,
+    // review/email bodies) that could inject instructions into the explanation.
+    const promptNumbers = (numericPayload(numbers) ?? {}) as Record<string, unknown>;
+    const result = await this.llm.explain({
+      agentType: decision.agentType,
+      decisionType: decision.decisionType,
+      // The deterministic agent's own numeric output is the ONLY ground truth.
+      numbers: promptNumbers,
+    });
+
+    if (!result) {
+      return { explanation: null, model: null, fromCache: false };
+    }
+
+    // Anti-hallucination guard: drop suggestions asserting figures the agent's
+    // numbers don't support, and flag the rationale if it does. (Execution itself
+    // never uses this text — approval runs the agent's own recommendation.)
+    const guarded = groundExplanation(numbers, result);
+
+    // Fail closed: if the rationale asserts a figure the decision doesn't
+    // support, suppress the whole explanation rather than displaying (or
+    // caching) a labelled hallucination. Caller falls back to the raw decision.
+    if (!guarded.grounded) {
+      this.logger.warn(
+        `HAIP AI rationale failed grounding for decision ${decisionId} — suppressed`,
+      );
+      return { explanation: null, model: null, fromCache: false };
+    }
+
+    const explanation = { ...guarded, model: result.model };
+
+    await this.db
+      .update(agentDecisions)
+      .set({ explanation })
+      .where(and(eq(agentDecisions.id, decisionId), eq(agentDecisions.propertyId, propertyId)));
+
+    return { explanation, model: result.model, fromCache: false };
+  }
 
   /** Register an agent implementation. Called by sub-agents on init. */
   registerAgent(agent: HaipAgent) {
@@ -389,6 +453,56 @@ export class AgentService {
       )
       .orderBy(desc(agentDecisions.createdAt))
       .limit(limit);
+  }
+
+  /**
+   * Train one agent on this property's own history. The agent computes its
+   * calibrated parameters; we persist them into `agent_configs.modelState.learned`
+   * and stamp `lastTrainedAt`. `analyze()` then uses the learned params instead of
+   * the cold-start defaults — the real per-property learning loop.
+   */
+  async trainAgent(propertyId: string, agentType: string) {
+    this.validateAgentType(agentType);
+    const agent = this.getAgentImpl(agentType);
+    const config = await this.getOrCreateConfig(propertyId, agentType);
+
+    const result = await agent.train(propertyId);
+
+    await this.db
+      .update(agentConfigs)
+      .set({
+        modelState: {
+          learned: result.metrics ?? {},
+          modelVersion: result.modelVersion,
+          dataPoints: result.dataPoints,
+          trainedAt: new Date().toISOString(),
+        },
+        lastTrainedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(agentConfigs.id, config.id));
+
+    return result;
+  }
+
+  /** Train every enabled agent for a property (the nightly job hits this). */
+  async trainAll(propertyId: string) {
+    const configs = await this.db
+      .select()
+      .from(agentConfigs)
+      .where(and(eq(agentConfigs.propertyId, propertyId), eq(agentConfigs.isEnabled, true)));
+
+    const results: Array<{ agentType: string; success: boolean; dataPoints?: number; error?: string }> = [];
+    for (const c of configs) {
+      if (!this.agents.has(c.agentType)) continue;
+      try {
+        const r = await this.trainAgent(propertyId, c.agentType);
+        results.push({ agentType: c.agentType, success: r.success, dataPoints: r.dataPoints });
+      } catch (e: any) {
+        results.push({ agentType: c.agentType, success: false, error: e?.message });
+      }
+    }
+    return { trained: results.length, results };
   }
 
   /** Get agent performance metrics. */

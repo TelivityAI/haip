@@ -18,6 +18,7 @@ import { InboundReservationService } from './inbound-reservation.service';
 import { RateParityService } from './rate-parity.service';
 import { CreateChannelConnectionDto } from './dto/create-channel-connection.dto';
 import { UpdateChannelConnectionDto } from './dto/update-channel-connection.dto';
+import { SetRateOverrideDto } from './dto/set-rate-override.dto';
 import { PushAriDto } from './dto/push-ari.dto';
 import { PushContentDto } from './dto/push-content.dto';
 import { InboundReservationDto } from './dto/inbound-reservation.dto';
@@ -252,11 +253,16 @@ export class ChannelController {
   async setRateOverride(
     @Query('channelConnectionId', ParseUUIDPipe) channelConnectionId: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
-    @Body() override: any,
+    @Body() override: SetRateOverrideDto,
   ) {
     return this.rateParityService.setRateOverride(channelConnectionId, propertyId, {
       channelConnectionId,
-      ...override,
+      ratePlanId: override.ratePlanId,
+      adjustmentType: override.adjustmentType,
+      adjustmentValue: override.adjustmentValue,
+      startDate: override.startDate,
+      endDate: override.endDate,
+      reason: override.reason,
     });
   }
 

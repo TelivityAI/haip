@@ -10,6 +10,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsMoneyString } from '../../../common/validation/is-money-string.validator';
 
 export class CreateChargeDto {
   @ApiProperty({ description: 'Property ID' })
@@ -30,8 +31,10 @@ export class CreateChargeDto {
   description!: string;
 
   @ApiProperty({ example: '150.00', description: 'Charge amount (positive for charges, negative for credits)' })
-  @IsString()
-  @IsNotEmpty()
+  // Must be a valid numeric decimal; negatives are allowed here at the DTO layer
+  // because credits/adjustments are legitimate — the service restricts WHEN a
+  // negative is permitted (only type='adjustment' or reversals).
+  @IsMoneyString({ allowNegative: true })
   amount!: string;
 
   @ApiProperty({ example: 'USD' })
@@ -42,7 +45,7 @@ export class CreateChargeDto {
 
   @ApiPropertyOptional({ example: '13.13', description: 'Tax amount' })
   @IsOptional()
-  @IsString()
+  @IsMoneyString({ allowZero: true }) // tax can be 0 but never negative
   taxAmount?: string;
 
   @ApiPropertyOptional({ example: '0.0875', description: 'Tax rate (e.g., 0.0875 for 8.75%)' })

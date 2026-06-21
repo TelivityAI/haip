@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
+import { AuditActorCtx, type AuditActor } from '../../common/audit/audit-actor';
 import { GuestService } from './guest.service';
 import { CreateGuestDto } from './dto/create-guest.dto';
 import { UpdateGuestDto } from './dto/update-guest.dto';
@@ -82,7 +83,8 @@ export class GuestController {
   async deleteGuest(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @AuditActorCtx() actor: AuditActor,
   ): Promise<void> {
-    await this.guestService.delete(id, propertyId);
+    await this.guestService.delete(id, propertyId, actor);
   }
 }

@@ -7,12 +7,15 @@ import {
   Body,
   Param,
   Query,
+  Req,
   ParseUUIDPipe,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse, ApiSecurity } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
-import { ApiKeyGuard } from '../auth/api-key.guard';
+import { ApiKeyGuard, type ConnectPrincipal } from '../auth/api-key.guard';
+import { ConnectScopeGuard } from '../auth/connect-scope.guard';
 import { ConnectSearchService } from './connect-search.service';
 import { ConnectContentService } from './connect-content.service';
 import { ConnectBookingService } from './connect-booking.service';
@@ -31,10 +34,12 @@ import { ListPropertiesDto } from './dto/list-properties.dto';
 // /api/v1/api/v1/connect/* because main.ts sets a global prefix.
 @Controller('connect')
 // @Public() skips the global JWT guard — the Connect API uses an API key
-// (x-api-key header) validated by ApiKeyGuard instead. Without this, every
-// endpoint below would be reachable unauthenticated.
+// (x-api-key header) validated by ApiKeyGuard instead. ConnectScopeGuard then
+// enforces tenant isolation for property-scoped credentials (the platform
+// CONNECT_API_KEY env value is cross-tenant by design — used by the demo
+// gateway and other trusted server-side callers).
 @Public()
-@UseGuards(ApiKeyGuard)
+@UseGuards(ApiKeyGuard, ConnectScopeGuard)
 export class ConnectController {
   constructor(
     private readonly searchService: ConnectSearchService,
@@ -49,19 +54,41 @@ export class ConnectController {
   @Post('search')
   @ApiOperation({ summary: 'Search properties with availability and rates (Agent 4.1)' })
   @ApiResponse({ status: 200, description: 'Search results with room types, rates, and nightly breakdown' })
-  async search(@Body() dto: AgentSearchDto) {
+  async search(@Body() dto: AgentSearchDto, @Req() req: any) {
+    // `AgentSearchDto.propertyId` is optional, so a property-scoped credential
+    // could otherwise omit it and the search service would enumerate across
+    // ALL active tenants. Pin to the credential's propertyId. (If the DTO does
+    // carry a propertyId, ConnectScopeGuard has already verified it matches.)
+    const principal = req.connect as ConnectPrincipal | undefined;
+    if (principal?.scope === 'property' && principal.propertyId) {
+      dto.propertyId = principal.propertyId;
+    }
     return this.searchService.search(dto);
   }
 
   @Get('properties')
   @ApiOperation({ summary: 'List all properties (Agent 4.2 background sync)' })
-  async listProperties(@Query() dto: ListPropertiesDto) {
+  async listProperties(@Query() dto: ListPropertiesDto, @Req() req: any) {
+    const principal = req.connect as ConnectPrincipal | undefined;
+    if (principal?.scope === 'property' && principal.propertyId) {
+      // Property-scoped credentials only ever see their one tenant.
+      const detail = await this.contentService.getPropertyDetail(principal.propertyId);
+      return detail ? [detail] : [];
+    }
     return this.contentService.listProperties(dto.limit, dto.offset);
   }
 
   @Get('properties/:id')
   @ApiOperation({ summary: 'Get detailed property content (Agent 4.2, 4.3)' })
-  async getProperty(@Param('id', ParseUUIDPipe) id: string) {
+  async getProperty(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
+    // `:id` IS the tenant on this route — ConnectScopeGuard intentionally does
+    // NOT enforce `params.id` (it would over-deny on /subscriptions/:id where
+    // `:id` is a subscription UUID). Enforce membership here where the route
+    // semantics are explicit.
+    const principal = req.connect as ConnectPrincipal | undefined;
+    if (principal?.scope === 'property' && principal.propertyId !== id) {
+      throw new ForbiddenException('Credential is not scoped to this property');
+    }
     return this.contentService.getPropertyDetail(id);
   }
 

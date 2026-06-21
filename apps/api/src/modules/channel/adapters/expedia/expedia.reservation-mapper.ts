@@ -28,9 +28,15 @@ export function mapExpediaBookingToHaip(data: Record<string, unknown>): ChannelR
     const stay = roomStay.StayDate ?? roomStay ?? {};
     const total = roomStay.Total ?? b.Total ?? {};
 
+    // EQC carries the Expedia hotel id per booking; used to route to the right
+    // tenant's connection. Left undefined when absent so the receiver rejects
+    // rather than guessing.
+    const hotelId = b['@_hotelId'] ?? b.Hotel?.['@_id'] ?? roomStay['@_hotelId'] ?? b['@_hotelid'];
+
     return {
       externalConfirmation: String(b['@_id'] ?? b['@_confirmId'] ?? b.UniqueID?.['@_id'] ?? `EXP-${Date.now()}`),
       channelCode: 'expedia',
+      channelHotelId: hotelId != null ? String(hotelId) : undefined,
       guestFirstName: String(name.GivenName ?? name['@_givenName'] ?? 'Guest'),
       guestLastName: String(name.Surname ?? name['@_surname'] ?? 'Unknown'),
       guestEmail: guest.Email ? String(guest.Email) : undefined,

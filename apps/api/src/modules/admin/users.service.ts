@@ -9,6 +9,7 @@ import { and, eq, or, isNull, inArray } from 'drizzle-orm';
 import { users, roles, userRoles, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { PermissionsService } from '../auth/permissions.service';
+import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -75,7 +76,7 @@ export class UsersService {
     return row;
   }
 
-  async create(dto: CreateUserDto) {
+  async create(dto: CreateUserDto, actor?: AuditActor) {
     const [dupe] = await this.db
       .select({ id: users.id })
       .from(users)
@@ -114,43 +115,52 @@ export class UsersService {
         entityType: 'user',
         entityId: user.id,
         description: 'user.created',
+        ...actorFields(actor),
       });
       return user;
     });
   }
 
-  async update(id: string, propertyId: string, dto: UpdateUserDto) {
+  async update(id: string, propertyId: string, dto: UpdateUserDto, actor?: AuditActor) {
     await this.getOwned(id, propertyId);
-    const [user] = await this.db
-      .update(users)
-      .set({ ...dto, updatedAt: new Date() })
-      .where(and(eq(users.id, id), eq(users.propertyId, propertyId)))
-      .returning();
-    await this.db.insert(auditLogs).values({
-      propertyId,
-      action: 'update',
-      entityType: 'user',
-      entityId: id,
-      description: 'user.updated',
+    // Transactional: the mutation and its audit row commit together, so an audit
+    // failure can't leave an unrecorded change (GDPR/PCI accountability).
+    return this.db.transaction(async (tx: any) => {
+      const [user] = await tx
+        .update(users)
+        .set({ ...dto, updatedAt: new Date() })
+        .where(and(eq(users.id, id), eq(users.propertyId, propertyId)))
+        .returning();
+      await tx.insert(auditLogs).values({
+        propertyId,
+        action: 'update',
+        entityType: 'user',
+        entityId: id,
+        description: 'user.updated',
+        ...actorFields(actor),
+      });
+      return user;
     });
-    return user;
   }
 
   /** DELETE = soft-disable (preserves history). */
-  async disable(id: string, propertyId: string) {
+  async disable(id: string, propertyId: string, actor?: AuditActor) {
     await this.getOwned(id, propertyId);
-    await this.db
-      .update(users)
-      .set({ status: 'disabled', updatedAt: new Date() })
-      .where(and(eq(users.id, id), eq(users.propertyId, propertyId)));
-    await this.db.insert(auditLogs).values({
-      propertyId,
-      action: 'update',
-      entityType: 'user',
-      entityId: id,
-      description: 'user.disabled',
+    return this.db.transaction(async (tx: any) => {
+      await tx
+        .update(users)
+        .set({ status: 'disabled', updatedAt: new Date() })
+        .where(and(eq(users.id, id), eq(users.propertyId, propertyId)));
+      await tx.insert(auditLogs).values({
+        propertyId,
+        action: 'update',
+        entityType: 'user',
+        entityId: id,
+        description: 'user.disabled',
+        ...actorFields(actor),
+      });
+      return { disabled: true };
     });
-    return { disabled: true };
   }
 
   private async assertRolesExist(roleIds: string[], propertyId: string) {
@@ -163,7 +173,7 @@ export class UsersService {
     }
   }
 
-  async assignRoles(userId: string, propertyId: string, roleIds: string[]) {
+  async assignRoles(userId: string, propertyId: string, roleIds: string[], actor?: AuditActor) {
     await this.getOwned(userId, propertyId);
     await this.assertRolesExist(roleIds, propertyId);
     await this.db.transaction(async (tx: any) => {
@@ -181,6 +191,7 @@ export class UsersService {
         entityType: 'user',
         entityId: userId,
         description: 'user.roles_updated',
+        ...actorFields(actor),
       });
     });
     return this.effectivePermissions(userId, propertyId);
