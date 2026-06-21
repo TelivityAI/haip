@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Trash2, Lock } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import Modal from '../ui/Modal';
 import {
   useRoles,
@@ -10,6 +11,7 @@ import {
 } from '../../hooks/useAdmin';
 
 export default function RolesSettings({ propertyId }: { propertyId: string }) {
+  const { t } = useTranslation();
   const { data: roles = [] } = useRoles(propertyId);
   const { data: catalog = [] } = usePermissionCatalog(propertyId);
   const { create, remove, setPermissions } = useRoleMutations(propertyId);
@@ -47,9 +49,9 @@ export default function RolesSettings({ propertyId }: { propertyId: string }) {
       {/* Role list */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-telivity-navy">Roles</h2>
+          <h2 className="text-sm font-semibold text-telivity-navy">{t('admin.roles')}</h2>
           <button onClick={() => setCreateOpen(true)} className="flex items-center gap-1 text-telivity-teal hover:text-telivity-light-teal text-sm font-semibold">
-            <Plus size={15} /> New
+            <Plus size={15} /> {t('admin.new')}
           </button>
         </div>
         <ul>
@@ -65,7 +67,7 @@ export default function RolesSettings({ propertyId }: { propertyId: string }) {
                   <span className="text-sm font-medium text-telivity-navy">{r.name}</span>
                   {r.isSystem && <Lock size={12} className="text-telivity-mid-grey" />}
                 </div>
-                <p className="text-xs text-telivity-mid-grey">{r.permissions.length} permissions</p>
+                <p className="text-xs text-telivity-mid-grey">{t('admin.permissionsCount', { count: r.permissions.length })}</p>
               </button>
             </li>
           ))}
@@ -87,18 +89,18 @@ export default function RolesSettings({ propertyId }: { propertyId: string }) {
             }
           />
         ) : (
-          <div className="bg-white rounded-xl shadow-sm p-8 text-center text-sm text-telivity-mid-grey">Select a role</div>
+          <div className="bg-white rounded-xl shadow-sm p-8 text-center text-sm text-telivity-mid-grey">{t('admin.selectARole')}</div>
         )}
       </div>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Role">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('admin.newRole')}>
         <div className="space-y-4">
-          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Key * (lowercase, underscores)</label><input value={key} onChange={(e) => setKey(e.target.value)} placeholder="spa_manager" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
-          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Name *</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Spa Manager" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
-          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
-          {create.isError && <p className="text-xs text-red-500">Could not create role (key may already exist).</p>}
+          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('admin.keyLabel')}</label><input value={key} onChange={(e) => setKey(e.target.value)} placeholder={t('admin.keyPlaceholder')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('admin.name')} {t('admin.required')}</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('admin.namePlaceholder')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('admin.description')}</label><input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+          {create.isError && <p className="text-xs text-red-500">{t('admin.couldNotCreateRole')}</p>}
           <button onClick={submitCreate} disabled={!key.trim() || !name.trim() || create.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
-            {create.isPending ? 'Creating…' : 'Create Role'}
+            {create.isPending ? t('admin.creating') : t('admin.createRole')}
           </button>
         </div>
       </Modal>
@@ -121,6 +123,7 @@ function PermissionMatrix({
   onSave: (keys: string[]) => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<string[]>(role.permissions);
   const readOnly = role.isSystem;
   const toggle = (key: string) =>
@@ -136,13 +139,13 @@ function PermissionMatrix({
         <div>
           <h2 className="text-sm font-semibold text-telivity-navy flex items-center gap-2">
             {role.name}
-            {readOnly && <span className="text-[10px] text-telivity-mid-grey uppercase tracking-wide flex items-center gap-1"><Lock size={11} /> system role (read-only)</span>}
+            {readOnly && <span className="text-[10px] text-telivity-mid-grey uppercase tracking-wide flex items-center gap-1"><Lock size={11} /> {t('admin.systemRoleReadOnly')}</span>}
           </h2>
           {role.description && <p className="text-xs text-telivity-mid-grey mt-0.5">{role.description}</p>}
         </div>
         {!readOnly && (
           <button onClick={onDelete} disabled={deleting} className="inline-flex items-center gap-1 text-red-500 hover:text-red-600 text-sm font-medium disabled:opacity-50">
-            <Trash2 size={14} /> Delete
+            <Trash2 size={14} /> {t('admin.delete')}
           </button>
         )}
       </div>
@@ -172,9 +175,9 @@ function PermissionMatrix({
       {!readOnly && (
         <div className="px-5 py-3 border-t border-gray-100 flex items-center gap-3">
           <button onClick={() => onSave(selected)} disabled={!dirty || saving} className="bg-telivity-teal text-white rounded-lg px-5 py-2 text-sm font-semibold disabled:opacity-50">
-            {saving ? 'Saving…' : 'Save Permissions'}
+            {saving ? t('admin.saving') : t('admin.savePermissions')}
           </button>
-          {dirty && <span className="text-xs text-telivity-orange">Unsaved changes</span>}
+          {dirty && <span className="text-xs text-telivity-orange">{t('admin.unsavedChanges')}</span>}
         </div>
       )}
     </div>
