@@ -1,11 +1,11 @@
 /**
- * Embed-time theming. A host site (a Remy/v0-generated page, a Webflow site, or any
+ * Embed-time theming. Any host site (a CMS-built site, a static marketing page, or any
  * hand-built site) can pass brand tokens on the mount element so the widget blends in —
  * independent of, and taking precedence over, the per-property branding from `/config`.
  *
  * Two ways to pass a theme on the mount element (or the embed <script>):
  *
- *   1. A JSON blob (what Remy injects):
+ *   1. A JSON blob (e.g. set by an automated site builder):
  *      <div id="haip-booking" data-booking-key="pk_live_…"
  *           data-theme='{"primary":"#0a7","font":"Inter, sans-serif","radius":"14px"}'></div>
  *
