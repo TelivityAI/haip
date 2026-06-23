@@ -2,9 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Contain the widget so an embedding host page styles it predictably. */
+/*
+ * Theme contract. Every themeable value is a CSS variable with a sensible fallback, so the
+ * widget renders before /config loads and an embedding site can override any token at mount
+ * time (see lib/theme.ts: data-theme / data-theme-*). Tokens:
+ *   --haip-primary     brand / primary button background
+ *   --haip-accent      secondary accents
+ *   --haip-on-primary  text/icon color on the primary button
+ *   --haip-font        font-family stack
+ *   --haip-radius      corner radius
+ *   --haip-text        body text color
+ *   --haip-surface     card / panel background
+ */
 .haip-booking {
-  font-family: 'Montserrat', Arial, Helvetica, sans-serif;
-  color: #23273d;
+  --haip-primary: #06bdb4;
+  --haip-accent: #f2641b;
+  --haip-on-primary: #ffffff;
+  --haip-font: 'Montserrat', Arial, Helvetica, sans-serif;
+  --haip-radius: 0.375rem;
+  --haip-text: #23273d;
+  --haip-surface: #ffffff;
+
+  font-family: var(--haip-font);
+  color: var(--haip-text);
   line-height: 1.5;
 }

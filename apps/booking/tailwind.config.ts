@@ -15,15 +15,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Branding comes from /config at runtime via CSS variables; these are
-        // sensible fallbacks so the widget renders before config loads.
+        // Branding/theme comes from CSS variables at runtime (lib/theme.ts embed override +
+        // /config branding); these fallbacks let the widget render before either loads.
         brand: {
           primary: 'var(--haip-primary, #06bdb4)',
           accent: 'var(--haip-accent, #f2641b)',
+          'on-primary': 'var(--haip-on-primary, #ffffff)',
+          surface: 'var(--haip-surface, #ffffff)',
         },
       },
+      borderRadius: {
+        brand: 'var(--haip-radius, 0.375rem)',
+      },
       fontFamily: {
-        sans: ['Montserrat', 'Arial', 'Helvetica', 'sans-serif'],
+        // The widget's font is driven by --haip-font on .haip-booking; this keeps `font-sans`
+        // consistent for any explicit uses.
+        sans: ['var(--haip-font)', 'Montserrat', 'Arial', 'Helvetica', 'sans-serif'],
       },
     },
   },

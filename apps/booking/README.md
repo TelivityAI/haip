@@ -49,6 +49,26 @@ Branding (display name, primary/accent colors, logo) is read from `/config`
 (and the `/search` `branding` block) and applied via CSS variables, so each
 property is themed.
 
+### Theming it into a host site
+
+For embeds where the widget must match the surrounding site (a Remy/v0-generated
+page, a Webflow site, any custom site), pass **theme tokens** on the mount
+element. They take precedence over `/config` branding and apply as scoped CSS
+variables on the widget container (never on the host page). Tokens: `primary`,
+`accent`, `onPrimary`, `font`, `radius`, `text`, `surface`.
+
+```html
+<!-- JSON blob (what Remy injects) -->
+<div id="haip-booking" data-booking-key="pk_live_XXX"
+     data-theme='{"primary":"#0a7d6b","font":"Inter, sans-serif","radius":"14px"}'></div>
+
+<!-- or individual attributes -->
+<div id="haip-booking" data-booking-key="pk_live_XXX"
+     data-theme-primary="#0a7d6b" data-theme-font="Inter, sans-serif" data-theme-radius="14px"></div>
+```
+
+Unknown tokens are ignored and values are sanitized (`src/lib/theme.ts`).
+
 ## Payment
 
 If `depositDue > 0` and `/config` returns a `stripePublishableKey`, the Payment
