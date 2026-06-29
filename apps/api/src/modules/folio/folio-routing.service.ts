@@ -265,21 +265,32 @@ export class FolioRoutingService {
     propertyId: string,
     dto: TransferCityLedgerDto,
   ) {
-    const sourceFolio = await this.folioService.findById(folioId, propertyId);
-    // Monetary compare on string representation via decimal.js (numeric-as-string).
-    const remainingBalance = new Decimal(sourceFolio.balance);
+    const result = await this.db.transaction(async (tx: any) => {
+      const [sourceFolio] = await tx
+        .select()
+        .from(folios)
+        .where(and(eq(folios.id, folioId), eq(folios.propertyId, propertyId)))
+        .for('update');
 
-    if (remainingBalance.lte(0)) {
-      return { message: 'No outstanding balance to transfer' };
-    }
+      if (!sourceFolio) {
+        throw new NotFoundException(`Folio ${folioId} not found`);
+      }
 
-    const amountStr = remainingBalance.toFixed(2);
+      await this.folioService.recalculateBalance(folioId, propertyId, tx);
 
-    // Bug 3: wrap all mutating steps in a single transaction so partial failure
-    // (e.g. CL folio created but payment insert fails) is impossible.
-    // Idempotency-by-transferId is out of scope for this PR.
-    const { cityLedgerFolio } = await this.db.transaction(async (tx: any) => {
-      // Create city ledger folio
+      const [refreshed] = await tx
+        .select()
+        .from(folios)
+        .where(and(eq(folios.id, folioId), eq(folios.propertyId, propertyId)));
+
+      const remainingBalance = new Decimal(refreshed?.balance ?? '0');
+
+      if (remainingBalance.lte(0)) {
+        return { message: 'No outstanding balance to transfer' as const };
+      }
+
+      const amountStr = remainingBalance.toFixed(2);
+
       const cityLedgerFolio = await this.folioService.create(
         {
           propertyId,
@@ -293,7 +304,6 @@ export class FolioRoutingService {
         tx,
       );
 
-      // Record city_ledger payment on the source folio (zeroes out the guest folio)
       await tx
         .insert(payments)
         .values({
@@ -309,7 +319,6 @@ export class FolioRoutingService {
 
       await this.folioService.recalculateBalance(folioId, propertyId, tx);
 
-      // Post matching charge on the city ledger folio
       await this.folioService.postCharge(
         cityLedgerFolio.id,
         {
@@ -323,13 +332,21 @@ export class FolioRoutingService {
         tx,
       );
 
-      return { cityLedgerFolio };
+      return {
+        cityLedgerFolio,
+        amountStr,
+        sourceFolioId: folioId,
+      };
     });
 
+    if ('message' in result) {
+      return result;
+    }
+
     return {
-      sourceFolioId: folioId,
-      cityLedgerFolioId: cityLedgerFolio.id,
-      transferredAmount: amountStr,
+      sourceFolioId: result.sourceFolioId,
+      cityLedgerFolioId: result.cityLedgerFolio.id,
+      transferredAmount: result.amountStr,
     };
   }
 }

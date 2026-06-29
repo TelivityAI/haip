@@ -11,10 +11,12 @@ import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
 import { eq, and } from 'drizzle-orm';
+import { Decimal } from 'decimal.js';
 import { payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
+import { sumRefundChildren } from './payment-ledger';
 import Stripe from 'stripe';
 
 /**
@@ -216,27 +218,71 @@ export class StripeWebhookController {
     const payment = await this.findPaymentByGatewayTransactionId(piId);
     if (!payment) return;
 
-    if (['refunded', 'partially_refunded'].includes(payment.status)) return;
+    const existingRefunds = await this.db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.originalPaymentId, payment.id),
+          eq(payments.propertyId, payment.propertyId),
+        ),
+      );
 
-    const status = charge.amount_refunded < charge.amount ? 'partially_refunded' : 'refunded';
+    const stripeRefundedDec = new Decimal(charge.amount_refunded).div(100);
+    const alreadyRefundedDec = sumRefundChildren(existingRefunds ?? []);
+    const deltaDec = stripeRefundedDec.minus(alreadyRefundedDec);
 
-    await this.db
-      .update(payments)
-      .set({ status, updatedAt: new Date() })
-      .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
+    if (deltaDec.lte(0)) {
+      this.logger.debug(
+        `Payment ${payment.id} Stripe refund already recorded (${stripeRefundedDec.toFixed(2)})`,
+      );
+      return;
+    }
 
-    // Recalculate folio balance after refund
+    const [existingForCharge] = await this.db
+      .select({ id: payments.id })
+      .from(payments)
+      .where(eq(payments.gatewayTransactionId, charge.id))
+      .limit(1);
+    if (existingForCharge) {
+      return;
+    }
+
+    const [refund] = await this.db
+      .insert(payments)
+      .values({
+        folioId: payment.folioId,
+        propertyId: payment.propertyId,
+        method: payment.method,
+        amount: deltaDec.negated().toFixed(2),
+        currencyCode: payment.currencyCode,
+        status: 'captured',
+        originalPaymentId: payment.id,
+        gatewayProvider: payment.gatewayProvider,
+        gatewayTransactionId: charge.id,
+        processedAt: new Date(),
+        notes: `Stripe refund ${charge.id}`,
+      })
+      .returning();
+
     await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
 
     await this.webhookService.emit(
       'payment.refunded',
       'payment',
-      payment.id,
-      { folioId: payment.folioId, status, stripeEvent: charge.id },
+      refund.id,
+      {
+        folioId: payment.folioId,
+        originalPaymentId: payment.id,
+        refundAmount: deltaDec.toFixed(2),
+        stripeEvent: charge.id,
+      },
       payment.propertyId,
     );
 
-    this.logger.log(`Payment ${payment.id} updated to ${status} via webhook`);
+    this.logger.log(
+      `Payment ${payment.id} refund child ${refund.id} recorded via webhook (${deltaDec.toFixed(2)})`,
+    );
   }
 
   private async findPaymentByGatewayTransactionId(transactionId: string) {
