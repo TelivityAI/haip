@@ -341,7 +341,6 @@ export class PaymentService {
       throw new BadRequestException(`Refund failed: ${result.errorMessage}`);
     }
 
-    const refundRowAmount = refundDec.negated().toFixed(2);
     const refund = await this.db.transaction(async (tx: any) => {
       const [locked] = await tx
         .select()
@@ -351,21 +350,6 @@ export class PaymentService {
 
       if (!locked) {
         throw new NotFoundException(`Payment ${id} not found`);
-      }
-
-      if (result.transactionId) {
-        const [existingByGateway] = await tx
-          .select()
-          .from(payments)
-          .where(
-            and(
-              eq(payments.gatewayTransactionId, result.transactionId),
-              eq(payments.propertyId, propertyId),
-            ),
-          );
-        if (existingByGateway) {
-          return { row: existingByGateway, isNew: false };
-        }
       }
 
       const existingRefunds = await tx
@@ -378,16 +362,30 @@ export class PaymentService {
           ),
         );
       const alreadyRefundedDec = sumRefundChildren(existingRefunds ?? []);
-      const remainingDec = new Decimal(locked.amount).minus(alreadyRefundedDec);
 
-      if (refundDec.gt(remainingDec)) {
-        // Stripe webhook may have recorded this refund between prepare and insert.
-        if (alreadyRefundedDec.gte(totalAfterDec)) {
-          const latest = existingRefunds[existingRefunds.length - 1];
-          if (latest) {
-            return { row: latest, isNew: false };
-          }
+      if (result.transactionId) {
+        const existingByGateway = (existingRefunds ?? []).find(
+          (r: any) => r.gatewayTransactionId === result.transactionId,
+        );
+        if (existingByGateway) {
+          return { row: existingByGateway, isNew: false };
         }
+      }
+
+      // Webhook or a concurrent refund may have recorded part/all of this refund
+      // while the gateway call was in flight.
+      if (alreadyRefundedDec.gte(totalAfterDec)) {
+        const latest = existingRefunds[existingRefunds.length - 1];
+        if (latest) {
+          return { row: latest, isNew: false };
+        }
+      }
+
+      const ledgerRefundDec = Decimal.min(
+        refundDec,
+        totalAfterDec.minus(alreadyRefundedDec),
+      );
+      if (ledgerRefundDec.lte(0)) {
         throw new ConflictException(
           `Payment ${id} refundable amount changed during gateway refund`,
         );
@@ -399,7 +397,7 @@ export class PaymentService {
           folioId: locked.folioId,
           propertyId,
           method: locked.method,
-          amount: refundRowAmount,
+          amount: ledgerRefundDec.negated().toFixed(2),
           currencyCode: locked.currencyCode,
           status: 'captured',
           originalPaymentId: id,

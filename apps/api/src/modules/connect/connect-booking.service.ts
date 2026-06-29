@@ -165,23 +165,8 @@ export class ConnectBookingService {
    * Verify booking — Agent 4.7 (Confirmation Verification).
    */
   async verify(confirmationNumber: string) {
-    const [booking] = await this.db
-      .select()
-      .from(bookings)
-      .where(eq(bookings.confirmationNumber, confirmationNumber));
-
-    if (!booking) {
-      throw new NotFoundException(`Booking ${confirmationNumber} not found`);
-    }
-
-    const [reservation] = await this.db
-      .select()
-      .from(reservations)
-      .where(eq(reservations.bookingId, booking.id));
-
-    if (!reservation) {
-      throw new NotFoundException('Reservation not found for this booking');
-    }
+    const { booking, reservation } = await this.loadBookingByConfirmation(confirmationNumber);
+    const propertyId = booking.propertyId;
 
     // Get guest name
     const [guest] = await this.db
@@ -193,7 +178,12 @@ export class ConnectBookingService {
     const [roomType] = await this.db
       .select()
       .from(roomTypes)
-      .where(eq(roomTypes.id, reservation.roomTypeId));
+      .where(
+        and(
+          eq(roomTypes.id, reservation.roomTypeId),
+          eq(roomTypes.propertyId, propertyId),
+        ),
+      );
 
     // Check room assignment
     let roomNumber: string | undefined;
@@ -201,7 +191,12 @@ export class ConnectBookingService {
       const [room] = await this.db
         .select()
         .from(rooms)
-        .where(eq(rooms.id, reservation.roomId));
+        .where(
+          and(
+            eq(rooms.id, reservation.roomId),
+            eq(rooms.propertyId, propertyId),
+          ),
+        );
       roomNumber = room?.number;
     }
 
@@ -209,7 +204,12 @@ export class ConnectBookingService {
     const folioList = await this.db
       .select()
       .from(folios)
-      .where(eq(folios.reservationId, reservation.id));
+      .where(
+        and(
+          eq(folios.reservationId, reservation.id),
+          eq(folios.propertyId, propertyId),
+        ),
+      );
 
     const folio = folioList[0];
 
@@ -236,23 +236,7 @@ export class ConnectBookingService {
    * Modify booking — Agent 4.6 (Modification & Cancellation).
    */
   async modify(confirmationNumber: string, dto: AgentModifyDto) {
-    const [booking] = await this.db
-      .select()
-      .from(bookings)
-      .where(eq(bookings.confirmationNumber, confirmationNumber));
-
-    if (!booking) {
-      throw new NotFoundException(`Booking ${confirmationNumber} not found`);
-    }
-
-    const [reservation] = await this.db
-      .select()
-      .from(reservations)
-      .where(eq(reservations.bookingId, booking.id));
-
-    if (!reservation) {
-      throw new NotFoundException('Reservation not found');
-    }
+    const { booking, reservation } = await this.loadBookingByConfirmation(confirmationNumber);
 
     if (['cancelled', 'checked_out', 'no_show'].includes(reservation.status)) {
       throw new BadRequestException(`Cannot modify reservation in ${reservation.status} status`);
@@ -301,7 +285,12 @@ export class ConnectBookingService {
         await this.db
           .update(reservations)
           .set({ guestId: forked.id, updatedAt: new Date() })
-          .where(eq(reservations.id, reservation.id));
+          .where(
+            and(
+              eq(reservations.id, reservation.id),
+              eq(reservations.propertyId, booking.propertyId),
+            ),
+          );
         reservation.guestId = forked.id;
       } else {
         await this.db
@@ -381,7 +370,12 @@ export class ConnectBookingService {
     const [updated] = await this.db
       .update(reservations)
       .set(updateFields)
-      .where(eq(reservations.id, reservation.id))
+      .where(
+        and(
+          eq(reservations.id, reservation.id),
+          eq(reservations.propertyId, booking.propertyId),
+        ),
+      )
       .returning();
 
     // Emit webhook
@@ -409,23 +403,7 @@ export class ConnectBookingService {
    * Cancel booking — Agent 4.6 (Modification & Cancellation).
    */
   async cancel(confirmationNumber: string, reason?: string) {
-    const [booking] = await this.db
-      .select()
-      .from(bookings)
-      .where(eq(bookings.confirmationNumber, confirmationNumber));
-
-    if (!booking) {
-      throw new NotFoundException(`Booking ${confirmationNumber} not found`);
-    }
-
-    const [reservation] = await this.db
-      .select()
-      .from(reservations)
-      .where(eq(reservations.bookingId, booking.id));
-
-    if (!reservation) {
-      throw new NotFoundException('Reservation not found');
-    }
+    const { booking, reservation } = await this.loadBookingByConfirmation(confirmationNumber);
 
     if (['cancelled', 'checked_out', 'no_show'].includes(reservation.status)) {
       throw new BadRequestException(`Reservation already ${reservation.status}`);
@@ -435,7 +413,12 @@ export class ConnectBookingService {
     const [ratePlan] = await this.db
       .select()
       .from(ratePlans)
-      .where(eq(ratePlans.id, reservation.ratePlanId));
+      .where(
+        and(
+          eq(ratePlans.id, reservation.ratePlanId),
+          eq(ratePlans.propertyId, booking.propertyId),
+        ),
+      );
 
     const penaltyInfo = this.calculateCancellationPenalty(ratePlan, reservation);
 
@@ -448,7 +431,12 @@ export class ConnectBookingService {
         cancellationReason: reason ?? 'Cancelled by agent',
         updatedAt: new Date(),
       })
-      .where(eq(reservations.id, reservation.id));
+      .where(
+        and(
+          eq(reservations.id, reservation.id),
+          eq(reservations.propertyId, booking.propertyId),
+        ),
+      );
 
     // Generate cancellation number
     const cancellationNumber = `CXL-${Date.now().toString(36).toUpperCase()}`;
@@ -474,6 +462,33 @@ export class ConnectBookingService {
   }
 
   // --- Private Helpers ---
+
+  private async loadBookingByConfirmation(confirmationNumber: string) {
+    const [booking] = await this.db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.confirmationNumber, confirmationNumber));
+
+    if (!booking) {
+      throw new NotFoundException(`Booking ${confirmationNumber} not found`);
+    }
+
+    const [reservation] = await this.db
+      .select()
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.bookingId, booking.id),
+          eq(reservations.propertyId, booking.propertyId),
+        ),
+      );
+
+    if (!reservation) {
+      throw new NotFoundException('Reservation not found for this booking');
+    }
+
+    return { booking, reservation };
+  }
 
   private async findOrCreateGuest(dto: AgentBookDto) {
     // Try to find by email — but ONLY reuse a guest that is already linked to
