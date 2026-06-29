@@ -19,6 +19,11 @@ export const FOLIO_PARENT_PAYMENT_STATUSES = [
   'refunded',
 ] as const;
 
+/** Parent payment statuses whose positive amount is included in folio net math. */
+export function parentCountsTowardFolioBalance(status: string): boolean {
+  return (FOLIO_PARENT_PAYMENT_STATUSES as readonly string[]).includes(status);
+}
+
 /** Payment rows that count toward a folio balance. */
 export function folioPaymentSumWhere(
   folioId: string,

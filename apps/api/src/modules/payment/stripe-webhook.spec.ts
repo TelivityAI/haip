@@ -17,34 +17,46 @@ const mockPayment = {
 function createRefundWebhookDb(
   payment: any,
   existingRefunds: any[] = [],
-  existingForCharge: any[] = [],
+  existingForLedger: any[] = [],
 ) {
-  let selectCall = 0;
   return {
     select: vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockImplementation(() => {
-          selectCall++;
-          if (selectCall === 1) {
-            return { then: (resolve: any) => resolve([payment]) };
-          }
-          if (selectCall === 2) {
-            return { then: (resolve: any) => resolve(existingRefunds) };
-          }
-          return {
-            limit: vi.fn().mockReturnValue({
-              then: (resolve: any) => resolve(existingForCharge),
-            }),
-          };
+        where: vi.fn().mockReturnValue({
+          then: (resolve: any) => resolve([payment]),
         }),
       }),
     })),
-    insert: vi.fn().mockReturnValue({
-      values: vi.fn().mockReturnValue({
-        returning: vi.fn().mockResolvedValue([
-          { id: 'refund-webhook-1', folioId: payment.folioId, originalPaymentId: payment.id },
-        ]),
-      }),
+    transaction: vi.fn(async (fn: any) => {
+      let selectCall = 0;
+      const tx = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() => {
+              selectCall++;
+              if (selectCall === 1) {
+                return { for: vi.fn().mockResolvedValue([payment]) };
+              }
+              if (selectCall === 2) {
+                return {
+                  limit: vi.fn().mockReturnValue({
+                    then: (resolve: any) => resolve(existingForLedger),
+                  }),
+                };
+              }
+              return { then: (resolve: any) => resolve(existingRefunds) };
+            }),
+          }),
+        })),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([
+              { id: 'refund-webhook-1', folioId: payment.folioId, originalPaymentId: payment.id },
+            ]),
+          }),
+        }),
+      };
+      return fn(tx);
     }),
     update: vi.fn(),
   };
@@ -204,9 +216,13 @@ describe('StripeWebhookController', () => {
         amount_refunded: 50000,
       });
 
-      expect(capturedDb.insert).toHaveBeenCalled();
+      expect(capturedDb.transaction).toHaveBeenCalled();
       expect(capturedDb.update).not.toHaveBeenCalled();
-      expect(mockFolioService.recalculateBalance).toHaveBeenCalledWith('folio-001', 'prop-001');
+      expect(mockFolioService.recalculateBalance).toHaveBeenCalledWith(
+        'folio-001',
+        'prop-001',
+        expect.anything(),
+      );
       expect(mockWebhookService.emit).toHaveBeenCalledWith(
         'payment.refunded',
         'payment',
@@ -236,7 +252,7 @@ describe('StripeWebhookController', () => {
         amount_refunded: 25000,
       });
 
-      expect(capturedDb.insert).toHaveBeenCalled();
+      expect(capturedDb.transaction).toHaveBeenCalled();
       expect(mockWebhookService.emit).toHaveBeenCalledWith(
         'payment.refunded',
         'payment',

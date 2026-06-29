@@ -116,28 +116,30 @@ describe('PaymentService.correctPayment (correction matrix, KB 14.1)', () => {
 
   it('refunds a captured card payment', async () => {
     const payment = { ...basePayment, status: 'captured', method: 'credit_card' };
-    let selectCall = 0;
-    const tx = {
-      select: vi.fn().mockImplementation(() => ({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockImplementation(() => {
-            selectCall++;
-            if (selectCall === 1) {
-              return { for: vi.fn().mockResolvedValue([payment]) };
-            }
-            return { then: (resolve: any) => resolve([]) };
+    const makeTx = () => {
+      let selectCall = 0;
+      return {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() => {
+              selectCall++;
+              if (selectCall === 1) {
+                return { for: vi.fn().mockResolvedValue([payment]) };
+              }
+              return { then: (resolve: any) => resolve([]) };
+            }),
+          }),
+        })),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ id: 'rfd-row', status: 'captured' }]),
           }),
         }),
-      })),
+      };
     };
     const db = {
       select: vi.fn().mockImplementation(chainResolving([payment])),
-      transaction: vi.fn(async (fn: any) => fn(tx)),
-      insert: vi.fn().mockReturnValue({
-        values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([{ id: 'rfd-row', status: 'captured' }]),
-        }),
-      }),
+      transaction: vi.fn(async (fn: any) => fn(makeTx())),
       update: vi.fn(),
       delete: vi.fn(),
     };

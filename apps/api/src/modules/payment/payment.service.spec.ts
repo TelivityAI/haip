@@ -334,27 +334,31 @@ describe('PaymentService', () => {
     it('should create a negative refund child without flipping parent status', async () => {
       const capturedPayment = { ...mockPayment, status: 'captured' };
       const refundPayment = { ...mockPayment, id: 'pay-002', amount: '-150.00', originalPaymentId: 'pay-001' };
-      let selectCall = 0;
-      const tx = {
-        select: vi.fn().mockImplementation(() => ({
-          from: vi.fn().mockReturnValue({
-            where: vi.fn().mockImplementation(() => {
-              selectCall++;
-              if (selectCall === 1) {
-                return { for: vi.fn().mockResolvedValue([capturedPayment]) };
-              }
-              return { then: (resolve: any) => resolve([]) };
+      let txRound = 0;
+      const makeTx = () => {
+        txRound++;
+        let selectCall = 0;
+        return {
+          select: vi.fn().mockImplementation(() => ({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockImplementation(() => {
+                selectCall++;
+                if (selectCall === 1) {
+                  return { for: vi.fn().mockResolvedValue([capturedPayment]) };
+                }
+                return { then: (resolve: any) => resolve([]) };
+              }),
+            }),
+          })),
+          insert: vi.fn().mockReturnValue({
+            values: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([refundPayment]),
             }),
           }),
-        })),
+        };
       };
       const db = {
-        transaction: vi.fn(async (fn: any) => fn(tx)),
-        insert: vi.fn().mockReturnValue({
-          values: vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([refundPayment]),
-          }),
-        }),
+        transaction: vi.fn(async (fn: any) => fn(makeTx())),
         update: vi.fn(),
         delete: vi.fn(),
       };
@@ -391,31 +395,33 @@ describe('PaymentService', () => {
         priorRefunds: any[],
         insertedRefund: any,
       ) {
-        let selectCall = 0;
-        const tx = {
-          select: vi.fn().mockImplementation(() => ({
-            from: vi.fn().mockReturnValue({
-              where: vi.fn().mockImplementation(() => {
-                selectCall++;
-                if (selectCall === 1) {
+        const makeTx = () => {
+          let selectCall = 0;
+          return {
+            select: vi.fn().mockImplementation(() => ({
+              from: vi.fn().mockReturnValue({
+                where: vi.fn().mockImplementation(() => {
+                  selectCall++;
+                  if (selectCall === 1) {
+                    return {
+                      for: vi.fn().mockResolvedValue([original]),
+                    };
+                  }
                   return {
-                    for: vi.fn().mockResolvedValue([original]),
+                    then: (resolve: any) => resolve(priorRefunds),
                   };
-                }
-                return {
-                  then: (resolve: any) => resolve(priorRefunds),
-                };
+                }),
+              }),
+            })),
+            insert: vi.fn().mockReturnValue({
+              values: vi.fn().mockReturnValue({
+                returning: vi.fn().mockResolvedValue([insertedRefund]),
               }),
             }),
-          })),
+          };
         };
         return {
-          transaction: vi.fn(async (fn: any) => fn(tx)),
-          insert: vi.fn().mockReturnValue({
-            values: vi.fn().mockReturnValue({
-              returning: vi.fn().mockResolvedValue([insertedRefund]),
-            }),
-          }),
+          transaction: vi.fn(async (fn: any) => fn(makeTx())),
           update: vi.fn(),
           delete: vi.fn(),
         };
@@ -446,7 +452,7 @@ describe('PaymentService', () => {
         const svc = await svcWith(db);
         await svc.refundPayment('pay-001', 'prop-001', '50.00');
         expect(db.update).not.toHaveBeenCalled();
-        expect(db.insert).toHaveBeenCalled();
+        expect(db.transaction).toHaveBeenCalled();
       });
 
       it('second partial refund on a legacy partially_refunded parent works', async () => {
@@ -471,7 +477,7 @@ describe('PaymentService', () => {
         );
         const svc = await svcWith(db);
         await svc.refundPayment('pay-001', 'prop-001', '20.00');
-        expect(db.insert).toHaveBeenCalled();
+        expect(db.transaction).toHaveBeenCalled();
       });
 
       it('rejects a refund that would exceed remaining refundable amount', async () => {

@@ -218,70 +218,90 @@ export class StripeWebhookController {
     const payment = await this.findPaymentByGatewayTransactionId(piId);
     if (!payment) return;
 
-    const existingRefunds = await this.db
-      .select()
-      .from(payments)
-      .where(
-        and(
-          eq(payments.originalPaymentId, payment.id),
-          eq(payments.propertyId, payment.propertyId),
-        ),
-      );
-
     const stripeRefundedDec = new Decimal(charge.amount_refunded).div(100);
-    const alreadyRefundedDec = sumRefundChildren(existingRefunds ?? []);
-    const deltaDec = stripeRefundedDec.minus(alreadyRefundedDec);
+    const ledgerKey = `stripe_refund:${charge.id}:${stripeRefundedDec.toFixed(2)}`;
 
-    if (deltaDec.lte(0)) {
-      this.logger.debug(
-        `Payment ${payment.id} Stripe refund already recorded (${stripeRefundedDec.toFixed(2)})`,
-      );
-      return;
-    }
+    const recorded = await this.db.transaction(async (tx: any) => {
+      const [parent] = await tx
+        .select()
+        .from(payments)
+        .where(
+          and(
+            eq(payments.id, payment.id),
+            eq(payments.propertyId, payment.propertyId),
+          ),
+        )
+        .for('update');
 
-    const [existingForCharge] = await this.db
-      .select({ id: payments.id })
-      .from(payments)
-      .where(eq(payments.gatewayTransactionId, charge.id))
-      .limit(1);
-    if (existingForCharge) {
-      return;
-    }
+      if (!parent) return null;
 
-    const [refund] = await this.db
-      .insert(payments)
-      .values({
-        folioId: payment.folioId,
-        propertyId: payment.propertyId,
-        method: payment.method,
-        amount: deltaDec.negated().toFixed(2),
-        currencyCode: payment.currencyCode,
-        status: 'captured',
-        originalPaymentId: payment.id,
-        gatewayProvider: payment.gatewayProvider,
-        gatewayTransactionId: charge.id,
-        processedAt: new Date(),
-        notes: `Stripe refund ${charge.id}`,
-      })
-      .returning();
+      const [existingForLedger] = await tx
+        .select({ id: payments.id })
+        .from(payments)
+        .where(eq(payments.gatewayTransactionId, ledgerKey))
+        .limit(1);
+      if (existingForLedger) {
+        return null;
+      }
 
-    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+      const existingRefunds = await tx
+        .select()
+        .from(payments)
+        .where(
+          and(
+            eq(payments.originalPaymentId, parent.id),
+            eq(payments.propertyId, parent.propertyId),
+          ),
+        );
+
+      const alreadyRefundedDec = sumRefundChildren(existingRefunds ?? []);
+      const deltaDec = stripeRefundedDec.minus(alreadyRefundedDec);
+
+      if (deltaDec.lte(0)) {
+        this.logger.debug(
+          `Payment ${parent.id} Stripe refund already recorded (${stripeRefundedDec.toFixed(2)})`,
+        );
+        return null;
+      }
+
+      const [row] = await tx
+        .insert(payments)
+        .values({
+          folioId: parent.folioId,
+          propertyId: parent.propertyId,
+          method: parent.method,
+          amount: deltaDec.negated().toFixed(2),
+          currencyCode: parent.currencyCode,
+          status: 'captured',
+          originalPaymentId: parent.id,
+          gatewayProvider: parent.gatewayProvider,
+          gatewayTransactionId: ledgerKey,
+          processedAt: new Date(),
+          notes: `Stripe refund ${charge.id}`,
+        })
+        .returning();
+
+      await this.folioService.recalculateBalance(parent.folioId, parent.propertyId, tx);
+      return { row, parent, deltaDec };
+    });
+
+    if (!recorded) return;
 
     await this.webhookService.emit(
       'payment.refunded',
       'payment',
-      refund.id,
+      recorded.row.id,
       {
-        folioId: payment.folioId,
-        originalPaymentId: payment.id,
-        refundAmount: deltaDec.toFixed(2),
+        folioId: recorded.parent.folioId,
+        originalPaymentId: recorded.parent.id,
+        refundAmount: recorded.deltaDec.toFixed(2),
         stripeEvent: charge.id,
       },
-      payment.propertyId,
+      recorded.parent.propertyId,
     );
 
     this.logger.log(
-      `Payment ${payment.id} refund child ${refund.id} recorded via webhook (${deltaDec.toFixed(2)})`,
+      `Payment ${recorded.parent.id} refund child ${recorded.row.id} recorded via webhook (${recorded.deltaDec.toFixed(2)})`,
     );
   }
 

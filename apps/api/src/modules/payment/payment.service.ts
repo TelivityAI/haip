@@ -16,7 +16,7 @@ import type { PaymentGateway } from './interfaces/payment-gateway.interface';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
-import { sumRefundChildren } from './payment-ledger';
+import { sumRefundChildren, parentCountsTowardFolioBalance } from './payment-ledger';
 
 const CARD_METHODS = ['credit_card', 'debit_card', 'vcc'];
 
@@ -342,34 +342,90 @@ export class PaymentService {
     }
 
     const refundRowAmount = refundDec.negated().toFixed(2);
-    const [refund] = await this.db
-      .insert(payments)
-      .values({
-        folioId: original.folioId,
+    const refund = await this.db.transaction(async (tx: any) => {
+      const [locked] = await tx
+        .select()
+        .from(payments)
+        .where(and(eq(payments.id, id), eq(payments.propertyId, propertyId)))
+        .for('update');
+
+      if (!locked) {
+        throw new NotFoundException(`Payment ${id} not found`);
+      }
+
+      if (result.transactionId) {
+        const [existingByGateway] = await tx
+          .select()
+          .from(payments)
+          .where(
+            and(
+              eq(payments.gatewayTransactionId, result.transactionId),
+              eq(payments.propertyId, propertyId),
+            ),
+          );
+        if (existingByGateway) {
+          return { row: existingByGateway, isNew: false };
+        }
+      }
+
+      const existingRefunds = await tx
+        .select()
+        .from(payments)
+        .where(
+          and(
+            eq(payments.originalPaymentId, id),
+            eq(payments.propertyId, propertyId),
+          ),
+        );
+      const alreadyRefundedDec = sumRefundChildren(existingRefunds ?? []);
+      const remainingDec = new Decimal(locked.amount).minus(alreadyRefundedDec);
+
+      if (refundDec.gt(remainingDec)) {
+        // Stripe webhook may have recorded this refund between prepare and insert.
+        if (alreadyRefundedDec.gte(totalAfterDec)) {
+          const latest = existingRefunds[existingRefunds.length - 1];
+          if (latest) {
+            return { row: latest, isNew: false };
+          }
+        }
+        throw new ConflictException(
+          `Payment ${id} refundable amount changed during gateway refund`,
+        );
+      }
+
+      const [row] = await tx
+        .insert(payments)
+        .values({
+          folioId: locked.folioId,
+          propertyId,
+          method: locked.method,
+          amount: refundRowAmount,
+          currencyCode: locked.currencyCode,
+          status: 'captured',
+          originalPaymentId: id,
+          gatewayProvider: locked.gatewayProvider,
+          gatewayTransactionId: result.transactionId,
+          processedAt: new Date(),
+          notes: `Refund of payment ${id}`,
+        })
+        .returning();
+
+      return { row, isNew: true };
+    });
+
+    if (refund.isNew) {
+      await this.folioService.recalculateBalance(original.folioId, propertyId);
+
+      await this.webhookService.emit(
+        'payment.refunded',
+        'payment',
+        refund.row.id,
+        { folioId: original.folioId, originalPaymentId: id, refundAmount: refundDec.toFixed(2) },
         propertyId,
-        method: original.method,
-        amount: refundRowAmount,
-        currencyCode: original.currencyCode,
-        status: 'captured',
-        originalPaymentId: id,
-        gatewayProvider: original.gatewayProvider,
-        gatewayTransactionId: result.transactionId,
-        processedAt: new Date(),
-        notes: `Refund of payment ${id}`,
-      })
-      .returning();
+      );
+    }
 
-    await this.folioService.recalculateBalance(original.folioId, propertyId);
-
-    await this.webhookService.emit(
-      'payment.refunded',
-      'payment',
-      refund.id,
-      { folioId: original.folioId, originalPaymentId: id, refundAmount: refundDec.toFixed(2) },
-      propertyId,
-    );
-
-    return refund;
+    return refund.row;
   }
 
   /**
@@ -504,6 +560,12 @@ export class PaymentService {
         throw new NotFoundException(`Payment ${id} not found`);
       }
 
+      // When the parent is voided/failed/etc., it is excluded from folioPaymentSumWhere
+      // but a captured child would still net — use a compensating charge instead.
+      if (!parentCountsTowardFolioBalance(locked.status)) {
+        return { useCharge: true as const, locked };
+      }
+
       const adjustmentAmount = new Decimal(locked.amount).negated().toFixed(2);
       const [row] = await tx
         .insert(payments)
@@ -521,8 +583,29 @@ export class PaymentService {
         .returning();
 
       await this.folioService.recalculateBalance(locked.folioId!, propertyId, tx);
-      return { row, adjustmentAmount };
+      return { useCharge: false as const, row, adjustmentAmount };
     });
+
+    if (adjustment.useCharge) {
+      const adjustmentAmount = new Decimal(adjustment.locked.amount).negated().toFixed(2);
+      const charge = await this.folioService.postCharge(adjustment.locked.folioId!, {
+        propertyId,
+        type: 'adjustment',
+        description: `Correction of payment ${id}`,
+        amount: adjustmentAmount,
+        currencyCode: adjustment.locked.currencyCode,
+        serviceDate: new Date().toISOString(),
+        skipTaxCalculation: true,
+      });
+      await this.webhookService.emit(
+        'payment.corrected',
+        'payment',
+        id,
+        { op: 'adjust', method: payment.method, adjustmentAmount },
+        propertyId,
+      );
+      return { op: 'adjust', adjustment: charge };
+    }
 
     await this.webhookService.emit(
       'payment.corrected',
