@@ -15,6 +15,7 @@ import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
 import type { PaymentGateway } from './interfaces/payment-gateway.interface';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
+import { ListPaymentsDto } from './dto/list-payments.dto';
 import { sumRefundChildren } from './payment-ledger';
 
 const CARD_METHODS = ['credit_card', 'debit_card', 'vcc'];
