@@ -392,10 +392,14 @@ describe('PaymentService', () => {
     describe('multi-refund partial scenario', () => {
       function buildRefundTxDb(
         original: any,
-        priorRefunds: any[],
+        prepareRefunds: any[],
+        postGatewayRefunds: any[],
         insertedRefund: any,
       ) {
+        let txRound = 0;
         const makeTx = () => {
+          txRound++;
+          const refundsForTx = txRound === 1 ? prepareRefunds : postGatewayRefunds;
           let selectCall = 0;
           return {
             select: vi.fn().mockImplementation(() => ({
@@ -408,7 +412,7 @@ describe('PaymentService', () => {
                     };
                   }
                   return {
-                    then: (resolve: any) => resolve(priorRefunds),
+                    then: (resolve: any) => resolve(refundsForTx),
                   };
                 }),
               }),
@@ -447,6 +451,7 @@ describe('PaymentService', () => {
         const db = buildRefundTxDb(
           capturedOriginal,
           [],
+          [],
           { id: 'refund-1', amount: '-50.00', originalPaymentId: 'pay-001' },
         );
         const svc = await svcWith(db);
@@ -456,9 +461,11 @@ describe('PaymentService', () => {
       });
 
       it('second partial refund on a legacy partially_refunded parent works', async () => {
+        const prior = [{ amount: '-50.00', originalPaymentId: 'pay-001' }];
         const db = buildRefundTxDb(
           partialOriginal,
-          [{ amount: '-50.00', originalPaymentId: 'pay-001' }],
+          prior,
+          prior,
           { id: 'refund-2', amount: '-30.00', originalPaymentId: 'pay-001' },
         );
         const svc = await svcWith(db);
@@ -467,12 +474,14 @@ describe('PaymentService', () => {
       });
 
       it('final partial refund that closes the gap succeeds', async () => {
+        const prior = [
+          { amount: '-50.00', originalPaymentId: 'pay-001' },
+          { amount: '-30.00', originalPaymentId: 'pay-001' },
+        ];
         const db = buildRefundTxDb(
           partialOriginal,
-          [
-            { amount: '-50.00', originalPaymentId: 'pay-001' },
-            { amount: '-30.00', originalPaymentId: 'pay-001' },
-          ],
+          prior,
+          prior,
           { id: 'refund-3', amount: '-20.00', originalPaymentId: 'pay-001' },
         );
         const svc = await svcWith(db);
@@ -481,9 +490,11 @@ describe('PaymentService', () => {
       });
 
       it('rejects a refund that would exceed remaining refundable amount', async () => {
+        const prior = [{ amount: '-50.00', originalPaymentId: 'pay-001' }];
         const db = buildRefundTxDb(
           partialOriginal,
-          [{ amount: '-50.00', originalPaymentId: 'pay-001' }],
+          prior,
+          prior,
           { id: 'unreachable' } as any,
         );
         const svc = await svcWith(db);
@@ -496,15 +507,18 @@ describe('PaymentService', () => {
         const db1 = buildRefundTxDb(
           capturedOriginal,
           [],
+          [],
           { id: 'refund-1', amount: '-50.00', originalPaymentId: 'pay-001' },
         );
         const svc1 = await svcWith(db1);
         await svc1.refundPayment('pay-001', 'prop-001', '50.00');
         const key1 = mockGateway.refund.mock.calls[mockGateway.refund.mock.calls.length - 1][2].idempotencyKey;
 
+        const prior = [{ amount: '-50.00', originalPaymentId: 'pay-001' }];
         const db2 = buildRefundTxDb(
           partialOriginal,
-          [{ amount: '-50.00', originalPaymentId: 'pay-001' }],
+          prior,
+          prior,
           { id: 'refund-2', amount: '-30.00', originalPaymentId: 'pay-001' },
         );
         const svc2 = await svcWith(db2);
@@ -512,6 +526,70 @@ describe('PaymentService', () => {
         const key2 = mockGateway.refund.mock.calls[mockGateway.refund.mock.calls.length - 1][2].idempotencyKey;
 
         expect(key1).not.toBe(key2);
+      });
+
+      it('does not re-emit webhook when ledger already reflects the refund', async () => {
+        const webhookChild = {
+          id: 'refund-webhook',
+          amount: '-50.00',
+          originalPaymentId: 'pay-001',
+          gatewayTransactionId: 'stripe_refund:ch_1:50.00',
+        };
+        const db = buildRefundTxDb(capturedOriginal, [], [webhookChild], webhookChild);
+        const svc = await svcWith(db);
+        const result = await svc.refundPayment('pay-001', 'prop-001', '50.00');
+        expect(result).toEqual(webhookChild);
+        expect(mockWebhookService.emit).not.toHaveBeenCalled();
+        expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
+      });
+
+      it('records only the unrecorded portion when webhook recorded a partial refund', async () => {
+        const webhookChild = {
+          id: 'refund-webhook',
+          amount: '-30.00',
+          originalPaymentId: 'pay-001',
+          gatewayTransactionId: 'stripe_refund:ch_1:30.00',
+        };
+        const apiChild = {
+          id: 'refund-api',
+          amount: '-20.00',
+          originalPaymentId: 'pay-001',
+          gatewayTransactionId: 'mock-ref-123',
+        };
+        let insertValues: any;
+        let txRound = 0;
+        const makeTx = () => {
+          txRound++;
+          const refundsForTx = txRound === 1 ? [] : [webhookChild];
+          let selectCall = 0;
+          return {
+            select: vi.fn().mockImplementation(() => ({
+              from: vi.fn().mockReturnValue({
+                where: vi.fn().mockImplementation(() => {
+                  selectCall++;
+                  if (selectCall === 1) {
+                    return { for: vi.fn().mockResolvedValue([capturedOriginal]) };
+                  }
+                  return { then: (resolve: any) => resolve(refundsForTx) };
+                }),
+              }),
+            })),
+            insert: vi.fn().mockReturnValue({
+              values: vi.fn().mockImplementation((vals: any) => {
+                insertValues = vals;
+                return { returning: vi.fn().mockResolvedValue([apiChild]) };
+              }),
+            }),
+          };
+        };
+        const db = {
+          transaction: vi.fn(async (fn: any) => fn(makeTx())),
+          update: vi.fn(),
+          delete: vi.fn(),
+        };
+        const svc = await svcWith(db);
+        await svc.refundPayment('pay-001', 'prop-001', '50.00');
+        expect(insertValues.amount).toBe('-20.00');
       });
     });
   });
