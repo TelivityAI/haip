@@ -16,6 +16,7 @@ import type { PaymentGateway } from './interfaces/payment-gateway.interface';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
+import { sumRefundChildren, parentCountsTowardFolioBalance } from './payment-ledger';
 
 const CARD_METHODS = ['credit_card', 'debit_card', 'vcc'];
 
@@ -273,143 +274,158 @@ export class PaymentService {
   /**
    * Refund a captured/settled payment.
    *
-   * Two-phase concurrency-safe flow:
-   *  1. Conditional UPDATE claims the original payment by transitioning its
-   *     status to `refunded` or `partially_refunded`. A status guard on
-   *     `captured`/`settled` ensures only one concurrent request succeeds.
-   *  2. Stripe call happens outside the DB tx with an idempotency key.
-   *     On failure, revert the status to what it was.
+   * Parent row stays `captured` (or `settled`); net folio effect comes from a
+   * negative child row. Row lock serializes concurrent partial refunds.
    */
   async refundPayment(id: string, propertyId: string, amount?: string) {
-    // Load the original payment to decide partial vs full and sanity check status
-    const [original] = await this.db
-      .select()
-      .from(payments)
-      .where(and(eq(payments.id, id), eq(payments.propertyId, propertyId)));
+    const prepared = await this.db.transaction(async (tx: any) => {
+      const [original] = await tx
+        .select()
+        .from(payments)
+        .where(and(eq(payments.id, id), eq(payments.propertyId, propertyId)))
+        .for('update');
 
-    if (!original) {
-      throw new NotFoundException(`Payment ${id} not found`);
-    }
-    // Bug 3: allow multiple partial refunds — entry from captured, settled,
-    // AND partially_refunded. Only `refunded` (fully refunded) is terminal.
-    if (!['captured', 'settled', 'partially_refunded'].includes(original.status)) {
-      throw new BadRequestException(
-        `Cannot refund payment with status '${original.status}'`,
-      );
-    }
+      if (!original) {
+        throw new NotFoundException(`Payment ${id} not found`);
+      }
 
-    const refundAmount = amount ?? original.amount;
-    // Money math via decimal.js — keep as strings everywhere
-    const refundAmountDec = new Decimal(refundAmount);
-    const originalAmountDec = new Decimal(original.amount);
-    if (refundAmountDec.lte(0)) {
-      throw new BadRequestException('Refund amount must be positive');
-    }
+      if (!['captured', 'settled', 'partially_refunded'].includes(original.status)) {
+        throw new BadRequestException(
+          `Cannot refund payment with status '${original.status}'`,
+        );
+      }
 
-    // Bug 3: sum existing refunds to compute remaining refundable amount.
-    // Refund rows live in the same `payments` table with originalPaymentId
-    // pointing back to the captured payment, stored as negative amounts.
-    const existingRefunds = await this.db
-      .select()
-      .from(payments)
-      .where(
-        and(
-          eq(payments.originalPaymentId, id),
-          eq(payments.propertyId, propertyId),
-        ),
-      );
-    const alreadyRefundedDec = (existingRefunds ?? []).reduce(
-      (sum: Decimal, r: any) => sum.plus(new Decimal(r.amount).abs()),
-      new Decimal(0),
-    );
-    const remainingDec = originalAmountDec.minus(alreadyRefundedDec);
+      const refundAmount = amount ?? original.amount;
+      const refundAmountInTx = new Decimal(refundAmount);
+      const originalAmountDec = new Decimal(original.amount);
+      if (refundAmountInTx.lte(0)) {
+        throw new BadRequestException('Refund amount must be positive');
+      }
 
-    if (refundAmountDec.gt(remainingDec)) {
-      throw new BadRequestException(
-        `Refund amount ${refundAmountDec.toFixed(2)} exceeds remaining refundable amount ${remainingDec.toFixed(2)}`,
-      );
-    }
+      const existingRefunds = await tx
+        .select()
+        .from(payments)
+        .where(
+          and(
+            eq(payments.originalPaymentId, id),
+            eq(payments.propertyId, propertyId),
+          ),
+        );
+      const alreadyRefundedDec = sumRefundChildren(existingRefunds ?? []);
+      const remainingDec = originalAmountDec.minus(alreadyRefundedDec);
 
-    // After this refund, will the total reach the original? If so, mark the
-    // original fully refunded; otherwise leave (or set) to partially_refunded.
-    const totalAfterDec = alreadyRefundedDec.plus(refundAmountDec);
-    const fullyRefundedAfter = totalAfterDec.gte(originalAmountDec);
-    const newStatus = fullyRefundedAfter ? 'refunded' : 'partially_refunded';
-    const prevStatus = original.status;
+      if (remainingDec.lte(0)) {
+        throw new BadRequestException(`Payment ${id} is already fully refunded`);
+      }
 
-    // Phase 1: atomically claim the original by transitioning its status.
-    // Accept prevStatus of captured/settled/partially_refunded. A second
-    // refund still races safely because the guard requires the exact
-    // prevStatus we read — if another refund just landed, our claim fails.
-    const [claimed] = await this.db
-      .update(payments)
-      .set({ status: newStatus, updatedAt: new Date() })
-      .where(
-        and(
-          eq(payments.id, id),
-          eq(payments.propertyId, propertyId),
-          eq(payments.status, prevStatus),
-        ),
-      )
-      .returning();
+      if (refundAmountInTx.gt(remainingDec)) {
+        throw new BadRequestException(
+          `Refund amount ${refundAmountInTx.toFixed(2)} exceeds remaining refundable amount ${remainingDec.toFixed(2)}`,
+        );
+      }
 
-    if (!claimed) {
-      throw new ConflictException(
-        `Payment ${id} is no longer in '${prevStatus}' state — concurrent refund?`,
-      );
-    }
+      const totalAfterDec = alreadyRefundedDec.plus(refundAmountInTx);
+      return { original, totalAfterDec, refundAmountDec: refundAmountInTx };
+    });
 
-    // Phase 2: call Stripe with a UNIQUE idempotency key per refund attempt.
-    // Bug 3: the previous `ref_${id}` key caused Stripe to dedupe the second
-    // partial refund against the first. Include the running total so each
-    // partial refund gets a distinct key while a retry of the same logical
-    // refund (same running total) is still deduped.
+    const { original, totalAfterDec, refundAmountDec: refundDec } = prepared;
+
     const idempotencyKey = `ref_${id}_${totalAfterDec.toFixed(2)}`;
     const result = await this.gateway.refund(
       original.gatewayTransactionId,
-      refundAmountDec.toNumber(),
+      refundDec.toNumber(),
       { idempotencyKey },
     );
 
     if (!result.success) {
-      // Revert status
-      await this.db
-        .update(payments)
-        .set({ status: prevStatus, updatedAt: new Date() })
-        .where(and(eq(payments.id, id), eq(payments.propertyId, propertyId)));
       throw new BadRequestException(`Refund failed: ${result.errorMessage}`);
     }
 
-    // Create refund payment record (negative amount via decimal.js)
-    const refundRowAmount = refundAmountDec.negated().toFixed(2);
-    const [refund] = await this.db
-      .insert(payments)
-      .values({
-        folioId: original.folioId,
+    const refundRowAmount = refundDec.negated().toFixed(2);
+    const refund = await this.db.transaction(async (tx: any) => {
+      const [locked] = await tx
+        .select()
+        .from(payments)
+        .where(and(eq(payments.id, id), eq(payments.propertyId, propertyId)))
+        .for('update');
+
+      if (!locked) {
+        throw new NotFoundException(`Payment ${id} not found`);
+      }
+
+      if (result.transactionId) {
+        const [existingByGateway] = await tx
+          .select()
+          .from(payments)
+          .where(
+            and(
+              eq(payments.gatewayTransactionId, result.transactionId),
+              eq(payments.propertyId, propertyId),
+            ),
+          );
+        if (existingByGateway) {
+          return { row: existingByGateway, isNew: false };
+        }
+      }
+
+      const existingRefunds = await tx
+        .select()
+        .from(payments)
+        .where(
+          and(
+            eq(payments.originalPaymentId, id),
+            eq(payments.propertyId, propertyId),
+          ),
+        );
+      const alreadyRefundedDec = sumRefundChildren(existingRefunds ?? []);
+      const remainingDec = new Decimal(locked.amount).minus(alreadyRefundedDec);
+
+      if (refundDec.gt(remainingDec)) {
+        // Stripe webhook may have recorded this refund between prepare and insert.
+        if (alreadyRefundedDec.gte(totalAfterDec)) {
+          const latest = existingRefunds[existingRefunds.length - 1];
+          if (latest) {
+            return { row: latest, isNew: false };
+          }
+        }
+        throw new ConflictException(
+          `Payment ${id} refundable amount changed during gateway refund`,
+        );
+      }
+
+      const [row] = await tx
+        .insert(payments)
+        .values({
+          folioId: locked.folioId,
+          propertyId,
+          method: locked.method,
+          amount: refundRowAmount,
+          currencyCode: locked.currencyCode,
+          status: 'captured',
+          originalPaymentId: id,
+          gatewayProvider: locked.gatewayProvider,
+          gatewayTransactionId: result.transactionId,
+          processedAt: new Date(),
+          notes: `Refund of payment ${id}`,
+        })
+        .returning();
+
+      return { row, isNew: true };
+    });
+
+    if (refund.isNew) {
+      await this.folioService.recalculateBalance(original.folioId, propertyId);
+
+      await this.webhookService.emit(
+        'payment.refunded',
+        'payment',
+        refund.row.id,
+        { folioId: original.folioId, originalPaymentId: id, refundAmount: refundDec.toFixed(2) },
         propertyId,
-        method: original.method,
-        amount: refundRowAmount,
-        currencyCode: original.currencyCode,
-        status: 'captured',
-        originalPaymentId: id,
-        gatewayProvider: original.gatewayProvider,
-        gatewayTransactionId: result.transactionId,
-        processedAt: new Date(),
-        notes: `Refund of payment ${id}`,
-      })
-      .returning();
+      );
+    }
 
-    await this.folioService.recalculateBalance(original.folioId, propertyId);
-
-    await this.webhookService.emit(
-      'payment.refunded',
-      'payment',
-      refund.id,
-      { folioId: original.folioId, originalPaymentId: id, refundAmount },
-      propertyId,
-    );
-
-    return refund;
+    return refund.row;
   }
 
   /**
@@ -420,7 +436,7 @@ export class PaymentService {
    *  - `cash` within 24h void window                     → VOID (no gateway call)
    *  - captured/settled/partially_refunded card payment  → REFUND only
    *  - otherwise (cash past window, record-only tenders)  → ADJUST
-   *    (compensating negative adjustment charge on the folio)
+   *    (negative payment child row on the folio, same ledger model as refunds)
    *
    * [ASSUMPTION KB 14.1] cash void window = 24h / same business day.
    */
@@ -526,30 +542,79 @@ export class PaymentService {
       return { op: 'refund', refund: result };
     }
 
-    // op === 'adjust': post a compensating negative adjustment charge to the folio.
+    // op === 'adjust': negative payment child (same ledger model as refunds).
     if (!payment.folioId) {
       throw new BadRequestException(
         `Cannot adjust payment ${id}: it is not linked to a folio`,
       );
     }
-    const adjustmentAmount = new Decimal(payment.amount).negated().toFixed(2);
-    const charge = await this.folioService.postCharge(payment.folioId, {
-      propertyId,
-      type: 'adjustment',
-      description: `Correction of payment ${id}`,
-      amount: adjustmentAmount,
-      currencyCode: payment.currencyCode,
-      serviceDate: new Date().toISOString(),
-      skipTaxCalculation: true,
+
+    const adjustment = await this.db.transaction(async (tx: any) => {
+      const [locked] = await tx
+        .select()
+        .from(payments)
+        .where(and(eq(payments.id, id), eq(payments.propertyId, propertyId)))
+        .for('update');
+
+      if (!locked) {
+        throw new NotFoundException(`Payment ${id} not found`);
+      }
+
+      // When the parent is voided/failed/etc., it is excluded from folioPaymentSumWhere
+      // but a captured child would still net — use a compensating charge instead.
+      if (!parentCountsTowardFolioBalance(locked.status)) {
+        return { useCharge: true as const, locked };
+      }
+
+      const adjustmentAmount = new Decimal(locked.amount).negated().toFixed(2);
+      const [row] = await tx
+        .insert(payments)
+        .values({
+          folioId: locked.folioId,
+          propertyId,
+          method: locked.method,
+          amount: adjustmentAmount,
+          currencyCode: locked.currencyCode,
+          status: 'captured',
+          originalPaymentId: id,
+          processedAt: new Date(),
+          notes: `Correction of payment ${id}`,
+        })
+        .returning();
+
+      await this.folioService.recalculateBalance(locked.folioId!, propertyId, tx);
+      return { useCharge: false as const, row, adjustmentAmount };
     });
+
+    if (adjustment.useCharge) {
+      const adjustmentAmount = new Decimal(adjustment.locked.amount).negated().toFixed(2);
+      const charge = await this.folioService.postCharge(adjustment.locked.folioId!, {
+        propertyId,
+        type: 'adjustment',
+        description: `Correction of payment ${id}`,
+        amount: adjustmentAmount,
+        currencyCode: adjustment.locked.currencyCode,
+        serviceDate: new Date().toISOString(),
+        skipTaxCalculation: true,
+      });
+      await this.webhookService.emit(
+        'payment.corrected',
+        'payment',
+        id,
+        { op: 'adjust', method: payment.method, adjustmentAmount },
+        propertyId,
+      );
+      return { op: 'adjust', adjustment: charge };
+    }
+
     await this.webhookService.emit(
       'payment.corrected',
       'payment',
       id,
-      { op: 'adjust', method: payment.method, adjustmentAmount },
+      { op: 'adjust', method: payment.method, adjustmentAmount: adjustment.adjustmentAmount },
       propertyId,
     );
-    return { op: 'adjust', adjustment: charge };
+    return { op: 'adjust', adjustment: adjustment.row };
   }
 
   async findById(id: string, propertyId: string) {

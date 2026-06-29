@@ -8,6 +8,7 @@ import { eq, and, sql, gte, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import { folios, charges, payments, reservations, bookings } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { folioPaymentSumWhere } from '../payment/payment-ledger';
 import { WebhookService } from '../webhook/webhook.service';
 import { TaxService } from '../tax/tax.service';
 import { CreateFolioDto } from './dto/create-folio.dto';
@@ -265,13 +266,7 @@ export class FolioService {
         total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)`,
       })
       .from(payments)
-      .where(
-        and(
-          eq(payments.folioId, folioId),
-          eq(payments.propertyId, propertyId),
-          eq(payments.status, 'captured'),
-        ),
-      );
+      .where(folioPaymentSumWhere(folioId, propertyId));
 
     // Monetary math: operate on string representations via decimal.js to
     // preserve precision (postgres numeric returns strings).

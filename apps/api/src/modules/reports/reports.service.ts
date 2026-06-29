@@ -14,6 +14,7 @@ import {
   arTransactions,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { reportPaymentSumWhere } from '../payment/payment-ledger';
 
 @Injectable()
 export class ReportsService {
@@ -62,8 +63,7 @@ export class ReportsService {
       .from(payments)
       .where(
         and(
-          eq(payments.propertyId, propertyId),
-          eq(payments.status, 'captured' as any),
+          reportPaymentSumWhere(propertyId),
           sql`${payments.processedAt}::date = ${date}`,
         ),
       )
@@ -289,8 +289,7 @@ export class ReportsService {
       .from(payments)
       .where(
         and(
-          eq(payments.propertyId, propertyId),
-          eq(payments.status, 'captured' as any),
+          reportPaymentSumWhere(propertyId),
           sql`${payments.processedAt}::date = ${date}`,
         ),
       )

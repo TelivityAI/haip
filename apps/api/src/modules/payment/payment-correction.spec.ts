@@ -116,28 +116,31 @@ describe('PaymentService.correctPayment (correction matrix, KB 14.1)', () => {
 
   it('refunds a captured card payment', async () => {
     const payment = { ...basePayment, status: 'captured', method: 'credit_card' };
-    // refundPayment loads original (select), computes existing refunds (select -> []),
-    // claims (update returning), then gateway.refund, then insert refund row.
-    const selectImpls = [
-      chainResolving([payment])(), // correctPayment.findById
-      chainResolving([payment])(), // refundPayment load original
-      chainResolving([])(), // existing refunds
-    ];
-    let call = 0;
-    const db = {
-      select: vi.fn().mockImplementation(() => selectImpls[call++] ?? chainResolving([])()),
-      insert: vi.fn().mockReturnValue({
-        values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([{ id: 'rfd-row', status: 'captured' }]),
-        }),
-      }),
-      update: vi.fn().mockReturnValue({
-        set: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([{ ...payment, status: 'refunded' }]),
+    const makeTx = () => {
+      let selectCall = 0;
+      return {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() => {
+              selectCall++;
+              if (selectCall === 1) {
+                return { for: vi.fn().mockResolvedValue([payment]) };
+              }
+              return { then: (resolve: any) => resolve([]) };
+            }),
+          }),
+        })),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ id: 'rfd-row', status: 'captured' }]),
           }),
         }),
-      }),
+      };
+    };
+    const db = {
+      select: vi.fn().mockImplementation(chainResolving([payment])),
+      transaction: vi.fn(async (fn: any) => fn(makeTx())),
+      update: vi.fn(),
       delete: vi.fn(),
     };
     const svc = await buildService(db);
@@ -146,26 +149,52 @@ describe('PaymentService.correctPayment (correction matrix, KB 14.1)', () => {
     expect(mockGateway.refund).toHaveBeenCalled();
   });
 
-  it('adjusts an old cash payment via a compensating negative charge', async () => {
+  it('adjusts an old cash payment via a negative payment child', async () => {
     const payment = {
       ...basePayment,
       method: 'cash',
       status: 'captured',
       gatewayTransactionId: null,
-      createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000), // 48h ago, past window
+      createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
     };
-    const svc = await buildService(buildDb(payment));
+    const adjustmentRow = {
+      id: 'adj-pay-001',
+      amount: '-100.00',
+      originalPaymentId: 'pay-001',
+      status: 'captured',
+    };
+    const tx = {
+      select: vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            for: vi.fn().mockResolvedValue([payment]),
+          }),
+        }),
+      })),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([adjustmentRow]),
+        }),
+      }),
+    };
+    const db = {
+      select: vi.fn().mockImplementation(chainResolving([payment])),
+      transaction: vi.fn(async (fn: any) => fn(tx)),
+      insert: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    };
+    const svc = await buildService(db);
     const result = await svc.correctPayment('pay-001', 'prop-001');
     expect(result.op).toBe('adjust');
-    expect(mockFolioService.postCharge).toHaveBeenCalledWith(
-      'folio-001',
-      expect.objectContaining({ type: 'adjustment', amount: '-100.00', skipTaxCalculation: true }),
-    );
+    expect(tx.insert).toHaveBeenCalled();
+    expect(mockFolioService.postCharge).not.toHaveBeenCalled();
+    expect(mockFolioService.recalculateBalance).toHaveBeenCalledWith('folio-001', 'prop-001', tx);
     expect(mockWebhookService.emit).toHaveBeenCalledWith(
       'payment.corrected',
       'payment',
       'pay-001',
-      expect.objectContaining({ op: 'adjust' }),
+      expect.objectContaining({ op: 'adjust', adjustmentAmount: '-100.00' }),
       'prop-001',
     );
   });

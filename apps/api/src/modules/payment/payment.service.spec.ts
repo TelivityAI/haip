@@ -331,33 +331,35 @@ describe('PaymentService', () => {
   });
 
   describe('refundPayment', () => {
-    it('should create refund record and update original payment', async () => {
+    it('should create a negative refund child without flipping parent status', async () => {
       const capturedPayment = { ...mockPayment, status: 'captured' };
       const refundPayment = { ...mockPayment, id: 'pay-002', amount: '-150.00', originalPaymentId: 'pay-001' };
-      let selectCallCount = 0;
+      let txRound = 0;
+      const makeTx = () => {
+        txRound++;
+        let selectCall = 0;
+        return {
+          select: vi.fn().mockImplementation(() => ({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockImplementation(() => {
+                selectCall++;
+                if (selectCall === 1) {
+                  return { for: vi.fn().mockResolvedValue([capturedPayment]) };
+                }
+                return { then: (resolve: any) => resolve([]) };
+              }),
+            }),
+          })),
+          insert: vi.fn().mockReturnValue({
+            values: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([refundPayment]),
+            }),
+          }),
+        };
+      };
       const db = {
-        select: vi.fn().mockImplementation(() => ({
-          from: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({
-              then: (resolve: any) => {
-                selectCallCount++;
-                resolve(selectCallCount === 1 ? [capturedPayment] : []);
-              },
-            }),
-          }),
-        })),
-        insert: vi.fn().mockReturnValue({
-          values: vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([refundPayment]),
-          }),
-        }),
-        update: vi.fn().mockReturnValue({
-          set: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({
-              returning: vi.fn().mockResolvedValue([{ ...capturedPayment, status: 'refunded' }]),
-            }),
-          }),
-        }),
+        transaction: vi.fn(async (fn: any) => fn(makeTx())),
+        update: vi.fn(),
         delete: vi.fn(),
       };
 
@@ -373,6 +375,7 @@ describe('PaymentService', () => {
       const svc = module.get<PaymentService>(PaymentService);
 
       const result = await svc.refundPayment('pay-001', 'prop-001');
+      expect(db.update).not.toHaveBeenCalled();
       expect(mockGateway.refund).toHaveBeenCalled();
       expect(mockFolioService.recalculateBalance).toHaveBeenCalled();
       expect(mockWebhookService.emit).toHaveBeenCalledWith(
@@ -385,43 +388,41 @@ describe('PaymentService', () => {
       expect(result).toEqual(refundPayment);
     });
 
-    // Bug 3: partial refunds were one-shot only because:
-    //  1. Entry was restricted to captured/settled (partially_refunded couldn't refund)
-    //  2. Stripe idempotency key was `ref_${id}` — same for every partial
-    //  3. There was no remaining-amount check against prior refunds
-    describe('multi-refund partial scenario (Bug 3)', () => {
-      function buildRefundDb(
+    // Partial refunds: parent stays captured; negative children net the folio balance.
+    describe('multi-refund partial scenario', () => {
+      function buildRefundTxDb(
         original: any,
         priorRefunds: any[],
-        claimResult: any[],
         insertedRefund: any,
       ) {
-        let selectCall = 0;
-        return {
-          select: vi.fn().mockImplementation(() => ({
-            from: vi.fn().mockReturnValue({
-              where: vi.fn().mockReturnValue({
-                then: (resolve: any) => {
+        const makeTx = () => {
+          let selectCall = 0;
+          return {
+            select: vi.fn().mockImplementation(() => ({
+              from: vi.fn().mockReturnValue({
+                where: vi.fn().mockImplementation(() => {
                   selectCall++;
-                  // Order: 1=original lookup, 2=prior refunds sum
-                  if (selectCall === 1) resolve([original]);
-                  else resolve(priorRefunds);
-                },
+                  if (selectCall === 1) {
+                    return {
+                      for: vi.fn().mockResolvedValue([original]),
+                    };
+                  }
+                  return {
+                    then: (resolve: any) => resolve(priorRefunds),
+                  };
+                }),
+              }),
+            })),
+            insert: vi.fn().mockReturnValue({
+              values: vi.fn().mockReturnValue({
+                returning: vi.fn().mockResolvedValue([insertedRefund]),
               }),
             }),
-          })),
-          insert: vi.fn().mockReturnValue({
-            values: vi.fn().mockReturnValue({
-              returning: vi.fn().mockResolvedValue([insertedRefund]),
-            }),
-          }),
-          update: vi.fn().mockReturnValue({
-            set: vi.fn().mockReturnValue({
-              where: vi.fn().mockReturnValue({
-                returning: vi.fn().mockResolvedValue(claimResult),
-              }),
-            }),
-          }),
+          };
+        };
+        return {
+          transaction: vi.fn(async (fn: any) => fn(makeTx())),
+          update: vi.fn(),
           delete: vi.fn(),
         };
       }
@@ -442,25 +443,22 @@ describe('PaymentService', () => {
       const capturedOriginal = { ...mockPayment, amount: '100.00', status: 'captured' };
       const partialOriginal = { ...mockPayment, amount: '100.00', status: 'partially_refunded' };
 
-      it('first partial refund: $50 of $100 transitions to partially_refunded', async () => {
-        const db = buildRefundDb(
+      it('first partial refund inserts a negative child without flipping parent status', async () => {
+        const db = buildRefundTxDb(
           capturedOriginal,
-          [], // no prior refunds
-          [{ ...capturedOriginal, status: 'partially_refunded' }],
+          [],
           { id: 'refund-1', amount: '-50.00', originalPaymentId: 'pay-001' },
         );
         const svc = await svcWith(db);
         await svc.refundPayment('pay-001', 'prop-001', '50.00');
-        // UPDATE targeted partially_refunded
-        const setCall = db.update.mock.results[0].value.set.mock.calls[0][0];
-        expect(setCall.status).toBe('partially_refunded');
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.transaction).toHaveBeenCalled();
       });
 
-      it('second partial refund: $30 on top of an existing $50 partial works', async () => {
-        const db = buildRefundDb(
-          partialOriginal, // already partially_refunded
+      it('second partial refund on a legacy partially_refunded parent works', async () => {
+        const db = buildRefundTxDb(
+          partialOriginal,
           [{ amount: '-50.00', originalPaymentId: 'pay-001' }],
-          [{ ...partialOriginal, status: 'partially_refunded' }],
           { id: 'refund-2', amount: '-30.00', originalPaymentId: 'pay-001' },
         );
         const svc = await svcWith(db);
@@ -468,29 +466,24 @@ describe('PaymentService', () => {
         expect(mockGateway.refund).toHaveBeenCalled();
       });
 
-      it('final refund that closes the gap transitions to fully refunded', async () => {
-        // $100 - $50 - $30 = $20 remaining, refund $20 → status=refunded
-        const db = buildRefundDb(
+      it('final partial refund that closes the gap succeeds', async () => {
+        const db = buildRefundTxDb(
           partialOriginal,
           [
             { amount: '-50.00', originalPaymentId: 'pay-001' },
             { amount: '-30.00', originalPaymentId: 'pay-001' },
           ],
-          [{ ...partialOriginal, status: 'refunded' }],
           { id: 'refund-3', amount: '-20.00', originalPaymentId: 'pay-001' },
         );
         const svc = await svcWith(db);
         await svc.refundPayment('pay-001', 'prop-001', '20.00');
-        const setCall = db.update.mock.results[0].value.set.mock.calls[0][0];
-        expect(setCall.status).toBe('refunded');
+        expect(db.transaction).toHaveBeenCalled();
       });
 
       it('rejects a refund that would exceed remaining refundable amount', async () => {
-        // $100 - $50 already = $50 remaining. Attempt $60 → BadRequest.
-        const db = buildRefundDb(
+        const db = buildRefundTxDb(
           partialOriginal,
           [{ amount: '-50.00', originalPaymentId: 'pay-001' }],
-          [], // unreachable
           { id: 'unreachable' } as any,
         );
         const svc = await svcWith(db);
@@ -500,22 +493,18 @@ describe('PaymentService', () => {
       });
 
       it('uses a unique idempotency key per partial so Stripe does not dedupe different refunds', async () => {
-        // First partial
-        const db1 = buildRefundDb(
+        const db1 = buildRefundTxDb(
           capturedOriginal,
           [],
-          [{ ...capturedOriginal, status: 'partially_refunded' }],
           { id: 'refund-1', amount: '-50.00', originalPaymentId: 'pay-001' },
         );
         const svc1 = await svcWith(db1);
         await svc1.refundPayment('pay-001', 'prop-001', '50.00');
         const key1 = mockGateway.refund.mock.calls[mockGateway.refund.mock.calls.length - 1][2].idempotencyKey;
 
-        // Second partial on top — should use a different key
-        const db2 = buildRefundDb(
+        const db2 = buildRefundTxDb(
           partialOriginal,
           [{ amount: '-50.00', originalPaymentId: 'pay-001' }],
-          [{ ...partialOriginal, status: 'partially_refunded' }],
           { id: 'refund-2', amount: '-30.00', originalPaymentId: 'pay-001' },
         );
         const svc2 = await svcWith(db2);
