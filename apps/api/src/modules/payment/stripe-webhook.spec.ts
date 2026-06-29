@@ -14,6 +14,54 @@ const mockPayment = {
   gatewayTransactionId: 'pi_test_123',
 };
 
+function createRefundWebhookDb(
+  payment: any,
+  existingRefunds: any[] = [],
+  existingForLedger: any[] = [],
+) {
+  return {
+    select: vi.fn().mockImplementation(() => ({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          then: (resolve: any) => resolve([payment]),
+        }),
+      }),
+    })),
+    transaction: vi.fn(async (fn: any) => {
+      let selectCall = 0;
+      const tx = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() => {
+              selectCall++;
+              if (selectCall === 1) {
+                return { for: vi.fn().mockResolvedValue([payment]) };
+              }
+              if (selectCall === 2) {
+                return {
+                  limit: vi.fn().mockReturnValue({
+                    then: (resolve: any) => resolve(existingForLedger),
+                  }),
+                };
+              }
+              return { then: (resolve: any) => resolve(existingRefunds) };
+            }),
+          }),
+        })),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([
+              { id: 'refund-webhook-1', folioId: payment.folioId, originalPaymentId: payment.id },
+            ]),
+          }),
+        }),
+      };
+      return fn(tx);
+    }),
+    update: vi.fn(),
+  };
+}
+
 function createMockDb(returnData: any[] = [mockPayment]) {
   return {
     select: vi.fn().mockImplementation(() => ({
@@ -23,6 +71,11 @@ function createMockDb(returnData: any[] = [mockPayment]) {
         }),
       }),
     })),
+    insert: vi.fn().mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        returning: vi.fn().mockResolvedValue(returnData),
+      }),
+    }),
     update: vi.fn().mockReturnValue({
       set: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
@@ -143,8 +196,8 @@ describe('StripeWebhookController', () => {
       );
     });
 
-    it('should update payment to refunded on charge.refunded (full)', async () => {
-      const capturedDb = createMockDb([{ ...mockPayment, status: 'captured' }]);
+    it('should insert a refund child on charge.refunded (full)', async () => {
+      const capturedDb = createRefundWebhookDb({ ...mockPayment, status: 'captured', method: 'credit_card' });
       const module = await Test.createTestingModule({
         controllers: [StripeWebhookController],
         providers: [
@@ -160,21 +213,27 @@ describe('StripeWebhookController', () => {
         id: 'ch_test_123',
         payment_intent: 'pi_test_123',
         amount: 50000,
-        amount_refunded: 50000, // full refund
+        amount_refunded: 50000,
       });
 
-      expect(capturedDb.update).toHaveBeenCalled();
+      expect(capturedDb.transaction).toHaveBeenCalled();
+      expect(capturedDb.update).not.toHaveBeenCalled();
+      expect(mockFolioService.recalculateBalance).toHaveBeenCalledWith(
+        'folio-001',
+        'prop-001',
+        expect.anything(),
+      );
       expect(mockWebhookService.emit).toHaveBeenCalledWith(
         'payment.refunded',
         'payment',
-        'pay-001',
-        expect.objectContaining({ status: 'refunded' }),
+        'refund-webhook-1',
+        expect.objectContaining({ refundAmount: '500.00', originalPaymentId: 'pay-001' }),
         'prop-001',
       );
     });
 
-    it('should update to partially_refunded for partial refund', async () => {
-      const capturedDb = createMockDb([{ ...mockPayment, status: 'captured' }]);
+    it('should insert a partial refund child on charge.refunded', async () => {
+      const capturedDb = createRefundWebhookDb({ ...mockPayment, status: 'captured', method: 'credit_card' });
       const module = await Test.createTestingModule({
         controllers: [StripeWebhookController],
         providers: [
@@ -190,14 +249,15 @@ describe('StripeWebhookController', () => {
         id: 'ch_test_123',
         payment_intent: 'pi_test_123',
         amount: 50000,
-        amount_refunded: 25000, // partial refund
+        amount_refunded: 25000,
       });
 
+      expect(capturedDb.transaction).toHaveBeenCalled();
       expect(mockWebhookService.emit).toHaveBeenCalledWith(
         'payment.refunded',
         'payment',
-        'pay-001',
-        expect.objectContaining({ status: 'partially_refunded' }),
+        'refund-webhook-1',
+        expect.objectContaining({ refundAmount: '250.00' }),
         'prop-001',
       );
     });

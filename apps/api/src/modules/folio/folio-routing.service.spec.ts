@@ -49,15 +49,15 @@ const mockFolioService = {
 };
 
 function createMockDb(returnData: any[] = [mockReservation]) {
+  const whereResult = {
+    orderBy: vi.fn().mockResolvedValue([]),
+    for: vi.fn().mockResolvedValue(returnData),
+    then: (resolve: any) => resolve(returnData),
+  };
   const db: any = {
     select: vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          // Routing-rule lookups call .orderBy() and resolve to [] (no rules);
-          // other lookups are awaited directly via .then().
-          orderBy: vi.fn().mockResolvedValue([]),
-          then: (resolve: any) => resolve(returnData),
-        }),
+        where: vi.fn().mockReturnValue(whereResult),
       }),
     })),
     insert: vi.fn().mockReturnValue({
@@ -380,7 +380,18 @@ describe('FolioRoutingService', () => {
 
   describe('transferToCityLedger', () => {
     it('should create city ledger folio and record payment on source', async () => {
-      const result = await service.transferToCityLedger('folio-001', 'prop-001', {
+      mockDb = createMockDb([mockFolio]);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioRoutingService,
+          { provide: DRIZZLE, useValue: mockDb },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<FolioRoutingService>(FolioRoutingService);
+
+      const result = await svc.transferToCityLedger('folio-001', 'prop-001', {
         companyName: 'Acme Corp',
         paymentTermsDays: 'NET30',
       });
@@ -391,8 +402,9 @@ describe('FolioRoutingService', () => {
           companyName: 'Acme Corp',
           paymentTermsDays: 'NET30',
         }),
-        expect.anything(), // Bug 3: now called inside db.transaction with tx
+        expect.anything(),
       );
+      expect(mockFolioService.recalculateBalance).toHaveBeenCalled();
       expect(result.transferredAmount).toBe('300.00');
       expect(result.cityLedgerFolioId).toBe('folio-cl-001');
     });

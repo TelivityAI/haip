@@ -400,4 +400,44 @@ describe('FolioService', () => {
       expect(parseFloat(result.amount)).toBeLessThan(0);
     });
   });
+
+  describe('recalculateBalance', () => {
+    it('nets a captured parent with a negative refund child', async () => {
+      let selectCall = 0;
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => {
+                selectCall++;
+                if (selectCall === 1) resolve([{ total: '100.00' }]);
+                else resolve([{ total: '50.00' }]);
+              },
+            }),
+          }),
+        })),
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+      const svc = module.get<FolioService>(FolioService);
+
+      await svc.recalculateBalance('folio-001', 'prop-001');
+
+      const setCall = db.update.mock.results[0].value.set.mock.calls[0][0];
+      expect(setCall.totalPayments).toBe('50.00');
+      expect(setCall.balance).toBe('50.00');
+    });
+  });
 });
