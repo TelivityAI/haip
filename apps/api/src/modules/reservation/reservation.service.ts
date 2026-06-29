@@ -471,6 +471,21 @@ export class ReservationService {
     });
     const folios = folioResult.data;
 
+    // Express checkout: post late fee before balance validation so settle sees zero.
+    if (dto.expressCheckout && lateCheckoutFeeAmount && folios.length > 0) {
+      const openFolio = folios.find((f: any) => f.status === 'open');
+      if (openFolio) {
+        await this.folioService.postCharge(openFolio.id, {
+          propertyId: reservation.propertyId,
+          type: 'fee',
+          description: 'Late checkout fee',
+          amount: lateCheckoutFeeAmount,
+          currencyCode: reservation.currencyCode,
+          serviceDate: now.toISOString(),
+        });
+      }
+    }
+
     // Express checkout: validate balances before claiming the transition.
     if (dto.expressCheckout) {
       for (const folio of folios) {
@@ -503,7 +518,7 @@ export class ReservationService {
 
     const folioSummary: Array<{ folioId: string; balance: string; status: string }> = [];
 
-    if (lateCheckoutFeeAmount && folios.length > 0) {
+    if (!dto.expressCheckout && lateCheckoutFeeAmount && folios.length > 0) {
       const openFolio = folios.find((f: any) => f.status === 'open');
       if (openFolio) {
         await this.folioService.postCharge(openFolio.id, {

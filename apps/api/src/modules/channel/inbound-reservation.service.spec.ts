@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { InboundReservationService } from './inbound-reservation.service';
 import type { ChannelReservation } from './channel-adapter.interface';
 
@@ -194,6 +194,25 @@ describe('InboundReservationService', () => {
       expect(result.confirmationNumber).toBe('EXIST-123');
       expect(result.reservationId).toBe('res-1');
       expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it('should reject duplicate new push when existing reservation is cancelled', async () => {
+      let callCount = 0;
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            callCount++;
+            if (callCount === 1) return Promise.resolve([mockConnection]);
+            if (callCount === 2) return Promise.resolve([{ id: 'booking-1', confirmationNumber: 'EXIST-123' }]);
+            if (callCount === 3) return Promise.resolve([{ id: 'res-1', guestId: 'guest-1', status: 'cancelled' }]);
+            return Promise.resolve([]);
+          }),
+        }),
+      }));
+
+      const reservation = makeReservation();
+      await expect(service.processInboundReservation('conn-1', reservation))
+        .rejects.toThrow(ConflictException);
     });
   });
 

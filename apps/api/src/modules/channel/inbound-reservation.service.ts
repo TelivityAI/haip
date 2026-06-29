@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { bookings, reservations, guests, channelConnections, roomTypes, ratePlans } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
@@ -122,7 +122,9 @@ export class InboundReservationService {
     const confirmationNumber = this.generateConfirmationNumber();
 
     // Atomically create guest + booking + reservation so we never end up with a half-written record.
-    const { guest, booking, pmsReservation } = await this.db.transaction(async (tx: any) => {
+    let created: { guest: any; booking: any; pmsReservation: any };
+    try {
+      created = await this.db.transaction(async (tx: any) => {
       const availability = await this.availabilityService.searchAvailability(
         propertyId,
         reservation.arrivalDate,
@@ -130,10 +132,8 @@ export class InboundReservationService {
         roomTypeId,
         tx,
       );
-      const nightsOk = availability
-        .filter((a: any) => a.roomTypeId === roomTypeId)
-        .every((a: any) => a.available > 0);
-      if (!nightsOk) {
+      const roomNights = availability.filter((a: any) => a.roomTypeId === roomTypeId);
+      if (roomNights.length === 0 || !roomNights.every((a: any) => a.available > 0)) {
         throw new BadRequestException(
           `No availability for room type ${roomTypeId} on ${reservation.arrivalDate} → ${reservation.departureDate}`,
         );
@@ -174,7 +174,22 @@ export class InboundReservationService {
         .returning();
 
       return { guest, booking, pmsReservation };
-    });
+      });
+    } catch (err: any) {
+      if (err?.code === '23505') {
+        const raced = await this.findByExternalConfirmation(
+          reservation.externalConfirmation,
+          reservation.channelCode,
+          propertyId,
+        );
+        if (raced) {
+          return this.returnExistingInbound(raced, propertyId);
+        }
+      }
+      throw err;
+    }
+
+    const { guest, booking, pmsReservation } = created;
 
     // Confirm back to channel
     try {
@@ -268,9 +283,10 @@ export class InboundReservationService {
         (existingReservation.arrivalDate as string) < reservation.departureDate &&
         (existingReservation.departureDate as string) > reservation.arrivalDate;
 
-      const nightsOk = availability
-        .filter((a: any) => a.roomTypeId === roomTypeId)
-        .every((a: any) => {
+      const roomNights = availability.filter((a: any) => a.roomTypeId === roomTypeId);
+      const nightsOk =
+        roomNights.length > 0 &&
+        roomNights.every((a: any) => {
           const existingOccupiesThisNight =
             currentCountsItself &&
             (existingReservation.arrivalDate as string) <= a.date &&
@@ -428,6 +444,12 @@ export class InboundReservationService {
           eq(reservations.propertyId, propertyId),
         ),
       );
+
+    if (existingReservation?.status === 'cancelled') {
+      throw new ConflictException(
+        `Cannot accept duplicate new push for cancelled reservation ${existing.confirmationNumber}`,
+      );
+    }
 
     return {
       reservationId: existingReservation?.id,
