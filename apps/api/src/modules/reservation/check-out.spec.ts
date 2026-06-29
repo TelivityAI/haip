@@ -185,6 +185,27 @@ describe('ReservationService — checkOut', () => {
     expect(mockFolioService.settle).toHaveBeenCalledWith('folio-001', 'prop-001');
   });
 
+  it('should post late checkout fee before express checkout settles', async () => {
+    const lateProperty = { ...mockProperty, checkOutTime: '00:01', settings: { lateCheckoutFee: 75 } };
+    const db = createCheckOutDb({ property: lateProperty });
+    const svc = await createService(db);
+    const callOrder: string[] = [];
+    mockFolioService.postCharge.mockImplementation(async () => {
+      callOrder.push('postCharge');
+    });
+    mockFolioService.settle.mockImplementation(async () => {
+      callOrder.push('settle');
+    });
+
+    await svc.checkOut('res-001', 'prop-001', { expressCheckout: true });
+
+    expect(mockFolioService.postCharge).toHaveBeenCalledWith(
+      'folio-001',
+      expect.objectContaining({ type: 'fee', amount: '75' }),
+    );
+    expect(callOrder).toEqual(['postCharge', 'settle']);
+  });
+
   it('should throw on express checkout with outstanding balance', async () => {
     mockFolioService.findById.mockResolvedValue({ ...mockFolio, balance: '150.00' });
     const db = createCheckOutDb();

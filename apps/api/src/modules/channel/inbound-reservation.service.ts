@@ -6,6 +6,7 @@ import { ChannelService } from './channel.service';
 import { ChannelAdapterFactory } from './channel-adapter.factory';
 import { AriService } from './ari.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { AvailabilityService } from '../reservation/availability.service';
 import { generateConfirmationToken } from '../connect/connect-booking.service';
 import type { ChannelReservation } from './channel-adapter.interface';
 
@@ -17,6 +18,7 @@ export class InboundReservationService {
     private readonly adapterFactory: ChannelAdapterFactory,
     private readonly ariService: AriService,
     private readonly webhookService: WebhookService,
+    private readonly availabilityService: AvailabilityService,
   ) {}
 
   /**
@@ -49,9 +51,7 @@ export class InboundReservationService {
     }
 
     if (existing) {
-      throw new ConflictException(
-        `Reservation with external confirmation ${reservation.externalConfirmation} already exists (booking ${existing.confirmationNumber})`,
-      );
+      return this.returnExistingInbound(existing, propertyId);
     }
 
     return this.handleNewReservation(conn, reservation);
@@ -122,7 +122,23 @@ export class InboundReservationService {
     const confirmationNumber = this.generateConfirmationNumber();
 
     // Atomically create guest + booking + reservation so we never end up with a half-written record.
-    const { guest, booking, pmsReservation } = await this.db.transaction(async (tx: any) => {
+    let created: { guest: any; booking: any; pmsReservation: any };
+    try {
+      created = await this.db.transaction(async (tx: any) => {
+      const availability = await this.availabilityService.searchAvailability(
+        propertyId,
+        reservation.arrivalDate,
+        reservation.departureDate,
+        roomTypeId,
+        tx,
+      );
+      const roomNights = availability.filter((a: any) => a.roomTypeId === roomTypeId);
+      if (roomNights.length === 0 || !roomNights.every((a: any) => a.available > 0)) {
+        throw new BadRequestException(
+          `No availability for room type ${roomTypeId} on ${reservation.arrivalDate} → ${reservation.departureDate}`,
+        );
+      }
+
       const guest = await this.findOrCreateGuestTx(tx, reservation, propertyId);
 
       const [booking] = await tx
@@ -158,7 +174,22 @@ export class InboundReservationService {
         .returning();
 
       return { guest, booking, pmsReservation };
-    });
+      });
+    } catch (err: any) {
+      if (err?.code === '23505') {
+        const raced = await this.findByExternalConfirmation(
+          reservation.externalConfirmation,
+          reservation.channelCode,
+          propertyId,
+        );
+        if (raced) {
+          return this.returnExistingInbound(raced, propertyId);
+        }
+      }
+      throw err;
+    }
+
+    const { guest, booking, pmsReservation } = created;
 
     // Confirm back to channel
     try {
@@ -238,29 +269,61 @@ export class InboundReservationService {
     const departure = new Date(reservation.departureDate);
     const nights = Math.ceil((departure.getTime() - arrival.getTime()) / (1000 * 60 * 60 * 24));
 
-    // Update reservation
-    const [updated] = await this.db
-      .update(reservations)
-      .set({
-        arrivalDate: reservation.arrivalDate,
-        departureDate: reservation.departureDate,
-        nights,
+    const [updated] = await this.db.transaction(async (tx: any) => {
+      const availability = await this.availabilityService.searchAvailability(
+        propertyId,
+        reservation.arrivalDate,
+        reservation.departureDate,
         roomTypeId,
-        ratePlanId,
-        totalAmount: reservation.totalAmount.toString(),
-        currencyCode: reservation.currencyCode,
-        adults: reservation.adults,
-        children: reservation.children ?? 0,
-        specialRequests: reservation.specialRequests,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(reservations.id, existingReservation.id),
-          eq(reservations.propertyId, propertyId),
-        ),
-      )
-      .returning();
+        tx,
+      );
+
+      const currentCountsItself =
+        existingReservation.roomTypeId === roomTypeId &&
+        (existingReservation.arrivalDate as string) < reservation.departureDate &&
+        (existingReservation.departureDate as string) > reservation.arrivalDate;
+
+      const roomNights = availability.filter((a: any) => a.roomTypeId === roomTypeId);
+      const nightsOk =
+        roomNights.length > 0 &&
+        roomNights.every((a: any) => {
+          const existingOccupiesThisNight =
+            currentCountsItself &&
+            (existingReservation.arrivalDate as string) <= a.date &&
+            (existingReservation.departureDate as string) > a.date;
+          const effectiveAvailable = a.available + (existingOccupiesThisNight ? 1 : 0);
+          return effectiveAvailable > 0;
+        });
+
+      if (!nightsOk) {
+        throw new BadRequestException(
+          `No availability for room type ${roomTypeId} on ${reservation.arrivalDate} → ${reservation.departureDate}`,
+        );
+      }
+
+      return await tx
+        .update(reservations)
+        .set({
+          arrivalDate: reservation.arrivalDate,
+          departureDate: reservation.departureDate,
+          nights,
+          roomTypeId,
+          ratePlanId,
+          totalAmount: reservation.totalAmount.toString(),
+          currencyCode: reservation.currencyCode,
+          adults: reservation.adults,
+          children: reservation.children ?? 0,
+          specialRequests: reservation.specialRequests,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(reservations.id, existingReservation.id),
+            eq(reservations.propertyId, propertyId),
+          ),
+        )
+        .returning();
+    });
 
     // Push updated availability
     try {
@@ -334,12 +397,15 @@ export class InboundReservationService {
         ),
       );
 
+    const arrivalDate = reservation.arrivalDate || existingReservation.arrivalDate;
+    const departureDate = reservation.departureDate || existingReservation.departureDate;
+
     // Push updated availability
     try {
       await this.ariService.pushAvailability(
         propertyId,
-        reservation.arrivalDate,
-        reservation.departureDate,
+        arrivalDate,
+        departureDate,
       );
     } catch {
       // Fire-and-forget
@@ -367,6 +433,31 @@ export class InboundReservationService {
   }
 
   // --- Private Helpers ---
+
+  private async returnExistingInbound(existing: any, propertyId: string) {
+    const [existingReservation] = await this.db
+      .select()
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.bookingId, existing.id),
+          eq(reservations.propertyId, propertyId),
+        ),
+      );
+
+    if (existingReservation?.status === 'cancelled') {
+      throw new ConflictException(
+        `Cannot accept duplicate new push for cancelled reservation ${existing.confirmationNumber}`,
+      );
+    }
+
+    return {
+      reservationId: existingReservation?.id,
+      bookingId: existing.id,
+      confirmationNumber: existing.confirmationNumber,
+      guestId: existingReservation?.guestId,
+    };
+  }
 
   private async findConnectionForInbound(channelConnectionId: string) {
     // Look up connection without propertyId (inbound doesn't always know it)

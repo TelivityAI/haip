@@ -860,6 +860,7 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS bookings_property_external_channel_unique ON bookings (property_id, external_confirmation, channel_code) WHERE external_confirmation IS NOT NULL AND channel_code IS NOT NULL`,
   ];
 
   for (const t of tables) {
