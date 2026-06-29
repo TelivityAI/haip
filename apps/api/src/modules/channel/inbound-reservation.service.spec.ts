@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { InboundReservationService } from './inbound-reservation.service';
 import type { ChannelReservation } from './channel-adapter.interface';
+
+function mockAvailability() {
+  return Array.from({ length: 5 }, (_, i) => ({
+    roomTypeId: 'rt-1',
+    date: `2024-06-0${i + 1}`,
+    available: 5,
+  }));
+}
 
 function makeReservation(overrides: Partial<ChannelReservation> = {}): ChannelReservation {
   return {
@@ -31,6 +39,7 @@ describe('InboundReservationService', () => {
   let mockAdapterFactory: any;
   let mockAriService: any;
   let mockWebhookService: any;
+  let mockAvailabilityService: any;
 
   const mockConnection = {
     id: 'conn-1',
@@ -99,12 +108,17 @@ describe('InboundReservationService', () => {
 
     mockWebhookService = { emit: vi.fn().mockResolvedValue(undefined) };
 
+    mockAvailabilityService = {
+      searchAvailability: vi.fn().mockResolvedValue(mockAvailability()),
+    };
+
     service = new InboundReservationService(
       mockDb,
       mockChannelService,
       mockAdapterFactory,
       mockAriService,
       mockWebhookService,
+      mockAvailabilityService,
     );
   });
 
@@ -160,22 +174,26 @@ describe('InboundReservationService', () => {
       );
     });
 
-    it('should throw ConflictException for duplicate reservation', async () => {
+    it('should return existing booking idempotently for duplicate new push', async () => {
       let callCount = 0;
       mockDb.select.mockImplementation(() => ({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockImplementation(() => {
             callCount++;
-            if (callCount === 1) return Promise.resolve([mockConnection]); // connection
-            if (callCount === 2) return Promise.resolve([{ id: 'booking-1', confirmationNumber: 'EXIST-123' }]); // existing booking found!
+            if (callCount === 1) return Promise.resolve([mockConnection]);
+            if (callCount === 2) return Promise.resolve([{ id: 'booking-1', confirmationNumber: 'EXIST-123' }]);
+            if (callCount === 3) return Promise.resolve([{ id: 'res-1', guestId: 'guest-1' }]);
             return Promise.resolve([]);
           }),
         }),
       }));
 
       const reservation = makeReservation();
-      await expect(service.processInboundReservation('conn-1', reservation))
-        .rejects.toThrow(ConflictException);
+      const result = await service.processInboundReservation('conn-1', reservation);
+
+      expect(result.confirmationNumber).toBe('EXIST-123');
+      expect(result.reservationId).toBe('res-1');
+      expect(mockDb.insert).not.toHaveBeenCalled();
     });
   });
 
@@ -217,6 +235,40 @@ describe('InboundReservationService', () => {
       const reservation = makeReservation({ status: 'cancelled' });
       await expect(service.processInboundReservation('conn-1', reservation))
         .rejects.toThrow(NotFoundException);
+    });
+    it('should push availability using stored dates when cancel payload omits them', async () => {
+      let callCount = 0;
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            callCount++;
+            if (callCount === 1) return Promise.resolve([mockConnection]);
+            if (callCount === 2) return Promise.resolve([{ id: 'booking-1', confirmationNumber: 'CH-123' }]);
+            if (callCount === 3) {
+              return Promise.resolve([{
+                id: 'res-1',
+                bookingId: 'booking-1',
+                arrivalDate: '2024-06-01',
+                departureDate: '2024-06-05',
+              }]);
+            }
+            return Promise.resolve([]);
+          }),
+        }),
+      }));
+
+      const reservation = makeReservation({
+        status: 'cancelled',
+        arrivalDate: '',
+        departureDate: '',
+      });
+      await service.processInboundReservation('conn-1', reservation);
+
+      expect(mockAriService.pushAvailability).toHaveBeenCalledWith(
+        'prop-1',
+        '2024-06-01',
+        '2024-06-05',
+      );
     });
   });
 

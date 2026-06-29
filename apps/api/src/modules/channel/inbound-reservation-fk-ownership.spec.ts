@@ -7,6 +7,7 @@ import { ChannelService } from './channel.service';
 import { ChannelAdapterFactory } from './channel-adapter.factory';
 import { AriService } from './ari.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { AvailabilityService } from '../reservation/availability.service';
 
 /**
  * Cross-tenant FK ownership for channel inbound reservations (follow-on to
@@ -42,6 +43,7 @@ async function mkSvc(db: any) {
       { provide: ChannelAdapterFactory, useValue: {} },
       { provide: AriService, useValue: {} },
       { provide: WebhookService, useValue: { emit: vi.fn() } },
+      { provide: AvailabilityService, useValue: { searchAvailability: vi.fn().mockResolvedValue([]) } },
     ],
   }).compile();
   return mod.get(InboundReservationService);
