@@ -27,9 +27,12 @@ export class AvailabilityService {
     checkIn: string,
     checkOut: string,
     roomTypeId?: string,
+    db?: any,
   ): Promise<AvailabilityResult[]> {
+    const conn = db ?? this.db;
+
     // Get property overbooking config
-    const [property] = await this.db
+    const [property] = await conn
       .select()
       .from(properties)
       .where(eq(properties.id, propertyId));
@@ -44,14 +47,14 @@ export class AvailabilityService {
     if (roomTypeId) {
       roomTypeConditions.push(eq(roomTypes.id, roomTypeId));
     }
-    const types = await this.db
+    const types = await conn
       .select()
       .from(roomTypes)
       .where(and(...roomTypeConditions));
 
     // Get overlapping reservations (not cancelled/no_show/checked_out)
     const excludedStatuses = ['cancelled', 'no_show', 'checked_out'] as const;
-    const overlapping = await this.db
+    const overlapping = await conn
       .select({
         roomTypeId: reservations.roomTypeId,
         arrivalDate: reservations.arrivalDate,
@@ -70,7 +73,7 @@ export class AvailabilityService {
       );
 
     // Single grouped query for room counts per room type (avoids N+1).
-    const roomCountRows = await this.db
+    const roomCountRows = await conn
       .select({
         roomTypeId: rooms.roomTypeId,
         count: sql<number>`count(*)`,

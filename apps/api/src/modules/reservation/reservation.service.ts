@@ -90,6 +90,7 @@ export class ReservationService {
         dto.arrivalDate,
         dto.departureDate,
         dto.roomTypeId,
+        tx,
       );
       const roomTypeAvail = availability.find((a: any) => a.roomTypeId === dto.roomTypeId);
       if (!roomTypeAvail || roomTypeAvail.available <= 0) {
@@ -435,7 +436,7 @@ export class ReservationService {
 
     const now = new Date();
 
-    // Late checkout detection
+    // Late checkout detection (read-only)
     const [property] = await this.db
       .select()
       .from(properties)
@@ -462,7 +463,6 @@ export class ReservationService {
       }
     }
 
-    // Get folios for this reservation
     const folioResult = await this.folioService.list({
       propertyId: reservation.propertyId,
       reservationId: reservation.id,
@@ -471,8 +471,8 @@ export class ReservationService {
     });
     const folios = folioResult.data;
 
-    // Post late checkout fee to primary open folio
-    if (lateCheckoutFeeAmount && folios.length > 0) {
+    // Express checkout: post late fee before balance validation so settle sees zero.
+    if (dto.expressCheckout && lateCheckoutFeeAmount && folios.length > 0) {
       const openFolio = folios.find((f: any) => f.status === 'open');
       if (openFolio) {
         await this.folioService.postCharge(openFolio.id, {
@@ -486,11 +486,53 @@ export class ReservationService {
       }
     }
 
-    // Express checkout path
+    // Express checkout: validate balances before claiming the transition.
+    if (dto.expressCheckout) {
+      for (const folio of folios) {
+        if (folio.status !== 'open') continue;
+        const refreshed = await this.folioService.findById(folio.id, reservation.propertyId);
+        if (new Decimal(refreshed.balance).abs().gt('0.01')) {
+          throw new BadRequestException(
+            `Cannot express checkout: folio ${folio.folioNumber} has outstanding balance of ${refreshed.balance}`,
+          );
+        }
+      }
+    }
+
+    const updateData: Record<string, unknown> = {
+      status: 'checked_out',
+      checkedOutAt: now,
+      actualDepartureTime: now,
+      isLateCheckout,
+      updatedAt: now,
+    };
+    if (lateCheckoutFeeAmount) updateData['lateCheckoutFee'] = lateCheckoutFeeAmount;
+
+    const updated = await this.claimTransition(
+      id,
+      propertyId,
+      ['checked_in', 'stayover', 'due_out'],
+      updateData,
+      'checked_out',
+    );
+
     const folioSummary: Array<{ folioId: string; balance: string; status: string }> = [];
 
+    if (!dto.expressCheckout && lateCheckoutFeeAmount && folios.length > 0) {
+      const openFolio = folios.find((f: any) => f.status === 'open');
+      if (openFolio) {
+        await this.folioService.postCharge(openFolio.id, {
+          propertyId: reservation.propertyId,
+          type: 'fee',
+          description: 'Late checkout fee',
+          amount: lateCheckoutFeeAmount,
+          currencyCode: reservation.currencyCode,
+          serviceDate: now.toISOString(),
+        });
+      }
+    }
+
     if (dto.expressCheckout) {
-      // Phase 1: Capture all authorized payments across all open folios
       for (const folio of folios) {
         if (folio.status !== 'open') continue;
 
@@ -514,26 +556,12 @@ export class ReservationService {
         }
       }
 
-      // Phase 2: Validate all folio balances BEFORE settling any
-      const openFolios: Array<{ folio: any; refreshed: any }> = [];
       for (const folio of folios) {
         if (folio.status !== 'open') continue;
-        const refreshed = await this.folioService.findById(folio.id, reservation.propertyId);
-        if (new Decimal(refreshed.balance).abs().gt('0.01')) {
-          throw new BadRequestException(
-            `Cannot express checkout: folio ${folio.folioNumber} has outstanding balance of ${refreshed.balance}`,
-          );
-        }
-        openFolios.push({ folio, refreshed });
-      }
-
-      // Phase 3: All validated — now settle
-      for (const { folio } of openFolios) {
         await this.folioService.settle(folio.id, reservation.propertyId);
         folioSummary.push({ folioId: folio.id, balance: '0.00', status: 'settled' });
       }
     } else {
-      // Non-express: compile folio summaries
       for (const folio of folios) {
         folioSummary.push({
           folioId: folio.id,
@@ -541,10 +569,7 @@ export class ReservationService {
           status: folio.status,
         });
       }
-    }
 
-    // Void remaining pre-auths (for non-express, or any that weren't captured)
-    if (!dto.expressCheckout) {
       for (const folio of folios) {
         const authorizedPayments = await this.db
           .select()
@@ -566,32 +591,10 @@ export class ReservationService {
       }
     }
 
-    // Mark room vacant_dirty
     if (reservation.roomId) {
       await this.roomStatusService.markVacantDirty(reservation.roomId, reservation.propertyId);
     }
 
-    // Update reservation
-    const updateData: Record<string, unknown> = {
-      status: 'checked_out',
-      checkedOutAt: now,
-      actualDepartureTime: now,
-      isLateCheckout,
-      updatedAt: now,
-    };
-    if (lateCheckoutFeeAmount) updateData['lateCheckoutFee'] = lateCheckoutFeeAmount;
-
-    // Bug 2: atomic claim — only checked_in / stayover / due_out can
-    // transition to checked_out. Prevents double checkout races.
-    const updated = await this.claimTransition(
-      id,
-      propertyId,
-      ['checked_in', 'stayover', 'due_out'],
-      updateData,
-      'checked_out',
-    );
-
-    // Emit webhook
     await this.webhookService.emit(
       'reservation.checked_out',
       'reservation',
@@ -830,6 +833,7 @@ export class ReservationService {
           newArrival,
           newDeparture,
           newRoomTypeId,
+          tx,
         );
 
         // Check each night in the requested window has availability.
