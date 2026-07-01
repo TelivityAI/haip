@@ -51,7 +51,7 @@ export default function Communications() {
     queryKey: ['agent-decisions', propertyId, 'guest_comms'],
     queryFn: () =>
       api
-        .get(`/v1/agents/${propertyId}/decisions/guest_comms`, { params: { limit: 50 } })
+        .get(`/v1/agents/${propertyId}/guest_comms/decisions`, { params: { limit: 50 } })
         .then((r) => r.data?.data ?? r.data ?? []),
     enabled: !!propertyId,
   });

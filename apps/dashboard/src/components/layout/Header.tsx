@@ -1,18 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Bell, ChevronDown, Menu, LogOut, User, Languages } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { useProperty } from '../../context/PropertyContext';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../hooks/useSocket';
-import { api } from '../../lib/api';
 import { SUPPORTED_LANGUAGES } from '../../i18n';
-
-interface Property {
-  id: string;
-  name: string;
-  code: string;
-}
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -20,22 +13,11 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick }: HeaderProps) {
   const { t, i18n } = useTranslation();
-  const { propertyId, setPropertyId } = useProperty();
+  const { propertyId, setPropertyId, properties } = useProperty();
   const { user, roles, authEnabled, logout } = useAuth();
   const { connected } = useSocket();
-  const [properties, setProperties] = useState<Property[]>([]);
   const [open, setOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
-
-  useEffect(() => {
-    api.get('/v1/properties').then((res) => {
-      const list = res.data?.data ?? res.data ?? [];
-      setProperties(list);
-      if (!propertyId && list.length > 0) {
-        setPropertyId(list[0].id);
-      }
-    }).catch(() => {});
-  }, []);
 
   const activeProperty = properties.find((p) => p.id === propertyId);
   const currentLang =

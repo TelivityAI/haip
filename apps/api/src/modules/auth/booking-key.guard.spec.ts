@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UnauthorizedException } from '@nestjs/common';
 import { BookingKeyGuard, hashBookingKey } from './booking-key.guard';
 
+vi.mock('@telivityhaip/database', () => ({
+  bookingEngineCredentials: { keyHash: 'keyHash' },
+}));
+
 function ctx(req: any) {
   return { switchToHttp: () => ({ getRequest: () => req }) } as any;
 }
@@ -61,7 +65,17 @@ describe('BookingKeyGuard', () => {
     expect(req.bookingEngine.propertyId).toBe(A);
   });
 
-  it('401 when no DB is wired (fail-closed)', async () => {
+  it('AUTH_ENABLED=false still validates a provided key', async () => {
+    config.get.mockImplementation((k: string, d?: any) => (k === 'AUTH_ENABLED' ? 'false' : d));
+    const raw = 'pk_live_DEMOKEY';
+    db = dbReturning([{ id: 'cred-demo', propertyId: A, keyHash: hashBookingKey(raw), isActive: true, revokedAt: null }]);
+    guard = new BookingKeyGuard(config, db);
+    const req: any = { headers: { 'x-booking-key': raw } };
+    await expect(guard.canActivate(ctx(req))).resolves.toBe(true);
+    expect(req.bookingEngine).toEqual({ propertyId: A, credentialId: 'cred-demo' });
+  });
+
+    it('401 when no DB is wired (fail-closed)', async () => {
     guard = new BookingKeyGuard(config, undefined);
     const req: any = { headers: { 'x-booking-key': 'pk_live_X' } };
     await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(UnauthorizedException);

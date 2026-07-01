@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Radio, Plus, ChevronLeft, RefreshCw, Zap, Image as ImageIcon } from 'lucide-react';
+import { format, addDays } from 'date-fns';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import { useToast } from '../components/ui/Toast';
@@ -210,8 +211,17 @@ function ConnectionDetail() {
     enabled: !!id && !!propertyId,
   });
 
+  const ariStart = format(new Date(), 'yyyy-MM-dd');
+  const ariEnd = format(addDays(new Date(), 30), 'yyyy-MM-dd');
+
   const syncMutation = useMutation({
-    mutationFn: (action: string) => api.post(`/v1/channels/push/${action}`, { propertyId, connectionId: id }),
+    mutationFn: (action: string) =>
+      api.post(`/v1/channels/push/${action}`, {
+        propertyId,
+        channelConnectionId: id,
+        startDate: ariStart,
+        endDate: ariEnd,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       queryClient.invalidateQueries({ queryKey: ['ari-logs', id] });

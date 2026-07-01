@@ -80,7 +80,7 @@ function TaskBoard() {
 
   const actionMutation = useMutation({
     mutationFn: ({ id, action, body }: { id: string; action: string; body?: Record<string, unknown> }) =>
-      api.patch(`/v1/housekeeping/tasks/${id}/${action}`, body ?? {}),
+      api.patch(`/v1/housekeeping/tasks/${id}/${action}`, body ?? {}, { params: { propertyId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['housekeeping'] });
       setTaskDetail(null);
@@ -92,8 +92,24 @@ function TaskBoard() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['housekeeping'] }),
   });
 
+  const { data: usersData } = useQuery({
+    queryKey: ['admin', 'users', propertyId],
+    queryFn: () => api.get('/v1/admin/users', { params: { propertyId } }).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+  const housekeeperIds = ((usersData as { id: string }[]) ?? []).map((u) => u.id);
+
   const autoAssignMutation = useMutation({
-    mutationFn: () => api.post('/v1/housekeeping/auto-assign', { propertyId, serviceDate: today, housekeepers: [] }),
+    mutationFn: () => {
+      if (housekeeperIds.length === 0) {
+        throw new Error('No staff users available for auto-assign');
+      }
+      return api.post('/v1/housekeeping/auto-assign', {
+        propertyId,
+        serviceDate: today,
+        housekeepers: housekeeperIds,
+      });
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['housekeeping'] }),
   });
 
@@ -118,7 +134,7 @@ function TaskBoard() {
           <button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending} className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-telivity-light-grey disabled:opacity-50">
             <Zap size={14} /> Generate Stayovers
           </button>
-          <button onClick={() => autoAssignMutation.mutate()} disabled={autoAssignMutation.isPending} className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-telivity-light-grey disabled:opacity-50">
+          <button onClick={() => autoAssignMutation.mutate()} disabled={autoAssignMutation.isPending || housekeeperIds.length === 0} className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-telivity-light-grey disabled:opacity-50">
             <UserPlus size={14} /> Auto-Assign
           </button>
         </div>

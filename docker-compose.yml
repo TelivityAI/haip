@@ -93,6 +93,7 @@ services:
       # Serve the bundled dashboard at the same origin as the API (port 3000),
       # so the one-command demo has a single URL. (Auth stays off by default.)
       SERVE_DASHBOARD: 'true'
+      SERVE_BOOKING: 'true'
       PORT: 3000
       DATABASE_URL: postgresql://haip:haip@postgres:5432/haip
       REDIS_URL: redis://redis:6379
@@ -100,6 +101,7 @@ services:
       # STRIPE_SECRET_KEY:
       # STRIPE_WEBHOOK_SECRET:
       AUTH_ENABLED: 'false'
+      DEMO_PROPERTY_ID: 'a0000001-0000-4000-a000-000000000001'
       # Local demo intentionally runs auth-off + mock payments. The prod boot
       # check only fires when NODE_ENV=production; this opt-in keeps the lean
       # demo green even if someone flips NODE_ENV.

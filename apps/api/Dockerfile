@@ -8,6 +8,7 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/dashboard/package.json ./apps/dashboard/
+COPY apps/booking/package.json ./apps/booking/
 COPY packages/database/package.json ./packages/database/
 COPY packages/shared/package.json* ./packages/shared/
 
@@ -18,6 +19,7 @@ COPY tsconfig.base.json ./
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 COPY apps/dashboard/ ./apps/dashboard/
+COPY apps/booking/ ./apps/booking/
 
 # Build workspace packages
 RUN pnpm --filter @telivityhaip/shared run build
@@ -25,6 +27,9 @@ RUN pnpm --filter @telivityhaip/database run build
 
 # Build dashboard (Vite static output)
 RUN pnpm --filter dashboard run build
+
+# Build booking engine SPA
+RUN pnpm --filter @telivityhaip/booking run build
 
 # Build API (NestJS)
 RUN pnpm --filter @telivityhaip/api run build
@@ -42,6 +47,7 @@ COPY --from=base /app/apps/api/dist ./apps/api/dist
 COPY --from=base /app/apps/api/package.json ./apps/api/
 COPY --from=base /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=base /app/apps/dashboard/dist ./apps/dashboard/dist
+COPY --from=base /app/apps/booking/dist ./apps/booking/dist
 COPY --from=base /app/packages/database/dist ./packages/database/dist
 COPY --from=base /app/packages/database/package.json ./packages/database/
 # database's own node_modules (postgres, drizzle-orm) — needed so the

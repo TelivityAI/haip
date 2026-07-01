@@ -58,7 +58,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
 
   const { data: configData } = useQuery({
     queryKey: ['booking-engine', 'config', propertyId],
-    queryFn: () => api.get('/v1/admin/booking-engine/config').then((r) => r.data),
+    queryFn: () => api.get('/v1/admin/booking-engine/config', { params: { propertyId } }).then((r) => r.data),
     enabled: !!propertyId,
   });
 
@@ -107,7 +107,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
   // ---- Publishable keys ----
   const { data: keysData } = useQuery({
     queryKey: ['booking-engine', 'keys', propertyId],
-    queryFn: () => api.get('/v1/admin/booking-engine/keys').then((r) => r.data),
+    queryFn: () => api.get('/v1/admin/booking-engine/keys', { params: { propertyId } }).then((r) => r.data),
     enabled: !!propertyId,
   });
   const keys: PublishableKey[] = keysData?.data ?? keysData ?? [];
@@ -117,7 +117,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
 
   const createKey = useMutation({
     mutationFn: (label: string) =>
-      api.post('/v1/admin/booking-engine/keys', { label }).then((r) => r.data),
+      api.post('/v1/admin/booking-engine/keys', { label }, { params: { propertyId } }).then((r) => r.data),
     onSuccess: (res) => {
       const created = res?.data ?? res;
       setNewKey(created?.key ?? null);
@@ -129,7 +129,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
   });
 
   const revokeKey = useMutation({
-    mutationFn: (id: string) => api.delete(`/v1/admin/booking-engine/keys/${id}`),
+    mutationFn: (id: string) => api.delete(`/v1/admin/booking-engine/keys/${id}`, { params: { propertyId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['booking-engine', 'keys'] });
       toast('success', 'Key revoked');
@@ -149,7 +149,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
         sellableRatePlanIds,
         depositPolicy,
         autoConfirm,
-      }),
+      }, { params: { propertyId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['booking-engine', 'config'] });
       toast('success', 'Booking engine settings saved');

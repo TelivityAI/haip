@@ -86,18 +86,28 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
     if (property) {
       setName(property.name ?? '');
       setCode(property.code ?? '');
-      setAddress(property.address ?? '');
+      setAddress(property.addressLine1 ?? property.address ?? '');
       setPhone(property.phone ?? '');
       setEmail(property.email ?? '');
       setTimezone(property.timezone ?? '');
-      setCurrency(property.currency ?? 'USD');
+      setCurrency(property.currencyCode ?? property.currency ?? 'USD');
       setCheckInTime(property.checkInTime ?? '15:00');
       setCheckOutTime(property.checkOutTime ?? '11:00');
     }
   }, [property]);
 
   const updateMutation = useMutation({
-    mutationFn: () => api.patch(`/v1/properties/${propertyId}`, { name, code, address, phone, email, timezone, currency, checkInTime, checkOutTime }),
+    mutationFn: () => api.patch(`/v1/properties/${propertyId}`, {
+      name,
+      code,
+      addressLine1: address || undefined,
+      phone,
+      email,
+      timezone,
+      currencyCode: currency,
+      checkInTime,
+      checkOutTime,
+    }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['properties'] }),
   });
 

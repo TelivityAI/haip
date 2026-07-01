@@ -17,6 +17,9 @@ export function hashBookingKey(raw: string): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
+/** Seeded demo property (`sid('a0000001', 1)` in packages/database seed). */
+export const DEFAULT_DEMO_PROPERTY_ID = 'a0000001-0000-4000-a000-000000000001';
+
 /**
  * Principal attached to the request by {@link BookingKeyGuard}.
  *
@@ -41,8 +44,9 @@ export interface BookingEnginePrincipal {
  * row. A revoked/inactive key is a TERMINAL reject (never silently re-authorized).
  *
  * Fail-closed: when `AUTH_ENABLED!=='false'` and no row matches → 401. Under
- * `AUTH_ENABLED='false'` (dev/demo) the guard attaches the seed demo property so
- * the one-command demo works without a key (sandbox parity with the other guards).
+ * `AUTH_ENABLED='false'` (dev/demo) a missing key attaches the seed demo property
+ * so the one-command demo works keyless; a provided key is still validated when
+ * the DB is available (so `?key=pk_live_…` resolves to the seeded property).
  */
 @Injectable()
 export class BookingKeyGuard implements CanActivate {
@@ -51,31 +55,17 @@ export class BookingKeyGuard implements CanActivate {
     @Optional() @Inject(DRIZZLE) private readonly db?: any,
   ) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<any>();
-
-    if (this.configService.get<string>('AUTH_ENABLED', 'true') === 'false') {
-      // Demo parity: attach the seeded demo property so the widget works keyless.
-      const demoPropertyId = this.configService.get<string>('DEMO_PROPERTY_ID');
-      req.bookingEngine = {
-        propertyId: demoPropertyId ?? '00000000-0000-4000-a000-000000000001',
-        credentialId: 'demo',
-      } as BookingEnginePrincipal;
-      return true;
-    }
-
+  private extractRawKey(req: any): string | undefined {
     const headerValue = req.headers?.['x-booking-key'] ?? req.headers?.['X-Booking-Key'];
     const queryValue = typeof req.query?.key === 'string' ? req.query.key : undefined;
     const raw = Array.isArray(headerValue) ? headerValue[0] : (headerValue ?? queryValue);
+    return raw && typeof raw === 'string' ? raw : undefined;
+  }
 
-    if (!raw || typeof raw !== 'string') {
-      throw new UnauthorizedException('Invalid or missing booking key');
-    }
+  private async resolveCredential(raw: string): Promise<BookingEnginePrincipal> {
     if (!this.db) {
-      // Fail-closed: without a DB we cannot validate the key.
       throw new UnauthorizedException('Invalid or missing booking key');
     }
-
     const keyHash = hashBookingKey(raw);
     const rows = await this.db
       .select()
@@ -90,10 +80,35 @@ export class BookingKeyGuard implements CanActivate {
       throw new UnauthorizedException('Booking key has been revoked');
     }
 
-    req.bookingEngine = {
+    return {
       propertyId: cred.propertyId,
       credentialId: cred.id,
-    } as BookingEnginePrincipal;
+    };
+  }
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const req = context.switchToHttp().getRequest<any>();
+    const rawKey = this.extractRawKey(req);
+
+    if (this.configService.get<string>('AUTH_ENABLED', 'true') === 'false') {
+      if (rawKey) {
+        req.bookingEngine = await this.resolveCredential(rawKey);
+        return true;
+      }
+      const demoPropertyId =
+        this.configService.get<string>('DEMO_PROPERTY_ID') ?? DEFAULT_DEMO_PROPERTY_ID;
+      req.bookingEngine = {
+        propertyId: demoPropertyId,
+        credentialId: 'demo',
+      } as BookingEnginePrincipal;
+      return true;
+    }
+
+    if (!rawKey) {
+      throw new UnauthorizedException('Invalid or missing booking key');
+    }
+
+    req.bookingEngine = await this.resolveCredential(rawKey);
     return true;
   }
 }

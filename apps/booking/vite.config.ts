@@ -7,6 +7,7 @@ import path from 'path';
 //  - src/embed.ts → small script a host page loads to mount the widget into
 //                   a <div id="haip-booking" data-booking-key="pk_..."></div>
 export default defineConfig({
+  base: '/booking/',
   root: path.resolve(__dirname),
   plugins: [react()],
   resolve: {

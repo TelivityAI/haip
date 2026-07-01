@@ -21,6 +21,11 @@ const Communications = lazy(() => import('./pages/Communications'));
 const Reviews = lazy(() => import('./pages/Reviews'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Import = lazy(() => import('./pages/Import'));
+const Groups = lazy(() => import('./pages/Groups'));
+const Cashier = lazy(() => import('./pages/Cashier'));
+const HouseAccounts = lazy(() => import('./pages/HouseAccounts'));
+const Accounting = lazy(() => import('./pages/Accounting'));
+const TaxSettings = lazy(() => import('./pages/TaxSettings'));
 
 export default function App() {
   useRealtimeInvalidation();
@@ -37,6 +42,11 @@ export default function App() {
             <Route path="/rooms/*" element={<Rooms />} />
             <Route path="/housekeeping/*" element={<Housekeeping />} />
             <Route path="/folios/*" element={<Folios />} />
+            <Route path="/groups/*" element={<Groups />} />
+            <Route path="/cashier/*" element={<Cashier />} />
+            <Route path="/house-accounts/*" element={<HouseAccounts />} />
+            <Route path="/accounting/*" element={<Accounting />} />
+            <Route path="/tax/*" element={<TaxSettings />} />
             <Route path="/rate-plans/*" element={<RatePlans />} />
             <Route path="/revenue/*" element={<Revenue />} />
             <Route path="/night-audit" element={<NightAudit />} />

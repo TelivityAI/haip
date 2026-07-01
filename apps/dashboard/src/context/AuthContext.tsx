@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { keycloak, AUTH_ENABLED } from '../lib/keycloak';
 import { api } from '../lib/api';
+import { reconnectSocket } from '../lib/socket';
 
 export interface AuthUser {
   sub: string;
@@ -95,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             keycloak.updateToken(60).then((refreshed) => {
               if (refreshed) {
                 api.defaults.headers.common['Authorization'] = `Bearer ${keycloak.token}`;
+                reconnectSocket();
               }
             }).catch(() => {
               keycloak.login();

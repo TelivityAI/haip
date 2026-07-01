@@ -7,16 +7,39 @@ import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import KpiCard from '../components/ui/KpiCard';
 
+interface RevenueSummary {
+  totalRevenue?: number;
+}
+
 interface AuditResult {
   id: string;
   businessDate: string;
   status: string;
   startedAt?: string;
   completedAt?: string;
-  roomChargesPosted?: number;
-  noShowsProcessed?: number;
-  revenueTotal?: number;
+  roomChargesPosted?: string | number;
+  noShowsProcessed?: string | number;
+  summary?: RevenueSummary | null;
   steps?: { step: string; count: number; status: string }[];
+}
+
+function auditRevenue(a: AuditResult): number | null {
+  const fromSummary = a.summary?.totalRevenue;
+  if (fromSummary != null && !Number.isNaN(Number(fromSummary))) {
+    return Number(fromSummary);
+  }
+  return null;
+}
+
+function auditCount(value: string | number | undefined): number {
+  if (value == null) return 0;
+  const n = Number(value);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+function formatAuditRevenue(a: AuditResult, empty = '$0.00'): string {
+  const rev = auditRevenue(a);
+  return rev != null ? `$${rev.toFixed(2)}` : empty;
 }
 
 const SEVERITY_ICONS = { critical: XCircle, warning: AlertTriangle, info: Info };
@@ -25,7 +48,7 @@ const SEVERITY_COLORS = { critical: 'text-red-600 bg-red-50', warning: 'text-tel
 function AnomalySection({ propertyId }: { propertyId: string }) {
   const { data: decisions } = useQuery({
     queryKey: ['agent-decisions', propertyId, 'night_audit'],
-    queryFn: () => api.get(`/v1/agents/${propertyId}/decisions/night_audit`, { params: { limit: 5 } }).then((r) => r.data?.data ?? r.data ?? []),
+    queryFn: () => api.get(`/v1/agents/${propertyId}/night_audit/decisions`, { params: { limit: 5 } }).then((r) => r.data?.data ?? r.data ?? []),
     enabled: !!propertyId,
   });
 
@@ -69,7 +92,7 @@ export default function NightAudit() {
 
   const { data } = useQuery({
     queryKey: ['audit', propertyId],
-    queryFn: () => api.get('/v1/night-audit/history', { params: { propertyId } }).then((r) => r.data),
+    queryFn: () => api.get('/v1/night-audit/runs', { params: { propertyId } }).then((r) => r.data),
     enabled: !!propertyId,
   });
 
@@ -78,7 +101,8 @@ export default function NightAudit() {
   const runMutation = useMutation({
     mutationFn: () => api.post('/v1/night-audit/run', { propertyId, businessDate: auditDate }),
     onSuccess: (res) => {
-      setLastResult(res.data?.data ?? res.data);
+      const payload = res.data?.data ?? res.data;
+      setLastResult(payload?.auditRun ?? payload);
       queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
   });
@@ -124,9 +148,9 @@ export default function NightAudit() {
 
         {lastResult && (
           <div className="mt-4 grid grid-cols-3 gap-4">
-            <KpiCard title="Room Charges" value={lastResult.roomChargesPosted ?? 0} icon={Moon} />
-            <KpiCard title="No-Shows" value={lastResult.noShowsProcessed ?? 0} icon={Moon} />
-            <KpiCard title="Revenue" value={lastResult.revenueTotal != null ? `$${Number(lastResult.revenueTotal).toFixed(2)}` : '$0.00'} icon={Moon} />
+            <KpiCard title="Room Charges" value={auditCount(lastResult.roomChargesPosted)} icon={Moon} />
+            <KpiCard title="No-Shows" value={auditCount(lastResult.noShowsProcessed)} icon={Moon} />
+            <KpiCard title="Revenue" value={formatAuditRevenue(lastResult)} icon={Moon} />
           </div>
         )}
 
@@ -172,9 +196,9 @@ export default function NightAudit() {
                 <td className="px-4 py-3"><StatusBadge status={a.status === 'completed' ? 'success' : a.status} label={a.status} /></td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{a.startedAt ? format(new Date(a.startedAt), 'HH:mm:ss') : '—'}</td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{a.completedAt ? format(new Date(a.completedAt), 'HH:mm:ss') : '—'}</td>
-                <td className="px-4 py-3 text-sm text-right">{a.roomChargesPosted ?? 0}</td>
-                <td className="px-4 py-3 text-sm text-right">{a.noShowsProcessed ?? 0}</td>
-                <td className="px-4 py-3 text-sm text-right font-medium">{a.revenueTotal != null ? `$${Number(a.revenueTotal).toFixed(2)}` : '—'}</td>
+                <td className="px-4 py-3 text-sm text-right">{auditCount(a.roomChargesPosted)}</td>
+                <td className="px-4 py-3 text-sm text-right">{auditCount(a.noShowsProcessed)}</td>
+                <td className="px-4 py-3 text-sm text-right font-medium">{formatAuditRevenue(a, '—')}</td>
               </tr>
             ))}
             {audits.length === 0 && (

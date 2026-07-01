@@ -4,6 +4,7 @@ import { BarChart3, Percent, DollarSign, TrendingUp } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { format, subDays } from 'date-fns';
 import { api } from '../lib/api';
+import { formatOccupancyPercent } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import KpiCard from '../components/ui/KpiCard';
 
@@ -34,6 +35,9 @@ export default function Reports() {
   });
 
   const reportData = data?.data ?? data ?? {};
+  const kpis = reportData.kpis ?? {};
+  const revenue = reportData.revenue ?? {};
+  const payments = reportData.payments ?? {};
 
   if (!propertyId) {
     return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
@@ -80,15 +84,15 @@ export default function Reports() {
       {report === 'financial-summary' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KpiCard title="ADR" value={reportData.adr != null ? `$${Number(reportData.adr).toFixed(2)}` : '—'} icon={DollarSign} />
-            <KpiCard title="RevPAR" value={reportData.revpar != null ? `$${Number(reportData.revpar).toFixed(2)}` : '—'} icon={TrendingUp} />
-            <KpiCard title="Occupancy" value={reportData.occupancyRate != null ? `${Number(reportData.occupancyRate).toFixed(1)}%` : '—'} icon={Percent} />
+            <KpiCard title="ADR" value={kpis.adr != null ? `$${Number(kpis.adr).toFixed(2)}` : '—'} icon={DollarSign} />
+            <KpiCard title="RevPAR" value={kpis.revpar != null ? `$${Number(kpis.revpar).toFixed(2)}` : '—'} icon={TrendingUp} />
+            <KpiCard title="Occupancy" value={formatOccupancyPercent(kpis.occupancyRate)} icon={Percent} />
           </div>
-          {reportData.revenueBreakdown && (
+          {reportData.revenueByType && (
             <div className="bg-white rounded-xl shadow-sm p-5">
               <h3 className="text-sm font-semibold text-telivity-navy mb-3">Revenue Breakdown</h3>
               <div className="space-y-2">
-                {Object.entries(reportData.revenueBreakdown as Record<string, number>).map(([k, v]) => (
+                {Object.entries(reportData.revenueByType as Record<string, number>).map(([k, v]) => (
                   <div key={k} className="flex justify-between py-1 border-b border-gray-50">
                     <span className="text-sm text-telivity-slate capitalize">{k.replace(/_/g, ' ')}</span>
                     <span className="text-sm font-medium">${Number(v).toFixed(2)}</span>
@@ -104,24 +108,11 @@ export default function Reports() {
       {report === 'occupancy' && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard title="Occupied" value={reportData.roomsOccupied ?? 0} icon={Percent} />
-            <KpiCard title="Available" value={reportData.roomsAvailable ?? 0} icon={Percent} />
-            <KpiCard title="OOO" value={reportData.roomsOutOfOrder ?? 0} icon={Percent} />
-            <KpiCard title="Occupancy %" value={reportData.occupancyRate != null ? `${Number(reportData.occupancyRate).toFixed(1)}%` : '—'} icon={Percent} />
+            <KpiCard title="Occupied" value={reportData.occupiedRooms ?? 0} icon={Percent} />
+            <KpiCard title="Available" value={reportData.availableRooms ?? 0} icon={Percent} />
+            <KpiCard title="OOO" value={reportData.outOfOrder ?? 0} icon={Percent} />
+            <KpiCard title="Occupancy %" value={formatOccupancyPercent(reportData.occupancyRate)} icon={Percent} />
           </div>
-          {reportData.byStatus && (
-            <div className="bg-white rounded-xl shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-telivity-navy mb-3">Room Status Distribution</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie data={Object.entries(reportData.byStatus as Record<string, number>).map(([k, v]) => ({ name: k.replace(/_/g, ' '), value: v }))} cx="50%" cy="50%" innerRadius={60} outerRadius={95} dataKey="value" nameKey="name" paddingAngle={2}>
-                    {Object.keys(reportData.byStatus as Record<string, number>).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip /><Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
         </div>
       )}
 
@@ -129,15 +120,15 @@ export default function Reports() {
       {report === 'daily-revenue' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KpiCard title="Room Revenue" value={reportData.roomRevenue != null ? `$${Number(reportData.roomRevenue).toFixed(2)}` : '—'} icon={DollarSign} />
-            <KpiCard title="Other Revenue" value={reportData.otherRevenue != null ? `$${Number(reportData.otherRevenue).toFixed(2)}` : '—'} icon={DollarSign} />
-            <KpiCard title="Total Revenue" value={reportData.totalRevenue != null ? `$${Number(reportData.totalRevenue).toFixed(2)}` : '—'} icon={DollarSign} />
+            <KpiCard title="Room Revenue" value={revenue.room != null ? `$${Number(revenue.room).toFixed(2)}` : '—'} icon={DollarSign} />
+            <KpiCard title="Other Revenue" value={revenue.other != null ? `$${Number(revenue.other).toFixed(2)}` : '—'} icon={DollarSign} />
+            <KpiCard title="Total Revenue" value={revenue.total != null ? `$${Number(revenue.total).toFixed(2)}` : '—'} icon={DollarSign} />
           </div>
-          {reportData.byMethod && (
+          {payments && Object.keys(payments).length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-5">
               <h3 className="text-sm font-semibold text-telivity-navy mb-3">Revenue by Payment Method</h3>
               <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={Object.entries(reportData.byMethod as Record<string, number>).map(([k, v]) => ({ method: k, amount: v }))}>
+                <BarChart data={Object.entries(payments as Record<string, number>).filter(([k]) => k !== 'total').map(([k, v]) => ({ method: k, amount: v }))}>
                   <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="method" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 12 }} /><Tooltip />
                   <Bar dataKey="amount" fill="#06bdb4" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -151,11 +142,14 @@ export default function Reports() {
       {report === 'occupancy-trend' && (
         <div className="bg-white rounded-xl shadow-sm p-5">
           <h3 className="text-sm font-semibold text-telivity-navy mb-3">Occupancy Trend</h3>
-          {Array.isArray(reportData) || reportData.trend ? (
+          {Array.isArray(reportData.daily) && reportData.daily.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={reportData.trend ?? reportData}>
+              <LineChart data={(reportData.daily as { date: string; occupancyRate: number }[]).map((d) => ({
+                ...d,
+                occupancyPct: Number(d.occupancyRate) * 100,
+              }))}>
                 <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 12 }} domain={[0, 100]} /><Tooltip />
-                <Line type="monotone" dataKey="occupancyRate" stroke="#06bdb4" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="occupancyPct" stroke="#06bdb4" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
