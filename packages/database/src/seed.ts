@@ -169,16 +169,18 @@ async function main() {
     'dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write',
     'guests.read', 'guests.write', 'rooms.read', 'rooms.write', 'media.manage',
     'housekeeping.read', 'housekeeping.manage', 'folios.read', 'folios.manage',
+    'groups.read', 'groups.manage', 'cashier.access', 'houseaccounts.read', 'houseaccounts.manage',
+    'accounting.view', 'tax.manage',
     'rateplans.read', 'rateplans.manage', 'revenue.manage', 'nightaudit.run',
     'reports.view', 'channels.manage', 'communications.manage', 'reviews.manage',
-    'settings.manage', 'admin.users.manage', 'admin.roles.manage',
+    'settings.manage', 'bookingengine.manage', 'admin.users.manage', 'admin.roles.manage',
   ];
   const ROLE_DEFS: { key: string; name: string; perms: string[] }[] = [
     { key: 'admin', name: 'Administrator', perms: ALL_PERMS },
-    { key: 'front_desk', name: 'Front Desk', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'folios.manage', 'rateplans.read', 'communications.manage', 'reviews.manage'] },
+    { key: 'front_desk', name: 'Front Desk', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'folios.manage', 'groups.read', 'houseaccounts.read', 'houseaccounts.manage', 'rateplans.read', 'communications.manage', 'reviews.manage'] },
     { key: 'housekeeping', name: 'Housekeeping', perms: ['dashboard.view', 'rooms.read', 'housekeeping.read'] },
     { key: 'housekeeping_manager', name: 'Housekeeping Manager', perms: ['dashboard.view', 'rooms.read', 'rooms.write', 'housekeeping.read', 'housekeeping.manage'] },
-    { key: 'night_auditor', name: 'Night Auditor', perms: ['dashboard.view', 'reservations.read', 'folios.read', 'nightaudit.run', 'reports.view'] },
+    { key: 'night_auditor', name: 'Night Auditor', perms: ['dashboard.view', 'reservations.read', 'folios.read', 'nightaudit.run', 'reports.view', 'cashier.access', 'houseaccounts.read', 'accounting.view'] },
     { key: 'readonly', name: 'Read Only', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'folios.read', 'rateplans.read', 'reports.view'] },
   ];
 

@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BadgeDollarSign, Plus, ChevronLeft } from 'lucide-react';
 import { api } from '../lib/api';
+import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
@@ -49,7 +50,18 @@ function RatePlanList() {
   const roomTypes = typesData?.data ?? typesData ?? [];
 
   const createMutation = useMutation({
-    mutationFn: () => api.post('/v1/rate-plans', { propertyId, name, code, type, baseAmount: Number(baseAmount), roomTypeId, currency: 'USD' }),
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.post('/v1/rate-plans', {
+        propertyId,
+        name,
+        code,
+        type,
+        baseAmount: moneyString(baseAmount),
+        roomTypeId,
+        currencyCode: 'USD',
+      });
+    },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['rate-plans'] }); setCreateOpen(false); },
   });
 

@@ -211,7 +211,6 @@ export default function Reviews() {
             <button
               onClick={() =>
                 createMutation.mutate({
-                  propertyId,
                   ...form,
                   stayDate: form.stayDate || undefined,
                 })

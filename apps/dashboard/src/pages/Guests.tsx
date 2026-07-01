@@ -36,7 +36,7 @@ function GuestList() {
 
   const { data } = useQuery({
     queryKey: ['guests', propertyId, searchTerm],
-    queryFn: () => api.get('/v1/guests', { params: { search: searchTerm || undefined } }).then((r) => r.data),
+    queryFn: () => api.get('/v1/guests', { params: { propertyId, search: searchTerm || undefined } }).then((r) => r.data),
     enabled: !!propertyId,
   });
 
@@ -171,7 +171,7 @@ function GuestDetail() {
 
   const { data: guestData } = useQuery({
     queryKey: ['guests', id],
-    queryFn: () => api.get(`/v1/guests/${id}`).then((r) => r.data),
+    queryFn: () => api.get(`/v1/guests/${id}`, { params: { propertyId } }).then((r) => r.data),
     enabled: !!id,
   });
 
@@ -186,7 +186,7 @@ function GuestDetail() {
 
   const updateMutation = useMutation({
     mutationFn: () =>
-      api.patch(`/v1/guests/${id}`, { firstName, lastName, email: email || undefined, phone: phone || undefined, vipLevel }),
+      api.patch(`/v1/guests/${id}`, { firstName, lastName, email: email || undefined, phone: phone || undefined, vipLevel }, { params: { propertyId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guests'] });
       setEditing(false);
@@ -194,12 +194,12 @@ function GuestDetail() {
   });
 
   const dnrMutation = useMutation({
-    mutationFn: () => api.patch(`/v1/guests/${id}`, { isDnr: !guest?.isDnr }),
+    mutationFn: () => api.patch(`/v1/guests/${id}`, { isDnr: !guest?.isDnr }, { params: { propertyId } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['guests'] }),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => api.delete(`/v1/guests/${id}`),
+    mutationFn: () => api.delete(`/v1/guests/${id}`, { params: { propertyId } }),
     onSuccess: () => navigate('/guests'),
   });
 

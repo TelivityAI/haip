@@ -10,9 +10,10 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table';
-import { CalendarDays, Plus, ChevronLeft, ChevronRight, ArrowUpDown, Search, X, MoreHorizontal, Eye, Pencil, Ban, DoorOpen, LogIn, LogOut } from 'lucide-react';
+import { CalendarDays, Plus, ChevronLeft, ChevronRight, ArrowUpDown, X, MoreHorizontal, Eye, Pencil, Ban, DoorOpen, LogIn, LogOut } from 'lucide-react';
 import { format, addDays, eachDayOfInterval } from 'date-fns';
 import { api } from '../lib/api';
+import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
@@ -48,7 +49,6 @@ function ReservationList() {
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -75,7 +75,6 @@ function ReservationList() {
   const params: Record<string, string> = {};
   if (propertyId) params.propertyId = propertyId;
   if (statusFilter) params.status = statusFilter;
-  if (searchTerm) params.search = searchTerm;
   if (dateFrom) params.arrivalDateFrom = dateFrom;
   if (dateTo) params.arrivalDateTo = dateTo;
 
@@ -88,32 +87,92 @@ function ReservationList() {
   const reservations: Reservation[] = data?.data ?? data ?? [];
 
   const searchAvailMutation = useMutation({
-    mutationFn: () =>
-      api.post('/v1/reservations/search-availability', {
-        propertyId,
-        checkInDate: createCheckIn,
-        checkOutDate: createCheckOut,
-        adults: createAdults,
-        children: createChildren,
-      }),
-    onSuccess: (res) => {
-      setAvailResults(res.data?.data ?? res.data ?? []);
+    mutationFn: async () => {
+      requirePropertyId(propertyId);
+      const [availRes, rateRes] = await Promise.all([
+        api.post('/v1/reservations/search-availability', {
+          propertyId,
+          checkIn: createCheckIn,
+          checkOut: createCheckOut,
+        }),
+        api.get('/v1/rate-plans', { params: { propertyId } }),
+      ]);
+      const rows: { roomTypeId: string; roomTypeName: string; available: number }[] =
+        availRes.data?.data ?? availRes.data ?? [];
+      const ratePlans: { id: string; name: string; roomTypeId: string; baseAmount?: string | number }[] =
+        rateRes.data?.data ?? rateRes.data ?? [];
+
+      const byType = new Map<string, { roomTypeId: string; roomTypeName: string; minAvailable: number }>();
+      for (const row of rows) {
+        const existing = byType.get(row.roomTypeId);
+        if (!existing) {
+          byType.set(row.roomTypeId, {
+            roomTypeId: row.roomTypeId,
+            roomTypeName: row.roomTypeName,
+            minAvailable: row.available,
+          });
+        } else {
+          existing.minAvailable = Math.min(existing.minAvailable, row.available);
+        }
+      }
+
+      return [...byType.values()]
+        .filter((rt) => rt.minAvailable > 0)
+        .map((rt) => ({
+          roomTypeId: rt.roomTypeId,
+          roomTypeName: rt.roomTypeName,
+          ratePlans: ratePlans
+            .filter((rp) => rp.roomTypeId === rt.roomTypeId)
+            .map((rp) => ({
+              id: rp.id,
+              name: rp.name,
+              rate: Number(rp.baseAmount ?? 0),
+            })),
+        }));
+    },
+    onSuccess: (grouped) => {
+      setAvailResults(grouped);
       setCreateStep(1);
     },
   });
 
   const createResMutation = useMutation({
-    mutationFn: () =>
-      api.post('/v1/reservations', {
+    mutationFn: async () => {
+      requirePropertyId(propertyId);
+      const guestRes = await api.post('/v1/guests', {
+        firstName: guestFirstName,
+        lastName: guestLastName,
+        email: guestEmail || undefined,
+        phone: guestPhone || undefined,
+      });
+      const guestId = guestRes.data?.id ?? guestRes.data?.data?.id;
+      const nights = Math.max(
+        1,
+        Math.round(
+          (new Date(createCheckOut).getTime() - new Date(createCheckIn).getTime()) /
+            (1000 * 60 * 60 * 24),
+        ),
+      );
+      const selectedPlan = availResults
+        .flatMap((rt) => rt.ratePlans)
+        .find((rp) => rp.id === selectedRatePlan);
+      const nightly = selectedPlan?.rate ?? 0;
+      const totalAmount = moneyString(nightly * nights);
+
+      return api.post('/v1/reservations', {
         propertyId,
+        guestId,
         roomTypeId: selectedRoomType,
         ratePlanId: selectedRatePlan,
         arrivalDate: createCheckIn,
         departureDate: createCheckOut,
         adults: createAdults,
         children: createChildren,
-        guest: { firstName: guestFirstName, lastName: guestLastName, email: guestEmail, phone: guestPhone },
-      }),
+        totalAmount,
+        currencyCode: 'USD',
+        source: 'direct',
+      });
+    },
     onSuccess: async (res) => {
       const id = res.data?.id ?? res.data?.data?.id;
       if (id) {
@@ -126,7 +185,8 @@ function ReservationList() {
   });
 
   const cancelMutation = useMutation({
-    mutationFn: (id: string) => api.patch(`/v1/reservations/${id}/cancel`, { reason: 'Cancelled by front desk' }),
+    mutationFn: (id: string) =>
+      api.patch(`/v1/reservations/${id}/cancel`, { cancellationReason: 'Cancelled by front desk' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reservations'] }),
   });
 
@@ -237,18 +297,6 @@ function ReservationList() {
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-end">
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Search</label>
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-telivity-mid-grey" />
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Guest name or confirmation #"
-              className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-telivity-teal"
-            />
-          </div>
-        </div>
         <div>
           <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Status</label>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
@@ -269,8 +317,8 @@ function ReservationList() {
           <label className="block text-xs font-medium text-telivity-mid-grey mb-1">To</label>
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
         </div>
-        {(searchTerm || statusFilter || dateFrom || dateTo) && (
-          <button onClick={() => { setSearchTerm(''); setStatusFilter(''); setDateFrom(''); setDateTo(''); }} className="p-2 text-telivity-mid-grey hover:text-telivity-orange">
+        {(statusFilter || dateFrom || dateTo) && (
+          <button onClick={() => { setStatusFilter(''); setDateFrom(''); setDateTo(''); }} className="p-2 text-telivity-mid-grey hover:text-telivity-orange">
             <X size={16} />
           </button>
         )}

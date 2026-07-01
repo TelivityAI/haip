@@ -122,7 +122,7 @@ graph TB
     WS -->|Broadcast| Dashboard
 ```
 
-**Option B Architecture** — The PMS is standalone. It works without OTAIP. OTAIP agents sit on top via the Connect API, using purpose-built endpoints for AI agent workflows. This is the [Apaleo](https://apaleo.com) model, done open source.
+**Option B Architecture** — The PMS is standalone. It works without OTAIP. OTAIP agents sit on top via the Connect API, using purpose-built endpoints for AI agent workflows.
 
 ### Key Design Decisions
 
@@ -494,7 +494,19 @@ seeds automatically) using the included [`render.yaml`](./render.yaml) blueprint
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/TelivityAI/haip)
 
 Any Docker host works too — the [`apps/api/Dockerfile`](./apps/api/Dockerfile)
-builds a single image serving both the API and the dashboard on port 3000.
+builds a single image serving the API, dashboard (`/`), and booking engine (`/booking/`) on port 3000.
+
+### Production checklist
+
+Before going live, verify:
+
+- `AUTH_ENABLED=true` with Keycloak configured (`KEYCLOAK_URL`, realm, client)
+- `STRIPE_MODE=live` (or `test`) with real keys — not `mock`
+- Do **not** set `HAIP_ALLOW_INSECURE` in production
+- `SERVE_DASHBOARD=true` and/or `SERVE_BOOKING=true` if serving UIs from the API container
+- External cron for night audit and agent training — see [`docs/operations/cron.md`](./docs/operations/cron.md)
+- `CORS_ORIGINS` set to your dashboard/booking hostnames
+- `STORAGE_DRIVER=s3` if using photo uploads (MinIO or AWS)
 
 ### Run tests
 

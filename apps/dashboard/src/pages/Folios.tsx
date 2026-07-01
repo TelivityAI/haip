@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Routes, Route, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Receipt, Search, ChevronLeft, Plus, Lock, RotateCcw, ArrowRightLeft } from 'lucide-react';
+import { Receipt, ChevronLeft, Plus, Lock, RotateCcw } from 'lucide-react';
 import { api } from '../lib/api';
+import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
@@ -23,7 +24,7 @@ interface Folio {
 interface Charge {
   id: string;
   description: string;
-  chargeType: string;
+  type: string;
   amount: number;
   serviceDate: string;
   isLocked?: boolean;
@@ -45,15 +46,14 @@ function FolioList() {
   const { propertyId } = useProperty();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
   const resId = searchParams.get('reservationId');
 
   const { data } = useQuery({
-    queryKey: ['folios', propertyId, searchTerm, statusFilter, resId],
+    queryKey: ['folios', propertyId, statusFilter, resId],
     queryFn: () => api.get('/v1/folios', {
-      params: { propertyId, search: searchTerm || undefined, status: statusFilter || undefined, reservationId: resId || undefined },
+      params: { propertyId, status: statusFilter || undefined, reservationId: resId || undefined },
     }).then((r) => r.data),
     enabled: !!propertyId,
   });
@@ -72,10 +72,6 @@ function FolioList() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex gap-3">
-        <div className="flex-1 relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-telivity-mid-grey" />
-          <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Folio #, guest name, or confirmation #" className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-telivity-teal" />
-        </div>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
           <option value="">All Status</option>
           <option value="open">Open</option>
@@ -150,6 +146,7 @@ function FolioDetail() {
   const folio: Folio | null = folioData?.data ?? folioData ?? null;
   const charges: Charge[] = chargesData?.data ?? chargesData ?? [];
   const payments: Payment[] = paymentsData?.data ?? paymentsData ?? [];
+  const currencyCode = (folio as { currencyCode?: string } | null)?.currencyCode ?? 'USD';
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['folios'] });
@@ -157,7 +154,17 @@ function FolioDetail() {
   };
 
   const postChargeMutation = useMutation({
-    mutationFn: () => api.post(`/v1/folios/${id}/charges`, { chargeType, amount: Number(chargeAmount), description: chargeDesc, serviceDate: new Date().toISOString().split('T')[0] }),
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.post(`/v1/folios/${id}/charges`, {
+        propertyId,
+        type: chargeType,
+        amount: moneyString(chargeAmount),
+        currencyCode,
+        description: chargeDesc,
+        serviceDate: new Date().toISOString().split('T')[0],
+      });
+    },
     onSuccess: () => { invalidate(); setChargeOpen(false); setChargeAmount(''); setChargeDesc(''); },
   });
 
@@ -167,7 +174,16 @@ function FolioDetail() {
   });
 
   const recordPaymentMutation = useMutation({
-    mutationFn: () => api.post('/v1/payments', { folioId: id, propertyId, method: payMethod, amount: Number(payAmount) }),
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.post('/v1/payments', {
+        folioId: id,
+        propertyId,
+        method: payMethod,
+        amount: moneyString(payAmount),
+        currencyCode,
+      });
+    },
     onSuccess: () => { invalidate(); setPaymentOpen(false); setPayAmount(''); },
   });
 
@@ -215,7 +231,7 @@ function FolioDetail() {
                 <tr key={c.id} className={`border-b border-gray-50 ${c.isReversed ? 'opacity-50 line-through' : ''}`}>
                   <td className="py-2 text-sm text-telivity-slate">{c.serviceDate}</td>
                   <td className="py-2 text-sm text-telivity-navy">{c.description} {c.isLocked && <Lock size={12} className="inline text-telivity-mid-grey" />}</td>
-                  <td className="py-2 text-sm text-telivity-slate">{c.chargeType}</td>
+                  <td className="py-2 text-sm text-telivity-slate">{c.type}</td>
                   <td className="py-2 text-sm text-right font-medium">${Number(c.amount).toFixed(2)}</td>
                   <td className="py-2 text-right">
                     {!c.isReversed && !c.isLocked && folio.status === 'open' && (

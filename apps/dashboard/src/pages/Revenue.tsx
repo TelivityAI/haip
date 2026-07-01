@@ -165,7 +165,7 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
       const results: AgentDecision[] = [];
       for (const type of AGENT_TYPES) {
         try {
-          const res = await api.get(`/v1/agents/${propertyId}/decisions/${type}`, { params: { limit: 20 } });
+          const res = await api.get(`/v1/agents/${propertyId}/${type}/decisions`, { params: { limit: 20 } });
           const items = res.data?.data ?? res.data ?? [];
           results.push(...items);
         } catch { /* agent may not exist */ }
@@ -319,7 +319,7 @@ function PerformanceSection({ propertyId }: { propertyId: string }) {
       const results: AgentPerformance[] = [];
       for (const type of AGENT_TYPES) {
         try {
-          const res = await api.get(`/v1/agents/${propertyId}/performance/${type}`);
+          const res = await api.get(`/v1/agents/${propertyId}/${type}/performance`);
           results.push(res.data?.data ?? res.data);
         } catch { /* skip */ }
       }
@@ -385,13 +385,13 @@ function SettingsSection({ propertyId, agents }: { propertyId: string; agents: A
 
   const updateConfigMutation = useMutation({
     mutationFn: ({ agentType, updates }: { agentType: string; updates: Record<string, unknown> }) =>
-      api.put(`/v1/agents/${propertyId}/config/${agentType}`, updates),
+      api.put(`/v1/agents/${propertyId}/${agentType}/config`, updates),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents'] }),
   });
 
   const runAgentMutation = useMutation({
     mutationFn: (agentType: string) =>
-      api.post(`/v1/agents/${propertyId}/run/${agentType}`),
+      api.post(`/v1/agents/${propertyId}/${agentType}/run`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents'] });
       queryClient.invalidateQueries({ queryKey: ['agent-decisions'] });

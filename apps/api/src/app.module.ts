@@ -85,6 +85,16 @@ if (process.env['NODE_ENV'] === 'production' || process.env['SERVE_DASHBOARD'] =
   imports.push(
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'dashboard', 'dist'),
+      exclude: ['/api/(.*)', '/booking/(.*)'],
+    }),
+  );
+}
+
+if (process.env['NODE_ENV'] === 'production' || process.env['SERVE_BOOKING'] === 'true') {
+  imports.push(
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', '..', 'booking', 'dist'),
+      serveRoot: '/booking',
       exclude: ['/api/(.*)'],
     }),
   );

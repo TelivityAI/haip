@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon } from 'lucide-react';
 import { api } from '../lib/api';
+import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
@@ -260,7 +261,7 @@ function RoomList() {
 
   const statusMutation = useMutation({
     mutationFn: ({ roomId, newStatus }: { roomId: string; newStatus: string }) =>
-      api.patch(`/v1/rooms/${roomId}/status`, { newStatus }, { params: { propertyId } }),
+      api.patch(`/v1/rooms/${roomId}/status`, { status: newStatus }, { params: { propertyId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       setDetailRoom(null);
@@ -434,7 +435,7 @@ function RoomTypeList() {
   const types: RoomType[] = data?.data ?? data ?? [];
 
   const createMutation = useMutation({
-    mutationFn: () => api.post('/v1/rooms/types', { propertyId, name, code, maxOccupancy: maxOcc, bedType }),
+    mutationFn: () => api.post('/v1/rooms/types', { propertyId, name, code, maxOccupancy: maxOcc, defaultOccupancy: maxOcc, bedType }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms', 'types'] });
       setCreateOpen(false);

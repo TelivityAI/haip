@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound } from 'lucide-react';
 import { format } from 'date-fns';
 import { api } from '../lib/api';
+import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
@@ -46,7 +47,7 @@ export default function FrontDesk() {
 
   const { data: arrivals } = useQuery({
     queryKey: ['reservations', 'arrivals', propertyId, today],
-    queryFn: () => api.get('/v1/reservations', { params: { propertyId, status: 'confirmed', arrivalDate: today } }).then((r) => r.data),
+    queryFn: () => api.get('/v1/reservations', { params: { propertyId, status: 'confirmed', arrivalDateFrom: today, arrivalDateTo: today } }).then((r) => r.data),
     enabled: !!propertyId,
   });
 
@@ -58,7 +59,7 @@ export default function FrontDesk() {
 
   const { data: departureData } = useQuery({
     queryKey: ['reservations', 'departures', propertyId, today],
-    queryFn: () => api.get('/v1/reservations', { params: { propertyId, status: 'checked_in', departureDate: today } }).then((r) => r.data),
+    queryFn: () => api.get('/v1/reservations', { params: { propertyId, status: 'checked_in', departureDateFrom: today, departureDateTo: today } }).then((r) => r.data),
     enabled: !!propertyId,
   });
 
@@ -77,8 +78,8 @@ export default function FrontDesk() {
     mutationFn: (data: { id: string; roomId?: string; idType?: string; idNumber?: string }) =>
       api.patch(`/v1/reservations/${data.id}/check-in`, {
         roomId: data.roomId || undefined,
-        idDocumentType: data.idType,
-        idDocumentNumber: data.idNumber,
+        idType: data.idType,
+        idNumber: data.idNumber,
       }),
     onSuccess: () => {
       invalidateAll();
@@ -101,8 +102,14 @@ export default function FrontDesk() {
   });
 
   const groupCheckInMutation = useMutation({
-    mutationFn: (reservationIds: string[]) =>
-      api.post('/v1/reservations/group-check-in', { reservationIds }, { params: { propertyId } }),
+    mutationFn: (reservationIds: string[]) => {
+      requirePropertyId(propertyId);
+      return api.post(
+        '/v1/reservations/group-check-in',
+        { reservations: reservationIds.map((reservationId) => ({ reservationId })) },
+        { params: { propertyId } },
+      );
+    },
     onSuccess: () => {
       invalidateAll();
       setSelectedForGroup([]);

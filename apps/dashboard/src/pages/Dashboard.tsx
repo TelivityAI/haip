@@ -16,6 +16,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { api } from '../lib/api';
+import { formatOccupancyPercent } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import { getSocket } from '../lib/socket';
 import KpiCard from '../components/ui/KpiCard';
@@ -67,13 +68,13 @@ export default function Dashboard() {
 
   const { data: arrivals } = useQuery({
     queryKey: ['reservations', 'arrivals', propertyId, today],
-    queryFn: () => api.get('/v1/reservations', { params: { propertyId, status: 'confirmed', arrivalDate: today } }).then((r) => r.data),
+    queryFn: () => api.get('/v1/reservations', { params: { propertyId, status: 'confirmed', arrivalDateFrom: today, arrivalDateTo: today } }).then((r) => r.data),
     enabled: !!propertyId,
   });
 
   const { data: departures } = useQuery({
     queryKey: ['reservations', 'departures', propertyId, today],
-    queryFn: () => api.get('/v1/reservations', { params: { propertyId, status: 'checked_in', departureDate: today } }).then((r) => r.data),
+    queryFn: () => api.get('/v1/reservations', { params: { propertyId, status: 'checked_in', departureDateFrom: today, departureDateTo: today } }).then((r) => r.data),
     enabled: !!propertyId,
   });
 
@@ -104,6 +105,7 @@ export default function Dashboard() {
 
   const occ = occupancy?.data ?? occupancy ?? {};
   const fin = financial?.data ?? financial ?? {};
+  const kpis = fin.kpis ?? {};
   const arrList = arrivals?.data ?? arrivals ?? [];
   const depList = departures?.data ?? departures ?? [];
   const ihList = inHouse?.data ?? inHouse ?? [];
@@ -140,25 +142,25 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard
           title="Occupancy"
-          value={occ.occupancyRate != null ? `${Number(occ.occupancyRate).toFixed(1)}%` : '—'}
-          subtitle={`${occupiedCount} of ${totalRooms} rooms`}
+          value={formatOccupancyPercent(occ.occupancyRate)}
+          subtitle={`${occ.occupiedRooms ?? occupiedCount} of ${occ.availableRooms ?? totalRooms} rooms`}
           icon={Percent}
         />
         <KpiCard
           title="ADR"
-          value={occ.adr != null ? `$${Number(occ.adr).toFixed(2)}` : '—'}
+          value={kpis.adr != null ? `$${Number(kpis.adr).toFixed(2)}` : '—'}
           subtitle="Average Daily Rate"
           icon={DollarSign}
         />
         <KpiCard
           title="RevPAR"
-          value={occ.revpar != null ? `$${Number(occ.revpar).toFixed(2)}` : '—'}
+          value={kpis.revpar != null ? `$${Number(kpis.revpar).toFixed(2)}` : '—'}
           subtitle="Revenue per Available Room"
           icon={TrendingUp}
         />
         <KpiCard
           title="Revenue Today"
-          value={fin.totalRevenue != null ? `$${Number(fin.totalRevenue).toFixed(2)}` : '—'}
+          value={kpis.totalRevenue != null ? `$${Number(kpis.totalRevenue).toFixed(2)}` : '—'}
           subtitle="Room + F&B + Other"
           icon={BedDouble}
         />
