@@ -58,7 +58,7 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
         setPropertiesError(err?.message ?? 'Failed to load properties');
       })
       .finally(() => setPropertiesLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap once; propertyId auto-select handled inside
+    // Bootstrap once; propertyId auto-select handled inside the effect.
   }, []);
 
   useEffect(() => {
