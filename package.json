@@ -15,6 +15,7 @@
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
+    "readme:sync-tests": "node scripts/sync-test-count.mjs",
     "test:coverage": "pnpm -r run test:coverage",
     "seed": "pnpm --filter @telivityhaip/database run seed",
     "db:generate": "pnpm --filter @telivityhaip/database run db:generate",
