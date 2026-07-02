@@ -14,6 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
+  <img src="https://img.shields.io/badge/Tests-1085%20passing-brightgreen" alt="1085 Tests Passing" />
   <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
@@ -424,7 +425,7 @@ executes; approval always runs the agent's own recommendation. Off by default
 | OTA Channels | Booking.com + Expedia (EQC) direct + SiteMinder (pmsXchange) | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (`pnpm test` — see CI for current counts) | Unit and integration tests |
+| Testing | Vitest (1085 tests across 128 test files) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -546,7 +547,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests — see CI for current counts
+# All tests (1085 tests across 128 test files)
 pnpm test
 
 # API tests only
@@ -1062,7 +1063,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests — see CI for current counts
+pnpm test             # Run all tests (1085 tests, 128 files)
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```
