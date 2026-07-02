@@ -76,11 +76,13 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      - name: Run tests
-        run: pnpm test
+      - name: Run tests and verify README test counts
+        run: node scripts/sync-test-count.mjs --check
         env:
           DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_test
           REDIS_URL: redis://localhost:6379
+          FORCE_COLOR: '0'
+          CI: 'true'
 
   release-smoke:
     name: Release smoke (PMS contract)

@@ -24,6 +24,7 @@ Thumbs.db
 
 # Testing
 coverage/
+.vitest-count/
 
 # Docker
 docker-data/
