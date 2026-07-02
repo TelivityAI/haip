@@ -450,15 +450,22 @@ hotel with the AI agents already running**, and serves everything at one URL:
 The first run builds the image and can take a few minutes; subsequent starts are
 fast. A one-shot `init` container pushes the schema and seeds the demo before the
 API starts (idempotent — safe to re-run). Auth is **off by default** so you land
-straight in the app; to explore the Keycloak login/RBAC flow instead, run
-`docker compose --profile auth up` and set `AUTH_ENABLED=true`.
+straight in the app; to explore the Keycloak login/RBAC flow instead, run:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.auth.yml --profile auth up -d --build
+```
+
+See [`docs/deployment.md`](./docs/deployment.md) for production self-host.
 
 > One-click cloud demo: see [Deploy to the cloud](#deploy-to-the-cloud) to spin up
 > a hosted instance with zero local setup.
 
 ### Production self-host
 
-Credentials-only setup: the repo wires services; you supply secrets in `.env.production`.
+See **[`docs/deployment.md`](./docs/deployment.md)** for the full production guide (compose files, env vars, TLS, backups, upgrades, GHCR images).
+
+Quick start:
 
 ```bash
 cp .env.production.example .env.production
@@ -467,11 +474,7 @@ cp .env.production.example .env.production
 docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
 ```
 
-- **Dashboard:** `http://localhost:3000` (or your host)
-- **Keycloak:** `http://localhost:8080` (change default admin password after first login)
-- **Auth is on** (`AUTH_ENABLED=true`); do not set `HAIP_ALLOW_INSECURE`
-
-Install scheduled jobs (night audit, group block cutoffs) from [`scripts/cron/`](./scripts/cron/) — see [`docs/operations/cron.md`](./docs/operations/cron.md) for endpoint details and required roles.
+Auth is on (`AUTH_ENABLED=true`); do not set `HAIP_ALLOW_INSECURE`.
 
 ### Local development
 
@@ -515,15 +518,7 @@ builds a single image serving the API, dashboard (`/`), and booking engine (`/bo
 
 ### Production checklist
 
-Before going live, verify:
-
-- `AUTH_ENABLED=true` with Keycloak configured (`KEYCLOAK_URL`, realm, client)
-- `STRIPE_MODE=live` (or `test`) with real keys — not `mock`
-- Do **not** set `HAIP_ALLOW_INSECURE` in production
-- `SERVE_DASHBOARD=true` and/or `SERVE_BOOKING=true` if serving UIs from the API container
-- External cron for night audit and agent training — see [`docs/operations/cron.md`](./docs/operations/cron.md)
-- `CORS_ORIGINS` set to your dashboard/booking hostnames
-- `STORAGE_DRIVER=s3` if using photo uploads (MinIO or AWS)
+Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.md#required-environment-variables) and [`docs/operations/cron.md`](./docs/operations/cron.md).
 
 ### Run tests
 

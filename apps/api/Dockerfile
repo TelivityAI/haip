@@ -25,6 +25,16 @@ COPY apps/booking/ ./apps/booking/
 RUN pnpm --filter @telivityhaip/shared run build
 RUN pnpm --filter @telivityhaip/database run build
 
+# Dashboard SPA — auth/Keycloak settings are baked at build time (Vite env).
+ARG VITE_AUTH_ENABLED=false
+ARG VITE_KEYCLOAK_URL=http://localhost:8080
+ARG VITE_KEYCLOAK_REALM=haip
+ARG VITE_KEYCLOAK_CLIENT_ID=haip-dashboard
+ENV VITE_AUTH_ENABLED=$VITE_AUTH_ENABLED \
+    VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL \
+    VITE_KEYCLOAK_REALM=$VITE_KEYCLOAK_REALM \
+    VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID
+
 # Build dashboard (Vite static output)
 RUN pnpm --filter dashboard run build
 

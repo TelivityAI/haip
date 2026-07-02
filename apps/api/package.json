@@ -12,6 +12,7 @@
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "test": "vitest run",
+    "test:release-smoke": "RELEASE_SMOKE=1 vitest run src/release-smoke.integration.spec.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "clean": "rm -rf dist"
@@ -57,7 +58,9 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^1.4.12",
     "@types/passport-jwt": "^4.0.1",
+    "@types/supertest": "^6.0.2",
     "eslint": "^9.0.0",
+    "supertest": "^7.0.0",
     "typescript": "^5.7.0",
     "unplugin-swc": "^1.5.9",
     "vitest": "^2.1.0"

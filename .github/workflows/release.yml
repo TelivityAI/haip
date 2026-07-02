@@ -9,6 +9,7 @@ env:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   ci:
@@ -71,6 +72,9 @@ jobs:
     name: Auto Release
     needs: ci
     runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.version.outputs.skip }}
+      next: ${{ steps.version.outputs.next }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -158,3 +162,38 @@ jobs:
           body_path: changelog.md
           generate_release_notes: false
           draft: false
+
+  publish-image:
+    name: Publish API image to GHCR
+    needs: release
+    if: needs.release.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          build-args: |
+            VITE_AUTH_ENABLED=true
+            VITE_KEYCLOAK_URL=http://localhost:8080
+            VITE_KEYCLOAK_REALM=haip
+            VITE_KEYCLOAK_CLIENT_ID=haip-dashboard
+          tags: |
+            ghcr.io/telivityai/haip-api:${{ needs.release.outputs.next }}
+            ghcr.io/telivityai/haip-api:latest
