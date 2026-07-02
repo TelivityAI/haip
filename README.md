@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/telivity-otaip/haip/actions"><img src="https://github.com/telivity-otaip/haip/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/TelivityAI/haip/actions"><img src="https://github.com/TelivityAI/haip/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript&logoColor=white" alt="TypeScript Strict" />
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
@@ -38,7 +38,7 @@ The hotel industry runs on closed-source, legacy PMS platforms that charge per-r
 
 HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, a **full commission-free direct booking engine** (guest-facing widget + public booking API) so hotels take reservations straight from their own website, Stripe payment processing, Keycloak authentication, local user & role administration, media management for property and room photos, tax calculation engine, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. It even ships a **ChatGPT gateway** so guests can search and book a room by chatting. All open source under Apache 2.0.
 
-What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and per-property calibration (deterministic engines that learn each hotel's own rates from its history — not LLMs pretending to be agents). HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
+What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and per-property calibration (deterministic engines that learn each hotel's own rates from its history — not LLMs pretending to be agents). HAIP is the sister project to [OTAIP](https://github.com/TelivityAI/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
 ### What HAIP is NOT
 
@@ -909,7 +909,7 @@ PATCH  /api/v1/properties/:id                      # Update property
 
 ## OTAIP Integration — Connect API
 
-The Connect API (`/api/v1/connect/`) is purpose-built for [OTAIP](https://github.com/telivity-otaip/otaip) AI agents. It provides higher-level abstractions over the core PMS endpoints, designed for agent workflows.
+The Connect API (`/api/v1/connect/`) is purpose-built for [OTAIP](https://github.com/TelivityAI/otaip) AI agents. It provides higher-level abstractions over the core PMS endpoints, designed for agent workflows.
 
 ### Agent Endpoints
 
@@ -1015,7 +1015,7 @@ HAIP is built in public and contributions are welcome.
 
 ### How to contribute
 
-1. Check the [open issues](https://github.com/telivity-otaip/haip/issues)
+1. Check the [open issues](https://github.com/TelivityAI/haip/issues)
 2. Read `CLAUDE.md` for code standards and conventions
 3. Read the relevant KB section before writing business logic
 4. Fork, branch, PR — tests required for all business logic
@@ -1043,5 +1043,5 @@ Copyright 2026 Telivity. You may use, modify, and distribute this software under
 ---
 
 <p align="center">
-  <sub>Built by <a href="https://github.com/telivity-otaip">Telivity</a> — open-source travel infrastructure for the AI era.</sub>
+  <sub>Built by <a href="https://github.com/TelivityAI">Telivity</a> — open-source travel infrastructure for the AI era.</sub>
 </p>
