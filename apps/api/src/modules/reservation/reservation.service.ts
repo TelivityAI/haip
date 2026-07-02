@@ -640,6 +640,20 @@ export class ReservationService {
     // Process each check-in individually
     for (const item of dto.reservations) {
       try {
+        // KB state machine (pending → confirmed → assigned → checked_in): a
+        // still-confirmed reservation must be assigned a room before it can
+        // check in. Assign first using the provided override or its
+        // pre-assigned room, then check in.
+        const reservation = await this.findByIdRaw(item.reservationId, propertyId);
+        if (reservation.status === 'confirmed') {
+          const roomToAssign = item.roomId ?? reservation.roomId ?? undefined;
+          if (!roomToAssign) {
+            throw new BadRequestException(
+              `Reservation ${item.reservationId} has no room assigned — provide a roomId`,
+            );
+          }
+          await this.assignRoom(item.reservationId, propertyId, { roomId: roomToAssign });
+        }
         const result = await this.checkIn(item.reservationId, propertyId, {
           roomId: item.roomId,
           skipDepositAuth: item.skipDepositAuth,
