@@ -1,0 +1,21 @@
+# HAIP cron — example crontab
+#
+# Install: edit paths/env below, then: crontab scripts/cron/crontab.example
+#
+# Suggested schedule (adjust to property timezone):
+#   Night audit: 00:30 daily
+#   Group cutoffs: 01:00 daily (after night audit)
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Load secrets from a root-owned file (chmod 600). Do not commit real values.
+# HAIP_URL=https://pms.example.com
+# HAIP_PROPERTY_ID=00000000-0000-4000-8000-000000000001
+# KEYCLOAK_URL=https://auth.example.com
+# KEYCLOAK_REALM=haip
+# KEYCLOAK_CLIENT_ID=haip-cron
+# KEYCLOAK_CLIENT_SECRET=replace-me
+
+30 0 * * * set -a && source /etc/haip/cron.env && set +a && /opt/haip/scripts/cron/night-audit.sh >> /var/log/haip/night-audit.log 2>&1
+0 1 * * * set -a && source /etc/haip/cron.env && set +a && /opt/haip/scripts/cron/group-cutoffs.sh >> /var/log/haip/group-cutoffs.log 2>&1

@@ -456,6 +456,23 @@ straight in the app; to explore the Keycloak login/RBAC flow instead, run
 > One-click cloud demo: see [Deploy to the cloud](#deploy-to-the-cloud) to spin up
 > a hosted instance with zero local setup.
 
+### Production self-host
+
+Credentials-only setup: the repo wires services; you supply secrets in `.env.production`.
+
+```bash
+cp .env.production.example .env.production
+# Edit .env.production — set DATABASE_URL, Stripe keys, Keycloak, CONNECT_API_KEY, etc.
+
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
+```
+
+- **Dashboard:** `http://localhost:3000` (or your host)
+- **Keycloak:** `http://localhost:8080` (change default admin password after first login)
+- **Auth is on** (`AUTH_ENABLED=true`); do not set `HAIP_ALLOW_INSECURE`
+
+Install scheduled jobs (night audit, group block cutoffs) from [`scripts/cron/`](./scripts/cron/) — see [`docs/operations/cron.md`](./docs/operations/cron.md) for endpoint details and required roles.
+
 ### Local development
 
 For hot-reload development against the source (requires **Node ≥ 20** and **pnpm ≥ 9**):
