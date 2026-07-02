@@ -8,7 +8,7 @@
  *   node scripts/sync-test-count.mjs --from-output /path/to/log  # parse existing test log
  */
 import { readFileSync, writeFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,39 +23,68 @@ const fromOutputIdx = args.indexOf('--from-output');
 const fromOutput =
   fromOutputIdx >= 0 ? readFileSync(args[fromOutputIdx + 1], 'utf8') : null;
 
+/** Strip ANSI color/spinner codes (common in CI logs). */
+function stripAnsi(text) {
+  return text.replace(/\u001b\[[0-9;]*m/g, '').replace(/\r/g, '');
+}
+
 function parseTestOutput(output) {
+  const text = stripAnsi(output);
   let tests = 0;
   let files = 0;
 
-  for (const line of output.split('\n')) {
-    const fileMatch = line.match(/Test Files\s+(\d+) passed/);
+  for (const line of text.split('\n')) {
+    const fileMatch = line.match(/Test Files\s+(\d+)\s+passed/);
     if (fileMatch) files += Number(fileMatch[1]);
 
-    const testMatch = line.match(/Tests\s+(\d+) passed/);
+    const testMatch = line.match(/Tests\s+(\d+)\s+passed/);
     if (testMatch) tests += Number(testMatch[1]);
   }
 
+  // Fallback: scan the full log (pnpm prefixes / wrapped lines can break per-line parsing).
+  if (files === 0) {
+    for (const match of text.matchAll(/Test Files\s+(\d+)\s+passed/g)) {
+      files += Number(match[1]);
+    }
+  }
+  if (tests === 0) {
+    for (const match of text.matchAll(/Tests\s+(\d+)\s+passed/g)) {
+      tests += Number(match[1]);
+    }
+  }
+
   if (tests === 0 || files === 0) {
-    throw new Error('Could not parse test counts from vitest output');
+    const hint = fromOutput
+      ? `Log size: ${output.length} bytes. Tail:\n${text.slice(-2000)}`
+      : 'Re-run with --from-output to inspect the captured log.';
+    throw new Error(`Could not parse test counts from vitest output.\n${hint}`);
   }
 
   return { tests, files };
 }
 
 function runTests() {
-  return execSync('pnpm -r run test', {
+  const env = {
+    ...process.env,
+    DATABASE_URL:
+      process.env.DATABASE_URL ?? 'postgresql://haip:haip@localhost:5432/haip_test',
+    REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379',
+    FORCE_COLOR: '0',
+  };
+
+  const result = spawnSync('pnpm', ['-r', 'run', 'test'], {
     cwd: root,
+    env,
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      DATABASE_URL:
-        process.env.DATABASE_URL ?? 'postgresql://haip:haip@localhost:5432/haip_test',
-      REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379',
-      FORCE_COLOR: '0',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
     maxBuffer: 20 * 1024 * 1024,
   });
+
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  if (result.status !== 0) {
+    process.stdout.write(output);
+    process.exit(result.status ?? 1);
+  }
+  return output;
 }
 
 function applyCounts(readme, { tests, files }) {
@@ -101,13 +130,7 @@ function readCountsFromReadme(readme) {
 const output = fromOutput ?? runTests();
 const counts = parseTestOutput(output);
 
-writeFileSync(
-  statsPath,
-  `${JSON.stringify({ ...counts, updatedAt: new Date().toISOString() }, null, 2)}\n`,
-);
-
 const readme = readFileSync(readmePath, 'utf8');
-const updated = applyCounts(readme, counts);
 
 if (checkOnly) {
   const current = readCountsFromReadme(readme);
@@ -121,6 +144,13 @@ if (checkOnly) {
   console.log(`README test counts OK (${counts.tests} tests, ${counts.files} files)`);
   process.exit(0);
 }
+
+writeFileSync(
+  statsPath,
+  `${JSON.stringify({ ...counts, updatedAt: new Date().toISOString() }, null, 2)}\n`,
+);
+
+const updated = applyCounts(readme, counts);
 
 if (updated === readme) {
   // First run or badge row missing — ensure badge + table exist
