@@ -9,13 +9,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/telivity-otaip/haip/actions"><img src="https://github.com/telivity-otaip/haip/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/TelivityAI/haip/actions"><img src="https://github.com/TelivityAI/haip/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript&logoColor=white" alt="TypeScript Strict" />
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-  <img src="https://img.shields.io/badge/Tests-551%20passing-brightgreen" alt="551 Tests Passing" />
   <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+</p>
+
+<p align="center">
+  <img src="docs/images/demo-dashboard.webp" alt="HAIP dashboard — reservations and AI agents" width="900" />
 </p>
 
 <p align="center">
@@ -421,7 +424,7 @@ executes; approval always runs the agent's own recommendation. Off by default
 | OTA Channels | Booking.com + Expedia (EQC) direct + SiteMinder (pmsXchange) | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (691 tests) | Unit and integration tests |
+| Testing | Vitest (`pnpm test` — see CI for current counts) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -445,7 +448,10 @@ hotel with the AI agents already running**, and serves everything at one URL:
 
 - **Dashboard:** `http://localhost:3000`
 - **Swagger / OpenAPI:** `http://localhost:3000/docs`
-- **Guest booking widget preview:** `http://localhost:3000/booking-preview.html` — every screen of the commission-free direct booking flow, branded with the demo hotel's data. The live, embeddable widget lives in `apps/booking` (drop-in `<script>` for any hotel website).
+- **Booking:** `http://localhost:3000/booking/` — live guest booking widget (search → quote → book)
+- **Preview page:** `http://localhost:3000/booking-preview.html` — optional static walkthrough of every booking screen
+
+Dashboard UI: English and Deutsch (header language switcher).
 
 The first run builds the image and can take a few minutes; subsequent starts are
 fast. A one-shot `init` container pushes the schema and seeds the demo before the
@@ -488,16 +494,23 @@ pnpm install
 cp .env.example .env          # defaults work as-is — no keys needed for a demo
 
 pnpm build                    # build workspace packages
-pnpm --filter @telivityhaip/database run migrate   # push schema
-pnpm --filter @telivityhaip/database run seed       # seed demo data
+pnpm db:migrate               # push schema (same as --filter @telivityhaip/database run migrate)
+pnpm seed                     # seed demo data
 
 pnpm dev                                            # API with hot reload (:3000)
 pnpm --filter @telivityhaip/dashboard dev           # dashboard dev server (:5173)
+pnpm --filter @telivityhaip/booking dev             # booking widget dev server (:5174)
 ```
 
-- API: `http://localhost:3000` · Swagger: `http://localhost:3000/docs`
-- Dashboard (dev server, proxies `/api` → API): `http://localhost:5173`
-- Keycloak admin (only with `--profile auth`): `http://localhost:8080`
+| Service | URL |
+|---------|-----|
+| API | `http://localhost:3000` |
+| Dashboard (dev) | `http://localhost:5173` |
+| Booking widget (dev) | `http://localhost:5174` |
+| Keycloak (`--profile auth`) | `http://localhost:8080` |
+
+> **Local dev dashboard is `:5173`, not `:3000`.** The API at `:3000` serves Swagger
+> and the REST API only unless you set `SERVE_DASHBOARD=true` on the API process.
 
 > Payments default to `STRIPE_MODE=mock` and guest email to draft-only, so no
 > Stripe or SMTP credentials are required. Set real keys in `.env` only when you
@@ -525,10 +538,20 @@ Before going live, verify:
 - `CORS_ORIGINS` set to your dashboard/booking hostnames
 - `STORAGE_DRIVER=s3` if using photo uploads (MinIO or AWS)
 
+### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| API won't start locally | Is Postgres/Redis up? `docker compose up -d postgres redis` |
+| Dashboard empty in local dev | You opened `:3000` instead of `:5173` |
+| `migrate` script missing on api package | Use `@telivityhaip/database`, not api: `pnpm db:migrate` |
+| Docker API unhealthy | Check init logs: `docker compose logs init` (migrate/seed may have failed) |
+| Booking returns 401 with auth on | Copy the booking key from **Settings → Booking Engine** (or pass `?key=` in the URL) |
+
 ### Run tests
 
 ```bash
-# All tests (691 tests across 61 test files)
+# All tests — see CI for current counts
 pnpm test
 
 # API tests only
@@ -1032,7 +1055,7 @@ HAIP is built in public and contributions are welcome.
 
 ### How to contribute
 
-1. Check the [open issues](https://github.com/telivity-otaip/haip/issues)
+1. Check the [open issues](https://github.com/TelivityAI/haip/issues)
 2. Read `CLAUDE.md` for code standards and conventions
 3. Read the relevant KB section before writing business logic
 4. Fork, branch, PR — tests required for all business logic
@@ -1044,7 +1067,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (691 tests, 61 files)
+pnpm test             # Run all tests — see CI for current counts
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```
@@ -1060,5 +1083,5 @@ Copyright 2026 Telivity. You may use, modify, and distribute this software under
 ---
 
 <p align="center">
-  <sub>Built by <a href="https://github.com/telivity-otaip">Telivity</a> — open-source travel infrastructure for the AI era.</sub>
+  <sub>Built by <a href="https://github.com/TelivityAI">Telivity</a> — open-source travel infrastructure for the AI era.</sub>
 </p>
