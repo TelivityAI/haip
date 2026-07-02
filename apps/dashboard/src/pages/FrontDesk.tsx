@@ -75,12 +75,30 @@ export default function FrontDesk() {
   };
 
   const checkInMutation = useMutation({
-    mutationFn: (data: { id: string; roomId?: string; idType?: string; idNumber?: string }) =>
-      api.patch(`/v1/reservations/${data.id}/check-in`, {
+    mutationFn: async (data: {
+      id: string;
+      status: string;
+      preAssignedRoomId?: string;
+      roomId?: string;
+      idType?: string;
+      idNumber?: string;
+    }) => {
+      // KB state machine: pending → confirmed → assigned → checked_in.
+      // A still-confirmed arrival must be assigned a room before it can check
+      // in, otherwise the API rejects the confirmed → checked_in transition.
+      if (data.status === 'confirmed') {
+        const roomToAssign = data.roomId || data.preAssignedRoomId;
+        if (!roomToAssign) {
+          throw new Error('Assign a room before checking in this guest.');
+        }
+        await api.patch(`/v1/reservations/${data.id}/assign-room`, { roomId: roomToAssign });
+      }
+      return api.patch(`/v1/reservations/${data.id}/check-in`, {
         roomId: data.roomId || undefined,
         idType: data.idType,
         idNumber: data.idNumber,
-      }),
+      });
+    },
     onSuccess: () => {
       invalidateAll();
       setCheckInModal(null);
@@ -382,6 +400,8 @@ export default function FrontDesk() {
               <button
                 onClick={() => checkInMutation.mutate({
                   id: checkInModal.id,
+                  status: checkInModal.status,
+                  preAssignedRoomId: checkInModal.roomId,
                   roomId: selectedRoom || undefined,
                   idType,
                   idNumber: idNumber || undefined,
