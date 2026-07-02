@@ -82,6 +82,55 @@ jobs:
           DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_test
           REDIS_URL: redis://localhost:6379
 
+  release-smoke:
+    name: Release smoke (PMS contract)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: haip
+          POSTGRES_PASSWORD: haip
+          POSTGRES_DB: haip_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run release smoke test
+        run: pnpm --filter @telivityhaip/api run test:release-smoke
+        env:
+          DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_smoke
+          REDIS_URL: redis://localhost:6379
+          RELEASE_SMOKE: '1'
+
   build:
     name: Build
     runs-on: ubuntu-latest

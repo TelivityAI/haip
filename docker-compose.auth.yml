@@ -1,0 +1,43 @@
+# Auth exploration overlay for docker-compose.yml
+#
+# Turns API auth on when Keycloak is running (--profile auth). The dashboard SPA
+# is rebuilt with VITE_AUTH_ENABLED=true so the UI redirects to Keycloak login.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.auth.yml --profile auth up -d --build
+#
+# For production self-host (NODE_ENV=production, Stripe, CONNECT_API_KEY), use
+# docker-compose.prod.yml instead — see docs/deployment.md.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        VITE_AUTH_ENABLED: 'true'
+        VITE_KEYCLOAK_URL: http://localhost:8080
+        VITE_KEYCLOAK_REALM: haip
+        VITE_KEYCLOAK_CLIENT_ID: haip-dashboard
+    environment:
+      AUTH_ENABLED: 'true'
+      # Demo exploration only — not production. Prod overlay clears this flag.
+      HAIP_ALLOW_INSECURE: 'true'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+
+  init:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        VITE_AUTH_ENABLED: 'true'
+        VITE_KEYCLOAK_URL: http://localhost:8080
+        VITE_KEYCLOAK_REALM: haip
+        VITE_KEYCLOAK_CLIENT_ID: haip-dashboard
