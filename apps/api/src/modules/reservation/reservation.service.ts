@@ -486,16 +486,15 @@ export class ReservationService {
       }
     }
 
-    // Express checkout: validate balances before claiming the transition.
-    if (dto.expressCheckout) {
-      for (const folio of folios) {
-        if (folio.status !== 'open') continue;
-        const refreshed = await this.folioService.findById(folio.id, reservation.propertyId);
-        if (new Decimal(refreshed.balance).abs().gt('0.01')) {
-          throw new BadRequestException(
-            `Cannot express checkout: folio ${folio.folioNumber} has outstanding balance of ${refreshed.balance}`,
-          );
-        }
+    // KB §5.4: balance must be zero at checkout (express and standard paths).
+    for (const folio of folios) {
+      if (folio.status !== 'open') continue;
+      const refreshed = await this.folioService.findById(folio.id, reservation.propertyId);
+      if (new Decimal(refreshed.balance).abs().gt('0.01')) {
+        const prefix = dto.expressCheckout ? 'Cannot express checkout' : 'Cannot checkout';
+        throw new BadRequestException(
+          `${prefix}: folio ${refreshed.folioNumber} has outstanding balance of ${refreshed.balance}`,
+        );
       }
     }
 

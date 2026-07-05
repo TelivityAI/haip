@@ -185,6 +185,10 @@ export class FolioService {
   }
 
   async transferCharge(folioId: string, propertyId: string, dto: TransferChargeDto) {
+    if (folioId === dto.targetFolioId) {
+      throw new BadRequestException('Source and target folio must differ');
+    }
+
     // Bug 2: wrap charge move + both balance recalculations in a transaction,
     // and SELECT ... FOR UPDATE both folio rows up-front so concurrent
     // transfers/recalculations on the same folios are serialized.

@@ -248,18 +248,14 @@ describe('ReservationService — checkOut', () => {
     expect(mockPaymentService.voidPayment).toHaveBeenCalledWith('pay-auth-001', 'prop-001');
   });
 
-  it('should return folio summary with balances on non-express checkout', async () => {
+  it('should throw on non-express checkout with outstanding balance', async () => {
     mockFolioService.list.mockResolvedValue({
       data: [{ ...mockFolio, balance: '150.00' }],
     });
+    mockFolioService.findById.mockResolvedValue({ ...mockFolio, balance: '150.00' });
     const db = createCheckOutDb();
     const svc = await createService(db);
-    const result = await svc.checkOut('res-001', 'prop-001');
-    expect(result.folioSummary).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ folioId: 'folio-001', balance: '150.00' }),
-      ]),
-    );
+    await expect(svc.checkOut('res-001', 'prop-001')).rejects.toThrow(BadRequestException);
   });
 
   it('should work from stayover state', async () => {
