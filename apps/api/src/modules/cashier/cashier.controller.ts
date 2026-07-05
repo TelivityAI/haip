@@ -16,9 +16,16 @@ import { RecordMovementDto } from './dto/record-movement.dto';
 import { CloseSessionDto } from './dto/close-session.dto';
 
 @ApiTags('cashier')
-@Controller('cash')
+@Controller(['cash', 'cashier'])
 export class CashierController {
   constructor(private readonly cashierService: CashierService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Cashier API namespace' })
+  @ApiResponse({ status: 200, description: 'Available cashier endpoints' })
+  cashierIndex() {
+    return { endpoints: ['drawers', 'sessions'] };
+  }
 
   @Post('drawers')
   @Roles('admin', 'front_desk', 'night_auditor')

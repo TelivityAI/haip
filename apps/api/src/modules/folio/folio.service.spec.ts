@@ -230,6 +230,25 @@ describe('FolioService', () => {
   });
 
   describe('transferCharge', () => {
+    it('should reject self-transfer', async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: { transaction: vi.fn() } },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+      const svc = module.get<FolioService>(FolioService);
+
+      await expect(
+        svc.transferCharge('folio-001', 'prop-001', {
+          chargeId: 'charge-001',
+          targetFolioId: 'folio-001',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('should transfer charge between folios', async () => {
       let selectCallCount = 0;
       const targetFolio = { ...mockFolio, id: 'folio-002' };
@@ -398,6 +417,219 @@ describe('FolioService', () => {
       const result = await svc.reverseCharge('folio-001', 'charge-001', 'prop-001');
       expect(result.isReversal).toBe(true);
       expect(parseFloat(result.amount)).toBeLessThan(0);
+    });
+  });
+
+  describe('close', () => {
+    it('should close a settled folio', async () => {
+      const settledFolio = { ...mockFolio, status: 'settled' };
+      const closedFolio = { ...settledFolio, status: 'closed', closedAt: new Date() };
+      let callCount = 0;
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => {
+                callCount++;
+                resolve(callCount === 1 ? [settledFolio] : []);
+              },
+            }),
+          }),
+        })),
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([closedFolio]),
+            }),
+          }),
+        }),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+      const svc = module.get<FolioService>(FolioService);
+
+      const result = await svc.close('folio-001', 'prop-001');
+      expect(result.status).toBe('closed');
+    });
+
+    it('should throw when folio is not settled', async () => {
+      const db = createMockDb([mockFolio]);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+      const svc = module.get<FolioService>(FolioService);
+
+      await expect(svc.close('folio-001', 'prop-001')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getCharges', () => {
+    it('should return paginated charges with filters', async () => {
+      let selectCall = 0;
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                offset: vi.fn().mockReturnValue({
+                  orderBy: vi.fn().mockResolvedValue([mockCharge]),
+                }),
+              }),
+              then: (resolve: any) => {
+                selectCall++;
+                resolve([{ count: 1 }]);
+              },
+            }),
+          }),
+        })),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+      const svc = module.get<FolioService>(FolioService);
+
+      const result = await svc.getCharges('folio-001', {
+        propertyId: 'prop-001',
+        type: 'room',
+        page: 1,
+        limit: 10,
+      });
+      expect(result.data).toEqual([mockCharge]);
+      expect(result.total).toBe(1);
+      expect(result.page).toBe(1);
+    });
+  });
+
+  describe('lockCharges', () => {
+    it('should lock charges up to audit date', async () => {
+      const locked = [{ ...mockCharge, isLocked: true }];
+      const db = {
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue(locked),
+            }),
+          }),
+        }),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+      const svc = module.get<FolioService>(FolioService);
+
+      const result = await svc.lockCharges('folio-001', 'prop-001', new Date('2026-04-05'));
+      expect(result.lockedCount).toBe(1);
+    });
+  });
+
+  describe('postRoomTariff', () => {
+    it('should post a room tariff charge', async () => {
+      let selectCallCount = 0;
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => {
+                selectCallCount++;
+                if (selectCallCount === 1) resolve([mockFolio]);
+                else resolve([{ total: '150.00' }]);
+              },
+            }),
+          }),
+        })),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([mockCharge]),
+          }),
+        }),
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+      const svc = module.get<FolioService>(FolioService);
+
+      const result = await svc.postRoomTariff(
+        'folio-001',
+        'prop-001',
+        '150.00',
+        'USD',
+        new Date('2026-04-05'),
+      );
+      expect(result.type).toBe('room');
+    });
+  });
+
+  describe('createAutoFolio', () => {
+    it('should create a guest folio for a reservation', async () => {
+      const result = await service.createAutoFolio({
+        id: 'res-001',
+        propertyId: 'prop-001',
+        guestId: 'guest-001',
+        currencyCode: 'USD',
+      });
+      expect(result).toEqual(mockFolio);
+      expect(mockWebhookService.emit).toHaveBeenCalled();
+    });
+  });
+
+  describe('settle — pending payments guard', () => {
+    it('should throw when pending authorized payments exist', async () => {
+      let callCount = 0;
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => {
+                callCount++;
+                if (callCount === 1) resolve([mockFolio]);
+                else resolve([{ count: 2 }]);
+              },
+            }),
+          }),
+        })),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+      const svc = module.get<FolioService>(FolioService);
+
+      await expect(svc.settle('folio-001', 'prop-001')).rejects.toThrow(BadRequestException);
     });
   });
 

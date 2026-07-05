@@ -17,6 +17,20 @@ import { RequirePermissions } from '../auth/permissions.decorator';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
+  @Get()
+  @ApiOperation({ summary: 'Available reports' })
+  async listReports() {
+    return {
+      reports: [
+        'daily-revenue',
+        'occupancy',
+        'financial-summary',
+        'trial-balance',
+        'occupancy-trend',
+      ],
+    };
+  }
+
   @Get('/daily-revenue')
   @ApiOperation({ summary: 'Daily revenue report' })
   @ApiQuery({ name: 'propertyId', required: true })

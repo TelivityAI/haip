@@ -377,6 +377,7 @@ async function main() {
       completed_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS night_audit_runs_property_date_unique ON audit_runs (property_id, business_date)`,
     // audit_logs
     `CREATE TABLE IF NOT EXISTS audit_logs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

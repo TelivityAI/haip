@@ -34,6 +34,13 @@ export class AccountingController {
     private readonly accountingCodeService: AccountingCodeService,
   ) {}
 
+  @Get('accounting')
+  @ApiOperation({ summary: 'Accounting API namespace' })
+  @ApiResponse({ status: 200, description: 'Available accounting endpoints' })
+  accountingIndex() {
+    return { endpoints: ['deposits', 'ar/ledgers', 'accounting/codes'] };
+  }
+
   // --- Deposit Ledger (KB 10) ---
 
   @Post('deposits')
