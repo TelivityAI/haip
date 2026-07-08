@@ -5,8 +5,11 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { ReportsService } from './reports.service';
+import { PortfolioPropertyResolver } from './portfolio-property-resolver';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
 
 @ApiTags('reports')
 @Controller('reports')
@@ -15,7 +18,20 @@ import { RequirePermissions } from '../auth/permissions.decorator';
 // property they belong to. PermissionsGuard enforces this for every route below.
 @RequirePermissions('reports.view')
 export class ReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(
+    private readonly reportsService: ReportsService,
+    private readonly portfolioResolver: PortfolioPropertyResolver,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private authOn(): boolean {
+    return this.configService.get<string>('AUTH_ENABLED', 'true') !== 'false';
+  }
+
+  private parsePropertyIds(raw?: string): string[] | undefined {
+    if (!raw) return undefined;
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  }
 
   @Get()
   @ApiOperation({ summary: 'Available reports' })
@@ -86,5 +102,45 @@ export class ReportsController {
     @Query('endDate') endDate: string,
   ) {
     return this.reportsService.getOccupancyTrend(propertyId, startDate, endDate);
+  }
+
+  @Get('/portfolio/financial-summary')
+  @ApiOperation({ summary: 'Portfolio financial summary across properties' })
+  @ApiQuery({ name: 'date', required: true })
+  @ApiQuery({ name: 'organizationId', required: false })
+  @ApiQuery({ name: 'propertyIds', required: false, description: 'Comma-separated property UUIDs' })
+  async getPortfolioFinancialSummary(
+    @Query('date') date: string,
+    @Query('organizationId') organizationId: string | undefined,
+    @Query('propertyIds') propertyIdsRaw: string | undefined,
+    @CurrentUser() user?: AuthUser,
+  ) {
+    const propertyIds = await this.portfolioResolver.resolvePropertyIds(
+      user,
+      this.authOn(),
+      organizationId,
+      this.parsePropertyIds(propertyIdsRaw),
+    );
+    return this.reportsService.getPortfolioFinancialSummary(propertyIds, date);
+  }
+
+  @Get('/portfolio/occupancy')
+  @ApiOperation({ summary: 'Portfolio occupancy across properties' })
+  @ApiQuery({ name: 'date', required: true })
+  @ApiQuery({ name: 'organizationId', required: false })
+  @ApiQuery({ name: 'propertyIds', required: false, description: 'Comma-separated property UUIDs' })
+  async getPortfolioOccupancy(
+    @Query('date') date: string,
+    @Query('organizationId') organizationId: string | undefined,
+    @Query('propertyIds') propertyIdsRaw: string | undefined,
+    @CurrentUser() user?: AuthUser,
+  ) {
+    const propertyIds = await this.portfolioResolver.resolvePropertyIds(
+      user,
+      this.authOn(),
+      organizationId,
+      this.parsePropertyIds(propertyIdsRaw),
+    );
+    return this.reportsService.getPortfolioOccupancy(propertyIds, date);
   }
 }

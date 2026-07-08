@@ -127,6 +127,14 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
+  broadcastStaffNotification(propertyId: string, notification: Record<string, unknown>) {
+    const room = `property:${propertyId}`;
+    this.server.to(room).emit('staffNotification', {
+      ...notification,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   private extractToken(client: Socket): string | null {
     const authToken = (client.handshake.auth as any)?.token;
     if (typeof authToken === 'string' && authToken.length > 0) {

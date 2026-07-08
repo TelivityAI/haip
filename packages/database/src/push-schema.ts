@@ -868,8 +868,55 @@ async function main() {
     await db.execute(sql.raw(t));
   }
 
+  // Organizations (hotel groups) — portfolio reporting
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS organizations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      name varchar(255) NOT NULL,
+      code varchar(20) NOT NULL UNIQUE,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`));
+
+  await db.execute(sql.raw(`
+    DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'staff_notification_severity') THEN
+      CREATE TYPE staff_notification_severity AS ENUM ('info','warning','critical');
+    END IF; END $$`));
+
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS staff_notifications (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      user_id varchar(255),
+      type varchar(50) NOT NULL,
+      title varchar(255) NOT NULL,
+      message text NOT NULL,
+      severity staff_notification_severity NOT NULL DEFAULT 'info',
+      source_event varchar(100),
+      source_entity_type varchar(50),
+      source_entity_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`));
+
+  await db.execute(sql.raw(`
+    CREATE INDEX IF NOT EXISTS staff_notifications_property_created_idx
+      ON staff_notifications (property_id, created_at DESC)`));
+
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS staff_notification_reads (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      notification_id uuid NOT NULL REFERENCES staff_notifications(id),
+      user_id varchar(255) NOT NULL,
+      read_at timestamptz NOT NULL DEFAULT now()
+    )`));
+
+  await db.execute(sql.raw(`
+    CREATE UNIQUE INDEX IF NOT EXISTS staff_notification_reads_unique
+      ON staff_notification_reads (notification_id, user_id)`));
+
   // Idempotent column additions for pre-existing databases
   const alters = [
+    `ALTER TABLE properties ADD COLUMN IF NOT EXISTS organization_id uuid REFERENCES organizations(id)`,
     `ALTER TABLE tax_rules ADD COLUMN IF NOT EXISTS split_percentage numeric(5,2)`,
     // House accounts reuse charges/payments (KB 13): folio_id becomes nullable,
     // add house_account_id. A row belongs to EITHER a folio OR a house account.

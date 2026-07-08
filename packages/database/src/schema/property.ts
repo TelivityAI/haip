@@ -1,4 +1,5 @@
 import { pgTable, uuid, varchar, text, boolean, timestamp, jsonb, integer } from 'drizzle-orm/pg-core';
+import { organizations } from './organization.js';
 
 /**
  * Property — top-level business unit (hotel, hostel, apartment complex).
@@ -6,6 +7,7 @@ import { pgTable, uuid, varchar, text, boolean, timestamp, jsonb, integer } from
  */
 export const properties = pgTable('properties', {
   id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').references(() => organizations.id),
   name: varchar('name', { length: 255 }).notNull(),
   code: varchar('code', { length: 20 }).notNull().unique(), // Short property code (e.g., "HTLNYC01")
   description: text('description'),

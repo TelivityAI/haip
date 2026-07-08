@@ -5,8 +5,18 @@
  * DO NOT INVENT HOTEL DOMAIN LOGIC.
  */
 
+// Organization (hotel groups)
+export { organizations } from './organization.js';
+
 // Property
 export { properties } from './property.js';
+
+// Staff notifications
+export {
+  staffNotificationSeverityEnum,
+  staffNotifications,
+  staffNotificationReads,
+} from './staff-notification.js';
 
 // Media (images for property / room types / rooms)
 export { mediaOwnerTypeEnum, mediaCategoryEnum, media } from './media.js';
