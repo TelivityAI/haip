@@ -173,7 +173,9 @@ export class AgentService {
           agentType,
           decisionType: rec.decisionType,
           confidence: rec.confidence,
-          summary: rec.recommendation?.summary ?? rec.decisionType,
+          summary:
+            (rec.recommendation as Record<string, unknown> | undefined)?.['summary'] ??
+            rec.decisionType,
         },
         propertyId,
       );

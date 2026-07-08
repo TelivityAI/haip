@@ -221,7 +221,7 @@ export class SearchService {
       .select({
         id: groupProfiles.id,
         name: groupProfiles.name,
-        groupType: groupProfiles.groupType,
+        groupType: groupProfiles.type,
       })
       .from(groupProfiles)
       .where(

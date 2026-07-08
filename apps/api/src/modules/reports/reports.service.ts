@@ -680,20 +680,20 @@ export class ReportsService {
       revpar: number;
     }> = [];
 
-    for (let i = 0; i < propertyIds.length; i++) {
-      const s = summaries[i];
+    for (const [i, propertyId] of propertyIds.entries()) {
+      const s = summaries[i]!;
       const kpis = s.kpis ?? {};
       totalRevenue = totalRevenue.plus(kpis.totalRevenue ?? 0);
       roomRevenue = roomRevenue.plus(kpis.roomRevenue ?? 0);
 
-      const occ = await this.getOccupancy(propertyIds[i], date);
+      const occ = await this.getOccupancy(propertyId, date);
       const roomsSold = occ.occupiedRooms ?? 0;
       const available = occ.availableRooms ?? 0;
       totalRoomsSold += roomsSold;
       totalAvailableRooms += available;
 
       byProperty.push({
-        propertyId: propertyIds[i],
+        propertyId,
         totalRevenue: kpis.totalRevenue ?? 0,
         occupancyRate: kpis.occupancyRate ?? 0,
         adr: kpis.adr ?? 0,
@@ -736,8 +736,8 @@ export class ReportsService {
     let arrivals = 0;
     let departures = 0;
     let stayovers = 0;
-    const byProperty = propertyIds.map((id, i) => {
-      const r = rows[i];
+    const byProperty = propertyIds.map((propertyId, i) => {
+      const r = rows[i]!;
       totalRooms += r.totalRooms ?? 0;
       availableRooms += r.availableRooms ?? 0;
       occupiedRooms += r.occupiedRooms ?? 0;
@@ -745,7 +745,7 @@ export class ReportsService {
       departures += r.departures ?? 0;
       stayovers += r.stayovers ?? 0;
       return {
-        propertyId: id,
+        propertyId,
         occupancyRate: r.occupancyRate ?? 0,
         occupiedRooms: r.occupiedRooms ?? 0,
         availableRooms: r.availableRooms ?? 0,
