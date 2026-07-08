@@ -37,6 +37,12 @@ export const WEBHOOK_EVENTS = {
   'audit.started': 'audit.started',
   'audit.completed': 'audit.completed',
 
+  // Accounting export events
+  'accounting.export.ready': 'accounting.export.ready',
+
+  // Staff notification events
+  'staff.notification_created': 'staff.notification_created',
+
   // Channel manager events
   'channel.connected': 'channel.connected',
   'channel.disconnected': 'channel.disconnected',

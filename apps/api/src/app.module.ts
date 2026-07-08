@@ -37,6 +37,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { PosModule } from './modules/pos/pos.module';
 import { DoorLockModule } from './modules/door-lock/door-lock.module';
 import { LlmModule } from './modules/llm/llm.module';
+import { SearchModule } from './modules/search/search.module';
+import { StaffNotificationsModule } from './modules/staff-notifications/staff-notifications.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -76,6 +78,8 @@ const imports: any[] = [
   PosModule,
   DoorLockModule,
   LlmModule,
+  SearchModule,
+  StaffNotificationsModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or

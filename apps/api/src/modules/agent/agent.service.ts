@@ -164,6 +164,21 @@ export class AgentService {
       }
 
       decisions.push(decision);
+
+      await this.webhookService.emit(
+        'agent.decision_created',
+        'agent_decision',
+        decision.id,
+        {
+          agentType,
+          decisionType: rec.decisionType,
+          confidence: rec.confidence,
+          summary:
+            (rec.recommendation as Record<string, unknown> | undefined)?.['summary'] ??
+            rec.decisionType,
+        },
+        propertyId,
+      );
     }
 
     // Update last run timestamp

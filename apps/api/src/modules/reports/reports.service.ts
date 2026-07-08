@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql, lte, gte } from 'drizzle-orm';
+import { eq, and, sql, lte, gte, inArray } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import {
   charges,
@@ -657,6 +657,118 @@ export class ReportsService {
         },
       },
       interLedgerTransfers: interLedgerTransfers.toFixed(2),
+    };
+  }
+
+  /**
+   * Portfolio financial summary — aggregates KPIs across multiple properties.
+   */
+  async getPortfolioFinancialSummary(propertyIds: string[], date: string) {
+    const summaries = await Promise.all(
+      propertyIds.map((id) => this.getFinancialSummary(id, date)),
+    );
+
+    let totalRevenue = new Decimal(0);
+    let roomRevenue = new Decimal(0);
+    let totalRoomsSold = 0;
+    let totalAvailableRooms = 0;
+    const byProperty: Array<{
+      propertyId: string;
+      totalRevenue: number;
+      occupancyRate: number;
+      adr: number;
+      revpar: number;
+    }> = [];
+
+    for (const [i, propertyId] of propertyIds.entries()) {
+      const s = summaries[i]!;
+      const kpis = s.kpis ?? {};
+      totalRevenue = totalRevenue.plus(kpis.totalRevenue ?? 0);
+      roomRevenue = roomRevenue.plus(kpis.roomRevenue ?? 0);
+
+      const occ = await this.getOccupancy(propertyId, date);
+      const roomsSold = occ.occupiedRooms ?? 0;
+      const available = occ.availableRooms ?? 0;
+      totalRoomsSold += roomsSold;
+      totalAvailableRooms += available;
+
+      byProperty.push({
+        propertyId,
+        totalRevenue: kpis.totalRevenue ?? 0,
+        occupancyRate: kpis.occupancyRate ?? 0,
+        adr: kpis.adr ?? 0,
+        revpar: kpis.revpar ?? 0,
+      });
+    }
+
+    const portfolioOccupancy = totalAvailableRooms > 0 ? totalRoomsSold / totalAvailableRooms : 0;
+    const portfolioAdr = totalRoomsSold > 0 ? roomRevenue.div(totalRoomsSold) : new Decimal(0);
+    const portfolioRevpar = portfolioAdr.times(portfolioOccupancy);
+
+    return {
+      date,
+      propertyCount: propertyIds.length,
+      propertyIds,
+      kpis: {
+        totalRevenue: totalRevenue.toNumber(),
+        roomRevenue: roomRevenue.toNumber(),
+        occupancyRate: Math.round(portfolioOccupancy * 10000) / 10000,
+        adr: Math.round(portfolioAdr.toNumber() * 100) / 100,
+        revpar: Math.round(portfolioRevpar.toNumber() * 100) / 100,
+        totalRoomsSold,
+        totalAvailableRooms,
+      },
+      byProperty,
+    };
+  }
+
+  /**
+   * Portfolio occupancy — sums room counts and activity across properties.
+   */
+  async getPortfolioOccupancy(propertyIds: string[], date: string) {
+    const rows = await Promise.all(
+      propertyIds.map((id) => this.getOccupancy(id, date)),
+    );
+
+    let totalRooms = 0;
+    let availableRooms = 0;
+    let occupiedRooms = 0;
+    let arrivals = 0;
+    let departures = 0;
+    let stayovers = 0;
+    const byProperty = propertyIds.map((propertyId, i) => {
+      const r = rows[i]!;
+      totalRooms += r.totalRooms ?? 0;
+      availableRooms += r.availableRooms ?? 0;
+      occupiedRooms += r.occupiedRooms ?? 0;
+      arrivals += r.arrivals ?? 0;
+      departures += r.departures ?? 0;
+      stayovers += r.stayovers ?? 0;
+      return {
+        propertyId,
+        occupancyRate: r.occupancyRate ?? 0,
+        occupiedRooms: r.occupiedRooms ?? 0,
+        availableRooms: r.availableRooms ?? 0,
+        arrivals: r.arrivals ?? 0,
+        departures: r.departures ?? 0,
+      };
+    });
+
+    const occupancyRate = availableRooms > 0 ? occupiedRooms / availableRooms : 0;
+
+    return {
+      date,
+      propertyCount: propertyIds.length,
+      propertyIds,
+      totalRooms,
+      availableRooms,
+      occupiedRooms,
+      occupancyRate: Math.round(occupancyRate * 10000) / 10000,
+      occupancyPercent: `${(occupancyRate * 100).toFixed(1)}%`,
+      arrivals,
+      departures,
+      stayovers,
+      byProperty,
     };
   }
 }
