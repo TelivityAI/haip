@@ -8,12 +8,14 @@ import { useMyPermissions } from '../../hooks/useAdmin';
 export default function AppLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { authEnabled, setPermissions } = useAuth();
-  const { propertyId } = useProperty();
+  const { propertyId, isPortfolioMode, properties } = useProperty();
 
-  // Under real auth, resolve the current user's effective permissions for the
-  // active property and feed them into AuthContext (drives nav/feature gating).
-  // When auth is disabled (demo), hasPermission already returns true.
-  const { data } = useMyPermissions(propertyId, authEnabled);
+  // Permissions are per-property. In portfolio mode, resolve against the first
+  // accessible property so nav gating still works without sending the sentinel id.
+  const permissionsPropertyId =
+    isPortfolioMode ? (properties[0]?.id ?? null) : propertyId;
+
+  const { data } = useMyPermissions(permissionsPropertyId, authEnabled);
   useEffect(() => {
     if (data?.permissions) setPermissions(data.permissions);
   }, [data, setPermissions]);

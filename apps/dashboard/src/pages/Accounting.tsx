@@ -206,7 +206,7 @@ function AccountingHome() {
             <Download size={14} /> Revenue Journal
           </a>
           <a href={exportUrl('trial-balance.csv')} className="inline-flex items-center gap-2 border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium hover:bg-telivity-light-grey">
-            <Download size={14} /> Trial Balance
+            <Download size={14} /> Folio Ledger Trial Balance
           </a>
         </div>
       </div>
