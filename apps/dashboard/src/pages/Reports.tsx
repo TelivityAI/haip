@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, Percent, DollarSign, TrendingUp } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { BarChart3, Percent, DollarSign, TrendingUp, Building2 } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { format, subDays } from 'date-fns';
 import { api } from '../lib/api';
 import { formatOccupancyPercent } from '../lib/api-helpers';
@@ -10,18 +10,26 @@ import KpiCard from '../components/ui/KpiCard';
 
 type ReportType = 'financial-summary' | 'occupancy' | 'daily-revenue' | 'occupancy-trend';
 
-const PIE_COLORS = ['#06bdb4', '#00a692', '#f2641b', '#eec517', '#bbbbc4', '#016491'];
-
 export default function Reports() {
-  const { propertyId } = useProperty();
+  const { propertyId, isPortfolioMode, properties } = useProperty();
   const [report, setReport] = useState<ReportType>('financial-summary');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
+  const portfolioReport =
+    isPortfolioMode && (report === 'financial-summary' || report === 'occupancy');
+
   const { data } = useQuery({
-    queryKey: ['reports', report, propertyId, report === 'occupancy-trend' ? startDate : date, report === 'occupancy-trend' ? endDate : null],
+    queryKey: ['reports', portfolioReport ? 'portfolio' : report, propertyId, report === 'occupancy-trend' ? startDate : date, report === 'occupancy-trend' ? endDate : null],
     queryFn: () => {
+      if (portfolioReport) {
+        const path =
+          report === 'financial-summary'
+            ? '/v1/reports/portfolio/financial-summary'
+            : '/v1/reports/portfolio/occupancy';
+        return api.get(path, { params: { date } }).then((r) => r.data);
+      }
       const params: Record<string, string> = { propertyId: propertyId! };
       if (report === 'occupancy-trend') {
         params.startDate = startDate;
@@ -31,23 +39,36 @@ export default function Reports() {
       }
       return api.get(`/v1/reports/${report}`, { params }).then((r) => r.data);
     },
-    enabled: !!propertyId,
+    enabled: !!propertyId && (!isPortfolioMode || portfolioReport),
   });
 
   const reportData = data?.data ?? data ?? {};
   const kpis = reportData.kpis ?? {};
   const revenue = reportData.revenue ?? {};
   const payments = reportData.payments ?? {};
+  const propertyNameMap = new Map(properties.map((p) => [p.id, p.name]));
 
   if (!propertyId) {
     return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
+  }
+
+  if (isPortfolioMode && !portfolioReport) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-telivity-mid-grey gap-2">
+        <Building2 size={32} className="text-telivity-teal/50" />
+        <p>Daily revenue and occupancy trend are per-property reports.</p>
+        <p className="text-sm">Select a single property to run this report.</p>
+      </div>
+    );
   }
 
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
         <BarChart3 size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Reports</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">
+          {isPortfolioMode ? 'Portfolio Reports' : 'Reports'}
+        </h1>
       </div>
 
       {/* Report Selector + Date */}
@@ -88,7 +109,36 @@ export default function Reports() {
             <KpiCard title="RevPAR" value={kpis.revpar != null ? `$${Number(kpis.revpar).toFixed(2)}` : '—'} icon={TrendingUp} />
             <KpiCard title="Occupancy" value={formatOccupancyPercent(kpis.occupancyRate)} icon={Percent} />
           </div>
-          {reportData.revenueByType && (
+          {isPortfolioMode && Array.isArray(reportData.byProperty) && (
+            <div className="bg-white rounded-xl shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-telivity-navy mb-3">By Property</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-telivity-mid-grey border-b border-gray-100">
+                      <th className="pb-2 font-medium">Property</th>
+                      <th className="pb-2 font-medium">Revenue</th>
+                      <th className="pb-2 font-medium">Occupancy</th>
+                      <th className="pb-2 font-medium">ADR</th>
+                      <th className="pb-2 font-medium">RevPAR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(reportData.byProperty as Array<{ propertyId: string; totalRevenue: number; occupancyRate: number; adr: number; revpar: number }>).map((row) => (
+                      <tr key={row.propertyId} className="border-b border-gray-50">
+                        <td className="py-2">{propertyNameMap.get(row.propertyId) ?? row.propertyId}</td>
+                        <td className="py-2">${Number(row.totalRevenue).toFixed(2)}</td>
+                        <td className="py-2">{formatOccupancyPercent(row.occupancyRate)}</td>
+                        <td className="py-2">${Number(row.adr).toFixed(2)}</td>
+                        <td className="py-2">${Number(row.revpar).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {!isPortfolioMode && reportData.revenueByType && (
             <div className="bg-white rounded-xl shadow-sm p-5">
               <h3 className="text-sm font-semibold text-telivity-navy mb-3">Revenue Breakdown</h3>
               <div className="space-y-2">
@@ -110,9 +160,43 @@ export default function Reports() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KpiCard title="Occupied" value={reportData.occupiedRooms ?? 0} icon={Percent} />
             <KpiCard title="Available" value={reportData.availableRooms ?? 0} icon={Percent} />
-            <KpiCard title="OOO" value={reportData.outOfOrder ?? 0} icon={Percent} />
+            {!isPortfolioMode && (
+              <KpiCard title="OOO" value={reportData.outOfOrder ?? 0} icon={Percent} />
+            )}
+            {isPortfolioMode && (
+              <KpiCard title="Arrivals" value={reportData.arrivals ?? 0} icon={Percent} />
+            )}
             <KpiCard title="Occupancy %" value={formatOccupancyPercent(reportData.occupancyRate)} icon={Percent} />
           </div>
+          {isPortfolioMode && Array.isArray(reportData.byProperty) && (
+            <div className="bg-white rounded-xl shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-telivity-navy mb-3">By Property</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-telivity-mid-grey border-b border-gray-100">
+                      <th className="pb-2 font-medium">Property</th>
+                      <th className="pb-2 font-medium">Occupied</th>
+                      <th className="pb-2 font-medium">Available</th>
+                      <th className="pb-2 font-medium">Occupancy</th>
+                      <th className="pb-2 font-medium">Arrivals</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(reportData.byProperty as Array<{ propertyId: string; occupiedRooms: number; availableRooms: number; occupancyRate: number; arrivals: number }>).map((row) => (
+                      <tr key={row.propertyId} className="border-b border-gray-50">
+                        <td className="py-2">{propertyNameMap.get(row.propertyId) ?? row.propertyId}</td>
+                        <td className="py-2">{row.occupiedRooms}</td>
+                        <td className="py-2">{row.availableRooms}</td>
+                        <td className="py-2">{formatOccupancyPercent(row.occupancyRate)}</td>
+                        <td className="py-2">{row.arrivals}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

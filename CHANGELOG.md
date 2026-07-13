@@ -8,6 +8,18 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — HIA gap features (portfolio, search, staff alerts, export automation)
+
+- **Portfolio rollup** — `organizations` table, optional `organization_id` on properties,
+  `GET /v1/reports/portfolio/*` endpoints, dashboard **All Properties** mode with
+  aggregated KPIs and per-property breakdown.
+- **Universal search** — `GET /v1/search` and `GET /v1/search/portfolio`; dashboard
+  command palette (⌘K / Ctrl+K) across guests, reservations, folios, rooms, groups.
+- **Staff notifications** — in-app alerts with websocket push; populated from
+  `agent.decision_created` and `audit.completed`; notification bell in the header.
+- **Accounting export automation** — on `audit.completed`, pre-generates CSV exports
+  and emits `accounting.export.ready` webhook with download paths.
+
 ### Added — Revenue Manager (RManager) Agent
 
 - **Revenue Manager orchestrator agent** (`revenue_manager`) — a meta-agent that
