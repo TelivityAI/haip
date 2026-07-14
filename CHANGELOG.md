@@ -14,6 +14,8 @@ All notable changes to HAIP are documented here. This project adheres to
   colors (separate from guest booking-engine branding); applied in Sidebar / CSS vars.
 - **Contextual help** — route help panel (`GET /v1/help`) plus optional grounded
   HAIP AI explain (`POST /v1/help/explain`).
+- **Report favorites** — `users.preferences.reportFavorites` via `GET/PATCH /v1/admin/me/preferences`.
+- **KPI warn thresholds** — `properties.settings.kpiThresholds` tint Dashboard KPI cards.
 
 ### Added — Portfolio, search, staff alerts, export automation
 
