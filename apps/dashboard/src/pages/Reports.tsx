@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { BarChart3, Percent, DollarSign, TrendingUp, Building2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { BarChart3, Percent, DollarSign, TrendingUp, Building2, Star } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { format, subDays } from 'date-fns';
 import { api } from '../lib/api';
@@ -10,12 +10,74 @@ import KpiCard from '../components/ui/KpiCard';
 
 type ReportType = 'financial-summary' | 'occupancy' | 'daily-revenue' | 'occupancy-trend';
 
+const REPORT_OPTIONS: { value: ReportType; label: string }[] = [
+  { value: 'financial-summary', label: 'Financial Summary' },
+  { value: 'occupancy', label: 'Occupancy' },
+  { value: 'daily-revenue', label: 'Daily Revenue' },
+  { value: 'occupancy-trend', label: 'Occupancy Trend' },
+];
+
+const DEMO_FAVORITES_KEY = 'haip.reportFavorites';
+
 export default function Reports() {
   const { propertyId, isPortfolioMode, properties } = useProperty();
+  const queryClient = useQueryClient();
   const [report, setReport] = useState<ReportType>('financial-summary');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+
+  const { data: prefsData } = useQuery({
+    queryKey: ['me', 'preferences'],
+    queryFn: () =>
+      api.get('/v1/admin/me/preferences').then((r) => r.data?.data ?? r.data ?? {}),
+  });
+
+  const favorites: ReportType[] = useMemo(() => {
+    const fromApi = (prefsData?.reportFavorites ?? []) as ReportType[];
+    if (fromApi.length) return fromApi.filter((f) => REPORT_OPTIONS.some((o) => o.value === f));
+    try {
+      const raw = localStorage.getItem(DEMO_FAVORITES_KEY);
+      if (raw) return JSON.parse(raw) as ReportType[];
+    } catch {
+      /* ignore */
+    }
+    return [];
+  }, [prefsData]);
+
+  const saveFavorites = useMutation({
+    mutationFn: (next: ReportType[]) =>
+      api.patch('/v1/admin/me/preferences', { reportFavorites: next }).then((r) => r.data),
+    onSuccess: (_data, next) => {
+      try {
+        localStorage.setItem(DEMO_FAVORITES_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      queryClient.invalidateQueries({ queryKey: ['me', 'preferences'] });
+    },
+  });
+
+  function toggleFavorite(type: ReportType) {
+    const next = favorites.includes(type)
+      ? favorites.filter((f) => f !== type)
+      : [...favorites, type];
+    saveFavorites.mutate(next);
+  }
+
+  const orderedOptions = useMemo(() => {
+    const favSet = new Set(favorites);
+    return [
+      ...REPORT_OPTIONS.filter((o) => favSet.has(o.value)),
+      ...REPORT_OPTIONS.filter((o) => !favSet.has(o.value)),
+    ];
+  }, [favorites]);
+
+  useEffect(() => {
+    if (favorites.length && !favorites.includes(report) && favorites[0]) {
+      // Keep current selection; do not force-switch.
+    }
+  }, [favorites, report]);
 
   const portfolioReport =
     isPortfolioMode && (report === 'financial-summary' || report === 'occupancy');
@@ -71,16 +133,52 @@ export default function Reports() {
         </h1>
       </div>
 
+      {favorites.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {favorites.map((f) => {
+            const opt = REPORT_OPTIONS.find((o) => o.value === f);
+            if (!opt) return null;
+            return (
+              <button
+                key={f}
+                onClick={() => setReport(f)}
+                className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
+                  report === f
+                    ? 'border-telivity-teal text-telivity-teal bg-telivity-teal/5'
+                    : 'border-gray-200 text-telivity-slate hover:border-telivity-teal'
+                }`}
+              >
+                <Star size={10} className="inline mr-1 fill-telivity-teal text-telivity-teal" />
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Report Selector + Date */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-end">
         <div>
           <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Report</label>
-          <select value={report} onChange={(e) => setReport(e.target.value as ReportType)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
-            <option value="financial-summary">Financial Summary</option>
-            <option value="occupancy">Occupancy</option>
-            <option value="daily-revenue">Daily Revenue</option>
-            <option value="occupancy-trend">Occupancy Trend</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <select value={report} onChange={(e) => setReport(e.target.value as ReportType)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
+              {orderedOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => toggleFavorite(report)}
+              className="p-2 rounded-lg border border-gray-200 hover:border-telivity-teal"
+              title={favorites.includes(report) ? 'Remove favorite' : 'Add favorite'}
+              aria-label={favorites.includes(report) ? 'Remove favorite' : 'Add favorite'}
+            >
+              <Star
+                size={16}
+                className={favorites.includes(report) ? 'fill-telivity-teal text-telivity-teal' : 'text-telivity-mid-grey'}
+              />
+            </button>
+          </div>
         </div>
         {report !== 'occupancy-trend' ? (
           <div>

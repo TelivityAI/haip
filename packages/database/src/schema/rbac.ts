@@ -8,6 +8,7 @@ import {
   pgEnum,
   uniqueIndex,
   index,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 
@@ -44,6 +45,10 @@ export const users = pgTable(
     email: varchar('email', { length: 255 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     status: userStatusEnum('status').notNull().default('active'),
+    // Self-service UI prefs (report favorites, etc.) — not property-scoped roles.
+    preferences: jsonb('preferences').$type<{
+      reportFavorites?: string[];
+    }>().notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

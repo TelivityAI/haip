@@ -49,6 +49,11 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const today = format(new Date(), 'yyyy-MM-dd');
 
+  const activeProperty = isPortfolioMode
+    ? null
+    : properties.find((p) => p.id === propertyId);
+  const thr = activeProperty?.settings?.kpiThresholds ?? {};
+
   const { data: portfolioFinancial } = useQuery({
     queryKey: ['reports', 'portfolio', 'financial-summary', today],
     queryFn: () => api.get('/v1/reports/portfolio/financial-summary', { params: { date: today } }).then((r) => r.data),
@@ -260,24 +265,32 @@ export default function Dashboard() {
           value={formatOccupancyPercent(occ.occupancyRate)}
           subtitle={`${occ.occupiedRooms ?? occupiedCount} of ${occ.availableRooms ?? totalRooms} rooms`}
           icon={Percent}
+          numericValue={occ.occupancyRate != null ? Number(occ.occupancyRate) : undefined}
+          threshold={thr.occupancyRate}
         />
         <KpiCard
           title="ADR"
           value={kpis.adr != null ? `$${Number(kpis.adr).toFixed(2)}` : '—'}
           subtitle="Average Daily Rate"
           icon={DollarSign}
+          numericValue={kpis.adr != null ? Number(kpis.adr) : undefined}
+          threshold={thr.adr}
         />
         <KpiCard
           title="RevPAR"
           value={kpis.revpar != null ? `$${Number(kpis.revpar).toFixed(2)}` : '—'}
           subtitle="Revenue per Available Room"
           icon={TrendingUp}
+          numericValue={kpis.revpar != null ? Number(kpis.revpar) : undefined}
+          threshold={thr.revpar}
         />
         <KpiCard
           title="Revenue Today"
           value={kpis.totalRevenue != null ? `$${Number(kpis.totalRevenue).toFixed(2)}` : '—'}
           subtitle="Room + F&B + Other"
           icon={BedDouble}
+          numericValue={kpis.totalRevenue != null ? Number(kpis.totalRevenue) : undefined}
+          threshold={thr.totalRevenue}
         />
       </div>
 

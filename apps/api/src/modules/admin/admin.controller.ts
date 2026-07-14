@@ -27,6 +27,7 @@ import { AssignRolesDto } from './dto/assign-roles.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { SetRolePermissionsDto } from './dto/set-role-permissions.dto';
+import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 
 @ApiTags('admin')
 @Controller('admin')
@@ -68,6 +69,36 @@ export class AdminController {
       ? await this.permissionsService.getEffectivePermissions(user.id, propertyId)
       : [];
     return { permissions, navKeys: navKeysFor(permissions) };
+  }
+
+  @Get('me/preferences')
+  @Roles()
+  @ApiOperation({ summary: 'Current user UI preferences (report favorites, etc.)' })
+  async myPreferences(@CurrentUser() authUser: AuthUser | undefined) {
+    if (!authUser) {
+      // Demo / auth-disabled: empty prefs (dashboard may use localStorage).
+      return { reportFavorites: [] };
+    }
+    const user = await this.permissionsService.findLocalUser(authUser.sub, authUser.email);
+    if (!user) return { reportFavorites: [] };
+    return this.usersService.getPreferences(user.id);
+  }
+
+  @Patch('me/preferences')
+  @Roles()
+  @ApiOperation({ summary: 'Update current user UI preferences' })
+  async updateMyPreferences(
+    @CurrentUser() authUser: AuthUser | undefined,
+    @Body() dto: UpdatePreferencesDto,
+  ) {
+    if (!authUser) {
+      return { reportFavorites: dto.reportFavorites ?? [] };
+    }
+    const user = await this.permissionsService.findLocalUser(authUser.sub, authUser.email);
+    if (!user) {
+      return { reportFavorites: dto.reportFavorites ?? [] };
+    }
+    return this.usersService.updatePreferences(user.id, dto);
   }
 
   // ---- Users ----

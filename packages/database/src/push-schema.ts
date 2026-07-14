@@ -917,6 +917,11 @@ async function main() {
   // Idempotent column additions for pre-existing databases
   const alters = [
     `ALTER TABLE properties ADD COLUMN IF NOT EXISTS organization_id uuid REFERENCES organizations(id)`,
+    `ALTER TABLE properties ADD COLUMN IF NOT EXISTS staff_display_name varchar(200)`,
+    `ALTER TABLE properties ADD COLUMN IF NOT EXISTS staff_logo_media_id uuid`,
+    `ALTER TABLE properties ADD COLUMN IF NOT EXISTS staff_primary_color varchar(9)`,
+    `ALTER TABLE properties ADD COLUMN IF NOT EXISTS staff_accent_color varchar(9)`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences jsonb NOT NULL DEFAULT '{}'::jsonb`,
     `ALTER TABLE tax_rules ADD COLUMN IF NOT EXISTS split_percentage numeric(5,2)`,
     // House accounts reuse charges/payments (KB 13): folio_id becomes nullable,
     // add house_account_id. A row belongs to EITHER a folio OR a house account.

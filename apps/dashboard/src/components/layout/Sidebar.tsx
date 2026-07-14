@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
+import { useProperty } from '../../context/PropertyContext';
 
 type NavItem = {
   to: string;
@@ -96,6 +97,19 @@ function isItemVisible(
 export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const { hasRole, hasPermission } = useAuth();
   const { t } = useTranslation();
+  const { propertyId, isPortfolioMode, properties } = useProperty();
+
+  const activeProperty = isPortfolioMode
+    ? null
+    : properties.find((p) => p.id === propertyId);
+
+  const brandName = isPortfolioMode
+    ? 'HAIP'
+    : (activeProperty?.staffDisplayName || activeProperty?.name || 'HAIP');
+  const brandLogo = !isPortfolioMode ? activeProperty?.staffLogoUrl : null;
+  const tagline = isPortfolioMode
+    ? t('header.allProperties', { defaultValue: 'All Properties' })
+    : t('nav.tagline');
 
   const visibleSections = NAV_SECTIONS.map((section) => ({
     ...section,
@@ -118,15 +132,25 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}
+        style={
+          !isPortfolioMode && activeProperty?.staffPrimaryColor
+            ? { backgroundColor: activeProperty.staffPrimaryColor }
+            : undefined
+        }
       >
         <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold tracking-wide">HAIP</h1>
-            <p className="text-xs text-telivity-mid-grey mt-0.5">{t('nav.tagline')}</p>
+          <div className="flex items-center gap-3 min-w-0">
+            {brandLogo ? (
+              <img src={brandLogo} alt="" className="h-8 w-8 rounded object-cover flex-shrink-0 bg-white/10" />
+            ) : null}
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold tracking-wide truncate">{brandName}</h1>
+              <p className="text-xs text-white/60 mt-0.5 truncate">{tagline}</p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="lg:hidden p-1 rounded hover:bg-white/10"
+            className="lg:hidden p-1 rounded hover:bg-white/10 flex-shrink-0"
             aria-label={t('nav.closeMenu')}
           >
             <X size={18} />

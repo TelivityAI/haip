@@ -73,6 +73,13 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
   const [currency, setCurrency] = useState('USD');
   const [checkInTime, setCheckInTime] = useState('15:00');
   const [checkOutTime, setCheckOutTime] = useState('11:00');
+  const [staffDisplayName, setStaffDisplayName] = useState('');
+  const [staffLogoMediaId, setStaffLogoMediaId] = useState('');
+  const [staffPrimaryColor, setStaffPrimaryColor] = useState('');
+  const [staffAccentColor, setStaffAccentColor] = useState('');
+  const [occWarnBelow, setOccWarnBelow] = useState('');
+  const [adrWarnBelow, setAdrWarnBelow] = useState('');
+  const [revparWarnBelow, setRevparWarnBelow] = useState('');
 
   const { data } = useQuery({
     queryKey: ['properties', propertyId],
@@ -93,21 +100,49 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
       setCurrency(property.currencyCode ?? property.currency ?? 'USD');
       setCheckInTime(property.checkInTime ?? '15:00');
       setCheckOutTime(property.checkOutTime ?? '11:00');
+      setStaffDisplayName(property.staffDisplayName ?? '');
+      setStaffLogoMediaId(property.staffLogoMediaId ?? '');
+      setStaffPrimaryColor(property.staffPrimaryColor ?? '');
+      setStaffAccentColor(property.staffAccentColor ?? '');
+      const thr = property.settings?.kpiThresholds ?? {};
+      setOccWarnBelow(thr.occupancyRate?.warnBelow != null ? String(thr.occupancyRate.warnBelow) : '');
+      setAdrWarnBelow(thr.adr?.warnBelow != null ? String(thr.adr.warnBelow) : '');
+      setRevparWarnBelow(thr.revpar?.warnBelow != null ? String(thr.revpar.warnBelow) : '');
     }
   }, [property]);
 
   const updateMutation = useMutation({
-    mutationFn: () => api.patch(`/v1/properties/${propertyId}`, {
-      name,
-      code,
-      addressLine1: address || undefined,
-      phone,
-      email,
-      timezone,
-      currencyCode: currency,
-      checkInTime,
-      checkOutTime,
-    }),
+    mutationFn: () => {
+      const kpiThresholds: Record<string, { warnBelow?: number }> = {};
+      if (occWarnBelow !== '') {
+        kpiThresholds.occupancyRate = { warnBelow: Number(occWarnBelow) };
+      }
+      if (adrWarnBelow !== '') {
+        kpiThresholds.adr = { warnBelow: Number(adrWarnBelow) };
+      }
+      if (revparWarnBelow !== '') {
+        kpiThresholds.revpar = { warnBelow: Number(revparWarnBelow) };
+      }
+      return api.patch(`/v1/properties/${propertyId}`, {
+        name,
+        code,
+        addressLine1: address || undefined,
+        phone,
+        email,
+        timezone,
+        currencyCode: currency,
+        checkInTime,
+        checkOutTime,
+        staffDisplayName: staffDisplayName || undefined,
+        staffLogoMediaId: staffLogoMediaId || undefined,
+        staffPrimaryColor: staffPrimaryColor || undefined,
+        staffAccentColor: staffAccentColor || undefined,
+        settings: {
+          ...(property?.settings ?? {}),
+          kpiThresholds,
+        },
+      });
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['properties'] }),
   });
 
@@ -133,6 +168,30 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
           <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Check-in Time</label><input type="time" value={checkInTime} onChange={(e) => setCheckInTime(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
           <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Check-out Time</label><input type="time" value={checkOutTime} onChange={(e) => setCheckOutTime(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
         </div>
+
+        <div className="border-t border-gray-100 pt-4 mt-2">
+          <h3 className="text-sm font-semibold text-telivity-navy mb-3">Staff dashboard branding</h3>
+          <p className="text-xs text-telivity-mid-grey mb-3">Separate from guest booking-engine branding. Applied to the staff shell only.</p>
+          <div className="space-y-3">
+            <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Display name</label><input type="text" value={staffDisplayName} onChange={(e) => setStaffDisplayName(e.target.value)} placeholder="Overrides sidebar title" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+            <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Logo media ID</label><input type="text" value={staffLogoMediaId} onChange={(e) => setStaffLogoMediaId(e.target.value)} placeholder="UUID from Property Photos below" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal font-mono text-xs" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Primary color</label><input type="text" value={staffPrimaryColor} onChange={(e) => setStaffPrimaryColor(e.target.value)} placeholder="#016491" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+              <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Accent color</label><input type="text" value={staffAccentColor} onChange={(e) => setStaffAccentColor(e.target.value)} placeholder="#06bdb4" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-100 pt-4 mt-2">
+          <h3 className="text-sm font-semibold text-telivity-navy mb-3">KPI warn thresholds</h3>
+          <p className="text-xs text-telivity-mid-grey mb-3">Values below these mark dashboard KPIs as warning (occupancy is 0–1).</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Occupancy warn below</label><input type="number" step="0.01" min="0" max="1" value={occWarnBelow} onChange={(e) => setOccWarnBelow(e.target.value)} placeholder="0.60" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+            <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">ADR warn below</label><input type="number" step="0.01" value={adrWarnBelow} onChange={(e) => setAdrWarnBelow(e.target.value)} placeholder="150" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+            <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">RevPAR warn below</label><input type="number" step="0.01" value={revparWarnBelow} onChange={(e) => setRevparWarnBelow(e.target.value)} placeholder="100" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+          </div>
+        </div>
+
         <button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} className="bg-telivity-teal text-white rounded-lg px-6 py-2 text-sm font-semibold disabled:opacity-50">
           {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
         </button>
