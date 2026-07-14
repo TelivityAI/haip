@@ -25,7 +25,7 @@ export class HelpService {
 
   /**
    * Grounded explain over allowlisted numeric screen facts only.
-   * Never injects KB text. Returns null when AI is off or ungrounded.
+   * Returns null when AI is off or ungrounded.
    */
   async explain(route: string, facts: Record<string, unknown> = {}) {
     const entry = getHelpForRoute(route);

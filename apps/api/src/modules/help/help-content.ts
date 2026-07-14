@@ -1,9 +1,6 @@
 /**
- * Public OSS help copy for the staff dashboard.
- *
- * DO NOT paste from private kb/ or proprietary research. Only generic UI / ops
- * guidance that is safe to publish in an open-source product. If unsure whether
- * a sentence came from private KB doctrine, delete it.
+ * Staff dashboard help copy — short UI guidance for each route.
+ * Keep entries generic and suitable for an open-source product.
  */
 
 export interface HelpEntry {
