@@ -10,7 +10,7 @@ export class HelpController {
 
   @Get()
   @ApiOperation({
-    summary: 'Public contextual help for a dashboard route (OSS-safe copy only)',
+    summary: 'Contextual help for a dashboard route',
   })
   @ApiQuery({ name: 'route', required: true, example: '/night-audit' })
   getHelp(@Query('route') route: string) {
@@ -25,7 +25,7 @@ export class HelpController {
 
   @Post('explain')
   @ApiOperation({
-    summary: 'Optional grounded AI explain for screen numeric facts (no KB text)',
+    summary: 'Optional grounded AI explain for screen numeric facts',
   })
   explain(@Body() dto: HelpExplainDto) {
     return this.helpService.explain(dto.route, dto.facts ?? {});
