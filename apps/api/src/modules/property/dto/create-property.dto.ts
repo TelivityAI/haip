@@ -146,4 +146,31 @@ export class CreatePropertyDto {
   @Min(0)
   @Max(100)
   overbookingPercentage?: number;
+
+  @ApiPropertyOptional({ description: 'Staff dashboard display name (white-label)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  staffDisplayName?: string;
+
+  @ApiPropertyOptional({ description: 'Media UUID for staff dashboard logo' })
+  @IsOptional()
+  @IsString()
+  staffLogoMediaId?: string;
+
+  @ApiPropertyOptional({ example: '#06bdb4' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(9)
+  staffPrimaryColor?: string;
+
+  @ApiPropertyOptional({ example: '#016491' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(9)
+  staffAccentColor?: string;
+
+  @ApiPropertyOptional({ description: 'Flexible property settings including kpiThresholds' })
+  @IsOptional()
+  settings?: Record<string, unknown>;
 }

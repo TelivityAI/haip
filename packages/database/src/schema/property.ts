@@ -47,6 +47,12 @@ export const properties = pgTable('properties', {
   overbookingPercentage: integer('overbooking_percentage').notNull().default(0), // 0-15% typical
   nightAuditTime: varchar('night_audit_time', { length: 5 }).notNull().default('02:00'),
 
+  // Staff dashboard white-label (separate from guest booking_engine_config branding)
+  staffDisplayName: varchar('staff_display_name', { length: 200 }),
+  staffLogoMediaId: uuid('staff_logo_media_id'),
+  staffPrimaryColor: varchar('staff_primary_color', { length: 9 }),
+  staffAccentColor: varchar('staff_accent_color', { length: 9 }),
+
   // Property settings (flexible JSONB for operational config)
   settings: jsonb('settings').$type<{
     earlyCheckInFee?: number;
@@ -60,6 +66,12 @@ export const properties = pgTable('properties', {
     noShowFeeAmount?: number;
     noShowCutoffHour?: number;
     auditAutoLock?: boolean;
+    kpiThresholds?: {
+      occupancyRate?: { warnBelow?: number; goodAbove?: number };
+      adr?: { warnBelow?: number };
+      revpar?: { warnBelow?: number };
+      totalRevenue?: { warnBelow?: number };
+    };
   }>(),
 
   // Status

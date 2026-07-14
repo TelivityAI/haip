@@ -8,6 +8,16 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Staff branding, contextual help, report favorites & KPI thresholds
+
+- **Staff dashboard white-label** — property fields for display name, logo, primary/accent
+  colors (separate from guest booking-engine branding); applied in Sidebar / CSS vars.
+- **Contextual help** — public OSS route help panel (`GET /v1/help`) plus optional grounded
+  HAIP AI explain (`POST /v1/help/explain`). Help copy is code-owned and must not paste
+  private `kb/` doctrine.
+- **Report favorites** — `users.preferences.reportFavorites` via `GET/PATCH /v1/admin/me/preferences`.
+- **KPI warn thresholds** — `properties.settings.kpiThresholds` tint Dashboard KPI cards.
+
 ### Added — HIA gap features (portfolio, search, staff alerts, export automation)
 
 - **Portfolio rollup** — `organizations` table, optional `organization_id` on properties,

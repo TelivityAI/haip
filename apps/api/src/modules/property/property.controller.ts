@@ -38,7 +38,7 @@ export class PropertyController {
     // bind it (the id param is `:id`, not `propertyId`). Scope the list to the
     // caller's memberships here; demo (auth off) returns everything.
     if (!this.authOn() || !user) return all;
-    return (all as Array<{ id: string }>).filter((p) => userCanAccessProperty(user, p.id));
+    return all.filter((p) => userCanAccessProperty(user, p.id));
   }
 
   @Get(':id')

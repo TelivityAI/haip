@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode, useMemo } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { useAuth } from '../../context/AuthContext';
@@ -10,8 +10,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const { authEnabled, setPermissions } = useAuth();
   const { propertyId, isPortfolioMode, properties } = useProperty();
 
-  // Permissions are per-property. In portfolio mode, resolve against the first
-  // accessible property so nav gating still works without sending the sentinel id.
   const permissionsPropertyId =
     isPortfolioMode ? (properties[0]?.id ?? null) : propertyId;
 
@@ -19,6 +17,25 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (data?.permissions) setPermissions(data.permissions);
   }, [data, setPermissions]);
+
+  const activeProperty = useMemo(
+    () => (isPortfolioMode ? null : properties.find((p) => p.id === propertyId) ?? null),
+    [isPortfolioMode, properties, propertyId],
+  );
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (activeProperty?.staffPrimaryColor) {
+      root.style.setProperty('--staff-primary', activeProperty.staffPrimaryColor);
+    } else {
+      root.style.removeProperty('--staff-primary');
+    }
+    if (activeProperty?.staffAccentColor) {
+      root.style.setProperty('--staff-accent', activeProperty.staffAccentColor);
+    } else {
+      root.style.removeProperty('--staff-accent');
+    }
+  }, [activeProperty?.staffPrimaryColor, activeProperty?.staffAccentColor]);
 
   return (
     <div className="min-h-screen bg-telivity-light-grey">

@@ -39,6 +39,7 @@ import { DoorLockModule } from './modules/door-lock/door-lock.module';
 import { LlmModule } from './modules/llm/llm.module';
 import { SearchModule } from './modules/search/search.module';
 import { StaffNotificationsModule } from './modules/staff-notifications/staff-notifications.module';
+import { HelpModule } from './modules/help/help.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -80,6 +81,7 @@ const imports: any[] = [
   LlmModule,
   SearchModule,
   StaffNotificationsModule,
+  HelpModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or

@@ -202,4 +202,40 @@ export class UsersService {
     const permissions = await this.permissions.getEffectivePermissions(userId, propertyId);
     return { userId, propertyId, permissions };
   }
+
+  async getPreferences(userId: string) {
+    const [row] = await this.db
+      .select({ preferences: users.preferences })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!row) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+    return row.preferences ?? {};
+  }
+
+  async updatePreferences(
+    userId: string,
+    prefs: { reportFavorites?: string[] },
+  ) {
+    const [existing] = await this.db
+      .select({ preferences: users.preferences })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!existing) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+    const next = {
+      ...(existing.preferences ?? {}),
+      ...prefs,
+    };
+    const [user] = await this.db
+      .update(users)
+      .set({ preferences: next, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning({ preferences: users.preferences });
+    return user?.preferences ?? next;
+  }
 }

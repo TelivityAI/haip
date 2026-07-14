@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, Menu, LogOut, User, Languages, Search } from 'lucide-react';
+import { ChevronDown, Menu, LogOut, User, Languages, Search, CircleHelp } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { useProperty } from '../../context/PropertyContext';
@@ -9,6 +9,7 @@ import { useSocket } from '../../hooks/useSocket';
 import { SUPPORTED_LANGUAGES } from '../../i18n';
 import CommandPalette, { useCommandPaletteShortcut } from '../search/CommandPalette';
 import NotificationBell from '../notifications/NotificationBell';
+import HelpPanel from '../help/HelpPanel';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -22,6 +23,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useCommandPaletteShortcut(() => setSearchOpen(true));
 
@@ -153,6 +155,15 @@ export default function Header({ onMenuClick }: HeaderProps) {
             )}
           </div>
 
+          <button
+            onClick={() => setHelpOpen(true)}
+            className="p-2 rounded-lg hover:bg-telivity-light-grey transition-colors"
+            aria-label={t('header.help', { defaultValue: 'Help' })}
+            title={t('header.help', { defaultValue: 'Help' })}
+          >
+            <CircleHelp size={18} className="text-telivity-slate" />
+          </button>
+
           <NotificationBell />
 
           {authEnabled && user && (
@@ -178,6 +189,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
       </header>
 
       <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   );
 }
