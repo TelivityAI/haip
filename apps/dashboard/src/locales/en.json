@@ -423,6 +423,7 @@
       "retail": "Retail",
       "vendor": "Vendor"
     },
+    "name": "Name",
     "nameRequired": "Name *",
     "noAccounts": "No house accounts",
     "noProducts": "No products",
@@ -567,6 +568,83 @@
     "tagline": "Hotel AI Platform",
     "tax": "Tax Settings",
     "usersRoles": "Users & Roles"
+  },
+  "permissions": {
+    "groups": {
+      "accounting": "Accounting",
+      "administration": "Administration",
+      "billing": "Billing",
+      "cashier": "Cashier",
+      "channels": "Channels",
+      "communications": "Communications",
+      "frontDesk": "Front Desk",
+      "general": "General",
+      "groups": "Groups",
+      "guests": "Guests",
+      "houseAccounts": "House Accounts",
+      "housekeeping": "Housekeeping",
+      "nightAudit": "Night Audit",
+      "ratePlans": "Rate Plans",
+      "reports": "Reports",
+      "reservations": "Reservations",
+      "revenue": "Revenue Management",
+      "reviews": "Reviews",
+      "rooms": "Rooms",
+      "settings": "Settings",
+      "tax": "Tax"
+    },
+    "labels": {
+      "accounting": { "view": "View Accounting & Deposits" },
+      "admin": {
+        "roles": { "manage": "Manage Roles & Permissions" },
+        "users": { "manage": "Manage Users" }
+      },
+      "bookingengine": { "manage": "Manage Direct Booking Engine" },
+      "cashier": { "access": "Access Cashier Operations" },
+      "channels": { "manage": "Manage Channels" },
+      "communications": { "manage": "Manage Guest Communications" },
+      "dashboard": { "view": "View Dashboard" },
+      "folios": {
+        "manage": "Post Charges / Payments",
+        "read": "View Folios & Billing"
+      },
+      "frontdesk": { "access": "Access Front Desk" },
+      "groups": {
+        "manage": "Manage Groups & Allotments",
+        "read": "View Groups"
+      },
+      "guests": {
+        "read": "View Guests",
+        "write": "Create / Edit Guests"
+      },
+      "houseaccounts": {
+        "manage": "Manage House Accounts",
+        "read": "View House Accounts"
+      },
+      "housekeeping": {
+        "manage": "Assign / Inspect Housekeeping",
+        "read": "View Housekeeping"
+      },
+      "media": { "manage": "Manage Property Photos" },
+      "nightaudit": { "run": "Run Night Audit" },
+      "rateplans": {
+        "manage": "Manage Rate Plans",
+        "read": "View Rate Plans"
+      },
+      "reports": { "view": "View Reports" },
+      "reservations": {
+        "read": "View Reservations",
+        "write": "Create / Edit Reservations"
+      },
+      "revenue": { "manage": "Manage Revenue" },
+      "reviews": { "manage": "Manage Reviews" },
+      "rooms": {
+        "read": "View Rooms",
+        "write": "Manage Rooms / Room Types"
+      },
+      "settings": { "manage": "Manage Property Settings" },
+      "tax": { "manage": "Manage Tax Profiles & Rules" }
+    }
   },
   "nightAudit": {
     "anomalyDetection": "AI Anomaly Detection",
