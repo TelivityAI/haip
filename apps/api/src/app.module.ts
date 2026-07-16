@@ -91,7 +91,10 @@ if (process.env['NODE_ENV'] === 'production' || process.env['SERVE_DASHBOARD'] =
   imports.push(
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'dashboard', 'dist'),
-      exclude: ['/api/(.*)', '/booking/(.*)'],
+      // @nestjs/serve-static v5 defaults to `{*any}`, which Express 4 treats
+      // as a literal route rather than an SPA catch-all.
+      renderPath: '*',
+      exclude: ['/api{/*path}', '/booking{/*path}'],
     }),
   );
 }
@@ -101,7 +104,8 @@ if (process.env['NODE_ENV'] === 'production' || process.env['SERVE_BOOKING'] ===
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'booking', 'dist'),
       serveRoot: '/booking',
-      exclude: ['/api/(.*)'],
+      renderPath: '*',
+      exclude: ['/api{/*path}'],
     }),
   );
 }
