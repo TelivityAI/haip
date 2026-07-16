@@ -34,6 +34,7 @@ export class AriService {
     startDate: string,
     endDate: string,
     channelConnectionId?: string,
+    ariUpdateType?: 'Delta' | 'Overlay',
   ) {
     const connections = channelConnectionId
       ? [await this.channelService.findById(channelConnectionId, propertyId)]
@@ -87,10 +88,14 @@ export class AriService {
       if (items.length === 0) continue;
 
       const adapter = this.adapterFactory.getAdapter(conn.adapterType);
+      const connectionConfig: Record<string, unknown> = {
+        ...((conn.config ?? {}) as Record<string, unknown>),
+        ...(ariUpdateType ? { ariUpdateType } : {}),
+      };
       const result = await adapter.pushAvailability({
         propertyId,
         channelConnectionId: conn.id,
-        connectionConfig: (conn.config ?? {}) as Record<string, unknown>,
+        connectionConfig,
         items,
       });
 
@@ -117,6 +122,7 @@ export class AriService {
     startDate: string,
     endDate: string,
     channelConnectionId?: string,
+    ariUpdateType?: 'Delta' | 'Overlay',
   ) {
     const connections = channelConnectionId
       ? [await this.channelService.findById(channelConnectionId, propertyId)]
@@ -198,7 +204,10 @@ export class AriService {
 
       const adapter = this.adapterFactory.getAdapter(conn.adapterType);
 
-      const connectionConfig = (conn.config ?? {}) as Record<string, unknown>;
+      const connectionConfig: Record<string, unknown> = {
+        ...((conn.config ?? {}) as Record<string, unknown>),
+        ...(ariUpdateType ? { ariUpdateType } : {}),
+      };
       const rateResult = rateItems.length > 0
         ? await adapter.pushRates({ propertyId, channelConnectionId: conn.id, connectionConfig, items: rateItems })
         : { success: true, itemsSynced: 0, errors: [] };
@@ -227,17 +236,50 @@ export class AriService {
 
   /**
    * Push full ARI (availability + rates + restrictions) — convenience method.
+   * Pass ariUpdateType='Overlay' for DerbySoft full refresh (issue #93 flush).
    */
   async pushFullARI(
     propertyId: string,
     startDate: string,
     endDate: string,
     channelConnectionId?: string,
+    ariUpdateType?: 'Delta' | 'Overlay',
   ) {
-    const availabilityResults = await this.pushAvailability(propertyId, startDate, endDate, channelConnectionId);
-    const rateResults = await this.pushRates(propertyId, startDate, endDate, channelConnectionId);
+    const availabilityResults = await this.pushAvailability(
+      propertyId,
+      startDate,
+      endDate,
+      channelConnectionId,
+      ariUpdateType,
+    );
+    const rateResults = await this.pushRates(
+      propertyId,
+      startDate,
+      endDate,
+      channelConnectionId,
+      ariUpdateType,
+    );
 
     return { availability: availabilityResults, rates: rateResults };
+  }
+
+  /**
+   * Schedule a full Overlay ARI flush asynchronously.
+   * Channel BullMQ workers are not wired yet (same pragmatic stance as webhook
+   * delivery) — runs fire-and-forget on the event loop.
+   */
+  scheduleFullFlush(
+    propertyId: string,
+    startDate: string,
+    endDate: string,
+    channelConnectionId?: string,
+  ): { queued: true } {
+    setImmediate(() => {
+      void this.pushFullARI(propertyId, startDate, endDate, channelConnectionId, 'Overlay').catch(
+        () => undefined,
+      );
+    });
+    return { queued: true };
   }
 
   /**

@@ -1,0 +1,11 @@
+{
+  "name": "@telivityhaip/mock-derbysoft",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Mock DerbySoft Property Connector API for development and testing",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
+  }
+}

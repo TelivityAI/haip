@@ -133,7 +133,7 @@ graph TB
 - **Multi-tenant from day one** — `property_id` on every table, designed for portfolio operators managing multiple hotels
 - **Event-driven** — Webhook events on every state change (`reservation.created`, `folio.charge_posted`, `room.status_changed`). Build anything on top.
 - **AI agents as first-class citizens** — 12 built-in agents with a common interface: `analyze() → recommend() → execute()`, coordinated by a Revenue Manager orchestrator. Three operating modes: manual, suggest, autopilot. Decision logging for continuous learning.
-- **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. Booking.com + Expedia (EQC) direct adapters and a SiteMinder aggregator for 450+ OTA reach — distributing **both** ARI and descriptive content (photos/descriptions/amenities).
+- **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. Booking.com + Expedia (EQC) direct adapters plus SiteMinder and DerbySoft aggregators for 450+ OTA reach — distributing **both** ARI and descriptive content (photos/descriptions/amenities).
 - **Layered RBAC** — Keycloak JWT authentication **plus HAIP's own local users, roles & permissions**: a code-defined permission catalog, operator-defined custom roles, and guards (`@Roles` + `@RequirePermissions`) on every endpoint.
 - **Polymorphic media** — One image model for properties, room types & rooms; add by URL (zero infra) or upload to S3/MinIO, with one enforced primary per owner.
 - **Compliance as infrastructure** — PCI tokenization (Stripe), GDPR audit trails, jurisdiction-based tax calculation, guest registration per jurisdiction. Not bolted on — built in.
@@ -341,6 +341,7 @@ executes; approval always runs the agent's own recommendation. Off by default
 | **Booking.com** | Direct integration | OTA XML for ARI + inbound reservation webhooks/cancellations; JSON **Photo API** for content (photos with validation, plus room/property descriptions & amenities). |
 | **Expedia (EQC)** | Direct integration | EQC Availability & Rates (XML) for ARI, Booking Notification push for inbound reservations, and the **Image API** for content (with Expedia's own image limits). |
 | **SiteMinder** | Aggregator (pmsXchange) | SOAP / OTA XML. Connect once, distribute to 450+ OTAs — ARI push, reservation delivery, rate parity. (Content is managed in the SiteMinder extranet — no PMS content push.) |
+| **DerbySoft** | Aggregator (Property Connector) | REST/JSON + OAuth Bearer. ARI (inventory/rate/availability) with Delta/Overlay, property profile sync, inbound LiveCheck/Book/Modify/Cancel. See [`docs/channels/derbysoft.md`](./docs/channels/derbysoft.md). |
 
 ### Payments (Stripe)
 - PCI DSS compliant — never stores raw card data
@@ -422,7 +423,7 @@ executes; approval always runs the agent's own recommendation. Off by default
 | API Spec | OpenAPI 3.0 (auto-generated) | Swagger UI at `/docs` |
 | Auth | Keycloak (OAuth 2.0 / OIDC) | Identity provider, JWT, RBAC |
 | Payments | Stripe | PCI DSS compliant payment processing |
-| OTA Channels | Booking.com + Expedia (EQC) direct + SiteMinder (pmsXchange) | Direct + aggregated OTA connectivity (ARI + content) |
+| OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
 | Testing | Vitest (1115 tests across 134 test files) | Unit and integration tests |
@@ -618,7 +619,8 @@ haip/
 │   │   │       │   └── adapters/   # OTA channel adapters
 │   │   │       │       ├── booking-com/ # Booking.com (OTA XML + Photo API)
 │   │   │       │       ├── expedia/     # Expedia EQC (AR XML + Image API)
-│   │   │       │       └── siteminder/  # SiteMinder pmsXchange (SOAP/OTA XML)
+│   │   │       │       ├── siteminder/  # SiteMinder pmsXchange (SOAP/OTA XML)
+│   │   │       │       └── derbysoft/   # DerbySoft Property Connector (REST/JSON)
 │   │   │       ├── connect/        # OTAIP agent API layer
 │   │   │       ├── media/          # Images for property / room types / rooms (URL + S3)
 │   │   │       ├── events/         # WebSocket gateway

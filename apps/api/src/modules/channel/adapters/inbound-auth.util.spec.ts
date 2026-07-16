@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { createHmac } from 'node:crypto';
-import { verifyBasicAuth, verifyHmacSignature, getInboundAuth } from './inbound-auth.util';
+import {
+  verifyBasicAuth,
+  verifyHmacSignature,
+  verifyBearerAuth,
+  getInboundAuth,
+} from './inbound-auth.util';
 
 describe('inbound-auth.util — verifyBasicAuth', () => {
   const stored = { username: 'bc_user', password: 'bc_pass' };
@@ -64,6 +69,27 @@ describe('inbound-auth.util — verifyHmacSignature', () => {
 
   it('rejects a non-hex signature', () => {
     expect(verifyHmacSignature('not-hex-!!!', body, stored)).toBe(false);
+  });
+});
+
+describe('inbound-auth.util — verifyBearerAuth', () => {
+  const stored = { bearerToken: 'derby-inbound-secret' };
+
+  it('accepts the correct Bearer token', () => {
+    expect(verifyBearerAuth('Bearer derby-inbound-secret', stored)).toBe(true);
+  });
+
+  it('rejects a wrong token', () => {
+    expect(verifyBearerAuth('Bearer other-tenant', stored)).toBe(false);
+  });
+
+  it('rejects missing header or missing stored token', () => {
+    expect(verifyBearerAuth(undefined, stored)).toBe(false);
+    expect(verifyBearerAuth('Bearer derby-inbound-secret', undefined)).toBe(false);
+  });
+
+  it('rejects Basic auth schemes', () => {
+    expect(verifyBearerAuth('Basic abc', stored)).toBe(false);
   });
 });
 

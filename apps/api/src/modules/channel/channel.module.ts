@@ -14,13 +14,20 @@ import { BookingComInboundController } from './adapters/booking-com/booking-com-
 import { SiteMinderAdapter } from './adapters/siteminder/siteminder.adapter';
 import { ExpediaAdapter } from './adapters/expedia/expedia.adapter';
 import { ExpediaInboundController } from './adapters/expedia/expedia-inbound.controller';
+import { DerbySoftAdapter } from './adapters/derbysoft/derbysoft.adapter';
+import { DerbySoftInboundController } from './adapters/derbysoft/derbysoft-inbound.controller';
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { MediaModule } from '../media/media.module';
 
 @Module({
   imports: [ReservationModule, WebhookModule, MediaModule],
-  controllers: [ChannelController, BookingComInboundController, ExpediaInboundController],
+  controllers: [
+    ChannelController,
+    BookingComInboundController,
+    ExpediaInboundController,
+    DerbySoftInboundController,
+  ],
   providers: [
     ChannelService,
     AriService,
@@ -32,6 +39,7 @@ import { MediaModule } from '../media/media.module';
     BookingComAdapter,
     SiteMinderAdapter,
     ExpediaAdapter,
+    DerbySoftAdapter,
   ],
   exports: [ChannelService, AriService, InboundReservationService],
 })
