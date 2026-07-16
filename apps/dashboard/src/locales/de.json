@@ -1,17 +1,34 @@
 {
   "accounting": {
-    "actions": "Aktionen", "add": "Hinzufügen", "aging": "Fälligkeitsanalyse", "applyToFolio": "Auf Gästekonto anwenden", "arAging": "A/R-Fälligkeitsanalyse — {{name}}", "arPayment": "A/R-Zahlung — {{name}}", "arTransfer": "Zu A/R übertragen — {{name}}",
+    "actions": "Aktionen",
+    "add": "Hinzufügen",
     "addGlCode": "Sachkonto hinzufügen",
+    "aging": "Fälligkeitsanalyse",
     "amount": "Betrag",
+    "applyToFolio": "Auf Gästekonto anwenden",
+    "arAging": "A/R-Fälligkeitsanalyse — {{name}}",
+    "arPayment": "A/R-Zahlung — {{name}}",
+    "arTransfer": "Zu A/R übertragen — {{name}}",
     "code": "Code",
     "create": "Erstellen",
-    "depositActions": "Einlageaktionen — ${{amount}}", "folioIdPlaceholder": "Gästekonto-ID (optional zum Anwenden)", "forfeit": "Einbehalten", "loadingAgingReport": "Fälligkeitsbericht wird geladen…",
+    "depositActions": "Einlageaktionen — ${{amount}}",
+    "folioIdPlaceholder": "Gästekonto-ID (optional zum Anwenden)",
     "folioLedgerTrialBalance": "Gästekonto-Saldenliste",
+    "forfeit": "Einbehalten",
+    "loadingAgingReport": "Fälligkeitsbericht wird geladen…",
     "name": "Name",
+    "payment": "Zahlung",
     "record": "Buchen",
     "recordDeposit": "Einlage erfassen",
-    "recordPayment": "Zahlung erfassen", "payment": "Zahlung", "refund": "Erstatten", "reverse": "Stornieren", "reverseTransfer": "A/R-Übertragung stornieren", "sourceFolioIdPlaceholder": "Quell-Gästekonto-ID", "transactionIdPlaceholder": "Transaktions-ID", "transfer": "Übertragen", "transferBalance": "Saldo übertragen",
-    "revenueJournal": "Umsatzjournal"
+    "recordPayment": "Zahlung erfassen",
+    "refund": "Erstatten",
+    "revenueJournal": "Umsatzjournal",
+    "reverse": "Stornieren",
+    "reverseTransfer": "A/R-Übertragung stornieren",
+    "sourceFolioIdPlaceholder": "Quell-Gästekonto-ID",
+    "transactionIdPlaceholder": "Transaktions-ID",
+    "transfer": "Übertragen",
+    "transferBalance": "Saldo übertragen"
   },
   "admin": {
     "actions": "Aktionen",
@@ -70,6 +87,39 @@
     "revpar": "RevPAR",
     "waitingForEvents": "Warte auf Echtzeitereignisse…"
   },
+  "groups": {
+    "allotmentBlocks": "Kontingentblöcke",
+    "block": "Block",
+    "blockName": "Blockname *",
+    "contact": "Kontakt",
+    "contactEmail": "Kontakt-E-Mail",
+    "contactName": "Kontaktname",
+    "create": "Erstellen",
+    "createBlock": "Block erstellen",
+    "cutoffDate": "Stichtag",
+    "end": "Ende",
+    "generateInvoice": "Rechnung erstellen",
+    "invoiceGenerated": "Rechnung wurde erfolgreich erstellt.",
+    "masterFolio": "Hauptgästekonto",
+    "name": "Name",
+    "nameRequired": "Name *",
+    "newBlock": "Neuer Block",
+    "newProfile": "Neues Gruppenprofil",
+    "noBlocks": "Keine Blöcke",
+    "noMasterFolio": "Für diese Gruppe wurde kein Hauptgästekonto gefunden.",
+    "rate": "Satz",
+    "remaining": "Verbleibend",
+    "roomingListHint": "Ein Gast pro Zeile: Name, Anreise, Abreise, guestId (optionale UUID)",
+    "start": "Beginn",
+    "type": "Typ",
+    "types": {
+      "corporate": "Unternehmen",
+      "event": "Veranstaltung",
+      "other": "Sonstiges",
+      "travel_agent": "Reisebüro",
+      "wholesale": "Großhandel"
+    }
+  },
   "header": {
     "language": "Sprache",
     "logout": "Abmelden",
@@ -81,32 +131,13 @@
     "statusOffline": "Offline",
     "user": "Benutzer"
   },
-  "import": {
-    "description": "Migrieren Sie Datensätze aus einem anderen PMS. Wählen Sie eine Entität aus, laden Sie eine CSV-Datei hoch oder fügen Sie sie ein, ordnen Sie die Spalten zu, prüfen Sie sie mit einem Testlauf und importieren Sie sie anschließend."
-  },
-  "groups": {
-    "allotmentBlocks": "Kontingentblöcke", "blockName": "Blockname *", "block": "Block",
-    "contactEmail": "Kontakt-E-Mail",
-    "contactName": "Kontaktname",
-    "contact": "Kontakt", "createBlock": "Block erstellen", "cutoffDate": "Stichtag", "end": "Ende",
-    "create": "Erstellen",
-    "generateInvoice": "Rechnung erstellen", "invoiceGenerated": "Rechnung wurde erfolgreich erstellt.", "masterFolio": "Hauptgästekonto",
-    "nameRequired": "Name *",
-    "name": "Name", "noBlocks": "Keine Blöcke", "noMasterFolio": "Für diese Gruppe wurde kein Hauptgästekonto gefunden.",
-    "newProfile": "Neues Gruppenprofil", "newBlock": "Neuer Block",
-    "rate": "Satz", "remaining": "Verbleibend", "roomingListHint": "Ein Gast pro Zeile: Name, Anreise, Abreise, guestId (optionale UUID)",
-    "type": "Typ",
-    "start": "Beginn",
-    "types": {
-      "corporate": "Unternehmen",
-      "event": "Veranstaltung",
-      "other": "Sonstiges",
-      "travel_agent": "Reisebüro",
-      "wholesale": "Großhandel"
-    }
-  },
   "houseAccounts": {
-    "addProduct": "Produkt hinzufügen", "amount": "Betrag", "balance": "Saldo", "category": "Kategorie", "closeAccount": "Hauskonto schließen", "description": "Beschreibung",
+    "addProduct": "Produkt hinzufügen",
+    "amount": "Betrag",
+    "balance": "Saldo",
+    "category": "Kategorie",
+    "closeAccount": "Hauskonto schließen",
+    "description": "Beschreibung",
     "kind": "Art",
     "kinds": {
       "internal": "Intern",
@@ -114,11 +145,36 @@
       "retail": "Einzelhandel",
       "vendor": "Lieferant"
     },
-    "nameRequired": "Name *", "noAccounts": "Keine Hauskonten", "noProducts": "Keine Produkte", "openAccount": "Konto eröffnen",
-    "name": "Name", "paymentMethods": { "cash": "Bar", "creditCard": "Kreditkarte", "debitCard": "Debitkarte", "bankTransfer": "Banküberweisung", "other": "Sonstiges" }, "post": "Buchen", "postCharge": "Gebühr buchen", "price": "Preis", "priceRequired": "Preis *",
+    "name": "Name",
+    "nameRequired": "Name *",
+    "noAccounts": "Keine Hauskonten",
+    "noProducts": "Keine Produkte",
     "open": "Öffnen",
-    "openHouseAccount": "Hauskonto eröffnen", "productName": "Produktname *", "selectProperty": "Unterkunft auswählen", "title": "Hauskonten"
-    ,"quantity": "Menge", "record": "Buchen", "recordPayment": "Zahlung erfassen", "selectProduct": "Produkt auswählen", "sell": "Verkaufen", "sellProduct": "Produkt verkaufen"
+    "openAccount": "Konto eröffnen",
+    "openHouseAccount": "Hauskonto eröffnen",
+    "paymentMethods": {
+      "bankTransfer": "Banküberweisung",
+      "cash": "Bar",
+      "creditCard": "Kreditkarte",
+      "debitCard": "Debitkarte",
+      "other": "Sonstiges"
+    },
+    "post": "Buchen",
+    "postCharge": "Gebühr buchen",
+    "price": "Preis",
+    "priceRequired": "Preis *",
+    "productName": "Produktname *",
+    "quantity": "Menge",
+    "record": "Buchen",
+    "recordPayment": "Zahlung erfassen",
+    "selectProduct": "Produkt auswählen",
+    "selectProperty": "Unterkunft auswählen",
+    "sell": "Verkaufen",
+    "sellProduct": "Produkt verkaufen",
+    "title": "Hauskonten"
+  },
+  "import": {
+    "description": "Migrieren Sie Datensätze aus einem anderen PMS. Wählen Sie eine Entität aus, laden Sie eine CSV-Datei hoch oder fügen Sie sie ein, ordnen Sie die Spalten zu, prüfen Sie sie mit einem Testlauf und importieren Sie sie anschließend."
   },
   "media": {
     "add": "Hinzufügen",
@@ -282,12 +338,22 @@
     "title": "Suche"
   },
   "taxSettings": {
-    "addRule": "Regel hinzufügen", "addTaxRule": "Steuerregel hinzufügen",
+    "addRule": "Regel hinzufügen",
+    "addTaxRule": "Steuerregel hinzufügen",
     "effective": "Gültig ab",
     "jurisdiction": "Steuergebiet",
     "jurisdictionCode": "Steuergebietscode",
     "newProfile": "Neues Steuerprofil",
-    "profileName": "Profilname"
-    ,"noRules": "Keine Regeln", "rate": "Satz", "ratePlaceholder": "Satz (z. B. 0,07)", "ruleCode": "Code", "ruleName": "Name", "type": "Typ", "types": { "percentage": "Prozentsatz", "flat": "Pauschal" }
+    "noRules": "Keine Regeln",
+    "profileName": "Profilname",
+    "rate": "Satz",
+    "ratePlaceholder": "Satz (z. B. 0,07)",
+    "ruleCode": "Code",
+    "ruleName": "Name",
+    "type": "Typ",
+    "types": {
+      "flat": "Pauschal",
+      "percentage": "Prozentsatz"
+    }
   }
 }

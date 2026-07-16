@@ -1,10 +1,10 @@
 {
   "accounting": {
-    "addGlCode": "Add GL Code",
-    "add": "Add",
     "actions": "Actions",
-    "amount": "Amount",
+    "add": "Add",
+    "addGlCode": "Add GL Code",
     "aging": "Aging",
+    "amount": "Amount",
     "applyToFolio": "Apply to Folio",
     "arAging": "A/R Aging — {{name}}",
     "arLedgers": "A/R Ledgers",
@@ -13,31 +13,31 @@
     "code": "Code",
     "create": "Create",
     "csvExports": "CSV Exports",
-    "deposits": "Deposits",
     "depositActions": "Deposit Actions — ${{amount}}",
+    "deposits": "Deposits",
     "folioIdPlaceholder": "Folio ID (optional for apply)",
     "folioLedgerTrialBalance": "Folio Ledger Trial Balance",
+    "forfeit": "Forfeit",
     "glCodes": "GL Codes",
+    "loadingAgingReport": "Loading aging report...",
     "name": "Name",
     "noCodes": "No codes",
     "noDeposits": "No deposits",
     "noLedgers": "No A/R ledgers",
     "payment": "Payment",
-    "revenueJournal": "Revenue Journal",
     "record": "Record",
     "recordDeposit": "Record Deposit",
     "recordPayment": "Record Payment",
     "refund": "Refund",
+    "revenueJournal": "Revenue Journal",
     "reverse": "Reverse",
     "reverseTransfer": "Reverse A/R Transfer",
     "selectProperty": "Select a property",
     "sourceFolioIdPlaceholder": "Source Folio ID",
-    "title": "Accounting"
-    ,"transactionIdPlaceholder": "Transaction ID",
+    "title": "Accounting",
+    "transactionIdPlaceholder": "Transaction ID",
     "transfer": "Transfer",
-    "transferBalance": "Transfer Balance",
-    "forfeit": "Forfeit",
-    "loadingAgingReport": "Loading aging report..."
+    "transferBalance": "Transfer Balance"
   },
   "admin": {
     "actions": "Actions",
@@ -323,41 +323,41 @@
     "walkIn": "Walk-In"
   },
   "groups": {
-    "create": "Criar",
     "allotmentBlocks": "Allotment Blocks",
     "allotted": "Allotted",
+    "block": "Block",
+    "blockName": "Block name *",
     "contact": "Contact",
     "contactEmail": "Contact Email",
     "contactName": "Contact Name",
-    "blockName": "Block name *",
-    "block": "Block",
+    "create": "Criar",
     "createBlock": "Create Block",
     "cutoffDate": "Cutoff date",
+    "end": "End",
     "generateInvoice": "Generate Invoice",
     "import": "Import",
     "importRoomingList": "Import Rooming List",
     "invoiceGenerated": "Invoice generated successfully.",
     "masterFolio": "Master Folio",
     "name": "Name",
+    "nameRequired": "Name *",
     "new": "New Group",
     "newBlock": "New Block",
     "newProfile": "New Group Profile",
-    "nameRequired": "Name *",
     "noBlocks": "No blocks",
     "noInventory": "No inventory rows",
-    "noProfiles": "No group profiles",
     "noMasterFolio": "No master folio found for this group.",
+    "noProfiles": "No group profiles",
     "pickedUp": "Picked Up",
     "pickupRate": "Pickup Rate",
     "pickupReport": "Pickup Report",
     "processCutoffs": "Process Cutoffs",
+    "rate": "Rate",
     "releaseBlock": "Release Block",
     "remaining": "Remaining",
-    "rate": "Rate",
     "roomingListHint": "One guest per line: name, arrival, departure, guestId (optional UUID)",
     "selectProperty": "Select a property",
     "start": "Start",
-    "end": "End",
     "stayDate": "Stay Date",
     "title": "Groups",
     "type": "Type",
@@ -411,8 +411,8 @@
   "houseAccounts": {
     "accounts": "Accounts",
     "addProduct": "Add Product",
-    "balance": "Balance",
     "amount": "Amount",
+    "balance": "Balance",
     "category": "Category",
     "closeAccount": "Close Account",
     "description": "Description",
@@ -427,30 +427,30 @@
     "nameRequired": "Name *",
     "noAccounts": "No house accounts",
     "noProducts": "No products",
-    "openAccount": "Open Account",
     "open": "Open",
+    "openAccount": "Open Account",
     "openHouseAccount": "Open House Account",
-    "postCharge": "Post Charge",
-    "price": "Price",
-    "priceRequired": "Price *",
-    "productName": "Product name *",
-    "products": "Products",
-    "quantity": "Quantity",
-    "recordPayment": "Record Payment",
-    "record": "Record",
-    "selectProduct": "Select product",
-    "selectProperty": "Select a property",
-    "sellProduct": "Sell Product",
-    "sell": "Sell",
-    "title": "House Accounts",
-    "post": "Post",
     "paymentMethods": {
       "bankTransfer": "Bank Transfer",
       "cash": "Cash",
       "creditCard": "Credit Card",
       "debitCard": "Debit Card",
       "other": "Other"
-    }
+    },
+    "post": "Post",
+    "postCharge": "Post Charge",
+    "price": "Price",
+    "priceRequired": "Price *",
+    "productName": "Product name *",
+    "products": "Products",
+    "quantity": "Quantity",
+    "record": "Record",
+    "recordPayment": "Record Payment",
+    "selectProduct": "Select product",
+    "selectProperty": "Select a property",
+    "sell": "Sell",
+    "sellProduct": "Sell Product",
+    "title": "House Accounts"
   },
   "housekeeping": {
     "allStatus": "All Status",
@@ -569,6 +569,25 @@
     "tax": "Tax Settings",
     "usersRoles": "Users & Roles"
   },
+  "nightAudit": {
+    "anomalyDetection": "AI Anomaly Detection",
+    "businessDate": "Business Date",
+    "charges": "Charges",
+    "completed": "Completed",
+    "empty": "No audit history",
+    "history": "Audit History",
+    "issuesFound": "{{count}} issues found",
+    "noShows": "No-Shows",
+    "processing": "Processing audit steps…",
+    "revenue": "Revenue",
+    "roomCharges": "Room Charges",
+    "run": "Run Night Audit",
+    "running": "Running…",
+    "selectProperty": "Select a property",
+    "started": "Started",
+    "steps": "Steps",
+    "title": "Night Audit"
+  },
   "permissions": {
     "groups": {
       "accounting": "Accounting",
@@ -594,21 +613,39 @@
       "tax": "Tax"
     },
     "labels": {
-      "accounting": { "view": "View Accounting & Deposits" },
-      "admin": {
-        "roles": { "manage": "Manage Roles & Permissions" },
-        "users": { "manage": "Manage Users" }
+      "accounting": {
+        "view": "View Accounting & Deposits"
       },
-      "bookingengine": { "manage": "Manage Direct Booking Engine" },
-      "cashier": { "access": "Access Cashier Operations" },
-      "channels": { "manage": "Manage Channels" },
-      "communications": { "manage": "Manage Guest Communications" },
-      "dashboard": { "view": "View Dashboard" },
+      "admin": {
+        "roles": {
+          "manage": "Manage Roles & Permissions"
+        },
+        "users": {
+          "manage": "Manage Users"
+        }
+      },
+      "bookingengine": {
+        "manage": "Manage Direct Booking Engine"
+      },
+      "cashier": {
+        "access": "Access Cashier Operations"
+      },
+      "channels": {
+        "manage": "Manage Channels"
+      },
+      "communications": {
+        "manage": "Manage Guest Communications"
+      },
+      "dashboard": {
+        "view": "View Dashboard"
+      },
       "folios": {
         "manage": "Post Charges / Payments",
         "read": "View Folios & Billing"
       },
-      "frontdesk": { "access": "Access Front Desk" },
+      "frontdesk": {
+        "access": "Access Front Desk"
+      },
       "groups": {
         "manage": "Manage Groups & Allotments",
         "read": "View Groups"
@@ -625,45 +662,40 @@
         "manage": "Assign / Inspect Housekeeping",
         "read": "View Housekeeping"
       },
-      "media": { "manage": "Manage Property Photos" },
-      "nightaudit": { "run": "Run Night Audit" },
+      "media": {
+        "manage": "Manage Property Photos"
+      },
+      "nightaudit": {
+        "run": "Run Night Audit"
+      },
       "rateplans": {
         "manage": "Manage Rate Plans",
         "read": "View Rate Plans"
       },
-      "reports": { "view": "View Reports" },
+      "reports": {
+        "view": "View Reports"
+      },
       "reservations": {
         "read": "View Reservations",
         "write": "Create / Edit Reservations"
       },
-      "revenue": { "manage": "Manage Revenue" },
-      "reviews": { "manage": "Manage Reviews" },
+      "revenue": {
+        "manage": "Manage Revenue"
+      },
+      "reviews": {
+        "manage": "Manage Reviews"
+      },
       "rooms": {
         "read": "View Rooms",
         "write": "Manage Rooms / Room Types"
       },
-      "settings": { "manage": "Manage Property Settings" },
-      "tax": { "manage": "Manage Tax Profiles & Rules" }
+      "settings": {
+        "manage": "Manage Property Settings"
+      },
+      "tax": {
+        "manage": "Manage Tax Profiles & Rules"
+      }
     }
-  },
-  "nightAudit": {
-    "anomalyDetection": "AI Anomaly Detection",
-    "businessDate": "Business Date",
-    "charges": "Charges",
-    "completed": "Completed",
-    "empty": "No audit history",
-    "history": "Audit History",
-    "issuesFound": "{{count}} issues found",
-    "noShows": "No-Shows",
-    "processing": "Processing audit steps…",
-    "revenue": "Revenue",
-    "roomCharges": "Room Charges",
-    "run": "Run Night Audit",
-    "running": "Running…",
-    "selectProperty": "Select a property",
-    "started": "Started",
-    "steps": "Steps",
-    "title": "Night Audit"
   },
   "ratePlans": {
     "baseAmount": "Base Amount",
@@ -985,6 +1017,9 @@
     "selectProperty": "Select a property",
     "title": "Tax Settings",
     "type": "Type",
-    "types": { "percentage": "Percentage", "flat": "Flat" }
+    "types": {
+      "flat": "Flat",
+      "percentage": "Percentage"
+    }
   }
 }
