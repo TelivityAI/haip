@@ -3,6 +3,7 @@ import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import en from './locales/en.json';
 import de from './locales/de.json';
+import ptBR from './locales/pt-BR.json';
 
 /**
  * i18n foundation for the dashboard.
@@ -22,6 +23,7 @@ import de from './locales/de.json';
 export const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'de', label: 'Deutsch' },
+  { code: 'ptBR', label: 'Português (Brasil)' },
 ] as const;
 
 i18n
@@ -31,6 +33,7 @@ i18n
     resources: {
       en: { translation: en },
       de: { translation: de },
+      ptBR: { translation: ptBR },
     },
     fallbackLng: 'en',
     supportedLngs: SUPPORTED_LANGUAGES.map((l) => l.code),

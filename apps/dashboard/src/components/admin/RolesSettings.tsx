@@ -10,6 +10,10 @@ import {
   type PermissionDef,
 } from '../../hooks/useAdmin';
 
+function permissionGroupKey(group: string) {
+  return group.replace(/\s+(\w)/g, (_, letter: string) => letter.toUpperCase()).replace(/\s/g, '').replace(/^./, (letter) => letter.toLowerCase());
+}
+
 export default function RolesSettings({ propertyId }: { propertyId: string }) {
   const { t } = useTranslation();
   const { data: roles = [] } = useRoles(propertyId);
@@ -153,7 +157,7 @@ function PermissionMatrix({
       <div className="p-5 space-y-5 max-h-[26rem] overflow-y-auto">
         {Object.entries(groups).map(([group, perms]) => (
           <div key={group}>
-            <h3 className="text-xs font-semibold text-telivity-mid-grey uppercase tracking-wider mb-2">{group}</h3>
+            <h3 className="text-xs font-semibold text-telivity-mid-grey uppercase tracking-wider mb-2">{t(`permissions.groups.${permissionGroupKey(group)}`, { defaultValue: group })}</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {perms.map((p) => (
                 <label key={p.key} className={`flex items-center gap-2 text-sm ${readOnly ? 'opacity-80' : 'cursor-pointer'}`}>
@@ -164,7 +168,7 @@ function PermissionMatrix({
                     onChange={() => toggle(p.key)}
                     className="accent-telivity-teal"
                   />
-                  <span className="text-telivity-navy">{p.label}</span>
+                  <span className="text-telivity-navy">{t(`permissions.labels.${p.key}`, { defaultValue: p.label })}</span>
                 </label>
               ))}
             </div>

@@ -12,6 +12,7 @@ import {
 } from '@tanstack/react-table';
 import { CalendarDays, Plus, ChevronLeft, ChevronRight, ArrowUpDown, X, MoreHorizontal, Eye, Pencil, Ban, DoorOpen, LogIn, LogOut } from 'lucide-react';
 import { format, addDays, eachDayOfInterval } from 'date-fns';
+import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
@@ -43,6 +44,7 @@ interface Reservation {
 
 // ---- Reservation List ----
 function ReservationList() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -212,18 +214,21 @@ function ReservationList() {
   }
 
   const columns = useMemo<ColumnDef<Reservation>[]>(() => [
-    { accessorKey: 'confirmationNumber', header: 'Confirmation #', size: 140 },
-    { id: 'guest', header: 'Guest', cell: ({ row }) => guestName(row.original) },
-    { accessorKey: 'roomTypeName', header: 'Room Type', cell: ({ getValue }) => (getValue() as string) ?? '—' },
-    { accessorKey: 'roomNumber', header: 'Room #', cell: ({ getValue }) => (getValue() as string) ?? '—', size: 80 },
-    { accessorKey: 'arrivalDate', header: 'Arrival', size: 110 },
-    { accessorKey: 'departureDate', header: 'Departure', size: 110 },
-    { accessorKey: 'status', header: 'Status', cell: ({ getValue }) => <StatusBadge status={getValue() as string} />, size: 120 },
-    { accessorKey: 'totalAmount', header: 'Total', cell: ({ getValue }) => getValue() != null ? `$${Number(getValue()).toFixed(2)}` : '—', size: 100 },
-    { accessorKey: 'source', header: 'Source', cell: ({ getValue }) => (getValue() as string) ?? 'direct', size: 90 },
+    { accessorKey: 'confirmationNumber', header: t('reservations.confirmation'), size: 140 },
+    { id: 'guest', header: t('reservations.guest'), cell: ({ row }) => guestName(row.original) },
+    { accessorKey: 'roomTypeName', header: t('reservations.roomType'), cell: ({ getValue }) => (getValue() as string) ?? '—' },
+    { accessorKey: 'roomNumber', header: t('reservations.roomNumber'), cell: ({ getValue }) => (getValue() as string) ?? '—', size: 80 },
+    { accessorKey: 'arrivalDate', header: t('reservations.arrival'), size: 110 },
+    { accessorKey: 'departureDate', header: t('reservations.departure'), size: 110 },
+    { accessorKey: 'status', header: t('reservations.status'), cell: ({ getValue }) => {
+      const status = getValue() as string;
+      return <StatusBadge status={status} label={t(`reservations.statuses.${status}`, { defaultValue: status })} />;
+    }, size: 120 },
+    { accessorKey: 'totalAmount', header: t('reservations.total'), cell: ({ getValue }) => getValue() != null ? `$${Number(getValue()).toFixed(2)}` : '—', size: 100 },
+    { accessorKey: 'source', header: t('reservations.source'), cell: ({ getValue }) => (getValue() as string) ?? 'direct', size: 90 },
     {
       id: 'actions',
-      header: '',
+      header: t('reservations.actions'),
       size: 50,
       cell: ({ row }) => (
         <div className="relative">
@@ -236,26 +241,26 @@ function ReservationList() {
           {actionMenu === row.original.id && (
             <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1 w-40" onClick={(e) => e.stopPropagation()}>
               <button onClick={() => { setDetailRes(row.original); setActionMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-telivity-light-grey flex items-center gap-2">
-                <Eye size={14} /> View Details
+                <Eye size={14} /> {t('reservations.viewDetails')}
               </button>
               {row.original.status === 'pending' && (
                 <button onClick={() => { api.patch(`/v1/reservations/${row.original.id}/confirm`).then(() => queryClient.invalidateQueries({ queryKey: ['reservations'] })); setActionMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-telivity-light-grey flex items-center gap-2">
-                  <Pencil size={14} /> Confirm
+                  <Pencil size={14} /> {t('reservations.confirm')}
                 </button>
               )}
               {['confirmed', 'assigned'].includes(row.original.status) && (
                 <button onClick={() => { api.patch(`/v1/reservations/${row.original.id}/check-in`, {}).then(() => queryClient.invalidateQueries({ queryKey: ['reservations'] })); setActionMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-telivity-light-grey flex items-center gap-2">
-                  <LogIn size={14} /> Check In
+                  <LogIn size={14} /> {t('reservations.checkIn')}
                 </button>
               )}
               {row.original.status === 'checked_in' && (
                 <button onClick={() => { api.patch(`/v1/reservations/${row.original.id}/check-out`, {}).then(() => queryClient.invalidateQueries({ queryKey: ['reservations'] })); setActionMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-telivity-light-grey flex items-center gap-2">
-                  <LogOut size={14} /> Check Out
+                  <LogOut size={14} /> {t('reservations.checkOut')}
                 </button>
               )}
               {!['cancelled', 'checked_out', 'no_show'].includes(row.original.status) && (
-                <button onClick={() => { if (confirm('Cancel this reservation?')) { cancelMutation.mutate(row.original.id); } setActionMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm text-telivity-orange hover:bg-telivity-light-grey flex items-center gap-2">
-                  <Ban size={14} /> Cancel
+                <button onClick={() => { if (confirm(t('reservations.confirmCancellation'))) { cancelMutation.mutate(row.original.id); } setActionMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm text-telivity-orange hover:bg-telivity-light-grey flex items-center gap-2">
+                  <Ban size={14} /> {t('common.cancel')}
                 </button>
               )}
             </div>
@@ -263,7 +268,7 @@ function ReservationList() {
         </div>
       ),
     },
-  ], [actionMenu, queryClient, cancelMutation]);
+  ], [actionMenu, queryClient, cancelMutation, t]);
 
   const table = useReactTable({
     data: reservations,
@@ -277,20 +282,20 @@ function ReservationList() {
   });
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property to view reservations</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('reservations.selectProperty')}</div>;
   }
 
   return (
     <div onClick={() => setActionMenu(null)}>
       <div className="flex items-center gap-3 mb-6">
         <CalendarDays size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Reservations</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('reservations.title')}</h1>
         <div className="ml-auto flex gap-2">
           <button onClick={() => navigate('/reservations/calendar')} className="border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-grey transition-colors">
-            Calendar
+            {t('reservations.calendar')}
           </button>
           <button onClick={() => { resetCreateForm(); setCreateOpen(true); }} className="flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-teal transition-colors">
-            <Plus size={16} /> New Reservation
+            <Plus size={16} /> {t('reservations.newReservation')}
           </button>
         </div>
       </div>
@@ -298,23 +303,23 @@ function ReservationList() {
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Status</label>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.status')}</label>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
-            <option value="">All</option>
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="checked_in">Checked In</option>
-            <option value="checked_out">Checked Out</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="no_show">No Show</option>
+            <option value="">{t('reservations.all')}</option>
+            <option value="pending">{t('reservations.statuses.pending')}</option>
+            <option value="confirmed">{t('reservations.statuses.confirmed')}</option>
+            <option value="checked_in">{t('reservations.statuses.checked_in')}</option>
+            <option value="checked_out">{t('reservations.statuses.checked_out')}</option>
+            <option value="cancelled">{t('reservations.statuses.cancelled')}</option>
+            <option value="no_show">{t('reservations.statuses.no_show')}</option>
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">From</label>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.from')}</label>
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">To</label>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.to')}</label>
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
         </div>
         {(statusFilter || dateFrom || dateTo) && (
@@ -352,7 +357,7 @@ function ReservationList() {
               </tr>
             ))}
             {reservations.length === 0 && (
-              <tr><td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No reservations found</td></tr>
+              <tr><td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('reservations.empty')}</td></tr>
             )}
           </tbody>
         </table>
@@ -361,7 +366,7 @@ function ReservationList() {
         {table.getPageCount() > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
             <span className="text-xs text-telivity-mid-grey">
-              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()} ({reservations.length} results)
+              {t('reservations.pagination', { page: table.getState().pagination.pageIndex + 1, total: table.getPageCount(), count: reservations.length })}
             </span>
             <div className="flex gap-1">
               <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()} className="p-1.5 rounded hover:bg-telivity-light-grey disabled:opacity-30">
@@ -381,40 +386,40 @@ function ReservationList() {
           <div className="absolute inset-0 bg-black/30" onClick={() => setDetailRes(null)} />
           <div className="relative w-full max-w-lg bg-white shadow-xl overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-telivity-navy">Reservation Details</h2>
+              <h2 className="text-lg font-semibold text-telivity-navy">{t('reservations.details')}</h2>
               <button onClick={() => setDetailRes(null)} className="p-1 rounded hover:bg-telivity-light-grey"><X size={18} /></button>
             </div>
             <div className="p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-telivity-navy">{detailRes.confirmationNumber}</span>
-                <StatusBadge status={detailRes.status} />
+                <StatusBadge status={detailRes.status} label={t(`reservations.statuses.${detailRes.status}`, { defaultValue: detailRes.status })} />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Detail label="Guest" value={guestName(detailRes)} />
-                <Detail label="Source" value={detailRes.source ?? 'direct'} />
-                <Detail label="Arrival" value={detailRes.arrivalDate} />
-                <Detail label="Departure" value={detailRes.departureDate} />
-                <Detail label="Room Type" value={detailRes.roomTypeName ?? '—'} />
-                <Detail label="Room" value={detailRes.roomNumber ?? 'Unassigned'} />
-                <Detail label="Adults" value={String(detailRes.adults)} />
-                <Detail label="Children" value={String(detailRes.children ?? 0)} />
-                <Detail label="Total" value={detailRes.totalAmount != null ? `$${Number(detailRes.totalAmount).toFixed(2)}` : '—'} />
-                <Detail label="Rate Plan" value={detailRes.ratePlanName ?? '—'} />
+                <Detail label={t('reservations.guest')} value={guestName(detailRes)} />
+                <Detail label={t('reservations.source')} value={detailRes.source ?? 'direct'} />
+                <Detail label={t('reservations.arrival')} value={detailRes.arrivalDate} />
+                <Detail label={t('reservations.departure')} value={detailRes.departureDate} />
+                <Detail label={t('reservations.roomType')} value={detailRes.roomTypeName ?? '—'} />
+                <Detail label={t('reservations.room')} value={detailRes.roomNumber ?? t('reservations.unassigned')} />
+                <Detail label={t('reservations.adults')} value={String(detailRes.adults)} />
+                <Detail label={t('reservations.children')} value={String(detailRes.children ?? 0)} />
+                <Detail label={t('reservations.total')} value={detailRes.totalAmount != null ? `$${Number(detailRes.totalAmount).toFixed(2)}` : '—'} />
+                <Detail label={t('reservations.ratePlan')} value={detailRes.ratePlanName ?? '—'} />
               </div>
               {detailRes.notes && (
                 <div>
-                  <p className="text-xs text-telivity-mid-grey mb-1">Notes</p>
+                  <p className="text-xs text-telivity-mid-grey mb-1">{t('reservations.notes')}</p>
                   <p className="text-sm bg-telivity-light-grey rounded-lg p-3">{detailRes.notes}</p>
                 </div>
               )}
               <div className="flex gap-2 pt-2">
                 {detailRes.guestId && (
                   <button onClick={() => { navigate(`/guests/${detailRes.guestId}`); setDetailRes(null); }} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-3 py-2 text-sm font-semibold hover:bg-telivity-light-grey">
-                    View Guest
+                    {t('reservations.viewGuest')}
                   </button>
                 )}
                 <button onClick={() => { navigate(`/folios?reservationId=${detailRes.id}`); setDetailRes(null); }} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-3 py-2 text-sm font-semibold hover:bg-telivity-light-grey">
-                  View Folio
+                  {t('reservations.viewFolio')}
                 </button>
               </div>
             </div>
@@ -423,39 +428,39 @@ function ReservationList() {
       )}
 
       {/* Create Reservation Modal */}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Reservation" wide>
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('reservations.newReservation')} wide>
         {createStep === 0 && (
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-telivity-navy">Step 1: Search Availability</h3>
+            <h3 className="text-sm font-semibold text-telivity-navy">{t('reservations.searchAvailabilityStep')}</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Check-In</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.checkIn')}</label>
                 <input type="date" value={createCheckIn} onChange={(e) => setCreateCheckIn(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Check-Out</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.checkOut')}</label>
                 <input type="date" value={createCheckOut} onChange={(e) => setCreateCheckOut(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Adults</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.adults')}</label>
                 <input type="number" min={1} value={createAdults} onChange={(e) => setCreateAdults(Number(e.target.value))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Children</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.children')}</label>
                 <input type="number" min={0} value={createChildren} onChange={(e) => setCreateChildren(Number(e.target.value))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               </div>
             </div>
             <button onClick={() => searchAvailMutation.mutate()} disabled={searchAvailMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-teal disabled:opacity-50">
-              {searchAvailMutation.isPending ? 'Searching...' : 'Search Availability'}
+              {searchAvailMutation.isPending ? t('reservations.searching') : t('reservations.searchAvailability')}
             </button>
           </div>
         )}
 
         {createStep === 1 && (
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-telivity-navy">Step 2: Select Room & Rate</h3>
+            <h3 className="text-sm font-semibold text-telivity-navy">{t('reservations.selectRoomRateStep')}</h3>
             {availResults.length === 0 ? (
-              <p className="text-sm text-telivity-mid-grey">No availability found for these dates.</p>
+              <p className="text-sm text-telivity-mid-grey">{t('reservations.noAvailability')}</p>
             ) : (
               <div className="space-y-2">
                 {availResults.map((rt) => (
@@ -474,53 +479,53 @@ function ReservationList() {
               </div>
             )}
             <div className="flex gap-3">
-              <button onClick={() => setCreateStep(0)} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold">Back</button>
-              <button onClick={() => setCreateStep(2)} disabled={!selectedRatePlan} className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Next</button>
+              <button onClick={() => setCreateStep(0)} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold">{t('reservations.back')}</button>
+              <button onClick={() => setCreateStep(2)} disabled={!selectedRatePlan} className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('reservations.next')}</button>
             </div>
           </div>
         )}
 
         {createStep === 2 && (
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-telivity-navy">Step 3: Guest Details</h3>
+            <h3 className="text-sm font-semibold text-telivity-navy">{t('reservations.guestDetailsStep')}</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">First Name *</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.firstName')} *</label>
                 <input type="text" value={guestFirstName} onChange={(e) => setGuestFirstName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Last Name *</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.lastName')} *</label>
                 <input type="text" value={guestLastName} onChange={(e) => setGuestLastName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Email</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.email')}</label>
                 <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Phone</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.phone')}</label>
                 <input type="tel" value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               </div>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setCreateStep(1)} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold">Back</button>
-              <button onClick={() => setCreateStep(3)} disabled={!guestFirstName || !guestLastName} className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Review</button>
+              <button onClick={() => setCreateStep(1)} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold">{t('reservations.back')}</button>
+              <button onClick={() => setCreateStep(3)} disabled={!guestFirstName || !guestLastName} className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('reservations.review')}</button>
             </div>
           </div>
         )}
 
         {createStep === 3 && (
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-telivity-navy">Step 4: Review & Confirm</h3>
+            <h3 className="text-sm font-semibold text-telivity-navy">{t('reservations.reviewConfirmStep')}</h3>
             <div className="bg-telivity-light-grey rounded-lg p-4 space-y-2 text-sm">
-              <p><span className="text-telivity-mid-grey">Guest:</span> {guestFirstName} {guestLastName}</p>
-              <p><span className="text-telivity-mid-grey">Dates:</span> {createCheckIn} → {createCheckOut}</p>
-              <p><span className="text-telivity-mid-grey">Occupancy:</span> {createAdults} adults, {createChildren} children</p>
-              {guestEmail && <p><span className="text-telivity-mid-grey">Email:</span> {guestEmail}</p>}
+              <p><span className="text-telivity-mid-grey">{t('reservations.guest')}:</span> {guestFirstName} {guestLastName}</p>
+              <p><span className="text-telivity-mid-grey">{t('reservations.dates')}:</span> {createCheckIn} → {createCheckOut}</p>
+              <p><span className="text-telivity-mid-grey">{t('reservations.occupancy')}:</span> {t('reservations.occupancySummary', { adults: createAdults, children: createChildren })}</p>
+              {guestEmail && <p><span className="text-telivity-mid-grey">{t('common.email')}:</span> {guestEmail}</p>}
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setCreateStep(2)} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold">Back</button>
+              <button onClick={() => setCreateStep(2)} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold">{t('reservations.back')}</button>
               <button onClick={() => createResMutation.mutate()} disabled={createResMutation.isPending} className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
-                {createResMutation.isPending ? 'Creating...' : 'Create & Confirm'}
+                {createResMutation.isPending ? t('common.creating') : t('reservations.createAndConfirm')}
               </button>
             </div>
           </div>
@@ -541,6 +546,7 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 // ---- Tape Chart / Calendar ----
 function AvailabilityCalendar() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState(new Date());
@@ -568,7 +574,7 @@ function AvailabilityCalendar() {
   }
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.selectProperty')}</div>;
   }
 
   return (
@@ -578,13 +584,13 @@ function AvailabilityCalendar() {
           <ChevronLeft size={20} />
         </button>
         <CalendarDays size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Availability Calendar</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('reservations.availabilityCalendar')}</h1>
         <div className="ml-auto flex gap-2">
           <button onClick={() => setStartDate(addDays(startDate, -7))} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm hover:bg-telivity-light-grey">
             <ChevronLeft size={14} />
           </button>
           <button onClick={() => setStartDate(new Date())} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm hover:bg-telivity-light-grey">
-            Today
+            {t('reservations.today')}
           </button>
           <button onClick={() => setStartDate(addDays(startDate, 7))} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm hover:bg-telivity-light-grey">
             <ChevronRight size={14} />
@@ -596,7 +602,7 @@ function AvailabilityCalendar() {
         <table className="w-full min-w-[900px]">
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
-              <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate w-24 sticky left-0 bg-telivity-teal/5">Room</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate w-24 sticky left-0 bg-telivity-teal/5">{t('reservations.room')}</th>
               {days.map((d) => (
                 <th key={d.toISOString()} className="px-1 py-2 text-center text-xs font-medium text-telivity-slate min-w-[60px]">
                   <div>{format(d, 'EEE')}</div>
@@ -625,7 +631,7 @@ function AvailabilityCalendar() {
               </tr>
             ))}
             {rooms.length === 0 && (
-              <tr><td colSpan={15} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No rooms found</td></tr>
+              <tr><td colSpan={15} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('rooms.noRoomsFound')}</td></tr>
             )}
           </tbody>
         </table>

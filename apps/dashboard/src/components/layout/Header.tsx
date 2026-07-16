@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { useProperty } from '../../context/PropertyContext';
 import { PORTFOLIO_MODE_ID } from '../../lib/property-types';
+import { getDateLocale } from '../../lib/date-locale';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../hooks/useSocket';
 import { SUPPORTED_LANGUAGES } from '../../i18n';
@@ -33,6 +34,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const currentLang =
     SUPPORTED_LANGUAGES.find((l) => l.code === i18n.resolvedLanguage) ??
     SUPPORTED_LANGUAGES[0];
+  const formattedToday = format(new Date(), 'PPPP', { locale: getDateLocale(i18n.resolvedLanguage) });
 
   const propertyLabel = isPortfolioMode
     ? t('header.allProperties', { defaultValue: 'All Properties' })
@@ -98,12 +100,12 @@ export default function Header({ onMenuClick }: HeaderProps) {
             className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-telivity-teal text-sm text-telivity-mid-grey transition-colors min-w-[180px]"
           >
             <Search size={14} />
-            <span className="flex-1 text-left">{t('header.search', { defaultValue: 'Search…' })}</span>
+            <span className="flex-1 text-left">{t('header.search')}</span>
             <kbd className="text-[10px] bg-telivity-light-grey px-1.5 py-0.5 rounded">⌘K</kbd>
           </button>
 
           <span className="text-sm text-telivity-mid-grey hidden md:inline">
-            {format(new Date(), 'EEEE, MMM d, yyyy')}
+            {formattedToday}
           </span>
         </div>
 
@@ -116,7 +118,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <button
             onClick={() => setSearchOpen(true)}
             className="sm:hidden p-2 rounded-lg hover:bg-telivity-light-grey"
-            aria-label={t('header.search', { defaultValue: 'Search' })}
+            aria-label={t('header.search')}
           >
             <Search size={18} className="text-telivity-slate" />
           </button>

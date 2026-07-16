@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import Modal from '../components/ui/Modal';
+import { useTranslation } from 'react-i18next';
 
 interface Deposit {
   id: string;
@@ -21,6 +22,7 @@ interface ArLedger {
 }
 
 function AccountingHome() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const queryClient = useQueryClient();
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -184,7 +186,7 @@ function AccountingHome() {
   });
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('accounting.selectProperty')}</div>;
   }
 
   const exportUrl = (path: string) =>
@@ -196,17 +198,17 @@ function AccountingHome() {
     <div>
       <div className="flex items-center gap-3 mb-6">
         <Calculator size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Accounting</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('accounting.title')}</h1>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm p-5 mb-4">
-        <h2 className="text-sm font-semibold text-telivity-navy mb-3">CSV Exports</h2>
+        <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('accounting.csvExports')}</h2>
         <div className="flex flex-wrap gap-2">
           <a href={exportUrl('revenue-journal.csv')} className="inline-flex items-center gap-2 border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium hover:bg-telivity-light-grey">
-            <Download size={14} /> Revenue Journal
+            <Download size={14} /> {t('accounting.revenueJournal')}
           </a>
           <a href={exportUrl('trial-balance.csv')} className="inline-flex items-center gap-2 border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium hover:bg-telivity-light-grey">
-            <Download size={14} /> Folio Ledger Trial Balance
+            <Download size={14} /> {t('accounting.folioLedgerTrialBalance')}
           </a>
         </div>
       </div>
@@ -214,8 +216,8 @@ function AccountingHome() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl shadow-sm p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-telivity-navy">Deposits</h2>
-            <button onClick={() => setDepositOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-telivity-teal"><Plus size={14} /> Record</button>
+            <h2 className="text-sm font-semibold text-telivity-navy">{t('accounting.deposits')}</h2>
+            <button onClick={() => setDepositOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-telivity-teal"><Plus size={14} /> {t('accounting.record')}</button>
           </div>
           <ul className="space-y-2 text-sm">
             {deposits.slice(0, 8).map((d) => (
@@ -227,19 +229,19 @@ function AccountingHome() {
                     onClick={() => { setSelectedDeposit(d); setDepositActionOpen(true); }}
                     className="text-xs font-semibold text-telivity-teal hover:underline"
                   >
-                    Actions
+                    {t('accounting.actions')}
                   </button>
                 )}
               </li>
             ))}
-            {deposits.length === 0 && <li className="text-telivity-mid-grey">No deposits</li>}
+            {deposits.length === 0 && <li className="text-telivity-mid-grey">{t('accounting.noDeposits')}</li>}
           </ul>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-telivity-navy">GL Codes</h2>
-            <button onClick={() => setCodeOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-telivity-teal"><Plus size={14} /> Add</button>
+            <h2 className="text-sm font-semibold text-telivity-navy">{t('accounting.glCodes')}</h2>
+            <button onClick={() => setCodeOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-telivity-teal"><Plus size={14} /> {t('accounting.add')}</button>
           </div>
           <ul className="space-y-2 text-sm">
             {(codes as { id: string; code: string; label: string }[]).slice(0, 8).map((c) => (
@@ -248,76 +250,76 @@ function AccountingHome() {
                 <span>{c.label}</span>
               </li>
             ))}
-            {codes.length === 0 && <li className="text-telivity-mid-grey">No codes</li>}
+            {codes.length === 0 && <li className="text-telivity-mid-grey">{t('accounting.noCodes')}</li>}
           </ul>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-5 lg:col-span-2">
-          <h2 className="text-sm font-semibold text-telivity-navy mb-3">A/R Ledgers</h2>
+          <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('accounting.arLedgers')}</h2>
           <ul className="space-y-2 text-sm">
             {ledgers.slice(0, 10).map((l) => (
               <li key={l.id} className="flex justify-between items-center border-b border-gray-50 py-1">
                 <span>{l.name}</span>
                 <span className="font-medium">${Number(l.balance ?? 0).toFixed(2)}</span>
                 <div className="flex gap-2">
-                  <button onClick={() => { setSelectedLedger(l); setArActionOpen('payment'); }} className="text-xs text-telivity-teal hover:underline">Payment</button>
-                  <button onClick={async () => { setSelectedLedger(l); setArActionOpen('aging'); await refetchAging(); }} className="text-xs text-telivity-teal hover:underline">Aging</button>
-                  <button onClick={() => { setSelectedLedger(l); setArActionOpen('transfer'); }} className="text-xs text-telivity-teal hover:underline">Transfer</button>
-                  <button onClick={() => { setSelectedLedger(l); setArActionOpen('reverse'); }} className="text-xs text-telivity-teal hover:underline">Reverse</button>
+                  <button onClick={() => { setSelectedLedger(l); setArActionOpen('payment'); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.payment')}</button>
+                  <button onClick={async () => { setSelectedLedger(l); setArActionOpen('aging'); await refetchAging(); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.aging')}</button>
+                  <button onClick={() => { setSelectedLedger(l); setArActionOpen('transfer'); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.transfer')}</button>
+                  <button onClick={() => { setSelectedLedger(l); setArActionOpen('reverse'); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.reverse')}</button>
                 </div>
               </li>
             ))}
-            {ledgers.length === 0 && <li className="text-telivity-mid-grey">No A/R ledgers</li>}
+            {ledgers.length === 0 && <li className="text-telivity-mid-grey">{t('accounting.noLedgers')}</li>}
           </ul>
         </div>
       </div>
 
-      <Modal open={depositOpen} onClose={() => setDepositOpen(false)} title="Record Deposit">
+      <Modal open={depositOpen} onClose={() => setDepositOpen(false)} title={t('accounting.recordDeposit')}>
         <div className="space-y-4">
-          <input type="number" step="0.01" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} placeholder="Amount" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          <button onClick={() => recordDeposit.mutate()} disabled={!depositAmount || recordDeposit.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Record</button>
+          <input type="number" step="0.01" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} placeholder={t('accounting.amount')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <button onClick={() => recordDeposit.mutate()} disabled={!depositAmount || recordDeposit.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.record')}</button>
         </div>
       </Modal>
 
-      <Modal open={codeOpen} onClose={() => setCodeOpen(false)} title="Add GL Code">
+      <Modal open={codeOpen} onClose={() => setCodeOpen(false)} title={t('accounting.addGlCode')}>
         <div className="space-y-4">
-          <input type="text" value={codeValue} onChange={(e) => setCodeValue(e.target.value)} placeholder="Code" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          <input type="text" value={codeName} onChange={(e) => setCodeName(e.target.value)} placeholder="Name" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          <button onClick={() => createCode.mutate()} disabled={!codeName || !codeValue || createCode.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Create</button>
+          <input type="text" value={codeValue} onChange={(e) => setCodeValue(e.target.value)} placeholder={t('accounting.code')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input type="text" value={codeName} onChange={(e) => setCodeName(e.target.value)} placeholder={t('accounting.name')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <button onClick={() => createCode.mutate()} disabled={!codeName || !codeValue || createCode.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.create')}</button>
         </div>
       </Modal>
 
-      <Modal open={depositActionOpen} onClose={() => setDepositActionOpen(false)} title={`Deposit Actions — $${Number(selectedDeposit?.amount ?? 0).toFixed(2)}`}>
+      <Modal open={depositActionOpen} onClose={() => setDepositActionOpen(false)} title={t('accounting.depositActions', { amount: Number(selectedDeposit?.amount ?? 0).toFixed(2) })}>
         <div className="space-y-4">
-          <input type="text" value={applyFolioId} onChange={(e) => setApplyFolioId(e.target.value)} placeholder="Folio ID (optional for apply)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-xs" />
-          <button onClick={() => applyDeposit.mutate()} disabled={applyDeposit.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Apply to Folio</button>
-          <button onClick={() => refundDeposit.mutate()} disabled={refundDeposit.isPending} className="w-full border border-gray-200 rounded-lg px-4 py-2 text-sm font-semibold">Refund</button>
-          <button onClick={() => forfeitDeposit.mutate()} disabled={forfeitDeposit.isPending} className="w-full border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold">Forfeit</button>
+          <input type="text" value={applyFolioId} onChange={(e) => setApplyFolioId(e.target.value)} placeholder={t('accounting.folioIdPlaceholder')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-xs" />
+          <button onClick={() => applyDeposit.mutate()} disabled={applyDeposit.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.applyToFolio')}</button>
+          <button onClick={() => refundDeposit.mutate()} disabled={refundDeposit.isPending} className="w-full border border-gray-200 rounded-lg px-4 py-2 text-sm font-semibold">{t('accounting.refund')}</button>
+          <button onClick={() => forfeitDeposit.mutate()} disabled={forfeitDeposit.isPending} className="w-full border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold">{t('accounting.forfeit')}</button>
         </div>
       </Modal>
 
-      <Modal open={arActionOpen === 'payment'} onClose={() => setArActionOpen(null)} title={`A/R Payment — ${selectedLedger?.name ?? ''}`}>
+      <Modal open={arActionOpen === 'payment'} onClose={() => setArActionOpen(null)} title={t('accounting.arPayment', { name: selectedLedger?.name ?? '' })}>
         <div className="space-y-4">
-          <input type="number" step="0.01" value={arPaymentAmount} onChange={(e) => setArPaymentAmount(e.target.value)} placeholder="Amount" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          <button onClick={() => recordArPayment.mutate()} disabled={!arPaymentAmount || recordArPayment.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Record Payment</button>
+          <input type="number" step="0.01" value={arPaymentAmount} onChange={(e) => setArPaymentAmount(e.target.value)} placeholder={t('accounting.amount')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <button onClick={() => recordArPayment.mutate()} disabled={!arPaymentAmount || recordArPayment.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.recordPayment')}</button>
         </div>
       </Modal>
 
-      <Modal open={arActionOpen === 'transfer'} onClose={() => setArActionOpen(null)} title={`Transfer to A/R — ${selectedLedger?.name ?? ''}`}>
+      <Modal open={arActionOpen === 'transfer'} onClose={() => setArActionOpen(null)} title={t('accounting.arTransfer', { name: selectedLedger?.name ?? '' })}>
         <div className="space-y-4">
-          <input type="text" value={transferFolioId} onChange={(e) => setTransferFolioId(e.target.value)} placeholder="Source Folio ID" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-xs" />
-          <button onClick={() => transferToAr.mutate()} disabled={!transferFolioId || transferToAr.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Transfer Balance</button>
+          <input type="text" value={transferFolioId} onChange={(e) => setTransferFolioId(e.target.value)} placeholder={t('accounting.sourceFolioIdPlaceholder')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-xs" />
+          <button onClick={() => transferToAr.mutate()} disabled={!transferFolioId || transferToAr.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.transferBalance')}</button>
         </div>
       </Modal>
 
-      <Modal open={arActionOpen === 'reverse'} onClose={() => setArActionOpen(null)} title="Reverse A/R Transfer">
+      <Modal open={arActionOpen === 'reverse'} onClose={() => setArActionOpen(null)} title={t('accounting.reverseTransfer')}>
         <div className="space-y-4">
-          <input type="text" value={reverseTxId} onChange={(e) => setReverseTxId(e.target.value)} placeholder="Transaction ID" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-xs" />
-          <button onClick={() => reverseTransfer.mutate()} disabled={!reverseTxId || reverseTransfer.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Reverse</button>
+          <input type="text" value={reverseTxId} onChange={(e) => setReverseTxId(e.target.value)} placeholder={t('accounting.transactionIdPlaceholder')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-xs" />
+          <button onClick={() => reverseTransfer.mutate()} disabled={!reverseTxId || reverseTransfer.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.reverse')}</button>
         </div>
       </Modal>
 
-      <Modal open={arActionOpen === 'aging'} onClose={() => setArActionOpen(null)} title={`A/R Aging — ${selectedLedger?.name ?? ''}`}>
+      <Modal open={arActionOpen === 'aging'} onClose={() => setArActionOpen(null)} title={t('accounting.arAging', { name: selectedLedger?.name ?? '' })}>
         {aging ? (
           <div className="space-y-2 text-sm">
             {Object.entries(aging as Record<string, unknown>).map(([key, val]) => (
@@ -328,7 +330,7 @@ function AccountingHome() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-telivity-mid-grey">Loading aging report...</p>
+          <p className="text-sm text-telivity-mid-grey">{t('accounting.loadingAgingReport')}</p>
         )}
       </Modal>
     </div>

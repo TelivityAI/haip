@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound } from 'lucide-react';
 import { format } from 'date-fns';
@@ -32,6 +33,7 @@ interface Room {
 }
 
 export default function FrontDesk() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const queryClient = useQueryClient();
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -143,7 +145,7 @@ export default function FrontDesk() {
   function guestName(r: Reservation) {
     if (r.guestName) return r.guestName;
     if (r.guest) return `${r.guest.firstName} ${r.guest.lastName}`;
-    return 'Unknown Guest';
+    return t('frontDesk.unknownGuest');
   }
 
   const arrList: Reservation[] = arrivals?.data ?? arrivals ?? [];
@@ -152,15 +154,15 @@ export default function FrontDesk() {
   const roomList: Room[] = availableRooms?.data ?? availableRooms ?? [];
 
   const tabs: { key: Tab; label: string; icon: typeof LogIn; count: number }[] = [
-    { key: 'arrivals', label: 'Arrivals', icon: LogIn, count: arrList.length },
-    { key: 'in-house', label: 'In-House', icon: Users, count: ihList.length },
-    { key: 'departures', label: 'Departures', icon: LogOut, count: depList.length },
+    { key: 'arrivals', label: t('frontDesk.arrivals'), icon: LogIn, count: arrList.length },
+    { key: 'in-house', label: t('frontDesk.inHouse'), icon: Users, count: ihList.length },
+    { key: 'departures', label: t('frontDesk.departures'), icon: LogOut, count: depList.length },
   ];
 
   if (!propertyId) {
     return (
       <div className="flex items-center justify-center h-64 text-telivity-mid-grey">
-        Select a property to view the front desk
+        {t('frontDesk.selectProperty')}
       </div>
     );
   }
@@ -169,7 +171,7 @@ export default function FrontDesk() {
     <div>
       <div className="flex items-center gap-3 mb-6">
         <ConciergeBell size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Front Desk</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('frontDesk.title')}</h1>
         <div className="ml-auto flex gap-2">
           {tab === 'arrivals' && selectedForGroup.length > 0 && (
             <button
@@ -178,12 +180,12 @@ export default function FrontDesk() {
               className="flex items-center gap-2 bg-telivity-deep-blue text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-deep-blue/90 transition-colors disabled:opacity-50"
             >
               <UsersRound size={16} />
-              Group Check-In ({selectedForGroup.length})
+              {t('frontDesk.groupCheckIn', { count: selectedForGroup.length })}
             </button>
           )}
           <button className="flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-teal transition-colors">
             <UserPlus size={16} />
-            Walk-In
+            {t('frontDesk.walkIn')}
           </button>
         </div>
       </div>
@@ -226,25 +228,25 @@ export default function FrontDesk() {
                   />
                 </th>
               )}
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Guest</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Confirmation</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('frontDesk.guest')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('frontDesk.confirmation')}</th>
               {tab === 'arrivals' && (
-                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Room Type</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('frontDesk.roomType')}</th>
               )}
               {(tab === 'in-house' || tab === 'departures') && (
-                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Room</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('frontDesk.room')}</th>
               )}
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">
-                {tab === 'arrivals' ? 'Arrival' : tab === 'departures' ? 'Departure' : 'Arrival'}
+                {tab === 'arrivals' ? t('frontDesk.arrival') : tab === 'departures' ? t('frontDesk.departure') : t('frontDesk.arrival')}
               </th>
               {tab === 'in-house' && (
-                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Departure</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('frontDesk.departure')}</th>
               )}
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('common.status')}</th>
               {(tab === 'in-house' || tab === 'departures') && (
-                <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase tracking-wider">Balance</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('frontDesk.balance')}</th>
               )}
-              <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase tracking-wider">Actions</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -293,7 +295,7 @@ export default function FrontDesk() {
                       onClick={() => { setCheckInModal(r); resetCheckInForm(); }}
                       className="bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-teal transition-colors"
                     >
-                      Check In
+                      {t('frontDesk.checkIn')}
                     </button>
                   )}
                   {tab === 'in-house' && (
@@ -301,7 +303,7 @@ export default function FrontDesk() {
                       href={`/folios?reservationId=${r.id}`}
                       className="text-telivity-teal text-xs font-semibold hover:underline"
                     >
-                      View Folio
+                      {t('frontDesk.viewFolio')}
                     </a>
                   )}
                   {tab === 'departures' && (
@@ -310,7 +312,7 @@ export default function FrontDesk() {
                         onClick={() => setCheckOutModal(r)}
                         className="bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-teal transition-colors"
                       >
-                        Check Out
+                        {t('frontDesk.checkOut')}
                       </button>
                       <button
                         onClick={() => {
@@ -321,7 +323,7 @@ export default function FrontDesk() {
                         disabled={expressCheckoutMutation.isPending}
                         className="bg-telivity-orange text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-orange-lt transition-colors disabled:opacity-50"
                       >
-                        Express
+                        {t('frontDesk.express')}
                       </button>
                     </div>
                   )}
@@ -331,7 +333,7 @@ export default function FrontDesk() {
             {(tab === 'arrivals' ? arrList : tab === 'in-house' ? ihList : depList).length === 0 && (
               <tr>
                 <td colSpan={10} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">
-                  No {tab === 'arrivals' ? 'arrivals' : tab === 'in-house' ? 'in-house guests' : 'departures'} for today
+                  {t('frontDesk.noToday', { item: tab === 'arrivals' ? t('frontDesk.arrivals').toLowerCase() : tab === 'in-house' ? t('frontDesk.inHouse').toLowerCase() : t('frontDesk.departures').toLowerCase() })}
                 </td>
               </tr>
             )}
@@ -340,7 +342,7 @@ export default function FrontDesk() {
       </div>
 
       {/* Check-In Modal */}
-      <Modal open={!!checkInModal} onClose={() => setCheckInModal(null)} title="Check In Guest" wide>
+      <Modal open={!!checkInModal} onClose={() => setCheckInModal(null)} title={t('frontDesk.checkInGuest')} wide>
         {checkInModal && (
           <div className="space-y-4">
             <div className="bg-telivity-light-grey rounded-lg p-4">
@@ -351,40 +353,40 @@ export default function FrontDesk() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-telivity-navy mb-1">ID Document Type</label>
+              <label className="block text-sm font-medium text-telivity-navy mb-1">{t('frontDesk.idDocumentType')}</label>
               <select
                 value={idType}
                 onChange={(e) => setIdType(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
               >
-                <option value="passport">Passport</option>
-                <option value="drivers_license">Driver's License</option>
-                <option value="national_id">National ID</option>
+                <option value="passport">{t('frontDesk.passport')}</option>
+                <option value="drivers_license">{t('frontDesk.driversLicense')}</option>
+                <option value="national_id">{t('frontDesk.nationalId')}</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-telivity-navy mb-1">ID Number</label>
+              <label className="block text-sm font-medium text-telivity-navy mb-1">{t('frontDesk.idNumber')}</label>
               <input
                 type="text"
                 value={idNumber}
                 onChange={(e) => setIdNumber(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
-                placeholder="Enter ID number"
+                placeholder={t('frontDesk.enterIdNumber')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-telivity-navy mb-1">Assign Room</label>
+              <label className="block text-sm font-medium text-telivity-navy mb-1">{t('frontDesk.assignRoom')}</label>
               <select
                 value={selectedRoom}
                 onChange={(e) => setSelectedRoom(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
               >
-                <option value="">Use pre-assigned room</option>
+                <option value="">{t('frontDesk.usePreAssignedRoom')}</option>
                 {roomList.map((room) => (
                   <option key={room.id} value={room.id}>
-                    Room {room.roomNumber} {room.roomTypeName ? `(${room.roomTypeName})` : ''} — {formatLabel(room.status)}
+                    {t('frontDesk.roomNumber', { number: room.roomNumber })} {room.roomTypeName ? `(${room.roomTypeName})` : ''} — {formatLabel(room.status, t)}
                   </option>
                 ))}
               </select>
@@ -395,7 +397,7 @@ export default function FrontDesk() {
                 onClick={() => setCheckInModal(null)}
                 className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-grey transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={() => checkInMutation.mutate({
@@ -409,12 +411,12 @@ export default function FrontDesk() {
                 disabled={checkInMutation.isPending}
                 className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-teal transition-colors disabled:opacity-50"
               >
-                {checkInMutation.isPending ? 'Checking in...' : 'Confirm Check-In'}
+                {checkInMutation.isPending ? t('frontDesk.checkingIn') : t('frontDesk.confirmCheckIn')}
               </button>
             </div>
             {checkInMutation.isError && (
               <p className="text-sm text-telivity-orange">
-                {(checkInMutation.error as Error)?.message ?? 'Check-in failed'}
+                {(checkInMutation.error as Error)?.message ?? t('frontDesk.checkInFailed')}
               </p>
             )}
           </div>
@@ -422,18 +424,18 @@ export default function FrontDesk() {
       </Modal>
 
       {/* Check-Out Modal */}
-      <Modal open={!!checkOutModal} onClose={() => setCheckOutModal(null)} title="Check Out Guest">
+      <Modal open={!!checkOutModal} onClose={() => setCheckOutModal(null)} title={t('frontDesk.checkOutGuest')}>
         {checkOutModal && (
           <div className="space-y-4">
             <div className="bg-telivity-light-grey rounded-lg p-4">
               <p className="text-sm font-semibold text-telivity-navy">{guestName(checkOutModal)}</p>
               <p className="text-xs text-telivity-mid-grey mt-1">
-                Room {checkOutModal.roomNumber ?? '—'} &middot; {checkOutModal.confirmationNumber}
+                {t('frontDesk.roomNumber', { number: checkOutModal.roomNumber ?? '—' })} &middot; {checkOutModal.confirmationNumber}
               </p>
             </div>
 
             <div className="bg-telivity-light-grey rounded-lg p-4">
-              <p className="text-xs text-telivity-mid-grey">Outstanding Balance</p>
+              <p className="text-xs text-telivity-mid-grey">{t('frontDesk.outstandingBalance')}</p>
               <p className="text-xl font-semibold text-telivity-navy">${Number(checkOutModal.balance ?? 0).toFixed(2)}</p>
             </div>
 
@@ -442,19 +444,19 @@ export default function FrontDesk() {
                 onClick={() => setCheckOutModal(null)}
                 className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-grey transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={() => checkOutMutation.mutate(checkOutModal.id)}
                 disabled={checkOutMutation.isPending}
                 className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-teal transition-colors disabled:opacity-50"
               >
-                {checkOutMutation.isPending ? 'Processing...' : 'Confirm Check-Out'}
+                {checkOutMutation.isPending ? t('common.processing') : t('frontDesk.confirmCheckOut')}
               </button>
             </div>
             {checkOutMutation.isError && (
               <p className="text-sm text-telivity-orange">
-                {(checkOutMutation.error as Error)?.message ?? 'Check-out failed'}
+                {(checkOutMutation.error as Error)?.message ?? t('frontDesk.checkOutFailed')}
               </p>
             )}
           </div>
@@ -464,6 +466,6 @@ export default function FrontDesk() {
   );
 }
 
-function formatLabel(s: string) {
-  return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+function formatLabel(s: string, t: (key: string, options?: Record<string, unknown>) => string) {
+  return t(`dashboard.roomStatuses.${s}`, { defaultValue: s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) });
 }
