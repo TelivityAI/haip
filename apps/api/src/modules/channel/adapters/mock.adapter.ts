@@ -15,7 +15,7 @@ import type {
 /**
  * MockChannelAdapter — test/development adapter.
  * Stores pushed data in memory. Returns canned results.
- * Real adapters (SiteMinder, DerbySoft) replace this.
+ * Real adapters (SiteMinder, DerbySoft, Booking.com, Expedia) replace this.
  */
 @Injectable()
 export class MockChannelAdapter implements ChannelAdapter {

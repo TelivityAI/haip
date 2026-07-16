@@ -102,6 +102,7 @@ export class ChannelController {
       dto.startDate,
       dto.endDate,
       dto.channelConnectionId,
+      dto.ariUpdateType,
     );
   }
 
@@ -113,18 +114,52 @@ export class ChannelController {
       dto.startDate,
       dto.endDate,
       dto.channelConnectionId,
+      dto.ariUpdateType,
     );
   }
 
   @Post('push/full')
   @ApiOperation({ summary: 'Push full ARI (availability + rates + restrictions) to channels' })
   async pushFullARI(@Body() dto: PushAriDto) {
+    if (dto.asyncFlush) {
+      return this.ariService.scheduleFullFlush(
+        dto.propertyId,
+        dto.startDate,
+        dto.endDate,
+        dto.channelConnectionId,
+      );
+    }
     return this.ariService.pushFullARI(
       dto.propertyId,
       dto.startDate,
       dto.endDate,
       dto.channelConnectionId,
+      dto.ariUpdateType,
     );
+  }
+
+  @Post('push/full-flush')
+  @ApiOperation({
+    summary:
+      'Queue a full Overlay ARI flush (DerbySoft launch/refresh). Async fire-and-forget until BullMQ channel workers land.',
+  })
+  async pushFullFlush(@Body() dto: PushAriDto) {
+    return this.ariService.scheduleFullFlush(
+      dto.propertyId,
+      dto.startDate,
+      dto.endDate,
+      dto.channelConnectionId,
+    );
+  }
+
+  @Post('connections/:id/sync-property')
+  @ApiOperation({ summary: 'Sync property/room profiles to the channel (DerbySoft profile APIs)' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  async syncProperty(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.contentSyncService.pushContent(propertyId, id);
   }
 
   @Post('push/stop-sell')
