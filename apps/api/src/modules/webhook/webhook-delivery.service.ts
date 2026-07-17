@@ -2,9 +2,11 @@ import {
   Injectable,
   Inject,
   Logger,
+  Optional,
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createHmac } from 'crypto';
 import { eq, and, lte, or, isNull } from 'drizzle-orm';
 import { webhookDeliveries, agentWebhookSubscriptions } from '@telivityhaip/database';
@@ -37,6 +39,25 @@ export interface DeliveryPayload {
 }
 
 /**
+ * Internal (in-process) event emitted when a delivery permanently fails after
+ * all retries. Deliberately NOT routed through WebhookService: it must not
+ * fan out to external subscribers (their endpoint is the thing that's
+ * failing). The field is `eventType`, not `event`, so the wildcard webhook
+ * fan-out in ConnectEventsService ignores it.
+ */
+export const WEBHOOK_DELIVERY_FAILED = 'webhook.delivery_failed';
+
+export interface WebhookDeliveryFailedEvent {
+  propertyId: string;
+  subscriptionId: string;
+  subscriberName: string | null;
+  deliveryId: string;
+  eventType: string;
+  attempts: number;
+  lastError: string | null;
+}
+
+/**
  * WebhookDeliveryService — delivers events to subscribers with HMAC signing and retry.
  *
  * Not using BullMQ because Redis isn't wired up. Pragmatic replacement:
@@ -50,7 +71,10 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WebhookDeliveryService.name);
   private scanTimer: NodeJS.Timeout | null = null;
 
-  constructor(@Inject(DRIZZLE) private readonly db: any) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: any,
+    @Optional() private readonly eventEmitter?: EventEmitter2,
+  ) {}
 
   onModuleInit() {
     // Skip the background scanner in tests to keep Vitest fast and deterministic.
@@ -216,6 +240,18 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         `Webhook delivery ${deliveryId} FAILED after ${attemptNumber} attempts: ${errorMessage}`,
       );
+
+      // Alert staff — mandatory-delivery subscribers (e.g. government
+      // reporting integrations) must not fail silently.
+      this.eventEmitter?.emit(WEBHOOK_DELIVERY_FAILED, {
+        propertyId: delivery.propertyId,
+        subscriptionId: subscription.id,
+        subscriberName: subscription.subscriberName ?? null,
+        deliveryId,
+        eventType: delivery.eventType,
+        attempts: attemptNumber,
+        lastError: errorMessage,
+      } satisfies WebhookDeliveryFailedEvent);
       return;
     }
 

@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { WebhookPayload } from '../webhook/webhook.service';
+import {
+  WEBHOOK_DELIVERY_FAILED,
+  type WebhookDeliveryFailedEvent,
+} from '../webhook/webhook-delivery.service';
 import { StaffNotificationService } from './staff-notification.service';
 
 /**
@@ -42,6 +46,33 @@ export class StaffNotificationListener {
       sourceEvent: 'agent.decision_created',
       sourceEntityType: 'agent_decision',
       sourceEntityId: payload.entityId,
+    });
+  }
+
+  @OnEvent(WEBHOOK_DELIVERY_FAILED)
+  async onWebhookDeliveryFailed(payload: WebhookDeliveryFailedEvent) {
+    if (!payload?.propertyId) return;
+
+    // Loop guard: creating a notification emits staff.notification_created,
+    // which can itself be delivered to (and fail against) the same broken
+    // endpoint — alerting on THAT failure would notify forever. Skip it; the
+    // original failure already produced an alert.
+    if (payload.eventType === 'staff.notification_created') return;
+
+    const subscriber = payload.subscriberName ?? payload.subscriptionId;
+    await this.staffNotifications.create({
+      propertyId: payload.propertyId,
+      type: 'webhook_delivery_failed',
+      title: `Webhook delivery failed: ${payload.eventType}`,
+      message:
+        `Delivery to subscriber "${subscriber}" gave up after ${payload.attempts} attempts` +
+        `${payload.lastError ? ` (${payload.lastError})` : ''}. ` +
+        'The subscriber did NOT receive this event — if it powers a mandatory ' +
+        'integration (e.g. government reporting), re-deliver or reconcile manually.',
+      severity: 'critical',
+      sourceEvent: 'webhook.delivery_failed',
+      sourceEntityType: 'webhook_delivery',
+      sourceEntityId: payload.deliveryId,
     });
   }
 
