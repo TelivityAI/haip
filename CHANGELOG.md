@@ -8,6 +8,13 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Multi-arch GHCR images + VPS/cloud deploy guides
+
+- **Multi-platform GHCR publish** — release workflow builds `linux/amd64` and
+  `linux/arm64` for `ghcr.io/telivityai/haip-api` via Buildx/QEMU.
+- **Deployment docs** — VPS self-host steps plus Render / Railway / AWS / GCP
+  sketches in `docs/deployment.md` (closes remaining BRIEF-020 deploy gaps).
+
 ### Added — Staff branding, contextual help, report favorites & KPI thresholds
 
 - **Staff dashboard white-label** — property fields for display name, logo, primary/accent
