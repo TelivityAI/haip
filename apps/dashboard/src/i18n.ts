@@ -23,8 +23,16 @@ import ptBR from './locales/pt-BR.json';
 export const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'de', label: 'Deutsch' },
-  { code: 'ptBR', label: 'Português (Brasil)' },
+  { code: 'pt-BR', label: 'Português (Brasil)' },
 ] as const;
+
+// Include `pt` so navigator `pt-BR` resolves via nonExplicitSupportedLngs (not shown in switcher).
+const SUPPORTED_LOCALES = [...SUPPORTED_LANGUAGES.map((l) => l.code), 'pt'] as const;
+
+// Migrate legacy locale code saved before pt-BR was registered correctly.
+if (typeof localStorage !== 'undefined' && localStorage.getItem('haip.lang') === 'ptBR') {
+  localStorage.setItem('haip.lang', 'pt-BR');
+}
 
 i18n
   .use(LanguageDetector)
@@ -33,10 +41,11 @@ i18n
     resources: {
       en: { translation: en },
       de: { translation: de },
-      ptBR: { translation: ptBR },
+      pt: { translation: ptBR },
+      'pt-BR': { translation: ptBR },
     },
     fallbackLng: 'en',
-    supportedLngs: SUPPORTED_LANGUAGES.map((l) => l.code),
+    supportedLngs: [...SUPPORTED_LOCALES],
     nonExplicitSupportedLngs: true, // treat de-DE, de-AT, etc. as `de`
     returnEmptyString: false, // empty "" values fall back to English, not blank
     interpolation: { escapeValue: false }, // React already escapes
