@@ -7,6 +7,7 @@ import { MockChannelAdapter } from './adapters/mock.adapter';
 import { BookingComAdapter } from './adapters/booking-com/booking-com.adapter';
 import { SiteMinderAdapter } from './adapters/siteminder/siteminder.adapter';
 import { ExpediaAdapter } from './adapters/expedia/expedia.adapter';
+import { DerbySoftAdapter } from './adapters/derbysoft/derbysoft.adapter';
 
 /**
  * Factory that maps adapterType strings to ChannelAdapter instances.
@@ -21,12 +22,13 @@ export class ChannelAdapterFactory {
     private readonly bookingComAdapter: BookingComAdapter,
     private readonly siteMinderAdapter: SiteMinderAdapter,
     private readonly expediaAdapter: ExpediaAdapter,
+    private readonly derbySoftAdapter: DerbySoftAdapter,
   ) {
     this.adapters.set('mock', this.mockAdapter);
     this.adapters.set('booking_com', this.bookingComAdapter);
     this.adapters.set('siteminder', this.siteMinderAdapter);
     this.adapters.set('expedia', this.expediaAdapter);
-    // Future: this.adapters.set('derbysoft', this.derbysoftAdapter);
+    this.adapters.set('derbysoft', this.derbySoftAdapter);
   }
 
   getAdapter(adapterType: string): ChannelAdapter {

@@ -25,6 +25,7 @@ const ADAPTER_OPTIONS = [
   { value: 'booking_com', label: 'Booking.com' },
   { value: 'expedia', label: 'Expedia' },
   { value: 'siteminder', label: 'SiteMinder' },
+  { value: 'derbysoft', label: 'DerbySoft' },
   { value: 'mock', label: 'Demo (mock)' },
 ];
 

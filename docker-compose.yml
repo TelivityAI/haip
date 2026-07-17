@@ -121,6 +121,12 @@ services:
       EXPEDIA_USERNAME: haip_test
       EXPEDIA_PASSWORD: test_password
       EXPEDIA_HOTEL_ID: MOCK_EXP_HOTEL
+      DERBYSOFT_TUNNEL_BASE_URL: http://mock-derbysoft:4002/pcapigateway/tunnel/{accountId}
+      DERBYSOFT_PROFILE_BASE_URL: http://mock-derbysoft:4002/pcapigateway/profile/{accountId}
+      DERBYSOFT_TOKEN_URL: http://mock-derbysoft:4002/pcapigateway/account/token
+      DERBYSOFT_ACCOUNT_ID: haip_test
+      DERBYSOFT_CLIENT_SECRET: test_password
+      DERBYSOFT_HOTEL_ID: MOCK_DS_HOTEL
     ports:
       - '3000:3000'
     depends_on:
@@ -161,6 +167,21 @@ services:
       AUTH_PASS: test_password
     ports:
       - '4001:4001'
+    profiles:
+      - channels
+
+  # Mock DerbySoft Property Connector API (optional, for channel testing)
+  mock-derbysoft:
+    build:
+      context: ./tools/mock-derbysoft
+      dockerfile: Dockerfile
+    container_name: haip-mock-derbysoft
+    environment:
+      PORT: 4002
+      CLIENT_ID: haip_test
+      CLIENT_SECRET: test_password
+    ports:
+      - '4002:4002'
     profiles:
       - channels
 

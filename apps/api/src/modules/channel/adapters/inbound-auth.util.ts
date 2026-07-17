@@ -8,6 +8,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
  *
  *   { username: '...', password: '...' }                  // Basic Auth (Booking.com)
  *   { secret: '...' }                                     // HMAC-SHA256 (Expedia & similar)
+ *   { bearerToken: '...' }                                // Bearer token (DerbySoft → PMS)
  *
  * The previous code never validated the `Authorization` header at all, so anyone
  * who reached the public webhook URL could inject reservations/cancellations.
@@ -22,6 +23,10 @@ export interface InboundBasicAuth {
 export interface InboundHmacAuth {
   /** Shared secret used as the HMAC-SHA256 key (raw, not hashed). */
   secret: string;
+}
+export interface InboundBearerAuth {
+  /** Opaque bearer token DerbySoft presents on LiveCheck/Book/Modify/Cancel. */
+  bearerToken: string;
 }
 
 /**
@@ -84,8 +89,23 @@ export function verifyHmacSignature(
   return constantTimeEqualStr(provided, expected);
 }
 
+/**
+ * Verify `Authorization: Bearer <token>` against the stored bearer token on a
+ * channel connection. Constant-time; fail closed on missing input.
+ */
+export function verifyBearerAuth(
+  authHeader: string | undefined | null,
+  stored: InboundBearerAuth | undefined,
+): boolean {
+  if (!stored?.bearerToken) return false;
+  if (typeof authHeader !== 'string' || !authHeader) return false;
+  const m = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
+  if (!m) return false;
+  return constantTimeEqualStr(m[1]!.trim(), stored.bearerToken);
+}
+
 /** Extract `inboundAuth` from a channel connection's `config` jsonb safely. */
-export function getInboundAuth<T = InboundBasicAuth | InboundHmacAuth>(
+export function getInboundAuth<T = InboundBasicAuth | InboundHmacAuth | InboundBearerAuth>(
   config: unknown,
 ): T | undefined {
   if (!config || typeof config !== 'object') return undefined;

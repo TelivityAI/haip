@@ -8,6 +8,15 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — DerbySoft Property Connector adapter
+
+- **DerbySoft channel adapter** (`adapterType: derbysoft`) — REST/JSON + OAuth Bearer,
+  15 req/s client limiter, Delta/Overlay ARI (inventory/rate/availability), property
+  profile sync, inbound LiveCheck/Book/Modify/Cancel/Ping with Bearer auth.
+- **Mock PC server** on `:4002` (`tools/mock-derbysoft`, compose profile `channels`).
+- **Docs + partner checklist** — `docs/channels/derbysoft.md` (`pms.service@derbysoft.net`).
+- PCI: inbound payment card fields stripped before persistence.
+
 ### Added — Multi-arch GHCR images + VPS/cloud deploy guides
 
 - **Multi-platform GHCR publish** — release workflow builds `linux/amd64` and
