@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { TFunction } from 'i18next';
 import {
   TrendingUp,
   Brain,
@@ -17,6 +18,7 @@ import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import KpiCard from '../components/ui/KpiCard';
 import StatusBadge from '../components/ui/StatusBadge';
+import { useTranslation } from 'react-i18next';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,15 +55,25 @@ interface AgentPerformance {
   approvalRate: number;
 }
 
-const AGENT_LABELS: Record<string, string> = {
-  demand_forecast: 'Demand Forecast',
-  pricing: 'Dynamic Pricing',
-  channel_mix: 'Channel Mix',
-  overbooking: 'Overbooking',
-  night_audit: 'Night Audit Anomaly',
-  housekeeping: 'Housekeeping Optimizer',
-  cancellation: 'Cancellation Predictor',
+const AGENT_LABEL_KEYS: Record<string, string> = {
+  demand_forecast: 'demandForecast',
+  pricing: 'dynamicPricing',
+  channel_mix: 'channelMix',
+  overbooking: 'overbooking',
+  night_audit: 'nightAuditAnomaly',
+  housekeeping: 'housekeepingOptimizer',
+  cancellation: 'cancellationPredictor',
 };
+
+function agentLabel(t: TFunction, agentType: string) {
+  const key = AGENT_LABEL_KEYS[agentType];
+  return key ? t(`revenue.agents.${key}`) : agentType;
+}
+
+function decisionLabel(t: TFunction, decisionType: string) {
+  const key = decisionType === 'cancellation_risk' ? 'cancellationRisk' : undefined;
+  return key ? t(`revenue.decisionTypes.${key}`) : decisionType.replace(/_/g, ' ');
+}
 
 const AGENT_TYPES = ['demand_forecast', 'pricing', 'channel_mix', 'overbooking', 'night_audit', 'housekeeping', 'cancellation'];
 
@@ -70,6 +82,7 @@ const AGENT_TYPES = ['demand_forecast', 'pricing', 'channel_mix', 'overbooking',
 // ---------------------------------------------------------------------------
 
 function RevenueDashboard({ agents }: { agents: AgentStatus[] }) {
+  const { t } = useTranslation();
   const pendingTotal = agents.reduce((s, a) => s + a.pendingDecisions, 0);
   const enabledCount = agents.filter((a) => a.isEnabled).length;
   const autopilotCount = agents.filter((a) => a.mode === 'autopilot').length;
@@ -80,27 +93,27 @@ function RevenueDashboard({ agents }: { agents: AgentStatus[] }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       <KpiCard
-        title="Active Agents"
+        title={t('revenue.activeAgents')}
         value={`${enabledCount} / ${agents.length}`}
-        subtitle={`${autopilotCount} on autopilot`}
+        subtitle={t('revenue.onAutopilot', { count: autopilotCount })}
         icon={Brain}
       />
       <KpiCard
-        title="Pending Decisions"
+        title={t('revenue.pendingDecisions')}
         value={pendingTotal}
-        subtitle="Awaiting approval"
+        subtitle={t('revenue.awaitingApproval')}
         icon={AlertCircle}
       />
       <KpiCard
-        title="Agent Modes"
-        value={autopilotCount > 0 ? 'Autopilot' : enabledCount > 0 ? 'Suggest' : 'Manual'}
-        subtitle={agents.filter((a) => a.mode === 'suggest').length + ' in suggest mode'}
+        title={t('revenue.agentModes')}
+        value={autopilotCount > 0 ? t('revenue.modes.autopilot') : enabledCount > 0 ? t('revenue.modes.suggest') : t('revenue.modes.manual')}
+        subtitle={t('revenue.inSuggestMode', { count: agents.filter((a) => a.mode === 'suggest').length })}
         icon={Zap}
       />
       <KpiCard
-        title="Last Run"
+        title={t('revenue.lastRun')}
         value={latestRun?.lastRunAt ? new Date(latestRun.lastRunAt).toLocaleTimeString() : '—'}
-        subtitle={latestRun ? AGENT_LABELS[latestRun.agentType] ?? latestRun.agentType : 'No runs yet'}
+        subtitle={latestRun ? agentLabel(t, latestRun.agentType) : t('revenue.noRunsYet')}
         icon={TrendingUp}
       />
     </div>
@@ -112,6 +125,7 @@ function RevenueDashboard({ agents }: { agents: AgentStatus[] }) {
 // ---------------------------------------------------------------------------
 
 function HaipAiExplanation({ propertyId, decisionId }: { propertyId: string; decisionId: string }) {
+  const { t } = useTranslation();
   const { data, isLoading } = useQuery({
     queryKey: ['decision-explain', propertyId, decisionId],
     queryFn: async () => {
@@ -124,7 +138,7 @@ function HaipAiExplanation({ propertyId, decisionId }: { propertyId: string; dec
   if (isLoading) {
     return (
       <div className="mb-2 flex items-center gap-1 text-xs text-telivity-mid-grey">
-        <Brain size={12} className="text-telivity-teal" /> HAIP AI is analyzing…
+        <Brain size={12} className="text-telivity-teal" /> {t('revenue.aiAnalyzing')}
       </div>
     );
   }
@@ -154,6 +168,7 @@ function HaipAiExplanation({ propertyId, decisionId }: { propertyId: string; dec
 // ---------------------------------------------------------------------------
 
 function RecommendationsSection({ propertyId }: { propertyId: string }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -198,19 +213,19 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
     <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
       <div className="flex items-center gap-3 mb-4">
         <Brain size={20} className="text-telivity-teal" />
-        <h2 className="text-lg font-semibold text-telivity-navy">AI Recommendations</h2>
+        <h2 className="text-lg font-semibold text-telivity-navy">{t('revenue.aiRecommendations')}</h2>
         <div className="ml-auto flex gap-2">
-          {['all', ...AGENT_TYPES].map((t) => (
+          {['all', ...AGENT_TYPES].map((agentType) => (
             <button
-              key={t}
-              onClick={() => setFilter(t)}
+              key={agentType}
+              onClick={() => setFilter(agentType)}
               className={`text-xs px-3 py-1 rounded-full font-medium ${
-                filter === t
+                filter === agentType
                   ? 'bg-telivity-teal text-white'
                   : 'bg-gray-100 text-telivity-slate hover:bg-gray-200'
               }`}
             >
-              {t === 'all' ? 'All' : AGENT_LABELS[t] ?? t}
+              {agentType === 'all' ? t('revenue.all') : agentLabel(t, agentType)}
             </button>
           ))}
         </div>
@@ -219,15 +234,15 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
       {/* Pending decisions */}
       {pending.length > 0 && (
         <div className="mb-4">
-          <p className="text-xs font-semibold text-telivity-slate uppercase mb-2">Pending Approval ({pending.length})</p>
+          <p className="text-xs font-semibold text-telivity-slate uppercase mb-2">{t('revenue.pendingApproval', { count: pending.length })}</p>
           <div className="space-y-2">
             {pending.map((d) => (
               <div key={d.id} className="border border-telivity-teal/20 rounded-lg p-3">
                 <div className="flex items-center gap-3">
-                  <StatusBadge status="pending" label={AGENT_LABELS[d.agentType] ?? d.agentType} />
-                  <span className="text-sm text-telivity-navy font-medium">{d.decisionType.replace(/_/g, ' ')}</span>
+                  <StatusBadge status="pending" label={agentLabel(t, d.agentType)} />
+                  <span className="text-sm text-telivity-navy font-medium">{decisionLabel(t, d.decisionType)}</span>
                   <span className="text-xs text-telivity-mid-grey">
-                    Confidence: {(parseFloat(d.confidence) * 100).toFixed(0)}%
+                    {t('revenue.confidence')}: {(parseFloat(d.confidence) * 100).toFixed(0)}%
                   </span>
                   <span className="text-xs text-telivity-mid-grey ml-auto">
                     {new Date(d.createdAt).toLocaleString()}
@@ -243,14 +258,14 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
                     disabled={approveMutation.isPending}
                     className="flex items-center gap-1 bg-telivity-teal text-white text-xs px-3 py-1 rounded-lg hover:bg-telivity-dark-teal"
                   >
-                    <Check size={14} /> Approve
+                    <Check size={14} /> {t('revenue.approve')}
                   </button>
                   <button
                     onClick={() => rejectMutation.mutate(d.id)}
                     disabled={rejectMutation.isPending}
                     className="flex items-center gap-1 border border-gray-200 text-telivity-slate text-xs px-3 py-1 rounded-lg hover:bg-gray-100"
                   >
-                    <X size={14} /> Reject
+                    <X size={14} /> {t('revenue.reject')}
                   </button>
                 </div>
                 {expandedId === d.id && (
@@ -270,27 +285,27 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
       {/* Recent decisions */}
       {others.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-telivity-slate uppercase mb-2">Recent Decisions</p>
+          <p className="text-xs font-semibold text-telivity-slate uppercase mb-2">{t('revenue.recentDecisions')}</p>
           <table className="w-full">
             <thead>
               <tr className="bg-telivity-teal/5 border-b border-gray-100">
-                <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">Agent</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">Type</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">Confidence</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">Status</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">Date</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('revenue.agent')}</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('revenue.type')}</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('revenue.confidence')}</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('revenue.status')}</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('revenue.date')}</th>
               </tr>
             </thead>
             <tbody>
               {others.slice(0, 10).map((d, i) => (
                 <tr key={d.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
-                  <td className="px-3 py-2 text-sm text-telivity-navy">{AGENT_LABELS[d.agentType] ?? d.agentType}</td>
-                  <td className="px-3 py-2 text-sm text-telivity-slate">{d.decisionType.replace(/_/g, ' ')}</td>
+                  <td className="px-3 py-2 text-sm text-telivity-navy">{agentLabel(t, d.agentType)}</td>
+                  <td className="px-3 py-2 text-sm text-telivity-slate">{decisionLabel(t, d.decisionType)}</td>
                   <td className="px-3 py-2 text-sm text-telivity-slate">{(parseFloat(d.confidence) * 100).toFixed(0)}%</td>
                   <td className="px-3 py-2">
                     <StatusBadge
                       status={d.status === 'approved' || d.status === 'auto_executed' ? 'success' : d.status === 'rejected' ? 'error' : d.status}
-                      label={d.status === 'auto_executed' ? 'Auto' : d.status}
+                      label={d.status === 'auto_executed' ? t('revenue.autoExecuted') : t(`revenue.decisionStatuses.${d.status}`, { defaultValue: d.status })}
                     />
                   </td>
                   <td className="px-3 py-2 text-xs text-telivity-mid-grey">{new Date(d.createdAt).toLocaleString()}</td>
@@ -302,7 +317,7 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
       )}
 
       {allDecisions.length === 0 && (
-        <p className="text-sm text-telivity-mid-grey text-center py-8">No agent decisions yet. Run an agent to see recommendations.</p>
+        <p className="text-sm text-telivity-mid-grey text-center py-8">{t('revenue.noAgentDecisions')}</p>
       )}
     </div>
   );
@@ -313,6 +328,7 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
 // ---------------------------------------------------------------------------
 
 function PerformanceSection({ propertyId }: { propertyId: string }) {
+  const { t } = useTranslation();
   const { data: performances = [] } = useQuery({
     queryKey: ['agent-performance', propertyId],
     queryFn: async () => {
@@ -332,37 +348,37 @@ function PerformanceSection({ propertyId }: { propertyId: string }) {
     <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
       <div className="flex items-center gap-3 mb-4">
         <BarChart3 size={20} className="text-telivity-teal" />
-        <h2 className="text-lg font-semibold text-telivity-navy">Agent Performance</h2>
+        <h2 className="text-lg font-semibold text-telivity-navy">{t('revenue.agentPerformance')}</h2>
       </div>
 
       {performances.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {performances.map((p) => (
             <div key={p.agentType} className="border border-gray-100 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-telivity-navy mb-2">{AGENT_LABELS[p.agentType] ?? p.agentType}</h3>
+              <h3 className="text-sm font-semibold text-telivity-navy mb-2">{agentLabel(t, p.agentType)}</h3>
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="text-telivity-mid-grey">Total Decisions</span>
+                  <span className="text-telivity-mid-grey">{t('revenue.totalDecisions')}</span>
                   <span className="text-telivity-navy font-medium">{p.totalDecisions}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-telivity-mid-grey">Approved</span>
+                  <span className="text-telivity-mid-grey">{t('revenue.approved')}</span>
                   <span className="text-telivity-dark-teal font-medium">{p.approvedCount}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-telivity-mid-grey">Rejected</span>
+                  <span className="text-telivity-mid-grey">{t('revenue.rejected')}</span>
                   <span className="text-telivity-orange font-medium">{p.rejectedCount}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-telivity-mid-grey">Auto-Executed</span>
+                  <span className="text-telivity-mid-grey">{t('revenue.autoExecuted')}</span>
                   <span className="text-telivity-navy font-medium">{p.autoExecutedCount}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-telivity-mid-grey">Avg Confidence</span>
+                  <span className="text-telivity-mid-grey">{t('revenue.averageConfidence')}</span>
                   <span className="text-telivity-navy font-medium">{(p.averageConfidence * 100).toFixed(0)}%</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-telivity-mid-grey">Approval Rate</span>
+                  <span className="text-telivity-mid-grey">{t('revenue.approvalRate')}</span>
                   <span className="text-telivity-navy font-medium">{p.approvalRate}%</span>
                 </div>
               </div>
@@ -370,7 +386,7 @@ function PerformanceSection({ propertyId }: { propertyId: string }) {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-telivity-mid-grey text-center py-4">No performance data yet.</p>
+        <p className="text-sm text-telivity-mid-grey text-center py-4">{t('revenue.noPerformanceData')}</p>
       )}
     </div>
   );
@@ -381,6 +397,7 @@ function PerformanceSection({ propertyId }: { propertyId: string }) {
 // ---------------------------------------------------------------------------
 
 function SettingsSection({ propertyId, agents }: { propertyId: string; agents: AgentStatus[] }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   const updateConfigMutation = useMutation({
@@ -405,7 +422,7 @@ function SettingsSection({ propertyId, agents }: { propertyId: string; agents: A
     <div className="bg-white rounded-xl shadow-sm p-5">
       <div className="flex items-center gap-3 mb-4">
         <Settings2 size={20} className="text-telivity-teal" />
-        <h2 className="text-lg font-semibold text-telivity-navy">Agent Settings</h2>
+        <h2 className="text-lg font-semibold text-telivity-navy">{t('revenue.agentSettings')}</h2>
       </div>
 
       <div className="space-y-3">
@@ -414,11 +431,11 @@ function SettingsSection({ propertyId, agents }: { propertyId: string; agents: A
             <div className="flex items-center gap-3">
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-telivity-navy">
-                  {AGENT_LABELS[agent.agentType] ?? agent.agentType}
+                  {agentLabel(t, agent.agentType)}
                 </h3>
                 <p className="text-xs text-telivity-mid-grey mt-0.5">
-                  Last run: {agent.lastRunAt ? new Date(agent.lastRunAt).toLocaleString() : 'Never'}
-                  {agent.pendingDecisions > 0 && ` | ${agent.pendingDecisions} pending`}
+                  {t('revenue.lastRun')}: {agent.lastRunAt ? new Date(agent.lastRunAt).toLocaleString() : t('channels.never')}
+                  {agent.pendingDecisions > 0 && ` | ${t('revenue.pendingCount', { count: agent.pendingDecisions })}`}
                 </p>
               </div>
 
@@ -435,7 +452,7 @@ function SettingsSection({ propertyId, agents }: { propertyId: string; agents: A
                   }
                   className="rounded border-gray-300 text-telivity-teal focus:ring-telivity-teal"
                 />
-                Enabled
+                {t('revenue.enabled')}
               </label>
 
               {/* Mode selector */}
@@ -449,9 +466,9 @@ function SettingsSection({ propertyId, agents }: { propertyId: string; agents: A
                 }
                 className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-telivity-slate"
               >
-                <option value="manual">Manual</option>
-                <option value="suggest">Suggest</option>
-                <option value="autopilot">Autopilot</option>
+                <option value="manual">{t('revenue.modes.manual')}</option>
+                <option value="suggest">{t('revenue.modes.suggest')}</option>
+                <option value="autopilot">{t('revenue.modes.autopilot')}</option>
               </select>
 
               {/* Run Now button */}
@@ -460,7 +477,7 @@ function SettingsSection({ propertyId, agents }: { propertyId: string; agents: A
                 disabled={runAgentMutation.isPending || !agent.hasImplementation}
                 className="flex items-center gap-1 bg-telivity-teal text-white text-xs px-3 py-1.5 rounded-lg hover:bg-telivity-dark-teal disabled:opacity-50"
               >
-                <Play size={14} /> Run Now
+                <Play size={14} /> {t('revenue.runNow')}
               </button>
             </div>
           </div>
@@ -475,6 +492,7 @@ function SettingsSection({ propertyId, agents }: { propertyId: string; agents: A
 // ---------------------------------------------------------------------------
 
 export default function Revenue() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
 
   const { data: agentStatuses = [] } = useQuery<AgentStatus[]>({
@@ -486,7 +504,7 @@ export default function Revenue() {
   if (!propertyId) {
     return (
       <div className="flex items-center justify-center h-64 text-telivity-mid-grey">
-        Select a property
+        {t('common.selectProperty')}
       </div>
     );
   }
@@ -495,7 +513,7 @@ export default function Revenue() {
     <div>
       <div className="flex items-center gap-3 mb-6">
         <TrendingUp size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Revenue Management</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('revenue.title')}</h1>
       </div>
 
       <RevenueDashboard agents={agentStatuses} />

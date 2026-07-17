@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users, Search, Plus, ChevronLeft, AlertTriangle, Trash2 } from 'lucide-react';
@@ -24,6 +25,7 @@ interface Guest {
 
 // ---- Guest List ----
 function GuestList() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -53,16 +55,16 @@ function GuestList() {
   });
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property to view guests</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('guests.selectProperty')}</div>;
   }
 
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
         <Users size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Guests</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('guests.title')}</h1>
         <button onClick={() => setCreateOpen(true)} className="ml-auto flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-teal transition-colors">
-          <Plus size={16} /> New Guest
+          <Plus size={16} /> {t('guests.newGuest')}
         </button>
       </div>
 
@@ -73,7 +75,7 @@ function GuestList() {
           <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by name, email, or phone"
+            placeholder={t('guests.searchPlaceholder')}
             className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-telivity-teal"
           />
         </div>
@@ -84,13 +86,13 @@ function GuestList() {
         <table className="w-full">
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Email</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Phone</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('common.name')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('common.email')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('common.phone')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">VIP</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Stays</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Last Visit</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">Flags</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.stays')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.lastVisit')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.flags')}</th>
             </tr>
           </thead>
           <tbody>
@@ -114,31 +116,31 @@ function GuestList() {
               </tr>
             ))}
             {guests.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No guests found</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('guests.noGuestsFound')}</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
       {/* Create Guest Modal */}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Guest">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('guests.newGuest')}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">First Name *</label>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.firstName')} *</label>
               <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Last Name *</label>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.lastName')} *</label>
               <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Email</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.email')}</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Phone</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.phone')}</label>
             <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
           <button
@@ -146,7 +148,7 @@ function GuestList() {
             disabled={!firstName || !lastName || createMutation.isPending}
             className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-teal disabled:opacity-50"
           >
-            {createMutation.isPending ? 'Creating...' : 'Create Guest'}
+            {createMutation.isPending ? t('common.creating') : t('guests.createGuest')}
           </button>
         </div>
       </Modal>
@@ -156,6 +158,7 @@ function GuestList() {
 
 // ---- Guest Detail ----
 function GuestDetail() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
@@ -214,7 +217,7 @@ function GuestDetail() {
   }
 
   if (!guest) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Loading...</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.loading')}</div>;
   }
 
   return (
@@ -233,103 +236,103 @@ function GuestDetail() {
         {/* Profile Card */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-telivity-navy">Profile</h2>
+            <h2 className="text-sm font-semibold text-telivity-navy">{t('guests.profile')}</h2>
             {!editing && (
-              <button onClick={startEdit} className="text-sm text-telivity-teal font-medium hover:underline">Edit</button>
+              <button onClick={startEdit} className="text-sm text-telivity-teal font-medium hover:underline">{t('common.edit')}</button>
             )}
           </div>
 
           {editing ? (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
-                <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First Name" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-                <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last Name" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+                <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={t('guests.firstName')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+                <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={t('guests.lastName')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               </div>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">VIP Level</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.vipLevel')}</label>
                 <select value={vipLevel} onChange={(e) => setVipLevel(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
-                  <option value="none">None</option>
+                  <option value="none">{t('guests.none')}</option>
                   <option value="gold">Gold</option>
                   <option value="platinum">Platinum</option>
                   <option value="diamond">Diamond</option>
                 </select>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setEditing(false)} className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold">Cancel</button>
-                <button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} className="flex-1 bg-telivity-teal text-white rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50">Save</button>
+                <button onClick={() => setEditing(false)} className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold">{t('common.cancel')}</button>
+                <button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} className="flex-1 bg-telivity-teal text-white rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50">{t('common.save')}</button>
               </div>
             </div>
           ) : (
             <div className="space-y-3">
-              <DetailRow label="Email" value={guest.email ?? '—'} />
-              <DetailRow label="Phone" value={guest.phone ?? '—'} />
-              <DetailRow label="VIP Level" value={guest.vipLevel ?? 'none'} />
-              <DetailRow label="Total Stays" value={String(guest.totalStays ?? 0)} />
+              <DetailRow label={t('common.email')} value={guest.email ?? '—'} />
+              <DetailRow label={t('common.phone')} value={guest.phone ?? '—'} />
+              <DetailRow label={t('guests.vipLevel')} value={guest.vipLevel ?? t('guests.none')} />
+              <DetailRow label={t('guests.totalStays')} value={String(guest.totalStays ?? 0)} />
             </div>
           )}
         </div>
 
         {/* Stay History */}
         <div className="bg-white rounded-xl shadow-sm p-6 lg:col-span-2">
-          <h2 className="text-sm font-semibold text-telivity-navy mb-4">Stay History</h2>
+          <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('guests.stayHistory')}</h2>
           {(stays as { id: string; confirmationNumber: string; arrivalDate: string; departureDate: string; status: string; roomNumber?: string }[]).length > 0 ? (
             <div className="space-y-2">
               {(stays as { id: string; confirmationNumber: string; arrivalDate: string; departureDate: string; status: string; roomNumber?: string }[]).map((s) => (
                 <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                   <div>
                     <p className="text-sm font-medium text-telivity-navy">{s.confirmationNumber}</p>
-                    <p className="text-xs text-telivity-mid-grey">{s.arrivalDate} → {s.departureDate} {s.roomNumber ? `• Room ${s.roomNumber}` : ''}</p>
+                    <p className="text-xs text-telivity-mid-grey">{s.arrivalDate} → {s.departureDate} {s.roomNumber ? `• ${t('guests.roomNumber', { number: s.roomNumber })}` : ''}</p>
                   </div>
                   <StatusBadge status={s.status} />
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-telivity-mid-grey">No stay history</p>
+            <p className="text-sm text-telivity-mid-grey">{t('guests.noStayHistory')}</p>
           )}
         </div>
       </div>
 
       {/* Danger Zone */}
       <div className="mt-6 bg-white rounded-xl shadow-sm p-6 border border-telivity-orange/20">
-        <h2 className="text-sm font-semibold text-telivity-navy mb-4">Actions</h2>
+        <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('common.actions')}</h2>
         <div className="flex gap-3">
           <button
             onClick={() => { if (confirm(`${guest.isDnr ? 'Remove' : 'Set'} DNR flag for ${guest.firstName} ${guest.lastName}?`)) dnrMutation.mutate(); }}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${guest.isDnr ? 'bg-telivity-dark-teal text-white' : 'bg-telivity-orange text-white'}`}
           >
             <AlertTriangle size={14} />
-            {guest.isDnr ? 'Remove DNR' : 'Mark DNR'}
+            {guest.isDnr ? t('guests.removeDnr') : t('guests.markDnr')}
           </button>
           <button
             onClick={() => setDeleteConfirm(true)}
             className="flex items-center gap-2 border border-telivity-orange text-telivity-orange rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-orange/5"
           >
             <Trash2 size={14} />
-            Delete Guest (GDPR)
+            {t('guests.deleteGuest')}
           </button>
         </div>
       </div>
 
       {/* Delete Confirmation */}
-      <Modal open={deleteConfirm} onClose={() => setDeleteConfirm(false)} title="Confirm Guest Deletion">
+      <Modal open={deleteConfirm} onClose={() => setDeleteConfirm(false)} title={t('guests.confirmDeletion')}>
         <div className="space-y-4">
           <div className="bg-telivity-orange/10 rounded-lg p-4">
-            <p className="text-sm text-telivity-orange font-medium">This action is irreversible.</p>
+            <p className="text-sm text-telivity-orange font-medium">{t('guests.irreversible')}</p>
             <p className="text-sm text-telivity-slate mt-1">
-              All personal data for <strong>{guest.firstName} {guest.lastName}</strong> will be permanently deleted in accordance with GDPR right to erasure.
+              {t('guests.deletionDescription', { name: `${guest.firstName} ${guest.lastName}` })}
             </p>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => setDeleteConfirm(false)} className="flex-1 border border-gray-200 rounded-lg px-4 py-2 text-sm font-semibold">Cancel</button>
+            <button onClick={() => setDeleteConfirm(false)} className="flex-1 border border-gray-200 rounded-lg px-4 py-2 text-sm font-semibold">{t('common.cancel')}</button>
             <button
               onClick={() => { if (confirm('Are you absolutely sure? This cannot be undone.')) deleteMutation.mutate(); }}
               disabled={deleteMutation.isPending}
               className="flex-1 bg-telivity-orange text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
-              {deleteMutation.isPending ? 'Deleting...' : 'Permanently Delete'}
+              {deleteMutation.isPending ? t('common.deleting') : t('guests.permanentlyDelete')}
             </button>
           </div>
         </div>

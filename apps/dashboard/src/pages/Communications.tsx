@@ -4,6 +4,8 @@ import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 interface CommunicationDecision {
   id: string;
@@ -23,14 +25,19 @@ interface CommunicationDecision {
   createdAt: string;
 }
 
-const EMAIL_TYPE_LABELS: Record<string, string> = {
-  confirmation: 'Booking Confirmation',
-  pre_arrival: 'Pre-Arrival',
-  day_of: 'Day of Arrival',
-  welcome: 'Welcome',
-  post_stay: 'Post-Stay',
-  win_back: 'Win-Back',
+const EMAIL_TYPE_LABEL_KEYS: Record<string, string> = {
+  confirmation: 'confirmation',
+  pre_arrival: 'preArrival',
+  day_of: 'dayOfArrival',
+  welcome: 'welcome',
+  post_stay: 'postStay',
+  win_back: 'winBack',
 };
+
+function emailTypeLabel(t: TFunction, emailType: string) {
+  const key = EMAIL_TYPE_LABEL_KEYS[emailType];
+  return key ? t(`communications.emailTypes.${key}`) : emailType;
+}
 
 function statusToColor(status: string) {
   switch (status) {
@@ -43,6 +50,7 @@ function statusToColor(status: string) {
 }
 
 export default function Communications() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const queryClient = useQueryClient();
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -71,33 +79,33 @@ export default function Communications() {
   };
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.selectProperty')}</div>;
   }
 
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
         <Mail size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Guest Communications</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('communications.guestCommunications')}</h1>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl shadow-sm p-4">
           <div className="flex items-center gap-2 text-telivity-mid-grey text-xs font-semibold uppercase mb-1">
-            <Mail size={14} /> Total
+            <Mail size={14} /> {t('communications.total')}
           </div>
           <p className="text-2xl font-bold text-telivity-navy">{stats.total}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-4">
           <div className="flex items-center gap-2 text-telivity-mid-grey text-xs font-semibold uppercase mb-1">
-            <CheckCircle size={14} /> Sent
+            <CheckCircle size={14} /> {t('communications.sent')}
           </div>
           <p className="text-2xl font-bold text-green-600">{stats.sent}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-4">
           <div className="flex items-center gap-2 text-telivity-mid-grey text-xs font-semibold uppercase mb-1">
-            <Clock size={14} /> Pending Review
+            <Clock size={14} /> {t('communications.pendingReview')}
           </div>
           <p className="text-2xl font-bold text-telivity-orange">{stats.pending}</p>
         </div>
@@ -106,7 +114,7 @@ export default function Communications() {
       {/* Communications List */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-telivity-navy">Email Communications</h2>
+          <h2 className="text-sm font-semibold text-telivity-navy">{t('communications.emailCommunications')}</h2>
         </div>
         <div className="divide-y divide-gray-50">
           {comms.map((c) => (
@@ -114,15 +122,15 @@ export default function Communications() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-telivity-navy">
-                    {EMAIL_TYPE_LABELS[c.recommendation.emailType] ?? c.recommendation.emailType}
+                    {emailTypeLabel(t, c.recommendation.emailType)}
                   </span>
                   <StatusBadge
                     status={statusToColor(c.status)}
-                    label={c.status.replace('_', ' ')}
+                    label={t(`communications.statuses.${c.status}`, { defaultValue: c.status })}
                   />
                 </div>
                 <p className="text-xs text-telivity-mid-grey mt-0.5 truncate">
-                  To: {c.recommendation.to} — {c.recommendation.subject}
+                  {t('communications.to')}: {c.recommendation.to} — {c.recommendation.subject}
                 </p>
                 <p className="text-xs text-telivity-mid-grey">
                   {new Date(c.createdAt).toLocaleString()}
@@ -132,7 +140,7 @@ export default function Communications() {
                 <button
                   onClick={() => setPreviewId(previewId === c.id ? null : c.id)}
                   className="p-1.5 rounded-lg hover:bg-gray-100 text-telivity-slate"
-                  title="Preview"
+                  title={t('communications.preview')}
                 >
                   <Eye size={16} />
                 </button>
@@ -143,7 +151,7 @@ export default function Communications() {
                     className="flex items-center gap-1 bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-teal disabled:opacity-50"
                   >
                     <Send size={12} />
-                    Send
+                    {t('communications.send')}
                   </button>
                 )}
               </div>
@@ -151,7 +159,7 @@ export default function Communications() {
           ))}
           {comms.length === 0 && (
             <div className="px-5 py-8 text-center text-sm text-telivity-mid-grey">
-              No communications yet. Enable the Guest Communication agent in Settings.
+              {t('communications.empty')}
             </div>
           )}
         </div>
@@ -162,17 +170,17 @@ export default function Communications() {
         <div className="mt-4 bg-white rounded-xl shadow-sm p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-telivity-navy">
-              Email Preview — {previewItem.recommendation.subject}
+              {t('communications.emailPreview')} — {previewItem.recommendation.subject}
             </h3>
             <button
               onClick={() => setPreviewId(null)}
               className="text-xs text-telivity-mid-grey hover:text-telivity-navy"
             >
-              Close
+              {t('communications.close')}
             </button>
           </div>
           <div className="text-xs text-telivity-mid-grey mb-2">
-            To: {previewItem.recommendation.to} | Type: {EMAIL_TYPE_LABELS[previewItem.recommendation.emailType]}
+            {t('communications.to')}: {previewItem.recommendation.to} | {t('communications.type')}: {emailTypeLabel(t, previewItem.recommendation.emailType)}
           </div>
           <div
             className="border border-gray-200 rounded-lg p-4 text-sm"

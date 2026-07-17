@@ -1,90 +1,359 @@
 {
-  "nav": {
-    "tagline": "Hotel‑AI‑Plattform",
-    "mainNavigation": "Hauptmenü",
-    "closeMenu": "Menü schließen",
-    "dashboard": "Dashboard",
-    "frontDesk": "Rezeption",
-    "reservations": "Reservierungen",
-    "guests": "Gäste",
-    "rooms": "Zimmer",
-    "housekeeping": "Housekeeping",
-    "foliosBilling": "Gästekonten & Abrechnung",
-    "backOffice": "Back Office",
-    "groups": "Gruppen",
-    "cashier": "Kasse",
-    "houseAccounts": "Hauskonten",
-    "accounting": "Buchhaltung",
-    "tax": "Steuereinstellungen",
-    "ratePlans": "Ratenpläne",
-    "revenueManagement": "Revenue‑Management",
-    "nightAudit": "Tagesabschluss",
-    "reports": "Berichte",
-    "channels": "Kanäle",
-    "communications": "Kommunikation",
-    "reviews": "Bewertungen",
-    "usersRoles": "Benutzer & Positionen",
-    "import": "Datenimport",
-    "settings": "Einstellungen"
-  },
-  "header": {
-    "selectProperty": "Unterkunft auswählen",
-    "openMenu": "Menü öffnen",
-    "notifications": "Benachrichtigungen",
-    "logout": "Abmelden",
-    "user": "Benutzer",
-    "statusLive": "Online",
-    "statusOffline": "Offline",
-    "language": "Sprache"
+  "accounting": {
+    "actions": "Aktionen",
+    "add": "Hinzufügen",
+    "addGlCode": "Sachkonto hinzufügen",
+    "aging": "Fälligkeitsanalyse",
+    "amount": "Betrag",
+    "applyToFolio": "Auf Gästekonto anwenden",
+    "arAging": "A/R-Fälligkeitsanalyse — {{name}}",
+    "arPayment": "A/R-Zahlung — {{name}}",
+    "arTransfer": "Zu A/R übertragen — {{name}}",
+    "code": "Code",
+    "create": "Erstellen",
+    "depositActions": "Einlageaktionen — ${{amount}}",
+    "folioIdPlaceholder": "Gästekonto-ID (optional zum Anwenden)",
+    "folioLedgerTrialBalance": "Gästekonto-Saldenliste",
+    "forfeit": "Einbehalten",
+    "loadingAgingReport": "Fälligkeitsbericht wird geladen…",
+    "name": "Name",
+    "payment": "Zahlung",
+    "record": "Buchen",
+    "recordDeposit": "Einlage erfassen",
+    "recordPayment": "Zahlung erfassen",
+    "refund": "Erstatten",
+    "revenueJournal": "Umsatzjournal",
+    "reverse": "Stornieren",
+    "reverseTransfer": "A/R-Übertragung stornieren",
+    "sourceFolioIdPlaceholder": "Quell-Gästekonto-ID",
+    "transactionIdPlaceholder": "Transaktions-ID",
+    "transfer": "Übertragen",
+    "transferBalance": "Saldo übertragen"
   },
   "admin": {
-    "users": "Benutzer",
-    "roles": "Position",
-    "addUser": "Benutzer hinzufügen",
-    "new": "Neu",
-    "newRole": "Neue Position",
-    "name": "Name",
-    "email": "E‑Mail",
-    "status": "Status",
     "actions": "Aktionen",
-    "editRoles": "Position bearbeiten",
-    "disableUser": "Benutzer deaktivieren",
-    "disable": "Deaktivieren",
-    "noUsersYet": "Noch keine Benutzer",
-    "rolesForUser": "Position — {{name}}",
-    "system": "System",
-    "creating": "Erstelle…",
-    "createUser": "Benutzer erstellen",
-    "createRole": "Position erstellen",
-    "couldNotCreateUser": "Benutzer konnte nicht erstellt werden (E‑Mail existiert möglicherweise bereits).",
+    "addUser": "Benutzer hinzufügen",
     "couldNotCreateRole": "Position konnte nicht erstellt werden (Schlüssel existiert möglicherweise bereits).",
-    "saving": "Speichere…",
-    "saveRoles": "Position speichern",
-    "savePermissions": "Berechtigungen speichern",
+    "couldNotCreateUser": "Benutzer konnte nicht erstellt werden (E‑Mail existiert möglicherweise bereits).",
+    "createRole": "Position erstellen",
+    "createUser": "Benutzer erstellen",
+    "creating": "Erstelle…",
     "delete": "Löschen",
-    "unsavedChanges": "Ungespeicherte Änderungen",
-    "selectARole": "Position auswählen",
-    "permissionsCount": "{{count}} Berechtigungen",
-    "systemRoleReadOnly": "Systemposition (schreibgeschützt)",
+    "description": "Beschreibung",
+    "disable": "Deaktivieren",
+    "disableUser": "Benutzer deaktivieren",
+    "editRoles": "Position bearbeiten",
+    "email": "E‑Mail",
     "keyLabel": "Schlüssel * (kleinbuchstaben, unterstriche)",
     "keyPlaceholder": "spa_manager",
+    "name": "Name",
     "namePlaceholder": "Spa‑Manager",
+    "new": "Neu",
+    "newRole": "Neue Position",
+    "noUsersYet": "Noch keine Benutzer",
+    "permissionsCount": "{{count}} Berechtigungen",
+    "required": "*",
+    "roles": "Position",
+    "rolesForUser": "Position — {{name}}",
+    "savePermissions": "Berechtigungen speichern",
+    "saveRoles": "Position speichern",
+    "saving": "Speichere…",
+    "selectARole": "Position auswählen",
+    "status": "Status",
+    "system": "System",
+    "systemRoleReadOnly": "Systemposition (schreibgeschützt)",
+    "unsavedChanges": "Ungespeicherte Änderungen",
+    "users": "Benutzer"
+  },
+  "channels": {
+    "statuses": {
+      "active": "Aktiv",
+      "error": "Fehler",
+      "inactive": "Inaktiv",
+      "pending_setup": "Einrichtung ausstehend"
+    }
+  },
+  "common": {
+    "active": "Aktiv",
+    "create": "Erstellen",
+    "inactive": "Inaktiv",
+    "loading": "Wird geladen…",
+    "name": "Name",
+    "status": "Status"
+  },
+  "dashboard": {
+    "occupancy": "Belegung",
+    "revenueIntelligence": "Revenue Intelligence",
+    "revpar": "RevPAR",
+    "waitingForEvents": "Warte auf Echtzeitereignisse…"
+  },
+  "groups": {
+    "allotmentBlocks": "Kontingentblöcke",
+    "block": "Block",
+    "blockName": "Blockname *",
+    "contact": "Kontakt",
+    "contactEmail": "Kontakt-E-Mail",
+    "contactName": "Kontaktname",
+    "create": "Erstellen",
+    "createBlock": "Block erstellen",
+    "cutoffDate": "Stichtag",
+    "end": "Ende",
+    "generateInvoice": "Rechnung erstellen",
+    "invoiceGenerated": "Rechnung wurde erfolgreich erstellt.",
+    "masterFolio": "Hauptgästekonto",
+    "name": "Name",
+    "nameRequired": "Name *",
+    "newBlock": "Neuer Block",
+    "newProfile": "Neues Gruppenprofil",
+    "noBlocks": "Keine Blöcke",
+    "noMasterFolio": "Für diese Gruppe wurde kein Hauptgästekonto gefunden.",
+    "rate": "Satz",
+    "remaining": "Verbleibend",
+    "roomingListHint": "Ein Gast pro Zeile: Name, Anreise, Abreise, guestId (optionale UUID)",
+    "start": "Beginn",
+    "type": "Typ",
+    "types": {
+      "corporate": "Unternehmen",
+      "event": "Veranstaltung",
+      "other": "Sonstiges",
+      "travel_agent": "Reisebüro",
+      "wholesale": "Großhandel"
+    }
+  },
+  "header": {
+    "language": "Sprache",
+    "logout": "Abmelden",
+    "notifications": "Benachrichtigungen",
+    "openMenu": "Menü öffnen",
+    "search": "Suchen…",
+    "selectProperty": "Unterkunft auswählen",
+    "statusLive": "Online",
+    "statusOffline": "Offline",
+    "user": "Benutzer"
+  },
+  "houseAccounts": {
+    "addProduct": "Produkt hinzufügen",
+    "amount": "Betrag",
+    "balance": "Saldo",
+    "category": "Kategorie",
+    "closeAccount": "Hauskonto schließen",
     "description": "Beschreibung",
-    "required": "*"
+    "kind": "Art",
+    "kinds": {
+      "internal": "Intern",
+      "other": "Sonstiges",
+      "retail": "Einzelhandel",
+      "vendor": "Lieferant"
+    },
+    "name": "Name",
+    "nameRequired": "Name *",
+    "noAccounts": "Keine Hauskonten",
+    "noProducts": "Keine Produkte",
+    "open": "Öffnen",
+    "openAccount": "Konto eröffnen",
+    "openHouseAccount": "Hauskonto eröffnen",
+    "paymentMethods": {
+      "bankTransfer": "Banküberweisung",
+      "cash": "Bar",
+      "creditCard": "Kreditkarte",
+      "debitCard": "Debitkarte",
+      "other": "Sonstiges"
+    },
+    "post": "Buchen",
+    "postCharge": "Gebühr buchen",
+    "price": "Preis",
+    "priceRequired": "Preis *",
+    "productName": "Produktname *",
+    "quantity": "Menge",
+    "record": "Buchen",
+    "recordPayment": "Zahlung erfassen",
+    "selectProduct": "Produkt auswählen",
+    "selectProperty": "Unterkunft auswählen",
+    "sell": "Verkaufen",
+    "sellProduct": "Produkt verkaufen",
+    "title": "Hauskonten"
+  },
+  "import": {
+    "description": "Migrieren Sie Datensätze aus einem anderen PMS. Wählen Sie eine Entität aus, laden Sie eine CSV-Datei hoch oder fügen Sie sie ein, ordnen Sie die Spalten zu, prüfen Sie sie mit einem Testlauf und importieren Sie sie anschließend."
   },
   "media": {
+    "add": "Hinzufügen",
+    "captionPlaceholder": "Bildbeschreibung (optional)",
+    "couldNotAddImage": "Bild konnte nicht hinzugefügt werden. URL prüfen.",
+    "delete": "Löschen",
     "loadingImages": "Bilder werden geladen…",
+    "moveLeft": "Nach links",
+    "moveRight": "Nach rechts",
     "noImagesYet": "Noch keine Bilder",
     "primary": "Hauptbild",
     "setAsPrimary": "Als Hauptbild festlegen",
-    "delete": "Löschen",
-    "moveLeft": "Nach links",
-    "moveRight": "Nach rechts",
-    "urlPlaceholder": "Bild‑URL einfügen",
-    "captionPlaceholder": "Bildbeschreibung (optional)",
-    "add": "Hinzufügen",
-    "uploading": "Wird hochgeladen…",
     "uploadFile": "Datei hochladen",
-    "couldNotAddImage": "Bild konnte nicht hinzugefügt werden. URL prüfen."
+    "uploading": "Wird hochgeladen…",
+    "urlPlaceholder": "Bild‑URL einfügen"
+  },
+  "nav": {
+    "accounting": "Buchhaltung",
+    "backOffice": "Back Office",
+    "cashier": "Kasse",
+    "channels": "Kanäle",
+    "closeMenu": "Menü schließen",
+    "communications": "Kommunikation",
+    "dashboard": "Dashboard",
+    "foliosBilling": "Gästekonten & Abrechnung",
+    "frontDesk": "Rezeption",
+    "groups": "Gruppen",
+    "guests": "Gäste",
+    "houseAccounts": "Hauskonten",
+    "housekeeping": "Housekeeping",
+    "import": "Datenimport",
+    "mainNavigation": "Hauptmenü",
+    "nightAudit": "Tagesabschluss",
+    "ratePlans": "Ratenpläne",
+    "reports": "Berichte",
+    "reservations": "Reservierungen",
+    "revenueManagement": "Revenue‑Management",
+    "reviews": "Bewertungen",
+    "rooms": "Zimmer",
+    "settings": "Einstellungen",
+    "tagline": "Hotel‑AI‑Plattform",
+    "tax": "Steuereinstellungen",
+    "usersRoles": "Benutzer & Positionen"
+  },
+  "permissions": {
+    "groups": {
+      "accounting": "Buchhaltung",
+      "administration": "Verwaltung",
+      "billing": "Abrechnung",
+      "cashier": "Kasse",
+      "channels": "Kanäle",
+      "communications": "Kommunikation",
+      "frontDesk": "Rezeption",
+      "general": "Allgemein",
+      "groups": "Gruppen",
+      "guests": "Gäste",
+      "houseAccounts": "Hauskonten",
+      "housekeeping": "Housekeeping",
+      "nightAudit": "Tagesabschluss",
+      "ratePlans": "Ratenpläne",
+      "reports": "Berichte",
+      "reservations": "Reservierungen",
+      "revenue": "Revenue-Management",
+      "reviews": "Bewertungen",
+      "rooms": "Zimmer",
+      "settings": "Einstellungen",
+      "tax": "Steuern"
+    },
+    "labels": {
+      "accounting": {
+        "view": "Buchhaltung & Einlagen"
+      },
+      "admin": {
+        "roles": {
+          "manage": "Rollen & Berechtigungen verwalten"
+        },
+        "users": {
+          "manage": "Benutzer verwalten"
+        }
+      },
+      "bookingengine": {
+        "manage": "Direkte Buchungsmaschine verwalten"
+      },
+      "cashier": {
+        "access": "Kassenoperationen"
+      },
+      "channels": {
+        "manage": "Kanäle verwalten"
+      },
+      "communications": {
+        "manage": "Gästekommunikation"
+      },
+      "dashboard": {
+        "view": "Dashboard anzeigen"
+      },
+      "folios": {
+        "manage": "Gebühren / Zahlungen buchen",
+        "read": "Gästekonten & Abrechnung anzeigen"
+      },
+      "frontdesk": {
+        "access": "Rezeption verwenden"
+      },
+      "groups": {
+        "manage": "Gruppen & Kontingente verwalten",
+        "read": "Gruppen anzeigen"
+      },
+      "guests": {
+        "read": "Gäste anzeigen",
+        "write": "Gäste erstellen / ändern"
+      },
+      "houseaccounts": {
+        "manage": "Hauskonten verwalten",
+        "read": "Hauskonten anzeigen"
+      },
+      "housekeeping": {
+        "manage": "Housekeeping zuweisen / prüfen",
+        "read": "Housekeeping anzeigen"
+      },
+      "media": {
+        "manage": "Fotos verwalten"
+      },
+      "nightaudit": {
+        "run": "Tagesabschluss durchführen"
+      },
+      "rateplans": {
+        "manage": "Ratenpläne verwalten",
+        "read": "Ratenpläne anzeigen"
+      },
+      "reports": {
+        "view": "Berichte anzeigen"
+      },
+      "reservations": {
+        "read": "Reservierungen anzeigen",
+        "write": "Reservierungen erstellen / ändern"
+      },
+      "revenue": {
+        "manage": "Revenue-Management"
+      },
+      "reviews": {
+        "manage": "Bewertungen verwalten"
+      },
+      "rooms": {
+        "read": "Zimmer anzeigen",
+        "write": "Zimmer / Zimmertypen verwalten"
+      },
+      "settings": {
+        "manage": "Unterkunftseinstellungen verwalten"
+      },
+      "tax": {
+        "manage": "Steuerprofile & Regeln"
+      }
+    }
+  },
+  "search": {
+    "allPropertiesPlaceholder": "Alle Unterkünfte durchsuchen…",
+    "close": "Suche schließen",
+    "minimumCharacters": "Mindestens 2 Zeichen zum Suchen eingeben",
+    "noResults": "Keine Ergebnisse",
+    "placeholder": "Gäste, Reservierungen, Gästekonten suchen…",
+    "searching": "Suche läuft…",
+    "title": "Suche"
+  },
+  "taxSettings": {
+    "addRule": "Regel hinzufügen",
+    "addTaxRule": "Steuerregel hinzufügen",
+    "effective": "Gültig ab",
+    "jurisdiction": "Steuergebiet",
+    "jurisdictionCode": "Steuergebietscode",
+    "newProfile": "Neues Steuerprofil",
+    "noRules": "Keine Regeln",
+    "profileName": "Profilname",
+    "rate": "Satz",
+    "ratePlaceholder": "Satz (z. B. 0,07)",
+    "ruleCode": "Code",
+    "ruleName": "Name",
+    "type": "Typ",
+    "types": {
+      "flat": "Pauschal",
+      "percentage": "Prozentsatz"
+    }
   }
 }

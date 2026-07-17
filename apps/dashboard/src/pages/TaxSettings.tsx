@@ -8,6 +8,7 @@ import { requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
+import { useTranslation } from 'react-i18next';
 
 interface TaxProfile {
   id: string;
@@ -19,6 +20,7 @@ interface TaxProfile {
 }
 
 function TaxProfileList() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -54,16 +56,16 @@ function TaxProfileList() {
   });
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('taxSettings.selectProperty')}</div>;
   }
 
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
         <ReceiptText size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Tax Settings</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('taxSettings.title')}</h1>
         <button onClick={() => setCreateOpen(true)} className="ml-auto flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold">
-          <Plus size={16} /> New Profile
+          <Plus size={16} /> {t('taxSettings.newProfile')}
         </button>
       </div>
 
@@ -71,10 +73,10 @@ function TaxProfileList() {
         <table className="w-full">
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Jurisdiction</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Effective</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.name')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('taxSettings.jurisdiction')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('taxSettings.effective')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th>
             </tr>
           </thead>
           <tbody>
@@ -83,22 +85,22 @@ function TaxProfileList() {
                 <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{p.name}</td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{p.jurisdictionCode}</td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{p.effectiveFrom}</td>
-                <td className="px-4 py-3"><StatusBadge status={p.isActive !== false ? 'success' : 'completed'} label={p.isActive !== false ? 'Active' : 'Inactive'} /></td>
+                <td className="px-4 py-3"><StatusBadge status={p.isActive !== false ? 'success' : 'completed'} label={p.isActive !== false ? t('common.active') : t('common.inactive')} /></td>
               </tr>
             ))}
             {profiles.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No tax profiles</td></tr>
+              <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('taxSettings.empty')}</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Tax Profile">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('taxSettings.newProfile')}>
         <div className="space-y-4">
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Profile name" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          <input type="text" value={jurisdictionCode} onChange={(e) => setJurisdictionCode(e.target.value)} placeholder="Jurisdiction code" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('taxSettings.profileName')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input type="text" value={jurisdictionCode} onChange={(e) => setJurisdictionCode(e.target.value)} placeholder={t('taxSettings.jurisdictionCode')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
           <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          <button onClick={() => createMutation.mutate()} disabled={!name || createMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Create</button>
+          <button onClick={() => createMutation.mutate()} disabled={!name || createMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('common.create')}</button>
         </div>
       </Modal>
 
@@ -108,6 +110,7 @@ function TaxProfileList() {
 }
 
 function TaxCalculator() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const [amount, setAmount] = useState('100.00');
   const [chargeType, setChargeType] = useState('room');
@@ -131,7 +134,7 @@ function TaxCalculator() {
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-5 mt-6">
-      <h2 className="text-sm font-semibold text-telivity-navy mb-4">Tax Calculator (Test)</h2>
+      <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('taxSettings.calculator')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
         <select value={chargeType} onChange={(e) => setChargeType(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
@@ -142,7 +145,7 @@ function TaxCalculator() {
         </select>
         <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
       </div>
-      <button onClick={() => calculate.mutate()} disabled={!amount || calculate.isPending} className="bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Calculate</button>
+      <button onClick={() => calculate.mutate()} disabled={!amount || calculate.isPending} className="bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('taxSettings.calculate')}</button>
       {result && (
         <pre className="mt-4 bg-telivity-light-grey rounded-lg p-4 text-xs overflow-auto max-h-48">{JSON.stringify(result, null, 2)}</pre>
       )}
@@ -151,6 +154,7 @@ function TaxCalculator() {
 }
 
 function TaxProfileDetail() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
@@ -189,7 +193,7 @@ function TaxProfileDetail() {
     },
   });
 
-  if (!profile) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Loading...</div>;
+  if (!profile) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.loading')}</div>;
 
   return (
     <div>
@@ -197,17 +201,17 @@ function TaxProfileDetail() {
         <button onClick={() => navigate('/tax')} className="p-1.5 rounded hover:bg-telivity-light-grey"><ChevronLeft size={20} /></button>
         <ReceiptText size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">{profile.name}</h1>
-        <button onClick={() => setRuleOpen(true)} className="ml-auto flex items-center gap-1 bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold"><Plus size={14} /> Add Rule</button>
+        <button onClick={() => setRuleOpen(true)} className="ml-auto flex items-center gap-1 bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold"><Plus size={14} /> {t('taxSettings.addRule')}</button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Code</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Type</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">Rate</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('taxSettings.ruleName')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('taxSettings.ruleCode')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('taxSettings.type')}</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('taxSettings.rate')}</th>
             </tr>
           </thead>
           <tbody>
@@ -220,22 +224,22 @@ function TaxProfileDetail() {
               </tr>
             ))}
             {rules.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No rules</td></tr>
+              <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('taxSettings.noRules')}</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <Modal open={ruleOpen} onClose={() => setRuleOpen(false)} title="Add Tax Rule">
+      <Modal open={ruleOpen} onClose={() => setRuleOpen(false)} title={t('taxSettings.addTaxRule')}>
         <div className="space-y-4">
-          <input type="text" value={ruleName} onChange={(e) => setRuleName(e.target.value)} placeholder="Name" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          <input type="text" value={ruleCode} onChange={(e) => setRuleCode(e.target.value)} placeholder="Code" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input type="text" value={ruleName} onChange={(e) => setRuleName(e.target.value)} placeholder={t('taxSettings.ruleName')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input type="text" value={ruleCode} onChange={(e) => setRuleCode(e.target.value)} placeholder={t('taxSettings.ruleCode')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
           <select value={ruleType} onChange={(e) => setRuleType(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
-            <option value="percentage">Percentage</option>
-            <option value="flat">Flat</option>
+            <option value="percentage">{t('taxSettings.types.percentage')}</option>
+            <option value="flat">{t('taxSettings.types.flat')}</option>
           </select>
-          <input type="text" value={ruleRate} onChange={(e) => setRuleRate(e.target.value)} placeholder="Rate (e.g. 0.07)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          <button onClick={() => addRule.mutate()} disabled={!ruleName || !ruleCode || addRule.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Add Rule</button>
+          <input type="text" value={ruleRate} onChange={(e) => setRuleRate(e.target.value)} placeholder={t('taxSettings.ratePlaceholder')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <button onClick={() => addRule.mutate()} disabled={!ruleName || !ruleCode || addRule.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('taxSettings.addRule')}</button>
         </div>
       </Modal>
     </div>

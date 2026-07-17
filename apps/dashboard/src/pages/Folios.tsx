@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Routes, Route, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Receipt, ChevronLeft, Plus, Lock, RotateCcw } from 'lucide-react';
@@ -43,6 +44,7 @@ interface Payment {
 
 // ---- Folio List ----
 function FolioList() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -61,22 +63,22 @@ function FolioList() {
   const folios: Folio[] = data?.data ?? data ?? [];
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.selectProperty')}</div>;
   }
 
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
         <Receipt size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Folios & Billing</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('folios.title')}</h1>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex gap-3">
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
-          <option value="">All Status</option>
-          <option value="open">Open</option>
-          <option value="settled">Settled</option>
-          <option value="closed">Closed</option>
+          <option value="">{t('folios.allStatus')}</option>
+          <option value="open">{t('folios.open')}</option>
+          <option value="settled">{t('folios.settled')}</option>
+          <option value="closed">{t('folios.closed')}</option>
         </select>
       </div>
 
@@ -84,11 +86,11 @@ function FolioList() {
         <table className="w-full">
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Folio #</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Guest</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">Balance</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('folios.folioNumber')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('folios.guest')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('folios.type')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('folios.balance')}</th>
             </tr>
           </thead>
           <tbody>
@@ -102,7 +104,7 @@ function FolioList() {
               </tr>
             ))}
             {folios.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No folios found</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('folios.noFoliosFound')}</td></tr>
             )}
           </tbody>
         </table>
@@ -113,6 +115,7 @@ function FolioList() {
 
 // ---- Folio Detail ----
 function FolioDetail() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
@@ -190,7 +193,7 @@ function FolioDetail() {
   const settleMutation = useMutation({ mutationFn: () => api.patch(`/v1/folios/${id}/settle`), onSuccess: invalidate });
   const closeMutation = useMutation({ mutationFn: () => api.patch(`/v1/folios/${id}/close`), onSuccess: invalidate });
 
-  if (!folio) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Loading...</div>;
+  if (!folio) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.loading')}</div>;
 
   return (
     <div>
@@ -200,7 +203,7 @@ function FolioDetail() {
         <h1 className="text-2xl font-semibold text-telivity-navy">{folio.folioNumber}</h1>
         <StatusBadge status={folio.status === 'open' ? 'pending' : 'success'} label={folio.status} />
         <div className="ml-auto text-right">
-          <p className="text-xs text-telivity-mid-grey">Balance</p>
+          <p className="text-xs text-telivity-mid-grey">{t('folios.balance')}</p>
           <p className="text-2xl font-semibold text-telivity-navy">${Number(folio.balance ?? 0).toFixed(2)}</p>
         </div>
       </div>
@@ -209,20 +212,20 @@ function FolioDetail() {
         {/* Charges */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-telivity-navy">Charges</h2>
+            <h2 className="text-sm font-semibold text-telivity-navy">{t('folios.charges')}</h2>
             {folio.status === 'open' && (
               <button onClick={() => setChargeOpen(true)} className="flex items-center gap-1 bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold">
-                <Plus size={14} /> Post Charge
+                <Plus size={14} /> {t('folios.postCharge')}
               </button>
             )}
           </div>
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="pb-2 text-left text-xs font-medium text-telivity-mid-grey">Date</th>
-                <th className="pb-2 text-left text-xs font-medium text-telivity-mid-grey">Description</th>
-                <th className="pb-2 text-left text-xs font-medium text-telivity-mid-grey">Type</th>
-                <th className="pb-2 text-right text-xs font-medium text-telivity-mid-grey">Amount</th>
+                <th className="pb-2 text-left text-xs font-medium text-telivity-mid-grey">{t('common.date')}</th>
+                <th className="pb-2 text-left text-xs font-medium text-telivity-mid-grey">{t('folios.description')}</th>
+                <th className="pb-2 text-left text-xs font-medium text-telivity-mid-grey">{t('folios.type')}</th>
+                <th className="pb-2 text-right text-xs font-medium text-telivity-mid-grey">{t('folios.amount')}</th>
                 <th className="pb-2 text-right text-xs font-medium text-telivity-mid-grey"></th>
               </tr>
             </thead>
@@ -236,14 +239,14 @@ function FolioDetail() {
                   <td className="py-2 text-right">
                     {!c.isReversed && !c.isLocked && folio.status === 'open' && (
                       <button onClick={() => { if (confirm('Reverse this charge?')) reverseMutation.mutate(c.id); }} className="text-telivity-orange text-xs hover:underline">
-                        <RotateCcw size={12} className="inline" /> Reverse
+                        <RotateCcw size={12} className="inline" /> {t('folios.reverse')}
                       </button>
                     )}
                   </td>
                 </tr>
               ))}
               {charges.length === 0 && (
-                <tr><td colSpan={5} className="py-4 text-center text-sm text-telivity-mid-grey">No charges</td></tr>
+                <tr><td colSpan={5} className="py-4 text-center text-sm text-telivity-mid-grey">{t('folios.noCharges')}</td></tr>
               )}
             </tbody>
           </table>
@@ -253,10 +256,10 @@ function FolioDetail() {
         <div className="space-y-4">
           <div className="bg-white rounded-xl shadow-sm p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-telivity-navy">Payments</h2>
+              <h2 className="text-sm font-semibold text-telivity-navy">{t('folios.payments')}</h2>
               {folio.status === 'open' && (
                 <button onClick={() => setPaymentOpen(true)} className="flex items-center gap-1 bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold">
-                  <Plus size={14} /> Record
+                  <Plus size={14} /> {t('folios.record')}
                 </button>
               )}
             </div>
@@ -269,19 +272,19 @@ function FolioDetail() {
                 <StatusBadge status={p.status === 'captured' ? 'success' : p.status} label={p.status} />
               </div>
             ))}
-            {payments.length === 0 && <p className="text-sm text-telivity-mid-grey">No payments</p>}
+            {payments.length === 0 && <p className="text-sm text-telivity-mid-grey">{t('folios.noPayments')}</p>}
           </div>
 
           <div className="bg-white rounded-xl shadow-sm p-5 space-y-2">
-            <h2 className="text-sm font-semibold text-telivity-navy mb-3">Actions</h2>
+            <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('common.actions')}</h2>
             {folio.status === 'open' && (
               <button onClick={() => settleMutation.mutate()} disabled={settleMutation.isPending} className="w-full bg-telivity-dark-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
-                Settle Folio
+                {t('folios.settleFolio')}
               </button>
             )}
             {folio.status === 'settled' && (
               <button onClick={() => closeMutation.mutate()} disabled={closeMutation.isPending} className="w-full bg-telivity-deep-blue text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
-                Close Folio
+                {t('folios.closeFolio')}
               </button>
             )}
           </div>
@@ -289,40 +292,40 @@ function FolioDetail() {
       </div>
 
       {/* Post Charge Modal */}
-      <Modal open={chargeOpen} onClose={() => setChargeOpen(false)} title="Post Charge">
+      <Modal open={chargeOpen} onClose={() => setChargeOpen(false)} title={t('folios.postCharge')}>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Type</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('folios.type')}</label>
             <select value={chargeType} onChange={(e) => setChargeType(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
               <option value="room">Room</option><option value="food_beverage">F&B</option><option value="minibar">Minibar</option><option value="laundry">Laundry</option><option value="parking">Parking</option><option value="other">Other</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Amount</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('folios.amount')}</label>
             <input type="number" step="0.01" value={chargeAmount} onChange={(e) => setChargeAmount(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Description</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('folios.description')}</label>
             <input type="text" value={chargeDesc} onChange={(e) => setChargeDesc(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
-          <button onClick={() => postChargeMutation.mutate()} disabled={!chargeAmount || postChargeMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Post Charge</button>
+          <button onClick={() => postChargeMutation.mutate()} disabled={!chargeAmount || postChargeMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('folios.postCharge')}</button>
         </div>
       </Modal>
 
       {/* Record Payment Modal */}
-      <Modal open={paymentOpen} onClose={() => setPaymentOpen(false)} title="Record Payment">
+      <Modal open={paymentOpen} onClose={() => setPaymentOpen(false)} title={t('folios.recordPayment')}>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Method</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('folios.method')}</label>
             <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
               <option value="cash">Cash</option><option value="credit_card">Credit Card</option><option value="debit_card">Debit Card</option><option value="bank_transfer">Bank Transfer</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Amount</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('folios.amount')}</label>
             <input type="number" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
-          <button onClick={() => recordPaymentMutation.mutate()} disabled={!payAmount || recordPaymentMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Record Payment</button>
+          <button onClick={() => recordPaymentMutation.mutate()} disabled={!payAmount || recordPaymentMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('folios.recordPayment')}</button>
         </div>
       </Modal>
     </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon } from 'lucide-react';
@@ -74,6 +75,7 @@ function RoomDetailPanel({
   onTransition: (newStatus: string) => void;
   transitioning: boolean;
 }) {
+  const { t } = useTranslation();
   const { hasRole } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -101,9 +103,9 @@ function RoomDetailPanel({
     mutationFn: () => api.patch(`/v1/rooms/${room.id}`, { amenities }, { params: { propertyId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
-      toast('success', 'Features updated');
+      toast('success', t('rooms.featuresUpdated'));
     },
-    onError: () => toast('error', 'Failed to update features'),
+    onError: () => toast('error', t('rooms.featuresUpdateFailed')),
   });
 
   const addAmenity = () => {
@@ -117,7 +119,7 @@ function RoomDetailPanel({
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative w-full max-w-md bg-white shadow-xl overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between z-10">
-          <h2 className="text-lg font-semibold text-telivity-navy">Room {room.number}</h2>
+          <h2 className="text-lg font-semibold text-telivity-navy">{t('rooms.roomNumber', { number: room.number })}</h2>
           <button onClick={onClose} className="p-1 rounded hover:bg-telivity-light-grey"><X size={18} /></button>
         </div>
         <div className="p-6 space-y-5">
@@ -126,13 +128,13 @@ function RoomDetailPanel({
             {primaryImage ? (
               <img
                 src={primaryImage.url}
-                alt={primaryImage.altText ?? `Room ${room.number}`}
+                alt={primaryImage.altText ?? t('rooms.roomNumber', { number: room.number })}
                 className="w-full h-40 object-cover rounded-xl border border-gray-100"
               />
             ) : (
               <div className="w-full h-40 rounded-xl border border-dashed border-gray-200 bg-telivity-light-grey/40 flex flex-col items-center justify-center text-telivity-mid-grey">
                 <ImageIcon size={28} />
-                <span className="text-xs mt-1">No photo</span>
+                <span className="text-xs mt-1">{t('rooms.noPhoto')}</span>
               </div>
             )}
             {canManagePhotos && (
@@ -140,25 +142,25 @@ function RoomDetailPanel({
                 onClick={() => setPhotosOpen(true)}
                 className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-white/90 backdrop-blur text-telivity-slate text-xs font-medium rounded-lg px-2.5 py-1.5 shadow-sm hover:bg-white"
               >
-                <ImageIcon size={13} /> Manage photos
+                <ImageIcon size={13} /> {t('rooms.managePhotos')}
               </button>
             )}
           </div>
 
           <div className="flex items-center gap-2">
-            <StatusBadge status={room.status} />
+            <StatusBadge status={room.status} label={t(`dashboard.roomStatuses.${room.status}`, { defaultValue: room.status })} />
             {room.isAccessible && <StatusBadge status="info" label="ADA" />}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><p className="text-xs text-telivity-mid-grey">Type</p><p className="text-sm font-medium">{room.roomTypeName ?? '—'}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">Floor</p><p className="text-sm font-medium">{room.floor ?? '—'}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">Building</p><p className="text-sm font-medium">{room.building ?? '—'}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">Guest</p><p className="text-sm font-medium">{room.guestName ?? 'None'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('rooms.type')}</p><p className="text-sm font-medium">{room.roomTypeName ?? '—'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('rooms.floor')}</p><p className="text-sm font-medium">{room.floor ?? '—'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('rooms.building')}</p><p className="text-sm font-medium">{room.building ?? '—'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('rooms.guest')}</p><p className="text-sm font-medium">{room.guestName ?? t('rooms.none')}</p></div>
           </div>
 
           {/* Status Transitions */}
           <div>
-            <p className="text-xs font-medium text-telivity-mid-grey mb-2">Change Status</p>
+            <p className="text-xs font-medium text-telivity-mid-grey mb-2">{t('rooms.changeStatus')}</p>
             <div className="flex flex-wrap gap-2">
               {(VALID_TRANSITIONS[room.status] ?? []).map((s) => (
                 <button
@@ -167,7 +169,7 @@ function RoomDetailPanel({
                   disabled={transitioning}
                   className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium hover:border-telivity-teal hover:bg-telivity-teal/5 transition-colors disabled:opacity-50"
                 >
-                  → {s.replace(/_/g, ' ')}
+                  → {t(`dashboard.roomStatuses.${s}`, { defaultValue: s.replace(/_/g, ' ') })}
                 </button>
               ))}
             </div>
@@ -176,14 +178,14 @@ function RoomDetailPanel({
           {/* Features / amenities */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-telivity-mid-grey">Features</p>
+              <p className="text-xs font-medium text-telivity-mid-grey">{t('rooms.features')}</p>
               {canManageAmenities && dirty && (
                 <button
                   onClick={() => saveAmenities.mutate()}
                   disabled={saveAmenities.isPending}
                   className="text-xs font-semibold text-telivity-teal hover:text-telivity-light-teal disabled:opacity-50"
                 >
-                  {saveAmenities.isPending ? 'Saving…' : 'Save'}
+                  {saveAmenities.isPending ? t('common.saving') : t('common.save')}
                 </button>
               )}
             </div>
@@ -198,7 +200,7 @@ function RoomDetailPanel({
                   )}
                 </span>
               ))}
-              {amenities.length === 0 && <span className="text-xs text-telivity-mid-grey">No features</span>}
+              {amenities.length === 0 && <span className="text-xs text-telivity-mid-grey">{t('rooms.noFeatures')}</span>}
             </div>
             {canManageAmenities && (
               <div className="flex gap-2 mt-2">
@@ -207,10 +209,10 @@ function RoomDetailPanel({
                   value={newAmenity}
                   onChange={(e) => setNewAmenity(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAmenity(); } }}
-                  placeholder="Add a feature…"
+                  placeholder={t('rooms.addFeature')}
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-telivity-teal"
                 />
-                <button onClick={addAmenity} disabled={!newAmenity.trim()} className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium hover:border-telivity-teal disabled:opacity-50">Add</button>
+                <button onClick={addAmenity} disabled={!newAmenity.trim()} className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium hover:border-telivity-teal disabled:opacity-50">{t('common.add')}</button>
               </div>
             )}
           </div>
@@ -218,7 +220,7 @@ function RoomDetailPanel({
       </div>
 
       {canManagePhotos && (
-        <Modal open={photosOpen} onClose={() => setPhotosOpen(false)} title={`Photos — Room ${room.number}`}>
+        <Modal open={photosOpen} onClose={() => setPhotosOpen(false)} title={t('rooms.photosForRoom', { number: room.number })}>
           <MediaGallery propertyId={propertyId} ownerType="room" ownerId={room.id} canManage={canManagePhotos} />
         </Modal>
       )}
@@ -228,6 +230,7 @@ function RoomDetailPanel({
 
 // ---- Room List / Rack ----
 function RoomList() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const queryClient = useQueryClient();
   const [view, setView] = useState<'rack' | 'list'>('rack');
@@ -286,21 +289,21 @@ function RoomList() {
   }, {});
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property to view rooms</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('rooms.selectProperty')}</div>;
   }
 
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
         <DoorOpen size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Rooms</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('rooms.title')}</h1>
         <div className="ml-auto flex gap-2">
           <div className="flex border border-gray-200 rounded-lg overflow-hidden">
             <button onClick={() => setView('rack')} className={`p-2 ${view === 'rack' ? 'bg-telivity-teal text-white' : 'hover:bg-telivity-light-grey'}`}><LayoutGrid size={16} /></button>
             <button onClick={() => setView('list')} className={`p-2 ${view === 'list' ? 'bg-telivity-teal text-white' : 'hover:bg-telivity-light-grey'}`}><List size={16} /></button>
           </div>
           <button onClick={() => setCreateOpen(true)} className="flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-teal transition-colors">
-            <Plus size={16} /> Add Room
+            <Plus size={16} /> {t('rooms.addRoom')}
           </button>
         </div>
       </div>
@@ -309,7 +312,7 @@ function RoomList() {
       <div className="flex flex-wrap gap-2 mb-4">
         {summary.map((s) => (
           <div key={s.status} className="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2">
-            <StatusBadge status={s.status} />
+            <StatusBadge status={s.status} label={t(`dashboard.roomStatuses.${s.status}`, { defaultValue: s.status })} />
             <span className="text-sm font-semibold text-telivity-navy">{s.count}</span>
           </div>
         ))}
@@ -320,7 +323,7 @@ function RoomList() {
         <div className="space-y-6">
           {Object.entries(roomsByFloor).sort(([a], [b]) => Number(a) - Number(b)).map(([floor, floorRooms]) => (
             <div key={floor}>
-              <h3 className="text-xs font-semibold text-telivity-mid-grey uppercase tracking-wider mb-2">Floor {floor}</h3>
+              <h3 className="text-xs font-semibold text-telivity-mid-grey uppercase tracking-wider mb-2">{t('rooms.floorNumber', { floor })}</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                 {floorRooms.sort((a, b) => a.number.localeCompare(b.number)).map((room) => (
                   <div
@@ -330,7 +333,7 @@ function RoomList() {
                   >
                     <p className="text-sm font-semibold text-telivity-navy">{room.number}</p>
                     <p className="text-[10px] text-telivity-mid-grey truncate">{room.roomTypeName ?? ''}</p>
-                    <StatusBadge status={room.status} className="mt-1.5 text-[9px] px-1.5 py-0" />
+                    <StatusBadge status={room.status} label={t(`dashboard.roomStatuses.${room.status}`, { defaultValue: room.status })} className="mt-1.5 text-[9px] px-1.5 py-0" />
                     {room.guestName && (
                       <p className="text-[10px] text-telivity-slate mt-1 truncate">{room.guestName}</p>
                     )}
@@ -340,7 +343,7 @@ function RoomList() {
             </div>
           ))}
           {rooms.length === 0 && (
-            <div className="bg-white rounded-xl shadow-sm p-8 text-center text-telivity-mid-grey">No rooms found</div>
+            <div className="bg-white rounded-xl shadow-sm p-8 text-center text-telivity-mid-grey">{t('rooms.noRoomsFound')}</div>
           )}
         </div>
       )}
@@ -351,11 +354,11 @@ function RoomList() {
           <table className="w-full">
             <thead>
               <tr className="bg-telivity-teal/5 border-b border-gray-100">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Room #</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Floor</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Guest</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.roomNumberHeader')}</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.type')}</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.floor')}</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.guest')}</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">ADA</th>
               </tr>
             </thead>
@@ -365,9 +368,9 @@ function RoomList() {
                   <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{r.number}</td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.roomTypeName ?? '—'}</td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.floor ?? '—'}</td>
-                  <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
+                  <td className="px-4 py-3"><StatusBadge status={r.status} label={t(`dashboard.roomStatuses.${r.status}`, { defaultValue: r.status })} /></td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.guestName ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm">{r.isAccessible ? 'Yes' : '—'}</td>
+                  <td className="px-4 py-3 text-sm">{r.isAccessible ? t('common.yes') : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -388,25 +391,25 @@ function RoomList() {
       )}
 
       {/* Create Room Modal */}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Room">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('rooms.addRoom')}>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Room Number *</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('rooms.roomNumberHeader')} *</label>
             <input type="text" value={newRoomNumber} onChange={(e) => setNewRoomNumber(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Room Type *</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('rooms.roomType')} *</label>
             <select value={newRoomType} onChange={(e) => setNewRoomType(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
-              <option value="">Select type</option>
+              <option value="">{t('rooms.selectType')}</option>
               {types.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Floor</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('rooms.floor')}</label>
             <input type="number" value={newFloor} onChange={(e) => setNewFloor(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
           <button onClick={() => createMutation.mutate()} disabled={!newRoomNumber || !newRoomType || createMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
-            {createMutation.isPending ? 'Creating...' : 'Create Room'}
+            {createMutation.isPending ? t('common.creating') : t('rooms.createRoom')}
           </button>
         </div>
       </Modal>
@@ -416,6 +419,7 @@ function RoomList() {
 
 // ---- Room Types ----
 function RoomTypeList() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -444,7 +448,7 @@ function RoomTypeList() {
   });
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.selectProperty')}</div>;
   }
 
   return (
@@ -453,9 +457,9 @@ function RoomTypeList() {
         <button onClick={() => navigate('/rooms')} className="p-1.5 rounded hover:bg-telivity-light-grey">
           <DoorOpen size={20} />
         </button>
-        <h1 className="text-2xl font-semibold text-telivity-navy">Room Types</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('rooms.roomTypes')}</h1>
         <button onClick={() => setCreateOpen(true)} className="ml-auto flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold">
-          <Plus size={16} /> New Type
+          <Plus size={16} /> {t('rooms.newType')}
         </button>
       </div>
 
@@ -463,54 +467,54 @@ function RoomTypeList() {
         <table className="w-full">
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Code</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Max Occupancy</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Bed Type</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Rooms</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Photos</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.name')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.code')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.maxOccupancy')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.bedType')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.title')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.photos')}</th>
             </tr>
           </thead>
           <tbody>
-            {types.map((t, i) => (
-              <tr key={t.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
-                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{t.name}</td>
-                <td className="px-4 py-3 text-sm text-telivity-slate">{t.code}</td>
-                <td className="px-4 py-3 text-sm text-telivity-slate">{t.maxOccupancy ?? '—'}</td>
-                <td className="px-4 py-3 text-sm text-telivity-slate">{t.bedType ?? '—'}</td>
-                <td className="px-4 py-3 text-sm text-telivity-slate">{t.roomCount ?? '—'}</td>
+              {types.map((roomType, i) => (
+              <tr key={roomType.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
+                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{roomType.name}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{roomType.code}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{roomType.maxOccupancy ?? '—'}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{roomType.bedType ?? '—'}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{roomType.roomCount ?? '—'}</td>
                 <td className="px-4 py-3 text-sm">
-                  <button onClick={() => setPhotoType(t)} className="flex items-center gap-1.5 text-telivity-teal hover:text-telivity-light-teal font-medium">
-                    <ImageIcon size={14} /> Manage
+                  <button onClick={() => setPhotoType(roomType)} className="flex items-center gap-1.5 text-telivity-teal hover:text-telivity-light-teal font-medium">
+                    <ImageIcon size={14} /> {t('common.manage')}
                   </button>
                 </td>
               </tr>
             ))}
             {types.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No room types</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('rooms.noRoomTypes')}</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
       {photoType && propertyId && (
-        <Modal open={!!photoType} onClose={() => setPhotoType(null)} title={`Photos — ${photoType.name}`}>
+        <Modal open={!!photoType} onClose={() => setPhotoType(null)} title={t('rooms.photosForType', { name: photoType.name })}>
           <MediaGallery propertyId={propertyId} ownerType="room_type" ownerId={photoType.id} />
         </Modal>
       )}
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Room Type">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('rooms.newRoomType')}>
         <div className="space-y-4">
-          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Name *</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
-          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Code *</label><input type="text" value={code} onChange={(e) => setCode(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
-          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">Max Occupancy</label><input type="number" min={1} value={maxOcc} onChange={(e) => setMaxOcc(Number(e.target.value))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.name')} *</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('rooms.code')} *</label><input type="text" value={code} onChange={(e) => setCode(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+          <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('rooms.maxOccupancy')}</label><input type="number" min={1} value={maxOcc} onChange={(e) => setMaxOcc(Number(e.target.value))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Bed Type</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('rooms.bedType')}</label>
             <select value={bedType} onChange={(e) => setBedType(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
-              <option value="king">King</option><option value="queen">Queen</option><option value="double">Double</option><option value="twin">Twin</option><option value="suite">Suite</option>
+              <option value="king">{t('rooms.bedTypes.king')}</option><option value="queen">{t('rooms.bedTypes.queen')}</option><option value="double">{t('rooms.bedTypes.double')}</option><option value="twin">{t('rooms.bedTypes.twin')}</option><option value="suite">{t('rooms.bedTypes.suite')}</option>
             </select>
           </div>
-          <button onClick={() => createMutation.mutate()} disabled={!name || !code || createMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">Create</button>
+          <button onClick={() => createMutation.mutate()} disabled={!name || !code || createMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{createMutation.isPending ? t('common.creating') : t('common.create')}</button>
         </div>
       </Modal>
     </div>

@@ -12,6 +12,7 @@ import {
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import { useToast } from '../components/ui/Toast';
+import { useTranslation } from 'react-i18next';
 
 interface ImportEntity {
   entity: string;
@@ -82,6 +83,7 @@ function splitLines(text: string): string[] {
 }
 
 export default function Import() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -229,26 +231,25 @@ export default function Import() {
     <div>
       <div className="flex items-center gap-3 mb-6">
         <Upload size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Data Import</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('import.title')}</h1>
       </div>
 
       <p className="text-sm text-telivity-slate mb-6 max-w-2xl">
-        Migrate records from another PMS. Pick an entity, upload or paste a CSV, map the columns,
-        validate with a dry run, then import.
+        {t('import.description')}
       </p>
 
       {/* Step 1 — entity */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-        <h2 className="text-sm font-semibold text-telivity-navy mb-3">1. Choose what to import</h2>
+        <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('import.choose')}</h2>
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[16rem]">
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Entity</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('import.entity')}</label>
             <select
               value={entity}
               onChange={(e) => onEntityChange(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
             >
-              <option value="">Select an entity…</option>
+              <option value="">{t('import.selectEntity')}</option>
               {entities.map((e) => (
                 <option key={e.entity} value={e.entity}>
                   {e.entity}
@@ -301,7 +302,7 @@ export default function Import() {
 
       {/* Step 2 — CSV input */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-        <h2 className="text-sm font-semibold text-telivity-navy mb-3">2. Provide CSV data</h2>
+        <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('import.provideData')}</h2>
         <div className="flex flex-wrap items-center gap-3 mb-3">
           <input
             ref={fileInputRef}
@@ -316,7 +317,7 @@ export default function Import() {
           >
             <FileText size={15} /> Upload .csv file
           </button>
-          <span className="text-xs text-telivity-mid-grey">or paste below</span>
+          <span className="text-xs text-telivity-mid-grey">{t('import.pasteBelow')}</span>
         </div>
         <textarea
           value={csvText}
@@ -335,12 +336,12 @@ export default function Import() {
       {/* Step 3 — mapping */}
       {selectedEntity && sourceColumns.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-          <h2 className="text-sm font-semibold text-telivity-navy mb-3">3. Map columns</h2>
+          <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('import.mapColumns')}</h2>
           <table className="w-full">
             <thead>
               <tr className="bg-telivity-teal/5 border-b border-gray-100">
-                <th className="px-4 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">Source column</th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">Maps to field</th>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('import.sourceColumn')}</th>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('import.mapsTo')}</th>
               </tr>
             </thead>
             <tbody>

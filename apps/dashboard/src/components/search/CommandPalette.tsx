@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../lib/api';
 import { useProperty } from '../../context/PropertyContext';
 
@@ -21,6 +22,7 @@ interface CommandPaletteProps {
 }
 
 export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { propertyId, isPortfolioMode } = useProperty();
   const [query, setQuery] = useState('');
@@ -77,7 +79,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
       <div
         className="relative w-full max-w-xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden"
         role="dialog"
-        aria-label="Search"
+        aria-label={t('search.title')}
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
           <Search size={18} className="text-telivity-mid-grey flex-shrink-0" />
@@ -85,23 +87,23 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={isPortfolioMode ? 'Search all properties…' : 'Search guests, reservations, folios…'}
+            placeholder={isPortfolioMode ? t('search.allPropertiesPlaceholder') : t('search.placeholder')}
             className="flex-1 text-sm outline-none text-telivity-navy placeholder:text-telivity-mid-grey"
           />
-          <button onClick={onClose} className="p-1 rounded hover:bg-telivity-light-grey" aria-label="Close search">
+          <button onClick={onClose} className="p-1 rounded hover:bg-telivity-light-grey" aria-label={t('search.close')}>
             <X size={16} className="text-telivity-mid-grey" />
           </button>
         </div>
         <div className="max-h-80 overflow-y-auto">
           {debounced.length < 2 ? (
             <p className="px-4 py-6 text-sm text-telivity-mid-grey text-center">
-              Type at least 2 characters to search
+              {t('search.minimumCharacters')}
               <span className="block text-xs mt-1">⌘K / Ctrl+K</span>
             </p>
           ) : isFetching ? (
-            <p className="px-4 py-6 text-sm text-telivity-mid-grey text-center">Searching…</p>
+            <p className="px-4 py-6 text-sm text-telivity-mid-grey text-center">{t('search.searching')}</p>
           ) : results.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-telivity-mid-grey text-center">No results</p>
+            <p className="px-4 py-6 text-sm text-telivity-mid-grey text-center">{t('search.noResults')}</p>
           ) : (
             <ul>
               {results.map((r) => (

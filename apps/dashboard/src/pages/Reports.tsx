@@ -7,19 +7,21 @@ import { api } from '../lib/api';
 import { formatOccupancyPercent } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import KpiCard from '../components/ui/KpiCard';
+import { useTranslation } from 'react-i18next';
 
 type ReportType = 'financial-summary' | 'occupancy' | 'daily-revenue' | 'occupancy-trend';
 
-const REPORT_OPTIONS: { value: ReportType; label: string }[] = [
-  { value: 'financial-summary', label: 'Financial Summary' },
-  { value: 'occupancy', label: 'Occupancy' },
-  { value: 'daily-revenue', label: 'Daily Revenue' },
-  { value: 'occupancy-trend', label: 'Occupancy Trend' },
+const REPORT_OPTIONS: { value: ReportType; labelKey: string }[] = [
+  { value: 'financial-summary', labelKey: 'financialSummary' },
+  { value: 'occupancy', labelKey: 'occupancy' },
+  { value: 'daily-revenue', labelKey: 'dailyRevenue' },
+  { value: 'occupancy-trend', labelKey: 'occupancyTrend' },
 ];
 
 const DEMO_FAVORITES_KEY = 'haip.reportFavorites';
 
 export default function Reports() {
+  const { t } = useTranslation();
   const { propertyId, isPortfolioMode, properties } = useProperty();
   const queryClient = useQueryClient();
   const [report, setReport] = useState<ReportType>('financial-summary');
@@ -111,15 +113,15 @@ export default function Reports() {
   const propertyNameMap = new Map(properties.map((p) => [p.id, p.name]));
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('reports.selectProperty')}</div>;
   }
 
   if (isPortfolioMode && !portfolioReport) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-telivity-mid-grey gap-2">
         <Building2 size={32} className="text-telivity-teal/50" />
-        <p>Daily revenue and occupancy trend are per-property reports.</p>
-        <p className="text-sm">Select a single property to run this report.</p>
+        <p>{t('reports.portfolioNotice')}</p>
+        <p className="text-sm">{t('reports.selectSingleProperty')}</p>
       </div>
     );
   }
@@ -129,7 +131,7 @@ export default function Reports() {
       <div className="flex items-center gap-3 mb-6">
         <BarChart3 size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">
-          {isPortfolioMode ? 'Portfolio Reports' : 'Reports'}
+          {isPortfolioMode ? t('reports.portfolioTitle') : t('reports.title')}
         </h1>
       </div>
 
@@ -149,7 +151,7 @@ export default function Reports() {
                 }`}
               >
                 <Star size={10} className="inline mr-1 fill-telivity-teal text-telivity-teal" />
-                {opt.label}
+                {t(`reports.${opt.labelKey}`)}
               </button>
             );
           })}
@@ -159,19 +161,19 @@ export default function Reports() {
       {/* Report Selector + Date */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Report</label>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.report')}</label>
           <div className="flex items-center gap-2">
             <select value={report} onChange={(e) => setReport(e.target.value as ReportType)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
               {orderedOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+                <option key={o.value} value={o.value}>{t(`reports.${o.labelKey}`)}</option>
               ))}
             </select>
             <button
               type="button"
               onClick={() => toggleFavorite(report)}
               className="p-2 rounded-lg border border-gray-200 hover:border-telivity-teal"
-              title={favorites.includes(report) ? 'Remove favorite' : 'Add favorite'}
-              aria-label={favorites.includes(report) ? 'Remove favorite' : 'Add favorite'}
+              title={favorites.includes(report) ? t('reports.removeFavorite') : t('reports.addFavorite')}
+              aria-label={favorites.includes(report) ? t('reports.removeFavorite') : t('reports.addFavorite')}
             >
               <Star
                 size={16}
@@ -182,17 +184,17 @@ export default function Reports() {
         </div>
         {report !== 'occupancy-trend' ? (
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Date</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.date')}</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
         ) : (
           <>
             <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">From</label>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.from')}</label>
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">To</label>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.to')}</label>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
             </div>
           </>
@@ -209,14 +211,14 @@ export default function Reports() {
           </div>
           {isPortfolioMode && Array.isArray(reportData.byProperty) && (
             <div className="bg-white rounded-xl shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-telivity-navy mb-3">By Property</h3>
+              <h3 className="text-sm font-semibold text-telivity-navy mb-3">{t('reports.byProperty')}</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-telivity-mid-grey border-b border-gray-100">
-                      <th className="pb-2 font-medium">Property</th>
-                      <th className="pb-2 font-medium">Revenue</th>
-                      <th className="pb-2 font-medium">Occupancy</th>
+                      <th className="pb-2 font-medium">{t('reports.property')}</th>
+                      <th className="pb-2 font-medium">{t('reports.revenue')}</th>
+                      <th className="pb-2 font-medium">{t('reports.occupancy')}</th>
                       <th className="pb-2 font-medium">ADR</th>
                       <th className="pb-2 font-medium">RevPAR</th>
                     </tr>
@@ -238,7 +240,7 @@ export default function Reports() {
           )}
           {!isPortfolioMode && reportData.revenueByType && (
             <div className="bg-white rounded-xl shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-telivity-navy mb-3">Revenue Breakdown</h3>
+              <h3 className="text-sm font-semibold text-telivity-navy mb-3">{t('reports.revenueBreakdown')}</h3>
               <div className="space-y-2">
                 {Object.entries(reportData.revenueByType as Record<string, number>).map(([k, v]) => (
                   <div key={k} className="flex justify-between py-1 border-b border-gray-50">
@@ -256,8 +258,8 @@ export default function Reports() {
       {report === 'occupancy' && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard title="Occupied" value={reportData.occupiedRooms ?? 0} icon={Percent} />
-            <KpiCard title="Available" value={reportData.availableRooms ?? 0} icon={Percent} />
+            <KpiCard title={t('reports.occupied')} value={reportData.occupiedRooms ?? 0} icon={Percent} />
+            <KpiCard title={t('reports.available')} value={reportData.availableRooms ?? 0} icon={Percent} />
             {!isPortfolioMode && (
               <KpiCard title="OOO" value={reportData.outOfOrder ?? 0} icon={Percent} />
             )}
@@ -323,7 +325,7 @@ export default function Reports() {
       {/* Occupancy Trend */}
       {report === 'occupancy-trend' && (
         <div className="bg-white rounded-xl shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-telivity-navy mb-3">Occupancy Trend</h3>
+          <h3 className="text-sm font-semibold text-telivity-navy mb-3">{t('reports.occupancyTrend')}</h3>
           {Array.isArray(reportData.daily) && reportData.daily.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={(reportData.daily as { date: string; occupancyRate: number }[]).map((d) => ({
@@ -335,7 +337,7 @@ export default function Reports() {
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-sm text-telivity-mid-grey">No trend data available</p>
+            <p className="text-sm text-telivity-mid-grey">{t('reports.noTrend')}</p>
           )}
         </div>
       )}

@@ -18,9 +18,11 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Ba
 import { format } from 'date-fns';
 import { api } from '../lib/api';
 import { formatOccupancyPercent } from '../lib/api-helpers';
+import { getDateLocale } from '../lib/date-locale';
 import { useProperty } from '../context/PropertyContext';
 import { getSocket } from '../lib/socket';
 import KpiCard from '../components/ui/KpiCard';
+import { useTranslation } from 'react-i18next';
 
 const ROOM_STATUS_COLORS: Record<string, string> = {
   occupied: '#06bdb4',
@@ -33,10 +35,6 @@ const ROOM_STATUS_COLORS: Record<string, string> = {
   guest_ready: '#2cd1b9',
 };
 
-function formatLabel(s: string) {
-  return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 interface ActivityEvent {
   id: string;
   event: string;
@@ -45,9 +43,13 @@ interface ActivityEvent {
 }
 
 export default function Dashboard() {
+  const { t, i18n } = useTranslation();
   const { propertyId, setPropertyId, isPortfolioMode, properties } = useProperty();
   const navigate = useNavigate();
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const now = new Date();
+  const dateLocale = getDateLocale(i18n.resolvedLanguage);
+  const today = format(now, 'yyyy-MM-dd');
+  const formattedToday = format(now, 'PPPP', { locale: dateLocale });
 
   const activeProperty = isPortfolioMode
     ? null
@@ -124,7 +126,7 @@ export default function Dashboard() {
   if (!propertyId) {
     return (
       <div className="flex items-center justify-center h-64 text-telivity-mid-grey">
-        Select a property to view the dashboard
+        {t('dashboard.selectProperty')}
       </div>
     );
   }
@@ -146,48 +148,48 @@ export default function Dashboard() {
       <div>
         <div className="flex items-center gap-3 mb-6">
           <Building2 size={24} className="text-telivity-teal" />
-          <h1 className="text-2xl font-semibold text-telivity-navy">Portfolio Dashboard</h1>
+          <h1 className="text-2xl font-semibold text-telivity-navy">{t('dashboard.portfolio.title')}</h1>
           <span className="text-sm text-telivity-mid-grey ml-auto">
-            {fin.propertyCount ?? properties.length} properties · {format(new Date(), 'EEEE, MMMM d, yyyy')}
+            {t('dashboard.portfolio.propertyCount', { count: fin.propertyCount ?? properties.length })} · {formattedToday}
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <KpiCard
-            title="Portfolio Occupancy"
+            title={t('dashboard.portfolio.occupancy')}
             value={formatOccupancyPercent(kpis.occupancyRate)}
-            subtitle={`${occ.occupiedRooms ?? 0} of ${occ.availableRooms ?? 0} rooms`}
+            subtitle={t('dashboard.occupiedOfRooms', { occupied: occ.occupiedRooms ?? 0, total: occ.availableRooms ?? 0 })}
             icon={Percent}
           />
           <KpiCard
-            title="Portfolio ADR"
+            title={t('dashboard.portfolio.adr')}
             value={kpis.adr != null ? `$${Number(kpis.adr).toFixed(2)}` : '—'}
-            subtitle="Weighted average"
+            subtitle={t('dashboard.portfolio.weightedAverage')}
             icon={DollarSign}
           />
           <KpiCard
-            title="Portfolio RevPAR"
+            title={t('dashboard.portfolio.revpar')}
             value={kpis.revpar != null ? `$${Number(kpis.revpar).toFixed(2)}` : '—'}
-            subtitle="Across all properties"
+            subtitle={t('dashboard.portfolio.acrossAllProperties')}
             icon={TrendingUp}
           />
           <KpiCard
-            title="Total Revenue Today"
+            title={t('dashboard.portfolio.totalRevenueToday')}
             value={kpis.totalRevenue != null ? `$${Number(kpis.totalRevenue).toFixed(2)}` : '—'}
-            subtitle={`${occ.arrivals ?? 0} arrivals · ${occ.departures ?? 0} departures`}
+            subtitle={t('dashboard.portfolio.arrivalsAndDepartures', { arrivals: occ.arrivals ?? 0, departures: occ.departures ?? 0 })}
             icon={BedDouble}
           />
         </div>
 
         {chartData.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
-            <h2 className="text-sm font-semibold text-telivity-navy mb-4">Revenue by Property</h2>
+            <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('dashboard.portfolio.revenueByProperty')}</h2>
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, 'Revenue']} />
+                <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, t('dashboard.portfolio.revenue')]} />
                 <Bar dataKey="revenue" fill="#06bdb4" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -195,16 +197,16 @@ export default function Dashboard() {
         )}
 
         <div className="bg-white rounded-xl shadow-sm p-5">
-          <h2 className="text-sm font-semibold text-telivity-navy mb-4">Property Breakdown</h2>
+          <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('dashboard.portfolio.propertyBreakdown')}</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-telivity-mid-grey border-b border-gray-100">
-                  <th className="pb-2 font-medium">Property</th>
-                  <th className="pb-2 font-medium">Occupancy</th>
-                  <th className="pb-2 font-medium">ADR</th>
-                  <th className="pb-2 font-medium">RevPAR</th>
-                  <th className="pb-2 font-medium">Revenue</th>
+                  <th className="pb-2 font-medium">{t('dashboard.portfolio.property')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.occupancy')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.adr')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.revpar')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.portfolio.revenue')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -242,52 +244,56 @@ export default function Dashboard() {
   const roomData = roomSummary?.data ?? roomSummary ?? [];
   const chartData = Array.isArray(roomData)
     ? roomData.map((r: { status: string; count: number }) => ({
-        name: formatLabel(r.status),
+        name: t(`dashboard.roomStatuses.${r.status}`, { defaultValue: r.status.replace(/_/g, ' ') }),
+        status: r.status,
         value: Number(r.count),
         color: ROOM_STATUS_COLORS[r.status] ?? '#bbbbc4',
       }))
     : [];
 
   const totalRooms = chartData.reduce((sum: number, d: { value: number }) => sum + d.value, 0);
-  const occupiedCount = chartData.find((d: { name: string }) => d.name === 'Occupied')?.value ?? 0;
+  const occupiedCount = chartData.find((d: { status: string }) => d.status === 'occupied')?.value ?? 0;
 
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
         <LayoutDashboard size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Dashboard</h1>
-        <span className="text-sm text-telivity-mid-grey ml-auto">{format(new Date(), 'EEEE, MMMM d, yyyy')}</span>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('nav.dashboard')}</h1>
+        <span className="text-sm text-telivity-mid-grey ml-auto">{formattedToday}</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard
-          title="Occupancy"
+          title={t('dashboard.occupancy')}
           value={formatOccupancyPercent(occ.occupancyRate)}
-          subtitle={`${occ.occupiedRooms ?? occupiedCount} of ${occ.availableRooms ?? totalRooms} rooms`}
+          subtitle={t('dashboard.occupiedOfRooms', {
+            occupied: occ.occupiedRooms ?? occupiedCount,
+            total: occ.availableRooms ?? totalRooms,
+          })}
           icon={Percent}
           numericValue={occ.occupancyRate != null ? Number(occ.occupancyRate) : undefined}
           threshold={thr.occupancyRate}
         />
         <KpiCard
-          title="ADR"
+          title={t('dashboard.adr')}
           value={kpis.adr != null ? `$${Number(kpis.adr).toFixed(2)}` : '—'}
-          subtitle="Average Daily Rate"
+          subtitle={t('dashboard.averageDailyRate')}
           icon={DollarSign}
           numericValue={kpis.adr != null ? Number(kpis.adr) : undefined}
           threshold={thr.adr}
         />
         <KpiCard
-          title="RevPAR"
+          title={t('dashboard.revpar')}
           value={kpis.revpar != null ? `$${Number(kpis.revpar).toFixed(2)}` : '—'}
-          subtitle="Revenue per Available Room"
+          subtitle={t('dashboard.revenuePerAvailableRoom')}
           icon={TrendingUp}
           numericValue={kpis.revpar != null ? Number(kpis.revpar) : undefined}
           threshold={thr.revpar}
         />
         <KpiCard
-          title="Revenue Today"
+          title={t('dashboard.revenueToday')}
           value={kpis.totalRevenue != null ? `$${Number(kpis.totalRevenue).toFixed(2)}` : '—'}
-          subtitle="Room + F&B + Other"
+          subtitle={t('dashboard.revenueBreakdown')}
           icon={BedDouble}
           numericValue={kpis.totalRevenue != null ? Number(kpis.totalRevenue) : undefined}
           threshold={thr.totalRevenue}
@@ -304,7 +310,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="text-sm font-medium text-telivity-navy">{Array.isArray(arrList) ? arrList.length : 0}</p>
-                <p className="text-xs text-telivity-mid-grey">Arrivals</p>
+                <p className="text-xs text-telivity-mid-grey">{t('dashboard.arrivals')}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -313,7 +319,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="text-sm font-medium text-telivity-navy">{Array.isArray(ihList) ? ihList.length : 0}</p>
-                <p className="text-xs text-telivity-mid-grey">In-House</p>
+                <p className="text-xs text-telivity-mid-grey">{t('dashboard.inHouse')}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -322,7 +328,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="text-sm font-medium text-telivity-navy">{Array.isArray(depList) ? depList.length : 0}</p>
-                <p className="text-xs text-telivity-mid-grey">Departures</p>
+                <p className="text-xs text-telivity-mid-grey">{t('dashboard.departures')}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -331,14 +337,14 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="text-sm font-medium text-telivity-navy">{totalRooms - occupiedCount}</p>
-                <p className="text-xs text-telivity-mid-grey">Available Rooms</p>
+                <p className="text-xs text-telivity-mid-grey">{t('dashboard.availableRooms')}</p>
               </div>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-5 lg:col-span-2">
-          <h2 className="text-sm font-semibold text-telivity-navy mb-4">Room Status</h2>
+          <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('dashboard.roomStatus')}</h2>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
@@ -378,20 +384,20 @@ export default function Dashboard() {
               <Brain size={20} className="text-telivity-teal" />
             </div>
             <div className="flex-1">
-              <h2 className="text-sm font-semibold text-telivity-navy">Revenue Intelligence</h2>
+              <h2 className="text-sm font-semibold text-telivity-navy">{t('dashboard.revenueIntelligence')}</h2>
               <p className="text-xs text-telivity-mid-grey mt-0.5">
-                {agentStatuses.filter((a: { isEnabled: boolean }) => a.isEnabled).length} agents active
+                {t('dashboard.activeAgents', { count: agentStatuses.filter((a: { isEnabled: boolean }) => a.isEnabled).length })}
                 {' | '}
-                {agentStatuses.reduce((s: number, a: { pendingDecisions?: number }) => s + (a.pendingDecisions ?? 0), 0)} pending decisions
+                {t('dashboard.pendingDecisions', { count: agentStatuses.reduce((s: number, a: { pendingDecisions?: number }) => s + (a.pendingDecisions ?? 0), 0) })}
               </p>
             </div>
-            <span className="text-xs text-telivity-teal font-medium">View Revenue Management &rarr;</span>
+            <span className="text-xs text-telivity-teal font-medium">{t('dashboard.viewRevenueManagement')} &rarr;</span>
           </div>
         </div>
       )}
 
       <div className="bg-white rounded-xl shadow-sm p-5">
-        <h2 className="text-sm font-semibold text-telivity-navy mb-4">Recent Activity (Live)</h2>
+        <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('dashboard.recentActivityLive')}</h2>
         {activities.length > 0 ? (
           <div className="space-y-2">
             {activities.map((a, i) => (
@@ -399,13 +405,13 @@ export default function Dashboard() {
                 <div className="w-2 h-2 rounded-full bg-telivity-teal flex-shrink-0" />
                 <span className="text-sm font-medium text-telivity-navy">{a.event}</span>
                 <span className="text-xs text-telivity-mid-grey ml-auto">
-                  {format(new Date(a.timestamp), 'HH:mm:ss')}
+                  {format(new Date(a.timestamp), 'pp', { locale: dateLocale })}
                 </span>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-telivity-mid-grey">Waiting for real-time events...</p>
+          <p className="text-sm text-telivity-mid-grey">{t('dashboard.waitingForEvents')}</p>
         )}
       </div>
     </div>

@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import KpiCard from '../components/ui/KpiCard';
+import { useTranslation } from 'react-i18next';
 
 interface RevenueSummary {
   totalRevenue?: number;
@@ -46,6 +47,7 @@ const SEVERITY_ICONS = { critical: XCircle, warning: AlertTriangle, info: Info }
 const SEVERITY_COLORS = { critical: 'text-red-600 bg-red-50', warning: 'text-telivity-orange bg-orange-50', info: 'text-blue-500 bg-blue-50' };
 
 function AnomalySection({ propertyId }: { propertyId: string }) {
+  const { t } = useTranslation();
   const { data: decisions } = useQuery({
     queryKey: ['agent-decisions', propertyId, 'night_audit'],
     queryFn: () => api.get(`/v1/agents/${propertyId}/night_audit/decisions`, { params: { limit: 5 } }).then((r) => r.data?.data ?? r.data ?? []),
@@ -61,8 +63,8 @@ function AnomalySection({ propertyId }: { propertyId: string }) {
     <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border-l-4 border-telivity-teal">
       <div className="flex items-center gap-3 mb-4">
         <Brain size={20} className="text-telivity-teal" />
-        <h2 className="text-sm font-semibold text-telivity-navy">AI Anomaly Detection</h2>
-        <span className="text-xs text-telivity-mid-grey ml-auto">{anomalies.length} issues found</span>
+        <h2 className="text-sm font-semibold text-telivity-navy">{t('nightAudit.anomalyDetection')}</h2>
+        <span className="text-xs text-telivity-mid-grey ml-auto">{t('nightAudit.issuesFound', { count: anomalies.length })}</span>
       </div>
       <div className="space-y-2">
         {anomalies.slice(0, 10).map((a: any, i: number) => {
@@ -85,6 +87,7 @@ function AnomalySection({ propertyId }: { propertyId: string }) {
 }
 
 export default function NightAudit() {
+  const { t } = useTranslation();
   const { propertyId } = useProperty();
   const queryClient = useQueryClient();
   const [auditDate, setAuditDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -108,14 +111,14 @@ export default function NightAudit() {
   });
 
   if (!propertyId) {
-    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">Select a property</div>;
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('nightAudit.selectProperty')}</div>;
   }
 
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
         <Moon size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">Night Audit</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('nightAudit.title')}</h1>
       </div>
 
       {/* AI Anomalies Section */}
@@ -123,10 +126,10 @@ export default function NightAudit() {
 
       {/* Run Audit Panel */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-        <h2 className="text-sm font-semibold text-telivity-navy mb-4">Run Night Audit</h2>
+        <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('nightAudit.run')}</h2>
         <div className="flex gap-3 items-end">
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Business Date</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('nightAudit.businessDate')}</label>
             <input type="date" value={auditDate} onChange={(e) => setAuditDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
           <button
@@ -135,14 +138,14 @@ export default function NightAudit() {
             className="flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-6 py-2 text-sm font-semibold hover:bg-telivity-light-teal disabled:opacity-50"
           >
             <Play size={16} />
-            {runMutation.isPending ? 'Running...' : 'Run Night Audit'}
+            {runMutation.isPending ? t('nightAudit.running') : t('nightAudit.run')}
           </button>
         </div>
 
         {runMutation.isPending && (
           <div className="mt-4 flex items-center gap-3">
             <div className="w-5 h-5 border-2 border-telivity-teal border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-telivity-slate">Processing audit steps...</span>
+            <span className="text-sm text-telivity-slate">{t('nightAudit.processing')}</span>
           </div>
         )}
 
@@ -175,15 +178,15 @@ export default function NightAudit() {
       {/* Audit History */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-telivity-navy">Audit History</h2>
+          <h2 className="text-sm font-semibold text-telivity-navy">{t('nightAudit.history')}</h2>
         </div>
         <table className="w-full">
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Date</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Started</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Completed</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.date')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('nightAudit.started')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('nightAudit.completed')}</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">Charges</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">No-Shows</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">Revenue</th>
@@ -202,7 +205,7 @@ export default function NightAudit() {
               </tr>
             ))}
             {audits.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No audit history</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('nightAudit.empty')}</td></tr>
             )}
           </tbody>
         </table>
