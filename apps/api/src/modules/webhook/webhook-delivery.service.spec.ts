@@ -186,6 +186,34 @@ describe('WebhookDeliveryService', () => {
     expect(stored.attempts).toBe(5);
   });
 
+  it('emits webhook.delivery_failed internally on permanent failure', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    const db = createStatefulMockDb({ ...subscription, subscriberName: 'BR Compliance' });
+    const emitter = { emit: vi.fn() };
+    const service = new WebhookDeliveryService(db as any, emitter as any);
+
+    const delivery = await service.enqueue(payload, subscription.id);
+    await new Promise((r) => setImmediate(r));
+
+    // Not yet permanent — no alert.
+    expect(emitter.emit).not.toHaveBeenCalled();
+
+    for (let i = 0; i < 4; i++) {
+      await service.attemptDelivery(delivery.id);
+    }
+
+    expect(emitter.emit).toHaveBeenCalledTimes(1);
+    expect(emitter.emit).toHaveBeenCalledWith('webhook.delivery_failed', {
+      propertyId: 'prop-1',
+      subscriptionId: 'sub-1',
+      subscriberName: 'BR Compliance',
+      deliveryId: delivery.id,
+      eventType: 'reservation.created',
+      attempts: 5,
+      lastError: 'HTTP 500',
+    });
+  });
+
   it('signs "unsigned" when subscription has no secret', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200 });
     const sub = { ...subscription, secret: null };

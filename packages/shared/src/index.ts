@@ -26,6 +26,13 @@ export const WEBHOOK_EVENTS = {
   'payment.refunded': 'payment.refunded',
   'payment.failed': 'payment.failed',
 
+  // Fiscal document / invoice events (regional tax integrations).
+  // Core stores only a document reference on the folio; issuance is performed
+  // by external integrations subscribed to invoice.requested.
+  'invoice.requested': 'invoice.requested',
+  'invoice.issued': 'invoice.issued',
+  'invoice.voided': 'invoice.voided',
+
   // Room events
   'room.status_changed': 'room.status_changed',
 

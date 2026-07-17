@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-  <img src="https://img.shields.io/badge/Tests-1137%20passing-brightgreen" alt="1137 Tests Passing" />
+  <img src="https://img.shields.io/badge/Tests-1151%20passing-brightgreen" alt="1151 Tests Passing" />
   <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
@@ -377,9 +377,11 @@ executes; approval always runs the agent's own recommendation. Off by default
 
 ### Webhook Engine
 - Real-time webhook delivery on every entity state change
-- 64 event types including accounting events (`deposit.received`, `ar.transfer_created`, `cashdrawer.session_closed`), house-account & folio events (`houseaccount.opened`, `folio.transactions_moved`, `payment.corrected`), group events (`group.block_created`, `group.rooming_list_imported`), reservation-ops events (`reservation.note_added`, `reservation.message_sent`, `reservation.bulk_action_completed`), and AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
+- 73 event types including accounting events (`deposit.received`, `ar.transfer_created`, `cashdrawer.session_closed`), house-account & folio events (`houseaccount.opened`, `folio.transactions_moved`, `payment.corrected`), fiscal document events (`invoice.requested`, `invoice.issued`, `invoice.voided`), group events (`group.block_created`, `group.rooming_list_imported`), reservation-ops events (`reservation.note_added`, `reservation.message_sent`, `reservation.bulk_action_completed`), and AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
 - Event format: `entity.action` (e.g., `reservation.created`, `housekeeping.task_completed`)
 - Subscription management for external consumers
+- HMAC-signed deliveries with retries; permanent failures raise a critical staff notification
+- See **[`docs/webhooks.md`](./docs/webhooks.md)** for the integration guide (signature verification, payload conventions, fiscal documents, regional compliance examples)
 
 ### ChatGPT Gateway (Connect GPT)
 - A standalone, deployable **gateway that exposes HAIP hotel search & booking as a ChatGPT Custom GPT Action** (`tools/haip-connect-gpt`) — guests search availability and create/modify/cancel reservations by chatting
@@ -426,7 +428,7 @@ executes; approval always runs the agent's own recommendation. Off by default
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (1137 tests across 137 test files) | Unit and integration tests |
+| Testing | Vitest (1151 tests across 139 test files) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -548,7 +550,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (1137 tests across 137 test files)
+# All tests (1151 tests across 139 test files)
 pnpm test
 
 # API tests only
@@ -1065,7 +1067,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (1137 tests, 137 files)
+pnpm test             # Run all tests (1151 tests, 139 files)
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```
