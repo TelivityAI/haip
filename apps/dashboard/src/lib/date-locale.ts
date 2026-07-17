@@ -4,7 +4,7 @@ import { de, enUS, ptBR } from 'date-fns/locale';
 const DATE_LOCALES: Record<string, Locale> = {
   de,
   en: enUS,
-  ptBR: ptBR,
+  pt: ptBR,
 };
 
 export function getDateLocale(language?: string): Locale {
