@@ -64,6 +64,12 @@ export {
   payments,
 } from './folio.js';
 
+// Fiscal documents — external tax document references (invoice.* events)
+export {
+  fiscalDocumentStatusEnum,
+  fiscalDocuments,
+} from './fiscal-document.js';
+
 // Housekeeping
 export {
   housekeepingTaskStatusEnum,

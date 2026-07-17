@@ -21,6 +21,12 @@ import { CreateChargeDto } from './dto/create-charge.dto';
 import { ListChargesDto } from './dto/list-charges.dto';
 import { CreateRoutingRuleDto } from './dto/create-routing-rule.dto';
 import { MoveTransactionsDto } from './dto/move-transactions.dto';
+import {
+  RequestFiscalDocumentDto,
+  IssueFiscalDocumentDto,
+  VoidFiscalDocumentDto,
+} from './dto/fiscal-document.dto';
+import { FiscalDocumentService } from './fiscal-document.service';
 
 @ApiTags('folios')
 @Controller('folios')
@@ -28,6 +34,7 @@ export class FolioController {
   constructor(
     private readonly folioService: FolioService,
     private readonly folioRoutingService: FolioRoutingService,
+    private readonly fiscalDocumentService: FiscalDocumentService,
   ) {}
 
   // --- Split-folio routing rules (KB 14.2) ---
@@ -193,6 +200,60 @@ export class FolioController {
       chargeId: dto.chargeId,
       chargeType: dto.chargeType,
     });
+  }
+
+  // --- Fiscal documents (regional tax integrations, invoice.* events) ---
+
+  @Post(':id/fiscal-documents')
+  @Roles('admin', 'front_desk', 'night_auditor')
+  @ApiOperation({
+    summary:
+      'Request a fiscal document (invoice/tax note) for a folio — emits invoice.requested for external issuing integrations',
+  })
+  @ApiResponse({ status: 201, description: 'Fiscal document requested' })
+  requestFiscalDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RequestFiscalDocumentDto,
+  ) {
+    return this.fiscalDocumentService.request(id, dto);
+  }
+
+  @Get(':id/fiscal-documents')
+  @ApiOperation({ summary: 'List fiscal documents for a folio' })
+  @ApiResponse({ status: 200, description: 'Fiscal documents' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  listFiscalDocuments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.fiscalDocumentService.list(id, propertyId);
+  }
+
+  @Post(':id/fiscal-documents/:documentId/issue')
+  @Roles('admin', 'front_desk', 'night_auditor')
+  @ApiOperation({
+    summary:
+      'Record the issued document reference (called by the issuing integration) — emits invoice.issued',
+  })
+  @ApiResponse({ status: 200, description: 'Fiscal document issued' })
+  issueFiscalDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Body() dto: IssueFiscalDocumentDto,
+  ) {
+    return this.fiscalDocumentService.issue(id, documentId, dto);
+  }
+
+  @Post(':id/fiscal-documents/:documentId/void')
+  @Roles('admin', 'front_desk', 'night_auditor')
+  @ApiOperation({ summary: 'Void a fiscal document (or cancel a pending request) — emits invoice.voided' })
+  @ApiResponse({ status: 200, description: 'Fiscal document voided' })
+  voidFiscalDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Body() dto: VoidFiscalDocumentDto,
+  ) {
+    return this.fiscalDocumentService.void(id, documentId, dto);
   }
 
   @Post(':id/transfer-to-city-ledger')
