@@ -7,9 +7,8 @@
 
 ## THE PRODUCT
 
-An open-source, TypeScript/Node.js, API-first hotel PMS with native OTAIP agent orchestration and air booking. The only PMS in the world where AI agents are first-class citizens, not bolted-on afterthoughts. The Apaleo of open source — but with OTAIP agents built in and air distribution native.
+An open-source, TypeScript/Node.js, API-first hotel PMS with native OTAIP agent orchestration and air booking. The only PMS in the world where AI agents are first-class citizens, not bolted-on afterthoughts. 
 
-**Open source repo:** Trojan horse for Telivity commercial layer (managed cloud, premium agents, enterprise support).
 
 ---
 
@@ -100,7 +99,7 @@ What gets built:
 
 **Deliverables:** Complete billing flow. Check-in creates folio, charges post, payments settle, checkout zeroes balance. Stripe integration works.
 
-**Estimate:** 3 sessions × 3-4 hours = ~10 hours Claude Code time
+
 
 ---
 
@@ -116,8 +115,6 @@ What gets built:
 - **Room status updates:** Trigger housekeeping on checkout
 
 **Deliverables:** Full front desk operations. Check-in to checkout works end-to-end including group scenarios.
-
-**Estimate:** 2 sessions × 3-4 hours = ~7 hours Claude Code time
 
 ---
 
@@ -135,7 +132,6 @@ What gets built:
 
 **Deliverables:** Working housekeeping module. Room status transitions work, tasks auto-assign, checklists trackable.
 
-**Estimate:** 2 sessions × 3-4 hours = ~7 hours Claude Code time
 
 ---
 
@@ -157,7 +153,6 @@ What gets built:
 
 **Deliverables:** Night audit runs automatically, posts charges, processes no-shows, generates reports. Day close works.
 
-**Estimate:** 2 sessions × 3-4 hours = ~7 hours Claude Code time
 
 ---
 
@@ -174,7 +169,6 @@ What gets built:
 
 **Deliverables:** PMS connected to a channel manager. Rates push out, bookings come in, inventory stays in sync. Hotel is bookable on OTAs.
 
-**Estimate:** 3 sessions × 4 hours = ~12 hours Claude Code time
 
 ---
 
@@ -207,24 +201,9 @@ What gets built:
 
 **Deliverables:** Usable admin interface. A hotel can actually operate on this system.
 
-**Estimate:** 5 sessions × 4 hours = ~20 hours Claude Code time
 
 ---
 
-## TOTAL ESTIMATES
-
-| Phase | Sessions | Hours | Weeks |
-|-------|----------|-------|-------|
-| 0. Scaffolding | 2 | ~8h | 1-2 |
-| 1. Reservations | 4 | ~14h | 2-4 |
-| 2. Billing | 3 | ~10h | 4-6 |
-| 3. Front Desk | 2 | ~7h | 6-7 |
-| 4. Housekeeping | 2 | ~7h | 7-8 |
-| 5. Night Audit | 2 | ~7h | 8-9 |
-| 6. Channel Manager | 3 | ~12h | 9-11 |
-| 7. OTAIP Agents | 4 | ~16h | 11-13 |
-| 8. Admin UI | 5 | ~20h | 13-16 |
-| **Total** | **~27 sessions** | **~101 hours** | **~16 weeks** |
 
 ### What This Means in Real Time
 
@@ -263,11 +242,11 @@ PMS + channel manager + OTAIP agents. Now it's a real product. Hotels can get bo
 
 | Decision | Answer | Source |
 |----------|--------|--------|
-| Agents in PMS or on PMS? | **On PMS via API** (Option B) | Dušan confirmed |
-| Target market | **General — fork it, it's yours** | Dušan confirmed |
-| MVP scope | **Multi-property** (STR operators need this) | Dušan confirmed |
-| Repo | **Separate repo** from OTAIP | Recommended, Dušan confirmed |
-| Name | **HAIP** (Hotel AI Platform) | Dušan confirmed |
+| Agents in PMS or on PMS? | **On PMS via API** (Option B) | confirmed |
+| Target market | **General — fork it, it's yours** | confirmed |
+| MVP scope | **Multi-property** (STR operators need this) | confirmed |
+| Repo | **Separate repo** from OTAIP | Recommended, confirmed |
+| Name | **HAIP** (Hotel AI Platform) | confirmed |
 | Domain questions | **Research agents found answers** | 12/12 answered |
 
 ## RESEARCH-INFORMED ADJUSTMENTS TO BUILD PLAN
@@ -316,4 +295,4 @@ Based on 12 domain questions answered by research agents:
 | STR vs Hotel | Hotel core first, STR module later |
 | Channel distribution | ChannelAdapter interface — ship SiteMinder/DerbySoft adapters first (instant 450+ OTA reach), direct OTA adapters over time (Booking.com, Expedia). Same pattern as OTAIP ConnectAdapter. |
 | Revenue mgmt + distribution | Existential priority — elevated to Phase 1-2 |
-| Dušan's PMS experience | Limited to SiteMinder and STR tools. Treats hotel as "Air PSS/Distribution Lite" — domain decisions informed by air distribution parallels |
+| Dušan's PMS experience | Limited to SiteMinder and STR tools for now|
