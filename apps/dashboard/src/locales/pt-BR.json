@@ -42,37 +42,88 @@
   "admin": {
     "actions": "Ações",
     "addUser": "Adicionar usuário",
-    "couldNotCreateRole": "Não foi possível criar o perfil (a chave pode já estar em uso).",
+    "couldNotCreateRole": "Não foi possível criar o cargo (a chave pode já estar em uso).",
     "couldNotCreateUser": "Não foi possível criar o usuário (o e-mail pode já estar em uso).",
-    "createRole": "Criar perfil",
+    "createRole": "Criar cargo",
     "createUser": "Criar usuário",
     "creating": "Criando…",
     "delete": "Excluir",
     "description": "Descrição",
     "disable": "Desativar",
     "disableUser": "Desativar usuário",
-    "editRoles": "Editar perfis",
+    "editRoles": "Editar cargos",
     "email": "E-mail",
     "keyLabel": "Chave * (minúsculas, sublinhados)",
     "keyPlaceholder": "gerente_spa",
     "name": "Nome",
     "namePlaceholder": "Gerente de Spa",
     "new": "Novo",
-    "newRole": "Novo perfil",
+    "newRole": "Novo cargo",
     "noUsersYet": "Nenhum usuário cadastrado",
     "permissionsCount": "{{count}} permissões",
     "required": "*",
-    "roles": "Perfis",
-    "rolesForUser": "Perfis — {{name}}",
+    "roles": "Cargos",
+    "rolesForUser": "Cargos — {{name}}",
     "savePermissions": "Salvar permissões",
-    "saveRoles": "Salvar perfis",
+    "saveRoles": "Salvar cargos",
     "saving": "Salvando…",
-    "selectARole": "Selecione um perfil",
+    "selectARole": "Selecione um cargo",
     "status": "Status",
     "system": "sistema",
-    "systemRoleReadOnly": "perfil de sistema (somente leitura)",
+    "systemRoleReadOnly": "cargo de sistema (somente leitura)",
     "unsavedChanges": "Alterações não salvas",
     "users": "Usuários"
+  },
+  "bookingEngine": {
+    "active": "ativa",
+    "autoConfirm": "Confirmar automaticamente reservas pagas",
+    "branding": "Personalização",
+    "copied": "Copiada",
+    "copy": "Copiar",
+    "copyKeyWarning": "Copie esta chave agora — você não poderá vê-la novamente.",
+    "created": "Criada em",
+    "depositPolicy": "Política de Depósito",
+    "depositTypes": {
+      "first_night": "Primeira noite",
+      "full": "Valor integral",
+      "none": "Sem depósito",
+      "percentage": "Porcentagem"
+    },
+    "description": "Permita que os hóspedes reservem diretamente do seu site, sem comissões.",
+    "disabled": "Desativado",
+    "dismiss": "Ignorar",
+    "displayName": "Nome de Exibição",
+    "displayNamePlaceholder": "Mostrado aos hóspedes na página de reservas",
+    "enabled": "Ativado",
+    "generateKey": "Gerar chave",
+    "key": "Chave",
+    "label": "Rótulo",
+    "logo": "Logotipo",
+    "noKeysYet": "Nenhuma chave pública ainda",
+    "noRatePlans": "Nenhum plano de tarifas",
+    "noRoomTypes": "Nenhum tipo de quarto",
+    "percentageLabel": "Porcentagem",
+    "primaryColor": "Cor Principal",
+    "accentColor": "Cor de Destaque",
+    "promptLabel": "Rótulo para esta chave pública (ex: \"Site de marketing\")",
+    "publishableKeys": "Chaves Públicas",
+    "ratePlans": "Planos de Tarifas",
+    "refundableDeposit": "Depósito reembolsável",
+    "revoke": "Revogar",
+    "revoked": "revogada",
+    "roomTypes": "Tipos de Quarto",
+    "sellableInventory": "Inventário Disponível",
+    "sellableInventoryDescription": "Apenas os tipos de quarto e planos de tarifas marcados estarão disponíveis para reserva.",
+    "title": "Reservas Diretas",
+    "toasts": {
+      "keyGenerated": "Chave pública gerada",
+      "keyGenerationFailed": "Falha ao gerar chave",
+      "keyRevoked": "Chave revogada",
+      "keyRevocationFailed": "Falha ao revogar chave",
+      "settingsSaved": "Configurações do sistema de reservas salvas",
+      "settingsSaveFailed": "Falha ao salvar configurações"
+    },
+    "type": "Tipo"
   },
   "cashier": {
     "amount": "Valor",
@@ -245,7 +296,7 @@
     "roomStatus": "Status dos quartos",
     "roomStatuses": {
       "clean": "Limpo",
-      "guest_ready": "Pronto para Hóspede",
+      "guest_ready": "Pronto",
       "inspected": "Inspecionado",
       "occupied": "Ocupado",
       "out_of_order": "Em manutenção",
@@ -261,6 +312,14 @@
     "allStatus": "Todos os status",
     "amount": "Valor",
     "balance": "Saldo",
+    "chargeTypes": {
+      "food_beverage": "A&B",
+      "laundry": "Lavanderia",
+      "minibar": "Frigobar",
+      "other": "Outros",
+      "parking": "Estacionamento",
+      "room": "Quarto"
+    },
     "charges": "Lançamentos",
     "closeFolio": "Fechar conta",
     "closed": "Fechada",
@@ -268,11 +327,24 @@
     "description": "Descrição",
     "folioNumber": "Nº da conta",
     "guest": "Hóspede",
+    "master": "Mestre",
     "method": "Método",
     "noCharges": "Nenhum lançamento",
     "noFoliosFound": "Nenhuma conta encontrada",
     "noPayments": "Nenhum pagamento",
     "open": "Aberta",
+    "paymentMethods": {
+      "bank_transfer": "Transferência Bancária",
+      "cash": "Dinheiro",
+      "credit_card": "Cartão de Crédito",
+      "debit_card": "Cartão de Débito"
+    },
+    "paymentStatuses": {
+      "captured": "Recebido",
+      "failed": "Falhou",
+      "pending": "Pendente",
+      "refunded": "Reembolsado"
+    },
     "payments": "Pagamentos",
     "postCharge": "Lançar cobrança",
     "record": "Registrar",
@@ -303,6 +375,7 @@
     "driversLicense": "Carteira de motorista",
     "enterIdNumber": "Informe o número do documento",
     "express": "Expresso",
+    "expressCheckoutConfirm": "Fazer check-out expresso? Isso quitará automaticamente a conta.",
     "groupCheckIn": "Check-in em grupo ({{count}})",
     "guest": "Hóspede",
     "idDocumentType": "Tipo de documento",
@@ -372,6 +445,7 @@
   },
   "guests": {
     "confirmDeletion": "Confirmar exclusão do hóspede",
+    "confirmDeletionPrompt": "Você tem certeza absoluta? Essa ação não pode ser desfeita.",
     "createGuest": "Criar hóspede",
     "deleteGuest": "Excluir hóspede (LGPD)",
     "deletionDescription": "Todos os dados pessoais de {{name}} serão excluídos permanentemente de acordo com o direito de eliminação previsto na LGPD.",
@@ -567,7 +641,7 @@
     "settings": "Configurações",
     "tagline": "Plataforma de IA Hoteleira",
     "tax": "Configurações Fiscais",
-    "usersRoles": "Usuários e Perfis"
+    "usersRoles": "Usuários e Cargos"
   },
   "nightAudit": {
     "anomalyDetection": "Detecção de anomalias por IA",
@@ -618,14 +692,14 @@
       },
       "admin": {
         "roles": {
-          "manage": "Gerenciar perfis e permissões"
+          "manage": "Gerenciar cargos e permissões"
         },
         "users": {
           "manage": "Gerenciar usuários"
         }
       },
       "bookingengine": {
-        "manage": "Gerenciar o motor de reservas direto"
+        "manage": "Gerenciar o sistema de reservas diretas"
       },
       "cashier": {
         "access": "Operações de caixa"
@@ -693,7 +767,7 @@
         "manage": "Gerenciar configurações da propriedade"
       },
       "tax": {
-        "manage": "Perfis e regras fiscais"
+        "manage": "Cargos e regras fiscais"
       }
     }
   },
@@ -792,8 +866,8 @@
     "status": "Status",
     "statuses": {
       "cancelled": "Cancelada",
-      "checked_in": "Check-in realizado",
-      "checked_out": "Check-out realizado",
+      "checked_in": "Hospedado",
+      "checked_out": "Finalizado",
       "confirmed": "Confirmada",
       "no_show": "Não compareceu",
       "pending": "Pendente"
@@ -985,12 +1059,12 @@
     "saving": "Salvando...",
     "selectProperty": "Selecione uma propriedade",
     "staffDashboardBranding": "Identidade visual do painel da equipe",
-    "staffDashboardBrandingDescription": "Separada da identidade visual do motor de reservas para hóspedes. Aplicada apenas à interface da equipe.",
+    "staffDashboardBrandingDescription": "Separada da identidade visual do sistema de reservas para hóspedes. Aplicada apenas à interface da equipe.",
     "subscriber": "Assinante",
     "tabs": {
-      "bookingEngine": "Motor de reservas",
+      "bookingEngine": "Sistema de reservas",
       "property": "Propriedade",
-      "roles": "Perfis",
+      "roles": "Cargos",
       "users": "Usuários",
       "webhooks": "Webhooks"
     },

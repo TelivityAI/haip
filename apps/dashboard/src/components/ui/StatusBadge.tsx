@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 const STATUS_COLORS: Record<string, string> = {
   // Reservation statuses
   confirmed: 'bg-telivity-dark-teal text-white',
@@ -46,12 +48,23 @@ interface StatusBadgeProps {
 }
 
 export default function StatusBadge({ status, label, className = '' }: StatusBadgeProps) {
+  const { t } = useTranslation();
   const colors = STATUS_COLORS[status] ?? 'bg-telivity-mid-grey text-white';
+  
+  const defaultLabel = formatLabel(status);
+  const resolvedLabel = label ?? t([
+    `dashboard.roomStatuses.${status}`,
+    `housekeeping.statuses.${status}`,
+    `reservations.statuses.${status}`,
+    `channels.statuses.${status}`,
+    `communications.statuses.${status}`,
+  ], { defaultValue: defaultLabel });
+
   return (
     <span
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${colors} ${className}`}
     >
-      {label ?? formatLabel(status)}
+      {resolvedLabel}
     </span>
   );
 }
