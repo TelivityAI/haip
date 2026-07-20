@@ -316,7 +316,7 @@ export default function FrontDesk() {
                       </button>
                       <button
                         onClick={() => {
-                          if (confirm('Express checkout? This will auto-settle the folio.')) {
+                          if (confirm(t('frontDesk.expressCheckoutConfirm'))) {
                             expressCheckoutMutation.mutate(r.id);
                           }
                         }}

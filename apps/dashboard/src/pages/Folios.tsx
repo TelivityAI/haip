@@ -98,8 +98,8 @@ function FolioList() {
               <tr key={f.id} onClick={() => navigate(`/folios/${f.id}`)} className={`border-b border-gray-50 cursor-pointer hover:bg-telivity-light-grey/50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
                 <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{f.folioNumber}</td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{f.guestName ?? '—'}</td>
-                <td className="px-4 py-3"><StatusBadge status={f.type === 'guest' ? 'info' : 'warning'} label={f.type} /></td>
-                <td className="px-4 py-3"><StatusBadge status={f.status === 'open' ? 'pending' : f.status === 'settled' ? 'success' : 'completed'} label={f.status} /></td>
+                <td className="px-4 py-3"><StatusBadge status={f.type === 'guest' ? 'info' : 'warning'} label={t(`folios.${f.type}`, { defaultValue: f.type })} /></td>
+                <td className="px-4 py-3"><StatusBadge status={f.status === 'open' ? 'pending' : f.status === 'settled' ? 'success' : 'completed'} label={t(`folios.${f.status}`, { defaultValue: f.status })} /></td>
                 <td className="px-4 py-3 text-sm font-medium text-right">${Number(f.balance ?? 0).toFixed(2)}</td>
               </tr>
             ))}
@@ -201,7 +201,7 @@ function FolioDetail() {
         <button onClick={() => navigate('/folios')} className="p-1.5 rounded hover:bg-telivity-light-grey"><ChevronLeft size={20} /></button>
         <Receipt size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">{folio.folioNumber}</h1>
-        <StatusBadge status={folio.status === 'open' ? 'pending' : 'success'} label={folio.status} />
+        <StatusBadge status={folio.status === 'open' ? 'pending' : 'success'} label={t(`folios.${folio.status}`, { defaultValue: folio.status })} />
         <div className="ml-auto text-right">
           <p className="text-xs text-telivity-mid-grey">{t('folios.balance')}</p>
           <p className="text-2xl font-semibold text-telivity-navy">${Number(folio.balance ?? 0).toFixed(2)}</p>
@@ -234,7 +234,7 @@ function FolioDetail() {
                 <tr key={c.id} className={`border-b border-gray-50 ${c.isReversed ? 'opacity-50 line-through' : ''}`}>
                   <td className="py-2 text-sm text-telivity-slate">{c.serviceDate}</td>
                   <td className="py-2 text-sm text-telivity-navy">{c.description} {c.isLocked && <Lock size={12} className="inline text-telivity-mid-grey" />}</td>
-                  <td className="py-2 text-sm text-telivity-slate">{c.type}</td>
+                  <td className="py-2 text-sm text-telivity-slate">{t(`folios.chargeTypes.${c.type}`, { defaultValue: c.type })}</td>
                   <td className="py-2 text-sm text-right font-medium">${Number(c.amount).toFixed(2)}</td>
                   <td className="py-2 text-right">
                     {!c.isReversed && !c.isLocked && folio.status === 'open' && (
@@ -267,9 +267,9 @@ function FolioDetail() {
               <div key={p.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                 <div>
                   <p className="text-sm font-medium text-telivity-navy">${Number(p.amount).toFixed(2)}</p>
-                  <p className="text-xs text-telivity-mid-grey">{p.method} &middot; {p.createdAt?.split('T')[0]}</p>
+                  <p className="text-xs text-telivity-mid-grey">{t(`folios.paymentMethods.${p.method}`, { defaultValue: p.method })} &middot; {p.createdAt?.split('T')[0]}</p>
                 </div>
-                <StatusBadge status={p.status === 'captured' ? 'success' : p.status} label={p.status} />
+                <StatusBadge status={p.status === 'captured' ? 'success' : p.status} label={t(`folios.paymentStatuses.${p.status}`, { defaultValue: p.status })} />
               </div>
             ))}
             {payments.length === 0 && <p className="text-sm text-telivity-mid-grey">{t('folios.noPayments')}</p>}
@@ -297,7 +297,7 @@ function FolioDetail() {
           <div>
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('folios.type')}</label>
             <select value={chargeType} onChange={(e) => setChargeType(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
-              <option value="room">Room</option><option value="food_beverage">F&B</option><option value="minibar">Minibar</option><option value="laundry">Laundry</option><option value="parking">Parking</option><option value="other">Other</option>
+              <option value="room">{t('folios.chargeTypes.room')}</option><option value="food_beverage">{t('folios.chargeTypes.food_beverage')}</option><option value="minibar">{t('folios.chargeTypes.minibar')}</option><option value="laundry">{t('folios.chargeTypes.laundry')}</option><option value="parking">{t('folios.chargeTypes.parking')}</option><option value="other">{t('folios.chargeTypes.other')}</option>
             </select>
           </div>
           <div>
@@ -318,7 +318,7 @@ function FolioDetail() {
           <div>
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('folios.method')}</label>
             <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
-              <option value="cash">Cash</option><option value="credit_card">Credit Card</option><option value="debit_card">Debit Card</option><option value="bank_transfer">Bank Transfer</option>
+              <option value="cash">{t('folios.paymentMethods.cash')}</option><option value="credit_card">{t('folios.paymentMethods.credit_card')}</option><option value="debit_card">{t('folios.paymentMethods.debit_card')}</option><option value="bank_transfer">{t('folios.paymentMethods.bank_transfer')}</option>
             </select>
           </div>
           <div>

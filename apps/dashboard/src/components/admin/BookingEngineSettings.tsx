@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Copy, Check, Trash2, Image as ImageIcon } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -53,6 +54,7 @@ interface RatePlan {
 const DEFAULT_DEPOSIT: DepositPolicy = { type: 'none', refundable: true };
 
 export default function BookingEngineSettings({ propertyId }: { propertyId: string }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -123,18 +125,18 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
       setNewKey(created?.key ?? null);
       setCopied(false);
       queryClient.invalidateQueries({ queryKey: ['booking-engine', 'keys'] });
-      toast('success', 'Publishable key generated');
+      toast('success', t('bookingEngine.toasts.keyGenerated'));
     },
-    onError: () => toast('error', 'Failed to generate key'),
+    onError: () => toast('error', t('bookingEngine.toasts.keyGenerationFailed')),
   });
 
   const revokeKey = useMutation({
     mutationFn: (id: string) => api.delete(`/v1/admin/booking-engine/keys/${id}`, { params: { propertyId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['booking-engine', 'keys'] });
-      toast('success', 'Key revoked');
+      toast('success', t('bookingEngine.toasts.keyRevoked'));
     },
-    onError: () => toast('error', 'Failed to revoke key'),
+    onError: () => toast('error', t('bookingEngine.toasts.keyRevocationFailed')),
   });
 
   const saveConfig = useMutation({
@@ -152,13 +154,13 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
       }, { params: { propertyId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['booking-engine', 'config'] });
-      toast('success', 'Booking engine settings saved');
+      toast('success', t('bookingEngine.toasts.settingsSaved'));
     },
-    onError: () => toast('error', 'Failed to save settings'),
+    onError: () => toast('error', t('bookingEngine.toasts.settingsSaveFailed')),
   });
 
   const generateKey = () => {
-    const label = window.prompt('Label for this publishable key (e.g. "Marketing site")');
+    const label = window.prompt(t('bookingEngine.promptLabel'));
     if (label && label.trim()) createKey.mutate(label.trim());
   };
 
@@ -179,13 +181,13 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
       <div className="bg-white rounded-xl shadow-sm p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-telivity-navy">Direct Booking Engine</h2>
+            <h2 className="text-sm font-semibold text-telivity-navy">{t('bookingEngine.title')}</h2>
             <p className="text-xs text-telivity-mid-grey mt-1">
-              Let guests book directly from your website, commission-free.
+              {t('bookingEngine.description')}
             </p>
           </div>
           <label className="inline-flex items-center gap-2 cursor-pointer shrink-0">
-            <span className="text-xs font-medium text-telivity-slate">{isEnabled ? 'Enabled' : 'Disabled'}</span>
+            <span className="text-xs font-medium text-telivity-slate">{isEnabled ? t('bookingEngine.enabled') : t('bookingEngine.disabled')}</span>
             <button
               type="button"
               role="switch"
@@ -202,20 +204,20 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
       {/* 2. Publishable keys */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-telivity-navy">Publishable Keys</h2>
+          <h2 className="text-sm font-semibold text-telivity-navy">{t('bookingEngine.publishableKeys')}</h2>
           <button
             onClick={generateKey}
             disabled={createKey.isPending}
             className="flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
           >
-            <KeyRound size={15} /> Generate key
+            <KeyRound size={15} /> {t('bookingEngine.generateKey')}
           </button>
         </div>
 
         {newKey && (
           <div className="m-4 border-l-4 border-telivity-orange bg-telivity-orange/5 rounded-xl p-4">
             <p className="text-xs font-semibold text-telivity-orange mb-2">
-              Copy this key now — you won&apos;t be able to see it again.
+              {t('bookingEngine.copyKeyWarning')}
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-telivity-navy break-all">
@@ -225,13 +227,13 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
                 onClick={copyKey}
                 className="flex items-center gap-1.5 bg-telivity-teal text-white rounded-lg px-3 py-2 text-sm font-semibold shrink-0"
               >
-                {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? 'Copied' : 'Copy'}
+                {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? t('bookingEngine.copied') : t('bookingEngine.copy')}
               </button>
               <button
                 onClick={() => setNewKey(null)}
                 className="text-xs text-telivity-mid-grey hover:text-telivity-slate shrink-0"
               >
-                Dismiss
+                {t('bookingEngine.dismiss')}
               </button>
             </div>
           </div>
@@ -240,11 +242,11 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
         <table className="w-full">
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Label</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Key</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">Created</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">Actions</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('bookingEngine.label')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('bookingEngine.key')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('bookingEngine.created')}</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -255,7 +257,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
                 <td className="px-4 py-3">
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                     k.isActive ? 'bg-telivity-dark-teal/10 text-telivity-dark-teal' : 'bg-gray-100 text-telivity-mid-grey'
-                  }`}>{k.isActive ? 'active' : 'revoked'}</span>
+                  }`}>{k.isActive ? t('bookingEngine.active') : t('bookingEngine.revoked')}</span>
                 </td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">
                   {k.createdAt ? new Date(k.createdAt).toLocaleDateString() : '—'}
@@ -267,14 +269,14 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
                       disabled={revokeKey.isPending}
                       className="inline-flex items-center gap-1 text-red-500 hover:text-red-600 text-sm font-medium disabled:opacity-50"
                     >
-                      <Trash2 size={14} /> Revoke
+                      <Trash2 size={14} /> {t('bookingEngine.revoke')}
                     </button>
                   )}
                 </td>
               </tr>
             ))}
             {keys.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">No publishable keys yet</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('bookingEngine.noKeysYet')}</td></tr>
             )}
           </tbody>
         </table>
@@ -282,11 +284,11 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
 
       {/* 3. Sellable inventory */}
       <div className="bg-white rounded-xl shadow-sm p-6">
-        <h2 className="text-sm font-semibold text-telivity-navy mb-1">Sellable Inventory</h2>
-        <p className="text-xs text-telivity-mid-grey mb-4">Only checked room types and rate plans are publicly bookable.</p>
+        <h2 className="text-sm font-semibold text-telivity-navy mb-1">{t('bookingEngine.sellableInventory')}</h2>
+        <p className="text-xs text-telivity-mid-grey mb-4">{t('bookingEngine.sellableInventoryDescription')}</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-2">Room Types</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-2">{t('bookingEngine.roomTypes')}</label>
             <div className="space-y-1 max-h-56 overflow-y-auto border border-gray-100 rounded-lg p-2">
               {roomTypes.map((t) => (
                 <label key={t.id} className="flex items-center gap-2 text-sm py-1 cursor-pointer">
@@ -300,11 +302,11 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
                   <span className="text-[10px] text-telivity-mid-grey uppercase tracking-wide">{t.code}</span>
                 </label>
               ))}
-              {roomTypes.length === 0 && <p className="text-xs text-telivity-mid-grey py-1">No room types</p>}
+              {roomTypes.length === 0 && <p className="text-xs text-telivity-mid-grey py-1">{t('bookingEngine.noRoomTypes')}</p>}
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-2">Rate Plans</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-2">{t('bookingEngine.ratePlans')}</label>
             <div className="space-y-1 max-h-56 overflow-y-auto border border-gray-100 rounded-lg p-2">
               {ratePlans.map((p) => (
                 <label key={p.id} className="flex items-center gap-2 text-sm py-1 cursor-pointer">
@@ -318,7 +320,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
                   <span className="text-[10px] text-telivity-mid-grey uppercase tracking-wide">{p.code}</span>
                 </label>
               ))}
-              {ratePlans.length === 0 && <p className="text-xs text-telivity-mid-grey py-1">No rate plans</p>}
+              {ratePlans.length === 0 && <p className="text-xs text-telivity-mid-grey py-1">{t('bookingEngine.noRatePlans')}</p>}
             </div>
           </div>
         </div>
@@ -326,28 +328,28 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
 
       {/* 4. Branding */}
       <div className="bg-white rounded-xl shadow-sm p-6">
-        <h2 className="text-sm font-semibold text-telivity-navy mb-4">Branding</h2>
+        <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('bookingEngine.branding')}</h2>
         <div className="space-y-4 max-w-xl">
           <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Display Name</label>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('bookingEngine.displayName')}</label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Shown to guests on the booking page"
+              placeholder={t('bookingEngine.displayNamePlaceholder')}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Primary Color</label>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('bookingEngine.primaryColor')}</label>
               <div className="flex items-center gap-2">
                 <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="h-9 w-12 border border-gray-200 rounded-lg cursor-pointer" />
                 <input type="text" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-telivity-teal" />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Accent Color</label>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('bookingEngine.accentColor')}</label>
               <div className="flex items-center gap-2">
                 <input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} className="h-9 w-12 border border-gray-200 rounded-lg cursor-pointer" />
                 <input type="text" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-telivity-teal" />
@@ -357,7 +359,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
           <div>
             <div className="flex items-center gap-2 mb-2">
               <ImageIcon size={16} className="text-telivity-teal" />
-              <label className="text-xs font-medium text-telivity-mid-grey">Logo</label>
+              <label className="text-xs font-medium text-telivity-mid-grey">{t('bookingEngine.logo')}</label>
             </div>
             <MediaGallery propertyId={propertyId} ownerType="property" ownerId={propertyId} />
           </div>
@@ -366,25 +368,25 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
 
       {/* 5. Deposit policy */}
       <div className="bg-white rounded-xl shadow-sm p-6">
-        <h2 className="text-sm font-semibold text-telivity-navy mb-4">Deposit Policy</h2>
+        <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('bookingEngine.depositPolicy')}</h2>
         <div className="space-y-4 max-w-xl">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Type</label>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('bookingEngine.type')}</label>
               <select
                 value={depositPolicy.type}
                 onChange={(e) => setDepositPolicy((d) => ({ ...d, type: e.target.value as DepositType }))}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
               >
-                <option value="none">No deposit</option>
-                <option value="first_night">First night</option>
-                <option value="percentage">Percentage</option>
-                <option value="full">Full amount</option>
+                <option value="none">{t('bookingEngine.depositTypes.none')}</option>
+                <option value="first_night">{t('bookingEngine.depositTypes.first_night')}</option>
+                <option value="percentage">{t('bookingEngine.depositTypes.percentage')}</option>
+                <option value="full">{t('bookingEngine.depositTypes.full')}</option>
               </select>
             </div>
             {depositPolicy.type === 'percentage' && (
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Percentage</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('bookingEngine.percentageLabel')}</label>
                 <input
                   type="number"
                   min={0}
@@ -403,7 +405,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
               onChange={(e) => setDepositPolicy((d) => ({ ...d, refundable: e.target.checked }))}
               className="accent-telivity-teal"
             />
-            <span className="text-telivity-navy">Refundable deposit</span>
+            <span className="text-telivity-navy">{t('bookingEngine.refundableDeposit')}</span>
           </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
@@ -412,7 +414,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
               onChange={(e) => setAutoConfirm(e.target.checked)}
               className="accent-telivity-teal"
             />
-            <span className="text-telivity-navy">Auto-confirm paid bookings</span>
+            <span className="text-telivity-navy">{t('bookingEngine.autoConfirm')}</span>
           </label>
         </div>
       </div>
@@ -424,7 +426,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
           disabled={saveConfig.isPending}
           className="bg-telivity-teal text-white rounded-lg px-6 py-2 text-sm font-semibold disabled:opacity-50"
         >
-          {saveConfig.isPending ? 'Saving...' : 'Save'}
+          {saveConfig.isPending ? t('common.saving') : t('common.save')}
         </button>
       </div>
     </div>

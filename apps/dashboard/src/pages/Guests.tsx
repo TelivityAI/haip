@@ -328,7 +328,7 @@ function GuestDetail() {
           <div className="flex gap-3">
             <button onClick={() => setDeleteConfirm(false)} className="flex-1 border border-gray-200 rounded-lg px-4 py-2 text-sm font-semibold">{t('common.cancel')}</button>
             <button
-              onClick={() => { if (confirm('Are you absolutely sure? This cannot be undone.')) deleteMutation.mutate(); }}
+              onClick={() => { if (confirm(t('guests.confirmDeletionPrompt'))) deleteMutation.mutate(); }}
               disabled={deleteMutation.isPending}
               className="flex-1 bg-telivity-orange text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
