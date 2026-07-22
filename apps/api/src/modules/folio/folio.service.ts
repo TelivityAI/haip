@@ -323,6 +323,11 @@ export class FolioService {
       if (dto.isReversal && original.isLocked) {
         throw new BadRequestException('Cannot reverse a locked charge');
       }
+      // Operational integrity: a reversal cannot itself be reversed. Undo a
+      // mistaken reversal by re-posting the original charge.
+      if (dto.isReversal && original.isReversal) {
+        throw new BadRequestException('Cannot reverse a reversal transaction');
+      }
     }
 
     const [charge] = await db
@@ -406,6 +411,11 @@ export class FolioService {
     }
     if (original.isLocked) {
       throw new BadRequestException('Cannot reverse a locked charge');
+    }
+    // Operational integrity: a reversal cannot itself be reversed. Undo a
+    // mistaken reversal by re-posting the original charge.
+    if (original.isReversal) {
+      throw new BadRequestException('Cannot reverse a reversal transaction');
     }
 
     // Check if already reversed

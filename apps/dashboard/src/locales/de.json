@@ -87,6 +87,14 @@
     "revpar": "RevPAR",
     "waitingForEvents": "Warte auf Echtzeitereignisse…"
   },
+  "folios": {
+    "confirmRefund": "Diese Zahlung erstatten?",
+    "refund": "Erstatten",
+    "refundFailed": "Erstattung fehlgeschlagen",
+    "refundSuccess": "Zahlung erstattet",
+    "reverse": "Stornieren",
+    "reverseFailed": "Stornierung fehlgeschlagen"
+  },
   "groups": {
     "allotmentBlocks": "Kontingentblöcke",
     "block": "Block",
