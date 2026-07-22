@@ -1,8 +1,3 @@
-THIRD-PARTY NOTICES & ATTRIBUTION
-=================================
-
-HAIP is licensed under the Apache License 2.0 (see ./LICENSE).
-
 No third-party model weights are redistributed in this repository. HAIP AI is
 produced by a private build pipeline and distributed separately as a GGUF you
 load into Ollama. The attributions below acknowledge the upstream sources whose

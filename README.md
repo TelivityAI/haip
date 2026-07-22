@@ -209,11 +209,22 @@ cold-start defaults.
 | Pricing · Revenue Manager · Group Pickup · AR · Housekeeping · Night Audit | Deterministic math/rules |
 | Guest Comms · Review Response | Deterministic templates (no LLM) |
 
-**HAIP AI (optional):** a small **local** model (via Ollama) can add a plain-language
-*explanation + suggestions* layer over any agent decision — strictly grounded in that
-agent's numbers, with the deterministic agent vetoing anything unsupported. It never
-executes; approval always runs the agent's own recommendation. Off by default
-(`HAIP_AI_ENABLED`); the PMS works fully without it.
+**HAIP AI (optional):** a small, purpose-built **local** model (served via Ollama) that
+adds a plain-language *explanation + suggestions* layer over any agent decision — strictly
+grounded in that agent's own numbers, with the deterministic agent vetoing any figure it
+didn't compute (so it can't invent a rate, a policy, or a number). It **explains and
+suggests; it never executes** — approval always runs the agent's own recommendation. It
+runs entirely on the property's own hardware (no cloud calls, no per-use fees, and no guest
+data leaves the building) and is **off by default** — the PMS works fully without it.
+
+Enable it:
+
+```bash
+# pull the model (Apache-2.0, ~5 GB), then turn it on
+ollama pull hf.co/telivity/haip-ai
+export HAIP_AI_ENABLED=true
+export HAIP_AI_MODEL=haip-ai
+```
 
 ---
 
