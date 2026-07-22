@@ -1,3 +1,8 @@
+THIRD-PARTY NOTICES &amp; ATTRIBUTION
+=================================
+
+HAIP is licensed under the Apache License 2.0 (see ./LICENSE).
+
 No third-party model weights are redistributed in this repository. HAIP AI is
 produced by a private build pipeline and distributed separately as a GGUF you
 load into Ollama. The attributions below acknowledge the upstream sources whose
@@ -6,7 +11,7 @@ outputs or vocabulary informed that model.
 HAIP AI base model was developed using:
 
 • Gemma 4 E4B — Google DeepMind
-  License: Gemma Terms of Use
+  License: Apache License 2.0
   https://huggingface.co/google
 
 • Qwen 3.5-4B — Alibaba (Qwen)
@@ -20,7 +25,7 @@ HAIP AI base model was developed using:
 Additional distillation done using:
 
 • Gemma 4 31B — Google DeepMind
-  License: Gemma Terms of Use
+  License: Apache License 2.0
   https://huggingface.co/google
 
 • gpt-oss-120b — OpenAI
