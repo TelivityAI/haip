@@ -9,7 +9,9 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Groups, cashiering, house accounts, accounting, tax
 - Channel distribution + commission-free direct booking engine
 - Multi-property, RBAC, audit logging
-- Optional local AI for grounded decision explanations
+- **HAIP AI** — optional local model (Ollama) that explains the deterministic
+  agents' decisions in plain language, grounded so it can't invent figures.
+  Runs on your own hardware, off by default.
 
 ## In progress
 - Production deployment path (compose, container images, docs)
@@ -21,6 +23,7 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Complete guest registration (ID, minors/guardian, per-jurisdiction compliance)
 - Loyalty (guest recognition, tiers, rewards)
 - Upsells & ancillaries (rooms, add-ons, packages, and third-party content hotels can resell)
+- Expanded AI assistance (grounded explanations, suggestions, per-property calibration)
 - Expanded channel/OTA connectivity
 - Revenue management (pricing, demand, booking pace, forecasting)
 - Business intelligence & analytics (own-property demand, pickup, pace, RevPAR)
