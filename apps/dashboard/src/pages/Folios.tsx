@@ -6,6 +6,7 @@ import { Receipt, ChevronLeft, Plus, Lock, RotateCcw } from 'lucide-react';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
+import { useToast } from '../components/ui/Toast';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 
@@ -29,7 +30,8 @@ interface Charge {
   amount: number;
   serviceDate: string;
   isLocked?: boolean;
-  isReversed?: boolean;
+  isReversal?: boolean;
+  originalChargeId?: string;
   createdAt: string;
 }
 
@@ -39,8 +41,17 @@ interface Payment {
   method: string;
   status: string;
   gatewayReference?: string;
+  originalPaymentId?: string;
   createdAt: string;
 }
+
+function errMsg(e: unknown): string {
+  const anyE = e as { response?: { data?: { message?: string } }; message?: string };
+  const m = anyE?.response?.data?.message ?? anyE?.message;
+  return Array.isArray(m) ? m.join(', ') : (m ?? 'Request failed');
+}
+
+const REFUNDABLE_STATUSES = new Set(['captured', 'settled', 'partially_refunded']);
 
 // ---- Folio List ----
 function FolioList() {
@@ -120,6 +131,7 @@ function FolioDetail() {
   const { propertyId } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [chargeOpen, setChargeOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [chargeType, setChargeType] = useState('room');
@@ -151,6 +163,10 @@ function FolioDetail() {
   const payments: Payment[] = paymentsData?.data ?? paymentsData ?? [];
   const currencyCode = (folio as { currencyCode?: string } | null)?.currencyCode ?? 'USD';
 
+  const reversedIds = new Set(
+    charges.filter((c) => c.isReversal && c.originalChargeId).map((c) => c.originalChargeId!),
+  );
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['folios'] });
     queryClient.invalidateQueries({ queryKey: ['payments'] });
@@ -174,6 +190,7 @@ function FolioDetail() {
   const reverseMutation = useMutation({
     mutationFn: (chargeId: string) => api.post(`/v1/folios/${id}/charges/${chargeId}/reverse`),
     onSuccess: invalidate,
+    onError: (e) => toast('error', `${t('folios.reverseFailed')}: ${errMsg(e)}`),
   });
 
   const recordPaymentMutation = useMutation({
@@ -188,6 +205,15 @@ function FolioDetail() {
       });
     },
     onSuccess: () => { invalidate(); setPaymentOpen(false); setPayAmount(''); },
+  });
+
+  const refundMutation = useMutation({
+    mutationFn: (paymentId: string) => api.post(`/v1/payments/${paymentId}/refund`, {}),
+    onSuccess: () => {
+      invalidate();
+      toast('success', t('folios.refundSuccess'));
+    },
+    onError: (e) => toast('error', `${t('folios.refundFailed')}: ${errMsg(e)}`),
   });
 
   const settleMutation = useMutation({ mutationFn: () => api.patch(`/v1/folios/${id}/settle`), onSuccess: invalidate });
@@ -231,13 +257,13 @@ function FolioDetail() {
             </thead>
             <tbody>
               {charges.map((c) => (
-                <tr key={c.id} className={`border-b border-gray-50 ${c.isReversed ? 'opacity-50 line-through' : ''}`}>
+                <tr key={c.id} className={`border-b border-gray-50 ${reversedIds.has(c.id) ? 'opacity-50 line-through' : ''}`}>
                   <td className="py-2 text-sm text-telivity-slate">{c.serviceDate}</td>
                   <td className="py-2 text-sm text-telivity-navy">{c.description} {c.isLocked && <Lock size={12} className="inline text-telivity-mid-grey" />}</td>
                   <td className="py-2 text-sm text-telivity-slate">{t(`folios.chargeTypes.${c.type}`, { defaultValue: c.type })}</td>
                   <td className="py-2 text-sm text-right font-medium">${Number(c.amount).toFixed(2)}</td>
                   <td className="py-2 text-right">
-                    {!c.isReversed && !c.isLocked && folio.status === 'open' && (
+                    {!c.isReversal && !reversedIds.has(c.id) && !c.isLocked && folio.status === 'open' && (
                       <button onClick={() => { if (confirm('Reverse this charge?')) reverseMutation.mutate(c.id); }} className="text-telivity-orange text-xs hover:underline">
                         <RotateCcw size={12} className="inline" /> {t('folios.reverse')}
                       </button>
@@ -263,15 +289,36 @@ function FolioDetail() {
                 </button>
               )}
             </div>
-            {payments.map((p) => (
-              <div key={p.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                <div>
-                  <p className="text-sm font-medium text-telivity-navy">${Number(p.amount).toFixed(2)}</p>
-                  <p className="text-xs text-telivity-mid-grey">{t(`folios.paymentMethods.${p.method}`, { defaultValue: p.method })} &middot; {p.createdAt?.split('T')[0]}</p>
+            {payments.map((p) => {
+              const canRefund =
+                folio.status === 'open' &&
+                Number(p.amount) > 0 &&
+                !p.originalPaymentId &&
+                REFUNDABLE_STATUSES.has(p.status);
+
+              return (
+                <div key={p.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0 gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-telivity-navy">${Number(p.amount).toFixed(2)}</p>
+                    <p className="text-xs text-telivity-mid-grey">{t(`folios.paymentMethods.${p.method}`, { defaultValue: p.method })} &middot; {p.createdAt?.split('T')[0]}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {canRefund && (
+                      <button
+                        onClick={() => {
+                          if (confirm(t('folios.confirmRefund'))) refundMutation.mutate(p.id);
+                        }}
+                        disabled={refundMutation.isPending}
+                        className="text-telivity-orange text-xs hover:underline disabled:opacity-50"
+                      >
+                        {t('folios.refund')}
+                      </button>
+                    )}
+                    <StatusBadge status={p.status === 'captured' ? 'success' : p.status} label={t(`folios.paymentStatuses.${p.status}`, { defaultValue: p.status })} />
+                  </div>
                 </div>
-                <StatusBadge status={p.status === 'captured' ? 'success' : p.status} label={t(`folios.paymentStatuses.${p.status}`, { defaultValue: p.status })} />
-              </div>
-            ))}
+              );
+            })}
             {payments.length === 0 && <p className="text-sm text-telivity-mid-grey">{t('folios.noPayments')}</p>}
           </div>
 

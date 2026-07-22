@@ -418,6 +418,43 @@ describe('FolioService', () => {
       expect(result.isReversal).toBe(true);
       expect(parseFloat(result.amount)).toBeLessThan(0);
     });
+
+    it('should reject reversing a reversal transaction', async () => {
+      const reversalCharge = {
+        ...mockCharge,
+        id: 'charge-002',
+        amount: '-150.00',
+        isReversal: true,
+        originalChargeId: 'charge-001',
+      };
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => resolve([reversalCharge]),
+            }),
+          }),
+        })),
+        insert: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+      const svc = module.get<FolioService>(FolioService);
+
+      await expect(svc.reverseCharge('folio-001', 'charge-002', 'prop-001')).rejects.toThrow(
+        'Cannot reverse a reversal transaction',
+      );
+      expect(db.insert).not.toHaveBeenCalled();
+    });
   });
 
   describe('close', () => {
