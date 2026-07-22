@@ -18,5 +18,13 @@ Open-source, API-first hotel PMS (Apache 2.0).
 
 ## Planned
 - New-property onboarding wizard
+- Complete guest registration (ID, minors/guardian, per-jurisdiction compliance)
 - Expanded channel/OTA connectivity
-- Deeper reporting & analytics
+- Revenue management (pricing, demand, booking pace, forecasting)
+- Business intelligence & analytics (own-property demand, pickup, pace, RevPAR)
+- Deeper reporting and exports
+- Hardening & reliability (integration retries/timeouts, observability, scale)
+- Additional localizations
+
+Contributions welcome — open an issue or a draft PR to claim an area, and tag a
+maintainer to coordinate before starting larger work.
