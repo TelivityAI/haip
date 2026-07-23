@@ -43,6 +43,7 @@ export class ReportsController {
         'financial-summary',
         'trial-balance',
         'occupancy-trend',
+        'pickup',
       ],
     };
   }
@@ -102,6 +103,21 @@ export class ReportsController {
     @Query('endDate') endDate: string,
   ) {
     return this.reportsService.getOccupancyTrend(propertyId, startDate, endDate);
+  }
+
+  @Get('/pickup')
+  @ApiOperation({ summary: 'Pickup report — room nights gained/lost for a stay date' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'stayDate', required: true, description: 'Stay night to measure pickup for' })
+  @ApiQuery({ name: 'from', required: true, description: 'Start of booking window (ISO date)' })
+  @ApiQuery({ name: 'to', required: true, description: 'End of booking window (ISO date)' })
+  async getPickup(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('stayDate') stayDate: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    return this.reportsService.getPickup(propertyId, stayDate, from, to);
   }
 
   @Get('/portfolio/financial-summary')

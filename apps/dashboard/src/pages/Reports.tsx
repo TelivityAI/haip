@@ -9,7 +9,7 @@ import { useProperty } from '../context/PropertyContext';
 import KpiCard from '../components/ui/KpiCard';
 import { useTranslation } from 'react-i18next';
 
-type ReportType = 'financial-summary' | 'occupancy' | 'daily-revenue' | 'occupancy-trend' | 'trial-balance';
+type ReportType = 'financial-summary' | 'occupancy' | 'daily-revenue' | 'occupancy-trend' | 'trial-balance' | 'pickup';
 
 const REPORT_OPTIONS: { value: ReportType; labelKey: string }[] = [
   { value: 'financial-summary', labelKey: 'financialSummary' },
@@ -17,6 +17,7 @@ const REPORT_OPTIONS: { value: ReportType; labelKey: string }[] = [
   { value: 'daily-revenue', labelKey: 'dailyRevenue' },
   { value: 'trial-balance', labelKey: 'trialBalance' },
   { value: 'occupancy-trend', labelKey: 'occupancyTrend' },
+  { value: 'pickup', labelKey: 'pickup' },
 ];
 
 const DEMO_FAVORITES_KEY = 'haip.reportFavorites';
@@ -29,6 +30,9 @@ export default function Reports() {
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [stayDate, setStayDate] = useState(format(subDays(new Date(), -30), 'yyyy-MM-dd'));
+  const [pickupFrom, setPickupFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
+  const [pickupTo, setPickupTo] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   const { data: prefsData } = useQuery({
     queryKey: ['me', 'preferences'],
@@ -86,7 +90,7 @@ export default function Reports() {
     isPortfolioMode && (report === 'financial-summary' || report === 'occupancy');
 
   const { data } = useQuery({
-    queryKey: ['reports', portfolioReport ? 'portfolio' : report, propertyId, report === 'occupancy-trend' ? startDate : date, report === 'occupancy-trend' ? endDate : null],
+    queryKey: ['reports', portfolioReport ? 'portfolio' : report, propertyId, report === 'occupancy-trend' ? startDate : report === 'pickup' ? stayDate : date, report === 'occupancy-trend' ? endDate : report === 'pickup' ? pickupTo : null, report === 'pickup' ? pickupFrom : null],
     queryFn: () => {
       if (portfolioReport) {
         const path =
@@ -99,6 +103,10 @@ export default function Reports() {
       if (report === 'occupancy-trend') {
         params.startDate = startDate;
         params.endDate = endDate;
+      } else if (report === 'pickup') {
+        params.stayDate = stayDate;
+        params.from = pickupFrom;
+        params.to = pickupTo;
       } else {
         params.date = date;
       }
@@ -197,12 +205,12 @@ export default function Reports() {
             </button>
           </div>
         </div>
-        {report !== 'occupancy-trend' ? (
+        {report !== 'occupancy-trend' && report !== 'pickup' ? (
           <div>
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.date')}</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
-        ) : (
+        ) : report === 'occupancy-trend' ? (
           <>
             <div>
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.from')}</label>
@@ -211,6 +219,21 @@ export default function Reports() {
             <div>
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.to')}</label>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.stayDate')}</label>
+              <input type="date" value={stayDate} onChange={(e) => setStayDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.from')}</label>
+              <input type="date" value={pickupFrom} onChange={(e) => setPickupFrom(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.to')}</label>
+              <input type="date" value={pickupTo} onChange={(e) => setPickupTo(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
             </div>
           </>
         )}
@@ -398,6 +421,48 @@ export default function Reports() {
                 <span className="font-medium text-telivity-navy">${Number(reportData.interLedgerTransfers).toFixed(2)}</span>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Pickup */}
+      {report === 'pickup' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <KpiCard title={t('reports.baselineRoomNights')} value={reportData.baseline?.roomNights ?? 0} icon={TrendingUp} />
+            <KpiCard title={t('reports.currentRoomNights')} value={reportData.current?.roomNights ?? 0} icon={TrendingUp} />
+            <KpiCard
+              title={t('reports.netPickup')}
+              value={reportData.pickup?.roomNights ?? 0}
+              icon={TrendingUp}
+            />
+          </div>
+          {Array.isArray(reportData.daily) && reportData.daily.length > 0 ? (
+            <div className="bg-white rounded-xl shadow-sm p-5 overflow-x-auto">
+              <h3 className="text-sm font-semibold text-telivity-navy mb-3">{t('reports.dailyPickup')}</h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-telivity-mid-grey border-b border-gray-100">
+                    <th className="pb-2 font-medium">{t('reports.date')}</th>
+                    <th className="pb-2 font-medium text-right">{t('reports.added')}</th>
+                    <th className="pb-2 font-medium text-right">{t('reports.lost')}</th>
+                    <th className="pb-2 font-medium text-right">{t('reports.netPickup')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(reportData.daily as Array<{ date: string; roomNightsAdded: number; roomNightsLost: number; netPickup: number }>).map((row) => (
+                    <tr key={row.date} className="border-b border-gray-50">
+                      <td className="py-2">{row.date}</td>
+                      <td className="py-2 text-right text-green-700">+{row.roomNightsAdded}</td>
+                      <td className="py-2 text-right text-red-600">-{row.roomNightsLost}</td>
+                      <td className="py-2 text-right font-medium">{row.netPickup >= 0 ? `+${row.netPickup}` : row.netPickup}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-telivity-mid-grey">{t('reports.noPickup')}</p>
           )}
         </div>
       )}

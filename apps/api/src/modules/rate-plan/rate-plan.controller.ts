@@ -16,6 +16,7 @@ import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
 import { CreateRateRestrictionDto } from './dto/create-rate-restriction.dto';
 import { UpdateRateRestrictionDto } from './dto/update-rate-restriction.dto';
+import { EffectiveRateQueryDto } from './dto/effective-rate-query.dto';
 
 @ApiTags('rate-plans')
 @Controller('rate-plans')
@@ -51,14 +52,21 @@ export class RatePlanController {
   }
 
   @Get(':id/effective-rate')
-  @ApiOperation({ summary: 'Calculate effective rate (resolves derived rate chain)' })
+  @ApiOperation({
+    summary: 'Calculate effective rate (derived chain + LOS + occupancy adjustments)',
+  })
   @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'nights', required: false, description: 'Length of stay in nights' })
+  @ApiQuery({ name: 'checkIn', required: false, description: 'Arrival date (ISO)' })
+  @ApiQuery({ name: 'checkOut', required: false, description: 'Departure date (ISO)' })
+  @ApiQuery({ name: 'stayDate', required: false, description: 'Stay night for occupancy lookup' })
   @ApiResponse({ status: 200, description: 'Effective rate calculated' })
   getEffectiveRate(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query() context: EffectiveRateQueryDto,
   ) {
-    return this.ratePlanService.calculateDerivedRate(id, propertyId);
+    return this.ratePlanService.calculateDerivedRate(id, propertyId, context);
   }
 
   @Patch(':id')

@@ -162,6 +162,7 @@ export class BookingEngineService {
     const { effectiveRate, currency } = await this.ratePlanService.calculateDerivedRate(
       dto.ratePlanId,
       propertyId,
+      { nights, checkIn: dto.checkIn, checkOut: dto.checkOut, stayDate: dto.checkIn },
     );
 
     // Per-night tax via the real tax engine (not a flat property rate).

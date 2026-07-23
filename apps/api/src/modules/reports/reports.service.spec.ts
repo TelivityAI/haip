@@ -400,4 +400,41 @@ describe('ReportsService', () => {
     expect(result.summary.totalRevenue).toBe(10000);
     expect(result.summary.totalRoomNights).toBe(100);
   });
+
+  it('should compute pickup baseline, current, and daily net', async () => {
+    const db = createMockDb([
+      [{ count: 40 }],
+      [{ count: 47 }],
+      [
+        { date: '2026-07-01', roomNights: 5 },
+        { date: '2026-07-02', roomNights: 3 },
+      ],
+      [{ date: '2026-07-02', roomNights: 1 }],
+    ]);
+    const module = await Test.createTestingModule({
+      providers: [
+        ReportsService,
+        { provide: DRIZZLE, useValue: db },
+      ],
+    }).compile();
+    service = module.get(ReportsService);
+
+    const result = await service.getPickup(
+      'prop-001',
+      '2026-08-15',
+      '2026-07-01',
+      '2026-07-07',
+    );
+
+    expect(result.stayDate).toBe('2026-08-15');
+    expect(result.baseline.roomNights).toBe(40);
+    expect(result.current.roomNights).toBe(47);
+    expect(result.pickup.roomNights).toBe(7);
+    expect(result.daily).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ date: '2026-07-01', roomNightsAdded: 5, netPickup: 5 }),
+        expect.objectContaining({ date: '2026-07-02', roomNightsAdded: 3, roomNightsLost: 1, netPickup: 2 }),
+      ]),
+    );
+  });
 });
