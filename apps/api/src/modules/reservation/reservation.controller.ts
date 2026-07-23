@@ -19,6 +19,7 @@ import { ReservationImportService } from './reservation-import.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ModifyReservationDto } from './dto/modify-reservation.dto';
 import { AssignRoomDto } from './dto/assign-room.dto';
+import { MoveRoomDto } from './dto/move-room.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { SearchAvailabilityDto } from './dto/search-availability.dto';
 import { ListReservationsDto } from './dto/list-reservations.dto';
@@ -192,6 +193,19 @@ export class ReservationController {
     @Body() dto: AssignRoomDto,
   ) {
     return this.reservationService.assignRoom(id, propertyId, dto);
+  }
+
+  @Patch(':id/move-room')
+  @Roles('admin', 'front_desk')
+  @ApiOperation({ summary: 'Move assigned or in-house reservation to another room' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 200, description: 'Room moved' })
+  moveRoom(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: MoveRoomDto,
+  ) {
+    return this.reservationService.moveRoom(id, propertyId, dto);
   }
 
   @Patch(':id/cancel')

@@ -22,6 +22,7 @@ import { DepositSettlementService } from '../accounting/deposit-settlement.servi
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ModifyReservationDto } from './dto/modify-reservation.dto';
 import { AssignRoomDto } from './dto/assign-room.dto';
+import { MoveRoomDto } from './dto/move-room.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { ListReservationsDto } from './dto/list-reservations.dto';
 import { CheckInDto } from './dto/check-in.dto';
@@ -213,6 +214,83 @@ export class ReservationService {
     return updated;
   }
 
+  /**
+   * Move an assigned or in-house reservation to a different room.
+   * Vacates the previous room when the guest is already in-house.
+   */
+  async moveRoom(id: string, propertyId: string, dto: MoveRoomDto) {
+    const reservation = await this.findByIdRaw(id, propertyId);
+    const movable = ['assigned', 'checked_in', 'stayover', 'due_out'];
+    if (!movable.includes(reservation.status)) {
+      throw new BadRequestException(
+        `Cannot move room for reservation in '${reservation.status}' status`,
+      );
+    }
+    if (reservation.doNotMove && !dto.overrideDoNotMove) {
+      throw new BadRequestException(
+        'Reservation is marked do-not-move — pass overrideDoNotMove to proceed',
+      );
+    }
+    if (!dto.roomId || dto.roomId === reservation.roomId) {
+      throw new BadRequestException('A different target roomId is required');
+    }
+
+    const [room] = await this.db
+      .select()
+      .from(rooms)
+      .where(and(eq(rooms.id, dto.roomId), eq(rooms.propertyId, propertyId)));
+    if (!room) {
+      throw new NotFoundException(`Room ${dto.roomId} not found in this property`);
+    }
+    if (room.roomTypeId !== reservation.roomTypeId) {
+      throw new BadRequestException(
+        `Room ${dto.roomId} is type ${room.roomTypeId}, but reservation requires type ${reservation.roomTypeId}`,
+      );
+    }
+    const allowedStatuses = ['guest_ready', 'vacant_clean'];
+    if (!allowedStatuses.includes(room.status)) {
+      throw new BadRequestException(
+        `Room ${dto.roomId} is not available (status: ${room.status}). Must be 'guest_ready' or 'vacant_clean'.`,
+      );
+    }
+
+    const previousRoomId = reservation.roomId as string | null;
+    const inHouse = ['checked_in', 'stayover', 'due_out'].includes(reservation.status);
+
+    const [updated] = await this.db
+      .update(reservations)
+      .set({ roomId: dto.roomId, updatedAt: new Date() })
+      .where(and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)))
+      .returning();
+
+    if (inHouse) {
+      if (previousRoomId) {
+        try {
+          await this.roomStatusService.markVacantDirty(previousRoomId, propertyId);
+        } catch {
+          // Non-blocking — room may already be dirty
+        }
+      }
+      await this.roomStatusService.markOccupied(dto.roomId, propertyId);
+    }
+
+    await this.webhookService.emit(
+      'reservation.room_moved',
+      'reservation',
+      updated.id,
+      {
+        reservationId: updated.id,
+        previousRoomId,
+        newRoomId: dto.roomId,
+        reason: dto.reason ?? null,
+        status: updated.status,
+      },
+      propertyId,
+    );
+
+    return updated;
+  }
+
   // DELIBERATE NON-FEATURE (KB §14.8): there is intentionally NO un-cancel /
   // status-reversion method. Reverting a cancelled/inactive reservation back to
   // active is a payment-integrity hazard (released/refunded deposits, expired
@@ -377,6 +455,12 @@ export class ReservationService {
     let isEarlyCheckin = false;
     let earlyCheckinFee: string | undefined;
 
+    if (property?.guestRegistrationRequired && !dto.registrationSigned) {
+      throw new BadRequestException(
+        'Guest registration card must be signed before check-in for this property',
+      );
+    }
+
     if (property) {
       const checkInTime = property.checkInTime ?? '15:00';
       const [hours, minutes] = checkInTime.split(':').map(Number);
@@ -407,6 +491,10 @@ export class ReservationService {
     if (guestIdDocument) updateData['guestIdDocument'] = guestIdDocument;
     if (earlyCheckinFee) updateData['earlyCheckinFee'] = earlyCheckinFee;
     if (dto.registrationSigned) updateData['registrationSignedAt'] = now;
+    if (dto.registrationData) {
+      updateData['registrationData'] = dto.registrationData;
+      updateData['registrationSubmittedAt'] = now;
+    }
     if (dto.specialRequests) {
       updateData['specialRequests'] = reservation.specialRequests
         ? `${reservation.specialRequests}\n${dto.specialRequests}`
@@ -888,6 +976,7 @@ export class ReservationService {
     if (dto.children !== undefined) updates['children'] = dto.children;
     if (dto.specialRequests !== undefined)
       updates['specialRequests'] = dto.specialRequests;
+    if (dto.doNotMove !== undefined) updates['doNotMove'] = dto.doNotMove;
 
     // If dates or room type change, re-check availability on the new window.
     // The existing reservation still occupies its old window (and room type) in searchAvailability,
@@ -998,7 +1087,17 @@ export class ReservationService {
     // propertyId is required by the DTO — always tenant-scope.
     const conditions: any[] = [eq(reservations.propertyId, dto.propertyId)];
 
-    if (dto.status) {
+    if (dto.statuses) {
+      const parts = dto.statuses
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (parts.length === 1) {
+        conditions.push(eq(reservations.status, parts[0] as any));
+      } else if (parts.length > 1) {
+        conditions.push(inArray(reservations.status, parts as any));
+      }
+    } else if (dto.status) {
       conditions.push(eq(reservations.status, dto.status as any));
     }
     if (dto.guestId) {
