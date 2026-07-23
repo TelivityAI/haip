@@ -62,6 +62,19 @@ export class GroupsController {
     return this.groupProfileService.findProfileById(id, propertyId);
   }
 
+  @Get('profiles/:id/commercial')
+  @ApiOperation({
+    summary: 'Commercial links for a group profile (A/R ledgers + negotiated rates)',
+  })
+  @ApiResponse({ status: 200, description: 'Profile with linked A/R and rate plans' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  getCommercialLinks(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.groupProfileService.getCommercialLinks(id, propertyId);
+  }
+
   @Patch('profiles/:id')
   @Roles('admin', 'front_desk', 'revenue_manager')
   @ApiOperation({ summary: 'Update a group profile' })

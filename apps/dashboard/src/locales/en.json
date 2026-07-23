@@ -243,6 +243,32 @@
     "status": "Status",
     "yes": "Yes"
   },
+  "commercial": {
+    "arLedgers": "A/R ledgers",
+    "billing": "Billing",
+    "billingAddress": "Billing address",
+    "contact": "Contact",
+    "contactEmail": "Contact email",
+    "contactName": "Contact name",
+    "createArHint": "Create an A/R ledger named “{{name}}” linked to this profile.",
+    "createArLedger": "Create A/R ledger",
+    "createProfile": "Create commercial profile",
+    "linkedRates": "Linked rate plans",
+    "newProfile": "New profile",
+    "noArLedgers": "No linked A/R ledgers",
+    "noLinkedRates": "No linked rate plans — set groupProfileId on a negotiated rate",
+    "noProfiles": "No commercial profiles yet",
+    "selectProperty": "Select a property",
+    "subtitle": "Corporate, travel agent, and wholesale accounts (group profiles with billing terms).",
+    "terms": "Payment terms",
+    "title": "Commercial profiles",
+    "type": "Type",
+    "types": {
+      "corporate": "Corporate",
+      "travel_agent": "Travel agent",
+      "wholesale": "Wholesale"
+    }
+  },
   "communications": {
     "close": "Close",
     "emailCommunications": "Email Communications",
@@ -643,6 +669,7 @@
     "cashier": "Cashier",
     "channels": "Channels",
     "closeMenu": "Close menu",
+    "commercial": "Commercial",
     "communications": "Communications",
     "dashboard": "Dashboard",
     "foliosBilling": "Folios & Billing",

@@ -11,6 +11,8 @@ import {
   reservations,
   folios,
   charges,
+  arLedgers,
+  ratePlans,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
@@ -55,6 +57,8 @@ export class GroupProfileService {
         contactName: dto.contactName,
         contactEmail: dto.contactEmail,
         contactPhone: dto.contactPhone,
+        billingAddress: dto.billingAddress,
+        paymentTermsDays: dto.paymentTermsDays,
         masterFolioId,
         notes: dto.notes,
       })
@@ -80,6 +84,33 @@ export class GroupProfileService {
       throw new NotFoundException(`Group profile ${id} not found`);
     }
     return profile;
+  }
+
+  /**
+   * Commercial links for a profile: A/R ledgers and negotiated rate plans
+   * that reference this group profile (KB 14.3 standing account surfaces).
+   */
+  async getCommercialLinks(id: string, propertyId: string) {
+    const profile = await this.findProfileById(id, propertyId);
+    const [ledgers, plans] = await Promise.all([
+      this.db
+        .select()
+        .from(arLedgers)
+        .where(
+          and(eq(arLedgers.groupProfileId, id), eq(arLedgers.propertyId, propertyId)),
+        ),
+      this.db
+        .select()
+        .from(ratePlans)
+        .where(
+          and(eq(ratePlans.groupProfileId, id), eq(ratePlans.propertyId, propertyId)),
+        ),
+    ]);
+    return {
+      profile,
+      arLedgers: ledgers,
+      ratePlans: plans,
+    };
   }
 
   async listProfiles(dto: ListGroupProfilesDto) {

@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Upload,
   UsersRound,
+  Briefcase,
   Banknote,
   Building2,
   Calculator,
@@ -57,6 +58,7 @@ const NAV_SECTIONS: NavSection[] = [
     sectionKey: 'nav.backOffice',
     items: [
       { to: '/groups', icon: UsersRound, labelKey: 'nav.groups', permission: 'groups.read' },
+      { to: '/commercial', icon: Briefcase, labelKey: 'nav.commercial', permission: 'commercial.read' },
       { to: '/cashier', icon: Banknote, labelKey: 'nav.cashier', permission: 'cashier.access' },
       { to: '/house-accounts', icon: Building2, labelKey: 'nav.houseAccounts', permission: 'houseaccounts.read' },
       { to: '/accounting', icon: Calculator, labelKey: 'nav.accounting', permission: 'accounting.view' },
