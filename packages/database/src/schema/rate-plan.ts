@@ -44,6 +44,9 @@ export const ratePlans = pgTable('rate_plans', {
   // Cancellation policy reference
   cancellationPolicyId: uuid('cancellation_policy_id').references(() => cancellationPolicies.id),
 
+  /** Optional link for negotiated rates to a corporate/agent profile (KB 14.3). */
+  groupProfileId: uuid('group_profile_id'),
+
   // Meal plan
   mealPlan: varchar('meal_plan', { length: 20 }), // "room_only", "breakfast", "half_board", "full_board", "all_inclusive"
 

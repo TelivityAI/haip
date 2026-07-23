@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and, lte, gte } from 'drizzle-orm';
-import { ratePlans, rateRestrictions, roomTypes, cancellationPolicies } from '@telivityhaip/database';
+import { ratePlans, rateRestrictions, roomTypes, cancellationPolicies, groupProfiles } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
@@ -108,6 +108,22 @@ export class RatePlanService {
       if (!policy) {
         throw new BadRequestException(
           `cancellation policy ${dto.cancellationPolicyId} not found in this property`,
+        );
+      }
+    }
+    if (dto.groupProfileId) {
+      const [gp] = await this.db
+        .select({ id: groupProfiles.id })
+        .from(groupProfiles)
+        .where(
+          and(
+            eq(groupProfiles.id, dto.groupProfileId),
+            eq(groupProfiles.propertyId, dto.propertyId),
+          ),
+        );
+      if (!gp) {
+        throw new BadRequestException(
+          `group profile ${dto.groupProfileId} not found in this property`,
         );
       }
     }

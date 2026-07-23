@@ -22,6 +22,7 @@ const Reviews = lazy(() => import('./pages/Reviews'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Import = lazy(() => import('./pages/Import'));
 const Groups = lazy(() => import('./pages/Groups'));
+const Commercial = lazy(() => import('./pages/Commercial'));
 const Cashier = lazy(() => import('./pages/Cashier'));
 const HouseAccounts = lazy(() => import('./pages/HouseAccounts'));
 const Accounting = lazy(() => import('./pages/Accounting'));
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="/housekeeping/*" element={<Housekeeping />} />
             <Route path="/folios/*" element={<Folios />} />
             <Route path="/groups/*" element={<Groups />} />
+            <Route path="/commercial/*" element={<Commercial />} />
             <Route path="/cashier/*" element={<Cashier />} />
             <Route path="/house-accounts/*" element={<HouseAccounts />} />
             <Route path="/accounting/*" element={<Accounting />} />

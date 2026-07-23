@@ -50,6 +50,10 @@ export const groupProfiles = pgTable('group_profiles', {
   contactEmail: varchar('contact_email', { length: 255 }),
   contactPhone: varchar('contact_phone', { length: 30 }),
 
+  // Standing commercial billing (same fields as city-ledger / A/R surfaces)
+  billingAddress: text('billing_address'),
+  paymentTermsDays: varchar('payment_terms_days', { length: 10 }), // "NET30", "NET60"
+
   // Group/master folio for consolidated billing (KB 14.7)
   masterFolioId: uuid('master_folio_id').references(() => folios.id),
 

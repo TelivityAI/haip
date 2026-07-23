@@ -200,4 +200,31 @@ describe('GroupProfileService', () => {
       expect(invoice.lineItems).toHaveLength(2);
     });
   });
+
+  describe('getCommercialLinks', () => {
+    it('returns profile with linked A/R ledgers and rate plans', async () => {
+      let call = 0;
+      const db: any = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() => {
+              call++;
+              if (call === 1) {
+                return { then: (resolve: any) => resolve([mockProfile]) };
+              }
+              if (call === 2) {
+                return Promise.resolve([{ id: 'arl-1', name: 'Acme', groupProfileId: 'grp-001' }]);
+              }
+              return Promise.resolve([{ id: 'rp-1', name: 'CORP', type: 'negotiated' }]);
+            }),
+          }),
+        })),
+      };
+      const svc = await buildService(db);
+      const result = await svc.getCommercialLinks('grp-001', 'prop-001');
+      expect(result.profile.id).toBe('grp-001');
+      expect(result.arLedgers).toHaveLength(1);
+      expect(result.ratePlans).toHaveLength(1);
+    });
+  });
 });

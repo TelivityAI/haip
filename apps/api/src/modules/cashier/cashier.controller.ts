@@ -35,6 +35,19 @@ export class CashierController {
     return this.cashierService.createDrawer(dto);
   }
 
+  @Get('drawers')
+  @ApiOperation({ summary: 'List cash drawers for a property (KB 12.1)' })
+  @ApiResponse({ status: 200, description: 'Cash drawers' })
+  @ApiQuery({ name: 'propertyId', type: String, required: true })
+  @ApiQuery({ name: 'activeOnly', type: Boolean, required: false })
+  listDrawers(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('activeOnly') activeOnly?: string,
+  ) {
+    const onlyActive = activeOnly === undefined ? true : activeOnly !== 'false';
+    return this.cashierService.listDrawers(propertyId, onlyActive);
+  }
+
   @Get('drawers/:id')
   @ApiOperation({ summary: 'Get cash drawer by ID' })
   @ApiResponse({ status: 200, description: 'Cash drawer found' })
@@ -53,6 +66,23 @@ export class CashierController {
   @ApiResponse({ status: 201, description: 'Session opened' })
   openSession(@Body() dto: OpenSessionDto) {
     return this.cashierService.openSession(dto);
+  }
+
+  @Get('sessions')
+  @ApiOperation({ summary: 'List cash drawer sessions (resume open shifts)' })
+  @ApiResponse({ status: 200, description: 'Sessions' })
+  @ApiQuery({ name: 'propertyId', type: String, required: true })
+  @ApiQuery({ name: 'cashDrawerId', type: String, required: false })
+  @ApiQuery({ name: 'status', enum: ['open', 'closed'], required: false })
+  listSessions(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('cashDrawerId') cashDrawerId?: string,
+    @Query('status') status?: 'open' | 'closed',
+  ) {
+    return this.cashierService.listSessions(propertyId, {
+      cashDrawerId,
+      status,
+    });
   }
 
   @Get('sessions/:id')

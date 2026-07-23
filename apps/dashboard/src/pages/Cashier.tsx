@@ -13,21 +13,15 @@ interface CashDrawer {
   id: string;
   name: string;
   startingFloat?: string;
+  isActive?: boolean;
 }
 
-function getStoredDrawerIds(propertyId: string): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(`haip-drawers-${propertyId}`) ?? '[]') as string[];
-  } catch {
-    return [];
-  }
-}
-
-function storeDrawerId(propertyId: string, id: string) {
-  const ids = getStoredDrawerIds(propertyId);
-  if (!ids.includes(id)) {
-    localStorage.setItem(`haip-drawers-${propertyId}`, JSON.stringify([...ids, id]));
-  }
+interface CashSession {
+  id: string;
+  status: string;
+  cashDrawerId: string;
+  cashierUserId: string;
+  openingFloat?: string;
 }
 
 function CashierHome() {
@@ -38,24 +32,15 @@ function CashierHome() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerName, setDrawerName] = useState('');
   const [startingFloat, setStartingFloat] = useState('200.00');
-  const [drawerIds, setDrawerIds] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (propertyId) setDrawerIds(getStoredDrawerIds(propertyId));
-  }, [propertyId]);
-
-  const { data: drawers } = useQuery({
-    queryKey: ['cash', 'drawers', propertyId, drawerIds],
-    queryFn: async () => {
-      const results = await Promise.all(
-        drawerIds.map((id) =>
-          api.get(`/v1/cash/drawers/${id}`, { params: { propertyId } }).then((r) => r.data?.data ?? r.data).catch(() => null),
-        ),
-      );
-      return results.filter(Boolean) as CashDrawer[];
-    },
-    enabled: !!propertyId && drawerIds.length > 0,
+  const { data: drawersData } = useQuery({
+    queryKey: ['cash', 'drawers', propertyId],
+    queryFn: () =>
+      api.get('/v1/cash/drawers', { params: { propertyId } }).then((r) => r.data),
+    enabled: !!propertyId,
   });
+
+  const drawers: CashDrawer[] = drawersData?.data ?? drawersData ?? [];
 
   const createDrawer = useMutation({
     mutationFn: () => {
@@ -66,13 +51,8 @@ function CashierHome() {
         startingFloat: moneyString(startingFloat),
       });
     },
-    onSuccess: (res) => {
-      const id = res.data?.id ?? res.data?.data?.id;
-      if (id && propertyId) {
-        storeDrawerId(propertyId, id);
-        setDrawerIds(getStoredDrawerIds(propertyId));
-      }
-      queryClient.invalidateQueries({ queryKey: ['cash'] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cash', 'drawers'] });
       setDrawerOpen(false);
       setDrawerName('');
     },
@@ -81,8 +61,6 @@ function CashierHome() {
   if (!propertyId) {
     return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('cashier.selectProperty')}</div>;
   }
-
-  const drawerList = drawers ?? [];
 
   return (
     <div>
@@ -104,7 +82,7 @@ function CashierHome() {
             </tr>
           </thead>
           <tbody>
-            {drawerList.map((d, i) => (
+            {drawers.map((d, i) => (
               <tr key={d.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
                 <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{d.name}</td>
                 <td className="px-4 py-3 text-sm text-right">${Number(d.startingFloat ?? 0).toFixed(2)}</td>
@@ -113,7 +91,7 @@ function CashierHome() {
                 </td>
               </tr>
             ))}
-            {drawerList.length === 0 && (
+            {drawers.length === 0 && (
               <tr><td colSpan={3} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('cashier.noDrawers')}</td></tr>
             )}
           </tbody>
@@ -149,6 +127,33 @@ function CashierSession() {
   const [countedBalance, setCountedBalance] = useState('');
   const [cashierUserId, setCashierUserId] = useState('');
 
+  const { data: drawerData } = useQuery({
+    queryKey: ['cash', 'drawer', drawerId, propertyId],
+    queryFn: () =>
+      api.get(`/v1/cash/drawers/${drawerId}`, { params: { propertyId } }).then((r) => r.data?.data ?? r.data),
+    enabled: !!drawerId && !!propertyId,
+  });
+  const drawer = drawerData as CashDrawer | undefined;
+
+  const { data: openSessionsData } = useQuery({
+    queryKey: ['cash', 'sessions', 'open', drawerId, propertyId],
+    queryFn: () =>
+      api
+        .get('/v1/cash/sessions', {
+          params: { propertyId, cashDrawerId: drawerId, status: 'open' },
+        })
+        .then((r) => r.data),
+    enabled: !!drawerId && !!propertyId,
+  });
+  const openSessions: CashSession[] = openSessionsData?.data ?? openSessionsData ?? [];
+
+  useEffect(() => {
+    if (!sessionId && openSessions.length > 0) {
+      setSessionId(openSessions[0]!.id);
+      setCashierUserId(openSessions[0]!.cashierUserId);
+    }
+  }, [openSessions, sessionId]);
+
   const { data: usersData } = useQuery({
     queryKey: ['admin', 'users', propertyId],
     queryFn: () => api.get('/v1/admin/users', { params: { propertyId } }).then((r) => r.data),
@@ -163,10 +168,13 @@ function CashierSession() {
         propertyId,
         cashDrawerId: drawerId,
         cashierUserId,
-        openingFloat: '200.00',
+        // Omit openingFloat so the API uses the drawer starting float (KB 12.2).
       });
     },
-    onSuccess: (res) => setSessionId(res.data?.id ?? res.data?.data?.id),
+    onSuccess: (res) => {
+      setSessionId(res.data?.id ?? res.data?.data?.id);
+      queryClient.invalidateQueries({ queryKey: ['cash', 'sessions'] });
+    },
   });
 
   const recordMovement = useMutation({
@@ -189,7 +197,7 @@ function CashierSession() {
       requirePropertyId(propertyId);
       return api.post(`/v1/cash/sessions/${sessionId}/close`, {
         propertyId,
-        countedBalance: moneyString(countedBalance || movementAmount || '0'),
+        countedBalance: moneyString(countedBalance || '0'),
       });
     },
     onSuccess: () => navigate(`/cashier/report/${sessionId}`),
@@ -201,6 +209,7 @@ function CashierSession() {
         <button onClick={() => navigate('/cashier')} className="p-1.5 rounded hover:bg-telivity-light-grey"><ChevronLeft size={20} /></button>
         <Banknote size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">{t('cashier.session')}</h1>
+        {drawer?.name && <span className="text-sm text-telivity-mid-grey">{drawer.name}</span>}
         {sessionId && <StatusBadge status="success" label="Open" />}
         {sessionId && (
           <button onClick={() => navigate(`/cashier/report/${sessionId}`)} className="ml-auto flex items-center gap-1 text-xs font-semibold text-telivity-teal">
@@ -211,6 +220,11 @@ function CashierSession() {
 
       {!sessionId ? (
         <div className="bg-white rounded-xl shadow-sm p-6 max-w-md space-y-4">
+          {drawer?.startingFloat != null && (
+            <p className="text-sm text-telivity-mid-grey">
+              {t('cashier.startingFloat')}: ${Number(drawer.startingFloat).toFixed(2)}
+            </p>
+          )}
           <div>
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('cashier.cashier')}</label>
             <select value={cashierUserId} onChange={(e) => setCashierUserId(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">

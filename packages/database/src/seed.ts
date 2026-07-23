@@ -174,14 +174,15 @@ async function main() {
     'rateplans.read', 'rateplans.manage', 'services.read', 'services.manage', 'policies.read', 'policies.manage', 'revenue.manage', 'nightaudit.run',
     'reports.view', 'channels.manage', 'communications.manage', 'reviews.manage',
     'settings.manage', 'bookingengine.manage', 'admin.users.manage', 'admin.roles.manage',
+    'commercial.read',
   ];
   const ROLE_DEFS: { key: string; name: string; perms: string[] }[] = [
     { key: 'admin', name: 'Administrator', perms: ALL_PERMS },
-    { key: 'front_desk', name: 'Front Desk', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'folios.manage', 'groups.read', 'houseaccounts.read', 'houseaccounts.manage', 'rateplans.read', 'services.read', 'services.manage', 'policies.read', 'communications.manage', 'reviews.manage'] },
+    { key: 'front_desk', name: 'Front Desk', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'folios.manage', 'groups.read', 'commercial.read', 'houseaccounts.read', 'houseaccounts.manage', 'rateplans.read', 'services.read', 'services.manage', 'policies.read', 'communications.manage', 'reviews.manage'] },
     { key: 'housekeeping', name: 'Housekeeping', perms: ['dashboard.view', 'rooms.read', 'housekeeping.read'] },
     { key: 'housekeeping_manager', name: 'Housekeeping Manager', perms: ['dashboard.view', 'rooms.read', 'rooms.write', 'housekeeping.read', 'housekeeping.manage'] },
-    { key: 'night_auditor', name: 'Night Auditor', perms: ['dashboard.view', 'reservations.read', 'folios.read', 'nightaudit.run', 'reports.view', 'cashier.access', 'houseaccounts.read', 'accounting.view'] },
-    { key: 'readonly', name: 'Read Only', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'folios.read', 'rateplans.read', 'services.read', 'policies.read', 'reports.view'] },
+    { key: 'night_auditor', name: 'Night Auditor', perms: ['dashboard.view', 'reservations.read', 'folios.read', 'nightaudit.run', 'reports.view', 'cashier.access', 'houseaccounts.read', 'accounting.view', 'commercial.read'] },
+    { key: 'readonly', name: 'Read Only', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'folios.read', 'rateplans.read', 'services.read', 'policies.read', 'reports.view', 'commercial.read'] },
   ];
 
   const roleIdByKey: Record<string, string> = {};
@@ -1270,6 +1271,77 @@ async function main() {
     keyPrefix: DEMO_BOOKING_KEY.slice(0, 12),
   });
 
+  // ---------------------------------------------------------------------------
+  // Commercial profiles (KB 14.3) + A/R ledgers + cash drawers
+  // ---------------------------------------------------------------------------
+  const commercialProfileIds = {
+    acme: sid('ae000001', 1),
+    convention: sid('ae000001', 2),
+  };
+  await db.insert(schema.groupProfiles).values([
+    {
+      id: commercialProfileIds.acme,
+      propertyId,
+      name: 'Acme Corp',
+      type: 'corporate',
+      contactName: 'Priya Patel',
+      contactEmail: 'travel@acmecorp.example',
+      paymentTermsDays: 'NET30',
+      billingAddress: '100 Market St, Suite 400, San Francisco, CA 94105',
+      notes: 'Preferred corporate account',
+    },
+    {
+      id: commercialProfileIds.convention,
+      propertyId,
+      name: 'City Convention Bureau',
+      type: 'travel_agent',
+      contactName: 'Jordan Lee',
+      contactEmail: 'groups@citycb.example',
+      paymentTermsDays: 'NET60',
+      billingAddress: '1 Civic Plaza, Miami Beach, FL 33139',
+    },
+  ]);
+  await db.insert(schema.arLedgers).values([
+    {
+      id: sid('af000001', 1),
+      propertyId,
+      name: 'Acme Corp',
+      description: 'Corporate direct bill — NET30',
+      paymentTermsDays: 'NET30',
+      status: 'open',
+      balance: '0.00',
+      currencyCode: 'USD',
+      groupProfileId: commercialProfileIds.acme,
+    },
+    {
+      id: sid('af000001', 2),
+      propertyId,
+      name: 'City Convention Bureau',
+      description: 'Group / city account',
+      paymentTermsDays: 'NET60',
+      status: 'open',
+      balance: '0.00',
+      currencyCode: 'USD',
+      groupProfileId: commercialProfileIds.convention,
+    },
+  ]);
+  await db.insert(schema.cashDrawers).values([
+    {
+      id: sid('b8000001', 1),
+      propertyId,
+      name: 'Front Desk 1',
+      startingFloat: '200.00',
+      isActive: true,
+    },
+    {
+      id: sid('b8000001', 2),
+      propertyId,
+      name: 'Front Desk 2',
+      startingFloat: '150.00',
+      isActive: true,
+    },
+  ]);
+
   console.log('Seed complete.');
   console.log('  Property:      Telivity Grand Hotel (TGH)');
   console.log('  Room Types:    4');
@@ -1282,6 +1354,9 @@ async function main() {
   console.log('  Rate Plans:    5 with restrictions');
   console.log('  Cancel policies: 3 (FLEX-24, MOD-48, NRFN)');
   console.log('  Services:      3 (BREAKFAST, PARKING, LATECO)');
+  console.log('  Commercial:    2 profiles (Acme Corp, City Convention Bureau)');
+  console.log('  A/R Ledgers:   2 linked to commercial profiles');
+  console.log('  Cash Drawers:  2 (Front Desk 1/2)');
   console.log('  HK Tasks:      18 (mix of statuses)');
   console.log('  Night Audit:   1 completed run');
   console.log('  Channels:      2 connections');
