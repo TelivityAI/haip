@@ -12,9 +12,10 @@ import {
   Zap,
   AlertTriangle,
   Users,
+  CalendarClock,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { format } from 'date-fns';
+import { addDays, format } from 'date-fns';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import { useAuth } from '../context/AuthContext';
@@ -77,6 +78,12 @@ interface UrgentRoom {
   reason?: string;
 }
 
+interface OpsForecast {
+  date: string;
+  expectedCheckouts: number;
+  expectedStayovers: number;
+}
+
 const TASK_COLUMNS = ['pending', 'assigned', 'in_progress', 'completed', 'inspected'];
 const HK_ROLE_KEYS = new Set(['housekeeping', 'housekeeping_manager', 'admin']);
 
@@ -100,6 +107,7 @@ function HousekeepingDashboard() {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
   const today = format(new Date(), 'yyyy-MM-dd');
+  const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
 
   const { data: dashData } = useQuery({
     queryKey: ['housekeeping', 'dashboard', propertyId, today],
@@ -110,11 +118,21 @@ function HousekeepingDashboard() {
     enabled: !!propertyId,
   });
 
+  const { data: forecastData } = useQuery({
+    queryKey: ['housekeeping', 'ops-forecast', propertyId, tomorrow],
+    queryFn: () =>
+      api
+        .get('/v1/housekeeping/ops-forecast', { params: { propertyId, date: tomorrow } })
+        .then((r) => r.data as OpsForecast),
+    enabled: !!propertyId,
+  });
+
   const dash = dashData?.data ?? dashData ?? {};
   const taskSummary = dash.taskSummary ?? {};
   const roomSummary: RoomSummary = dash.roomSummary ?? {};
   const housekeeperSummary: HousekeeperSummaryRow[] = dash.housekeeperSummary ?? [];
   const urgentRooms: UrgentRoom[] = dash.urgentRooms ?? [];
+  const forecast = forecastData?.data ?? forecastData ?? {};
 
   if (!propertyId) {
     return (
@@ -131,6 +149,25 @@ function HousekeepingDashboard() {
         <KpiCard title={t('housekeeping.inProgress')} value={taskSummary.in_progress ?? 0} icon={Play} />
         <KpiCard title={t('housekeeping.completed')} value={taskSummary.completed ?? 0} icon={CheckCircle} />
         <KpiCard title={t('housekeeping.inspected')} value={taskSummary.inspected ?? 0} icon={Eye} />
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <CalendarClock size={16} className="text-telivity-teal" />
+          <h3 className="text-sm font-semibold text-telivity-navy">{t('housekeeping.opsForecast')}</h3>
+          <span className="text-xs text-telivity-mid-grey ml-auto">{forecast.date ?? tomorrow}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="border border-gray-100 rounded-lg p-4 text-center">
+            <p className="text-xs text-telivity-mid-grey uppercase">{t('housekeeping.expectedCheckouts')}</p>
+            <p className="text-2xl font-semibold text-telivity-navy mt-1">{forecast.expectedCheckouts ?? 0}</p>
+          </div>
+          <div className="border border-gray-100 rounded-lg p-4 text-center">
+            <p className="text-xs text-telivity-mid-grey uppercase">{t('housekeeping.expectedStayovers')}</p>
+            <p className="text-2xl font-semibold text-telivity-navy mt-1">{forecast.expectedStayovers ?? 0}</p>
+          </div>
+        </div>
+        <p className="text-xs text-telivity-mid-grey mt-3">{t('housekeeping.opsForecastHint')}</p>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm p-5">
@@ -721,7 +758,7 @@ function HousekeepingAnalytics() {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
   const today = format(new Date(), 'yyyy-MM-dd');
-  const startDate = format(new Date(Date.now() - 30 * 86400000), 'yyyy-MM-dd');
+  const startDate = format(addDays(new Date(), -30), 'yyyy-MM-dd');
 
   const { data } = useQuery({
     queryKey: ['housekeeping', 'analytics', propertyId, startDate, today],
@@ -817,7 +854,7 @@ function HousekeepingAnalytics() {
 // ---- Main Router ----
 export default function Housekeeping() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<'dashboard' | 'tasks' | 'analytics'>('tasks');
+  const [tab, setTab] = useState<'dashboard' | 'tasks' | 'analytics'>('dashboard');
 
   return (
     <div>

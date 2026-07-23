@@ -720,7 +720,11 @@
     "staff": "Equipe",
     "totalRooms": "Total de quartos",
     "unassign": "Desatribuir",
-    "urgentRooms": "Quartos urgentes"
+    "urgentRooms": "Quartos urgentes",
+    "expectedCheckouts": "Saídas previstas",
+    "expectedStayovers": "Permanências previstas",
+    "opsForecast": "Previsão operacional",
+    "opsForecastHint": "Derivado de reservas em casa (atribuída, check-in, permanência, saída prevista) para a data de serviço selecionada."
   },
   "import": {
     "choose": "1. Escolha o que importar",
@@ -1234,7 +1238,9 @@
       "occupiedWithoutReservation": "Ocupado sem reserva em casa",
       "vacantWithReservation": "Vago com reserva em casa",
       "count": "{{count}} divergência(s)"
-    }
+    },
+    "diaryCaption": "Atribuições de hóspedes de hoje — {{date}}",
+    "diaryStay": "Estadia"
   },
   "search": {
     "allPropertiesPlaceholder": "Pesquisar todas as propriedades…",

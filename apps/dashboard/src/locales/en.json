@@ -796,7 +796,11 @@
     "staff": "Staff",
     "totalRooms": "Total Rooms",
     "unassign": "Unassign",
-    "urgentRooms": "Urgent Rooms"
+    "urgentRooms": "Urgent Rooms",
+    "expectedCheckouts": "Expected Checkouts",
+    "expectedStayovers": "Expected Stayovers",
+    "opsForecast": "Ops Forecast",
+    "opsForecastHint": "Derived from in-house reservations (assigned, checked in, stayover, due out) for the selected service date."
   },
   "import": {
     "choose": "1. Choose what to import",
@@ -1315,7 +1319,9 @@
       "occupiedWithoutReservation": "Occupied without in-house reservation",
       "vacantWithReservation": "Vacant with in-house reservation",
       "count": "{{count}} discrepancy(ies)"
-    }
+    },
+    "diaryCaption": "Today's guest assignments — {{date}}",
+    "diaryStay": "Stay"
   },
   "search": {
     "allPropertiesPlaceholder": "Search all properties…",
