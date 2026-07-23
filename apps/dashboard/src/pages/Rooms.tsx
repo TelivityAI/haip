@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { format } from 'date-fns';
 import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
@@ -35,6 +36,14 @@ interface RoomType {
   roomCount?: number;
 }
 
+interface RoomDiaryEntry {
+  roomId: string;
+  guestName?: string | null;
+  arrivalDate: string;
+  departureDate: string;
+  status: string;
+}
+
 interface StatusCount {
   status: string;
   count: number;
@@ -65,12 +74,14 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 function RoomDetailPanel({
   room,
   propertyId,
+  diary,
   onClose,
   onTransition,
   transitioning,
 }: {
   room: Room;
   propertyId: string;
+  diary?: RoomDiaryEntry;
   onClose: () => void;
   onTransition: (newStatus: string) => void;
   transitioning: boolean;
@@ -155,7 +166,13 @@ function RoomDetailPanel({
             <div><p className="text-xs text-telivity-mid-grey">{t('rooms.type')}</p><p className="text-sm font-medium">{room.roomTypeName ?? '—'}</p></div>
             <div><p className="text-xs text-telivity-mid-grey">{t('rooms.floor')}</p><p className="text-sm font-medium">{room.floor ?? '—'}</p></div>
             <div><p className="text-xs text-telivity-mid-grey">{t('rooms.building')}</p><p className="text-sm font-medium">{room.building ?? '—'}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">{t('rooms.guest')}</p><p className="text-sm font-medium">{room.guestName ?? t('rooms.none')}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('rooms.guest')}</p><p className="text-sm font-medium">{diary?.guestName ?? room.guestName ?? t('rooms.none')}</p></div>
+            {diary && (
+              <div className="col-span-2">
+                <p className="text-xs text-telivity-mid-grey">{t('rooms.diaryStay')}</p>
+                <p className="text-sm font-medium">{diary.arrivalDate} → {diary.departureDate}</p>
+              </div>
+            )}
           </div>
 
           {/* Status Transitions */}
@@ -233,6 +250,7 @@ function RoomList() {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
   const queryClient = useQueryClient();
+  const today = format(new Date(), 'yyyy-MM-dd');
   const [view, setView] = useState<'rack' | 'list'>('rack');
   const [detailRoom, setDetailRoom] = useState<Room | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -258,9 +276,34 @@ function RoomList() {
     enabled: !!propertyId,
   });
 
+  const { data: diaryData } = useQuery({
+    queryKey: ['reservations', 'room-diary', propertyId, today],
+    queryFn: () =>
+      api
+        .get('/v1/reservations', {
+          params: {
+            propertyId,
+            statuses: 'assigned,checked_in,stayover,due_out',
+            arrivalDateTo: today,
+            departureDateFrom: today,
+            limit: 100,
+          },
+        })
+        .then((r) => r.data),
+    enabled: !!propertyId,
+  });
+
   const rooms: Room[] = roomsData?.data ?? roomsData ?? [];
   const summary: StatusCount[] = summaryData?.data ?? summaryData ?? [];
   const types: RoomType[] = typesData?.data ?? typesData ?? [];
+
+  const diaryByRoomId = useMemo(() => {
+    const map = new Map<string, RoomDiaryEntry>();
+    for (const r of (diaryData?.data ?? []) as RoomDiaryEntry[]) {
+      if (r.roomId) map.set(r.roomId, r);
+    }
+    return map;
+  }, [diaryData]);
 
   const statusMutation = useMutation({
     mutationFn: ({ roomId, newStatus }: { roomId: string; newStatus: string }) =>
@@ -321,11 +364,14 @@ function RoomList() {
       {/* Rack View */}
       {view === 'rack' && (
         <div className="space-y-6">
+          <p className="text-xs text-telivity-mid-grey">{t('rooms.diaryCaption', { date: today })}</p>
           {Object.entries(roomsByFloor).sort(([a], [b]) => Number(a) - Number(b)).map(([floor, floorRooms]) => (
             <div key={floor}>
               <h3 className="text-xs font-semibold text-telivity-mid-grey uppercase tracking-wider mb-2">{t('rooms.floorNumber', { floor })}</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                {floorRooms.sort((a, b) => a.number.localeCompare(b.number)).map((room) => (
+                {floorRooms.sort((a, b) => a.number.localeCompare(b.number)).map((room) => {
+                  const diary = diaryByRoomId.get(room.id);
+                  return (
                   <div
                     key={room.id}
                     onClick={() => setDetailRoom(room)}
@@ -334,11 +380,17 @@ function RoomList() {
                     <p className="text-sm font-semibold text-telivity-navy">{room.number}</p>
                     <p className="text-[10px] text-telivity-mid-grey truncate">{room.roomTypeName ?? ''}</p>
                     <StatusBadge status={room.status} label={t(`dashboard.roomStatuses.${room.status}`, { defaultValue: room.status })} className="mt-1.5 text-[9px] px-1.5 py-0" />
-                    {room.guestName && (
+                    {diary ? (
+                      <>
+                        <p className="text-[10px] text-telivity-slate mt-1 truncate font-medium">{diary.guestName ?? t('rooms.none')}</p>
+                        <p className="text-[9px] text-telivity-mid-grey truncate">{diary.arrivalDate} → {diary.departureDate}</p>
+                      </>
+                    ) : room.guestName ? (
                       <p className="text-[10px] text-telivity-slate mt-1 truncate">{room.guestName}</p>
-                    )}
+                    ) : null}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -359,20 +411,27 @@ function RoomList() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.floor')}</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.guest')}</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.diaryStay')}</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">ADA</th>
               </tr>
             </thead>
             <tbody>
-              {rooms.map((r, i) => (
+              {rooms.map((r, i) => {
+                const diary = diaryByRoomId.get(r.id);
+                return (
                 <tr key={r.id} onClick={() => setDetailRoom(r)} className={`border-b border-gray-50 cursor-pointer hover:bg-telivity-light-grey/50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
                   <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{r.number}</td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.roomTypeName ?? '—'}</td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.floor ?? '—'}</td>
                   <td className="px-4 py-3"><StatusBadge status={r.status} label={t(`dashboard.roomStatuses.${r.status}`, { defaultValue: r.status })} /></td>
-                  <td className="px-4 py-3 text-sm text-telivity-slate">{r.guestName ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm text-telivity-slate">{diary?.guestName ?? r.guestName ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm text-telivity-slate">
+                    {diary ? `${diary.arrivalDate} → ${diary.departureDate}` : '—'}
+                  </td>
                   <td className="px-4 py-3 text-sm">{r.isAccessible ? t('common.yes') : '—'}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -384,6 +443,7 @@ function RoomList() {
           key={detailRoom.id}
           room={detailRoom}
           propertyId={propertyId}
+          diary={diaryByRoomId.get(detailRoom.id)}
           onClose={() => setDetailRoom(null)}
           onTransition={(s) => statusMutation.mutate({ roomId: detailRoom.id, newStatus: s })}
           transitioning={statusMutation.isPending}

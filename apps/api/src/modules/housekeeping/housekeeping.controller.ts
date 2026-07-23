@@ -42,6 +42,17 @@ export class HousekeepingController {
     return this.housekeepingService.getDashboard(propertyId, serviceDate);
   }
 
+  @Get('/ops-forecast')
+  @ApiOperation({ summary: 'Expected checkout vs stayover task counts for a service date' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  @ApiQuery({ name: 'date', type: String, description: 'Service date (YYYY-MM-DD)' })
+  getOpsForecast(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('date') date: string,
+  ) {
+    return this.housekeepingService.getOpsForecast(propertyId, date);
+  }
+
   @Get('/analytics')
   @ApiOperation({ summary: 'Get housekeeping analytics' })
   @ApiQuery({ name: 'propertyId', type: String })

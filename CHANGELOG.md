@@ -8,6 +8,19 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — HK property ops depth (Slice 7)
+
+Beyond housekeeping desk wiring ([#185](https://github.com/telivityai/haip/pull/185)):
+
+- **Room rack diary** — Rooms rack view overlays today's assigned guest and
+  arrival→departure dates from the reservation list API (no new tables).
+- **Ops forecast** — `GET /housekeeping/ops-forecast?propertyId=&date=` returns
+  expected checkout vs stayover task counts derived from in-house reservation
+  statuses; dashboard shows tomorrow's forecast.
+- **Attendant console polish** — staff picker for assign, editable checklist,
+  maintenance flag on complete, room status + urgent-room summaries on the HK
+  dashboard.
+
 ### Added — Guest journey (ops + lifecycle triggers)
 
 - **Guest-comms event listener** — `reservation.created` / `checked_in` / `checked_out`

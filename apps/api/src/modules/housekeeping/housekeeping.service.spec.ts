@@ -447,3 +447,57 @@ describe('HousekeepingService — CRUD', () => {
     expect(result.data).toHaveLength(1);
   });
 });
+
+describe('HousekeepingService.getOpsForecast', () => {
+  async function createService(db: any) {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        HousekeepingService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: WebhookService, useValue: mockWebhookService },
+        { provide: RoomStatusService, useValue: mockRoomStatusService },
+      ],
+    }).compile();
+    return module.get(HousekeepingService);
+  }
+
+  it('returns checkout and stayover counts for the service date', async () => {
+    let selectCall = 0;
+    const db = {
+      select: vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            then: (resolve: (v: unknown) => void) => {
+              selectCall++;
+              resolve([{ count: selectCall === 1 ? 4 : 11 }]);
+            },
+          }),
+        }),
+      })),
+    };
+    const svc = await createService(db);
+    const result = await svc.getOpsForecast('prop-001', '2026-04-07');
+    expect(result).toEqual({
+      date: '2026-04-07',
+      expectedCheckouts: 4,
+      expectedStayovers: 11,
+    });
+    expect(db.select).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns zero counts when no matching reservations', async () => {
+    const db = {
+      select: vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            then: (resolve: (v: unknown) => void) => resolve([{ count: 0 }]),
+          }),
+        }),
+      })),
+    };
+    const svc = await createService(db);
+    const result = await svc.getOpsForecast('prop-001', '2026-04-07');
+    expect(result.expectedCheckouts).toBe(0);
+    expect(result.expectedStayovers).toBe(0);
+  });
+});

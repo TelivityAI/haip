@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { eq, and, sql, desc, asc, inArray, gte, lt } from 'drizzle-orm';
+import { eq, and, sql, desc, asc, inArray, gte, lt, lte, gt } from 'drizzle-orm';
 import { housekeepingTasks, rooms, reservations, guests, properties, roomTypes } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService, type WebhookPayload } from '../webhook/webhook.service';
@@ -166,6 +166,7 @@ export class HousekeepingService {
     if (dto.notes !== undefined) updates['notes'] = dto.notes;
     if (dto.maintenanceRequired !== undefined) updates['maintenanceRequired'] = dto.maintenanceRequired;
     if (dto.maintenanceNotes !== undefined) updates['maintenanceNotes'] = dto.maintenanceNotes;
+    if (dto.checklist !== undefined) updates['checklist'] = dto.checklist;
 
     const [updated] = await this.db
       .update(housekeepingTasks)
@@ -787,6 +788,41 @@ export class HousekeepingService {
         tasksCompleted: Number(h.tasksCompleted),
         avgTurnTimeMinutes: h.avgTurnTimeMinutes ? Number(h.avgTurnTimeMinutes) : 0,
       })),
+    };
+  }
+
+  /**
+   * Ops forecast for a service date: expected checkout vs stayover task volumes
+   * derived from in-house reservations (same signals as generate-stayover-tasks).
+   */
+  async getOpsForecast(propertyId: string, date: string) {
+    const inHouseStatuses = ['assigned', 'checked_in', 'stayover', 'due_out'] as const;
+    const baseWhere = and(
+      eq(reservations.propertyId, propertyId),
+      inArray(reservations.status, [...inHouseStatuses]),
+      sql`${reservations.roomId} is not null`,
+    );
+
+    const [checkoutRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reservations)
+      .where(and(baseWhere, eq(reservations.departureDate, date)));
+
+    const [stayoverRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reservations)
+      .where(
+        and(
+          baseWhere,
+          lte(reservations.arrivalDate, date),
+          gt(reservations.departureDate, date),
+        ),
+      );
+
+    return {
+      date,
+      expectedCheckouts: Number(checkoutRow?.count ?? 0),
+      expectedStayovers: Number(stayoverRow?.count ?? 0),
     };
   }
 

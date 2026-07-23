@@ -240,6 +240,8 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | 3 | **Front desk stay ops** | [#181](https://github.com/telivityai/haip/pull/181) | Arrivals / in-house queues, walk-in, in-house room move, registration card at check-in, operational notes at the desk. See **Reservation Management**. |
 | 4 | **A/R & cashier polish** | [#180](https://github.com/telivityai/haip/pull/180) | List cash drawers/sessions, A/R ledger CRUD + aging UX, folio→A/R from folio detail, reverse-transfer picker. See **Accounting & Cashiering** and **Folio & Billing**. |
 | 5 | **Commercial profiles** | [#180](https://github.com/telivityai/haip/pull/180) (also [#179](https://github.com/telivityai/haip/pull/179)) | Standing-account billing terms on group profiles; link A/R ledgers and negotiated rates; Commercial dashboard page. See **Groups & Commercial Profiles**. |
+| 6 | **Housekeeping desk wiring** | [#185](https://github.com/telivityai/haip/pull/185) | Task board, checklists, auto-assign, dashboard KPIs, analytics. See **Housekeeping**. |
+| 7 | **HK property ops depth** | _(this branch)_ | Room rack diary overlay (guest + stay dates from reservations); ops forecast (expected checkout vs stayover counts); attendant console polish (staff assign, editable checklist, room/urgent summaries). See **Housekeeping** and **Rooms**. |
 
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
@@ -319,6 +321,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Connecting room support
 - ADA/accessible room tracking
 - Real-time status summary dashboard
+- **Rack diary overlay** — today's assigned guest and arrival→departure dates on the rack view (from reservation list API)
 - Per-room photo and editable features/amenities from the room detail panel (primary image falls back to the room type's photo)
 
 ### Media & Photos
@@ -348,6 +351,8 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Room status integration — completing a task transitions the room through `clean → inspected → guest_ready`
 - Stayover task generation for occupied rooms
 - Dashboard with room summary, task summary, housekeeper performance, and urgent rooms
+- **Ops forecast** — `GET /housekeeping/ops-forecast` and dashboard card for expected checkout vs stayover volumes (from in-house reservations)
+- **Attendant console** — staff picker for assign, editable checklist, maintenance capture on complete
 - Analytics: average turn time, median turn time, inspection pass rate, maintenance issue rate, breakdown by room type and housekeeper
 
 ### Night Audit & Reporting
@@ -865,10 +870,11 @@ GET    /api/v1/cash/sessions/:id/report            # Cashier's report
 </details>
 
 <details>
-<summary><strong>Housekeeping</strong> — 15 endpoints</summary>
+<summary><strong>Housekeeping</strong> — 16 endpoints</summary>
 
 ```
 GET    /api/v1/housekeeping/dashboard              # Room + task + staff summary
+GET    /api/v1/housekeeping/ops-forecast           # Expected checkout vs stayover counts
 GET    /api/v1/housekeeping/analytics              # Turn times, pass rates, trends
 POST   /api/v1/housekeeping/generate-stayover-tasks # Generate daily stayover tasks
 POST   /api/v1/housekeeping/auto-assign            # Round-robin task assignment
