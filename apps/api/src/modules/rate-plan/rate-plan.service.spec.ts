@@ -169,6 +169,87 @@ describe('RatePlanService', () => {
       const result = await service.calculateDerivedRate('rp-big-001', 'prop-001');
       expect(result.effectiveRate).toBe(0);
     });
+
+    it('should apply LOS adjustment when nights provided', async () => {
+      const losPlan = {
+        ...mockBarRate,
+        losAdjustments: [
+          { minNights: 7, adjustmentType: 'percentage', adjustmentValue: -10 },
+          { minNights: 14, adjustmentType: 'percentage', adjustmentValue: -15 },
+        ],
+      };
+      const mockDb = {
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => resolve([losPlan]),
+            }),
+          }),
+        }),
+        insert: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          RatePlanService,
+          { provide: DRIZZLE, useValue: mockDb },
+        ],
+      }).compile();
+      const service = module.get<RatePlanService>(RatePlanService);
+
+      const shortStay = await service.calculateDerivedRate('rp-bar-001', 'prop-001', { nights: 3 });
+      expect(shortStay.effectiveRate).toBe(200);
+      expect(shortStay.losAdjustment).toBeNull();
+
+      const weekStay = await service.calculateDerivedRate('rp-bar-001', 'prop-001', { nights: 7 });
+      expect(weekStay.effectiveRate).toBe(180);
+      expect(weekStay.losAdjustment?.minNights).toBe(7);
+
+      const twoWeeks = await service.calculateDerivedRate('rp-bar-001', 'prop-001', { nights: 14 });
+      expect(twoWeeks.effectiveRate).toBe(170);
+      expect(twoWeeks.losAdjustment?.minNights).toBe(14);
+    });
+
+    it('should apply occupancy band when stayDate provided', async () => {
+      const occPlan = {
+        ...mockBarRate,
+        occupancyBands: [
+          { occupancyPctMin: 0, occupancyPctMax: 60, adjustmentType: 'percentage', adjustmentValue: -5 },
+          { occupancyPctMin: 61, occupancyPctMax: 100, adjustmentType: 'percentage', adjustmentValue: 10 },
+        ],
+      };
+
+      const mockDb = {
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => resolve([occPlan]),
+            }),
+          }),
+        }),
+        insert: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          RatePlanService,
+          { provide: DRIZZLE, useValue: mockDb },
+        ],
+      }).compile();
+      const service = module.get<RatePlanService>(RatePlanService);
+      vi.spyOn(service, 'getStayOccupancyPct').mockResolvedValue(80);
+
+      const result = await service.calculateDerivedRate('rp-bar-001', 'prop-001', {
+        stayDate: '2026-08-15',
+      });
+      expect(result.effectiveRate).toBe(220);
+      expect(result.occupancyPct).toBe(80);
+      expect(result.occupancyAdjustment?.adjustmentValue).toBe(10);
+    });
   });
 
   describe('create', () => {

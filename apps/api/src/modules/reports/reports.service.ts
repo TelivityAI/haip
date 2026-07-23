@@ -771,4 +771,113 @@ export class ReportsService {
       byProperty,
     };
   }
+
+  /**
+   * Pickup report — room nights on a stay date gained or lost over a booking window.
+   * Compares on-the-books room nights at the start vs end of the period, with a
+   * daily breakdown of additions (by createdAt) and losses (by cancelledAt).
+   */
+  async getPickup(propertyId: string, stayDate: string, from: string, to: string) {
+    const coversStayDate = and(
+      eq(reservations.propertyId, propertyId),
+      lte(reservations.arrivalDate, stayDate),
+      sql`${reservations.departureDate} > ${stayDate}`,
+    );
+
+    const activeAsOf = (asOfDate: string) =>
+      and(
+        coversStayDate,
+        sql`${reservations.createdAt}::date <= ${asOfDate}`,
+        sql`(${reservations.cancelledAt} is null or ${reservations.cancelledAt}::date > ${asOfDate})`,
+        sql`${reservations.status} not in ('no_show')`,
+      );
+
+    const [baselineRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reservations)
+      .where(
+        and(
+          coversStayDate,
+          sql`${reservations.createdAt}::date < ${from}`,
+          sql`(${reservations.cancelledAt} is null or ${reservations.cancelledAt}::date >= ${from})`,
+          sql`${reservations.status} not in ('cancelled', 'no_show')`,
+        ),
+      );
+
+    const [currentRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reservations)
+      .where(activeAsOf(to));
+
+    const baselineRoomNights = baselineRow?.count ?? 0;
+    const currentRoomNights = currentRow?.count ?? 0;
+
+    const dailyAdded = await this.db
+      .select({
+        date: sql<string>`${reservations.createdAt}::date`,
+        roomNights: sql<number>`count(*)::int`,
+      })
+      .from(reservations)
+      .where(
+        and(
+          coversStayDate,
+          sql`${reservations.createdAt}::date >= ${from}`,
+          sql`${reservations.createdAt}::date <= ${to}`,
+          sql`${reservations.status} not in ('cancelled', 'no_show')`,
+        ),
+      )
+      .groupBy(sql`${reservations.createdAt}::date`)
+      .orderBy(sql`${reservations.createdAt}::date`);
+
+    const dailyLost = await this.db
+      .select({
+        date: sql<string>`${reservations.cancelledAt}::date`,
+        roomNights: sql<number>`count(*)::int`,
+      })
+      .from(reservations)
+      .where(
+        and(
+          coversStayDate,
+          eq(reservations.status, 'cancelled' as any),
+          sql`${reservations.cancelledAt}::date >= ${from}`,
+          sql`${reservations.cancelledAt}::date <= ${to}`,
+        ),
+      )
+      .groupBy(sql`${reservations.cancelledAt}::date`)
+      .orderBy(sql`${reservations.cancelledAt}::date`);
+
+    const dailyMap = new Map<string, { roomNightsAdded: number; roomNightsLost: number }>();
+
+    for (const row of dailyAdded) {
+      const dateKey = typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().split('T')[0]!;
+      const entry = dailyMap.get(dateKey) ?? { roomNightsAdded: 0, roomNightsLost: 0 };
+      entry.roomNightsAdded = row.roomNights;
+      dailyMap.set(dateKey, entry);
+    }
+
+    for (const row of dailyLost) {
+      const dateKey = typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().split('T')[0]!;
+      const entry = dailyMap.get(dateKey) ?? { roomNightsAdded: 0, roomNightsLost: 0 };
+      entry.roomNightsLost = row.roomNights;
+      dailyMap.set(dateKey, entry);
+    }
+
+    const daily = [...dailyMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, counts]) => ({
+        date,
+        roomNightsAdded: counts.roomNightsAdded,
+        roomNightsLost: counts.roomNightsLost,
+        netPickup: counts.roomNightsAdded - counts.roomNightsLost,
+      }));
+
+    return {
+      stayDate,
+      period: { from, to },
+      baseline: { roomNights: baselineRoomNights },
+      current: { roomNights: currentRoomNights },
+      pickup: { roomNights: currentRoomNights - baselineRoomNights },
+      daily,
+    };
+  }
 }

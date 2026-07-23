@@ -4,13 +4,32 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, and, lte, gte } from 'drizzle-orm';
-import { ratePlans, rateRestrictions, roomTypes, cancellationPolicies, groupProfiles } from '@telivityhaip/database';
+import { eq, and, lte, gte, sql } from 'drizzle-orm';
+import { ratePlans, rateRestrictions, roomTypes, cancellationPolicies, groupProfiles, properties, rooms, reservations } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
 import { CreateRateRestrictionDto } from './dto/create-rate-restriction.dto';
 import { UpdateRateRestrictionDto } from './dto/update-rate-restriction.dto';
+import { EffectiveRateQueryDto } from './dto/effective-rate-query.dto';
+import {
+  applyRateAdjustment,
+  nightsBetween,
+  selectLosAdjustment,
+  selectOccupancyBand,
+  type LosAdjustment,
+  type OccupancyBand,
+} from './rate-pricing.util';
+
+export interface EffectiveRateResult {
+  effectiveRate: number;
+  currency: string;
+  baseRate: number;
+  nights?: number;
+  occupancyPct?: number;
+  losAdjustment?: LosAdjustment | null;
+  occupancyAdjustment?: OccupancyBand | null;
+}
 
 @Injectable()
 export class RatePlanService {
@@ -221,38 +240,112 @@ export class RatePlanService {
   }
 
   /**
-   * Calculate the effective rate for a derived rate plan.
-   * Follows the parent chain to get the base amount, then applies the adjustment.
+   * Calculate the effective rate for a rate plan.
+   * Resolves derived chains, then applies LOS and occupancy-based adjustments
+   * when stay context (nights / dates) is provided.
    */
   async calculateDerivedRate(
     id: string,
     propertyId: string,
-  ): Promise<{ effectiveRate: number; currency: string }> {
+    context?: EffectiveRateQueryDto,
+  ): Promise<EffectiveRateResult> {
     const ratePlan = await this.findById(id, propertyId);
 
+    let baseRate: number;
     if (ratePlan.type !== 'derived' || !ratePlan.parentRatePlanId) {
-      return {
-        effectiveRate: Number(ratePlan.baseAmount),
-        currency: ratePlan.currencyCode,
-      };
+      baseRate = Number(ratePlan.baseAmount);
+    } else {
+      const parent = await this.findById(ratePlan.parentRatePlanId, propertyId);
+      const parentAmount = Number(parent.baseAmount);
+      const adjustmentValue = Number(ratePlan.derivedAdjustmentValue);
+
+      if (ratePlan.derivedAdjustmentType === 'percentage') {
+        baseRate = parentAmount * (1 + adjustmentValue / 100);
+      } else {
+        baseRate = parentAmount + adjustmentValue;
+      }
     }
 
-    const parent = await this.findById(ratePlan.parentRatePlanId, propertyId);
-    const parentAmount = Number(parent.baseAmount);
-    const adjustmentValue = Number(ratePlan.derivedAdjustmentValue);
+    let effectiveRate = baseRate;
+    let nights = context?.nights;
+    if (!nights && context?.checkIn && context?.checkOut) {
+      nights = nightsBetween(context.checkIn, context.checkOut);
+    }
 
-    let effectiveRate: number;
-    if (ratePlan.derivedAdjustmentType === 'percentage') {
-      effectiveRate = parentAmount * (1 + adjustmentValue / 100);
-    } else {
-      // fixed adjustment
-      effectiveRate = parentAmount + adjustmentValue;
+    const losAdjustment = selectLosAdjustment(
+      ratePlan.losAdjustments as LosAdjustment[] | null,
+      nights ?? 0,
+    );
+    if (losAdjustment) {
+      effectiveRate = applyRateAdjustment(effectiveRate, losAdjustment);
+    }
+
+    const stayDate = context?.stayDate ?? context?.checkIn;
+    let occupancyPct: number | undefined;
+    let occupancyAdjustment: OccupancyBand | null = null;
+    if (stayDate && ratePlan.occupancyBands?.length) {
+      occupancyPct = await this.getStayOccupancyPct(propertyId, stayDate);
+      occupancyAdjustment = selectOccupancyBand(
+        ratePlan.occupancyBands as OccupancyBand[],
+        occupancyPct,
+      );
+      if (occupancyAdjustment) {
+        effectiveRate = applyRateAdjustment(effectiveRate, occupancyAdjustment);
+      }
     }
 
     return {
       effectiveRate: Math.max(0, Number(effectiveRate.toFixed(2))),
       currency: ratePlan.currencyCode,
+      baseRate: Math.max(0, Number(baseRate.toFixed(2))),
+      ...(nights ? { nights } : {}),
+      ...(occupancyPct != null ? { occupancyPct: Math.round(occupancyPct * 100) / 100 } : {}),
+      losAdjustment: losAdjustment ?? null,
+      occupancyAdjustment: occupancyAdjustment ?? null,
     };
+  }
+
+  /**
+   * Projected occupancy % for a stay date (confirmed/in-house reservations).
+   */
+  async getStayOccupancyPct(propertyId: string, stayDate: string): Promise<number> {
+    const [property] = await this.db
+      .select({ totalRooms: properties.totalRooms })
+      .from(properties)
+      .where(eq(properties.id, propertyId));
+    const totalRooms = property?.totalRooms ?? 0;
+
+    const roomStatusCounts = await this.db
+      .select({
+        status: rooms.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(rooms)
+      .where(and(eq(rooms.propertyId, propertyId), eq(rooms.isActive, true)))
+      .groupBy(rooms.status);
+
+    let unavailableRooms = 0;
+    for (const row of roomStatusCounts) {
+      if (row.status === 'out_of_order' || row.status === 'out_of_service') {
+        unavailableRooms += row.count;
+      }
+    }
+    const availableRooms = totalRooms - unavailableRooms;
+
+    const [soldResult] = await this.db
+      .select({ count: sql<number>`count(distinct ${reservations.id})::int` })
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.propertyId, propertyId),
+          sql`${reservations.status} not in ('cancelled', 'no_show')`,
+          lte(reservations.arrivalDate, stayDate),
+          sql`${reservations.departureDate} > ${stayDate}`,
+        ),
+      );
+
+    const roomsSold = soldResult?.count ?? 0;
+    return availableRooms > 0 ? (roomsSold / availableRooms) * 100 : 0;
   }
 
   // --- Rate Restrictions ---
