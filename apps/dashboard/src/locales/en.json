@@ -431,6 +431,8 @@
     "departure": "Departure",
     "departures": "Departures",
     "dnm": "DNM",
+    "doorPin": "Door PIN",
+    "doorPinNone": "—",
     "doNotMoveWarning": "This reservation is marked do-not-move.",
     "driversLicense": "Driver's License",
     "emailOptional": "Email (optional)",

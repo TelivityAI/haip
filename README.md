@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-<img src="https://img.shields.io/badge/Tests-1185%20passing-brightgreen" alt="1185 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+<img src="https://img.shields.io/badge/Tests-1193%20passing-brightgreen" alt="1193 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -240,6 +240,13 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | 3 | **Front desk stay ops** | [#181](https://github.com/telivityai/haip/pull/181) | Arrivals / in-house queues, walk-in, in-house room move, registration card at check-in, operational notes at the desk. See **Reservation Management**. |
 | 4 | **A/R & cashier polish** | [#180](https://github.com/telivityai/haip/pull/180) | List cash drawers/sessions, A/R ledger CRUD + aging UX, folio→A/R from folio detail, reverse-transfer picker. See **Accounting & Cashiering** and **Folio & Billing**. |
 | 5 | **Commercial profiles** | [#180](https://github.com/telivityai/haip/pull/180) (also [#179](https://github.com/telivityai/haip/pull/179)) | Standing-account billing terms on group profiles; link A/R ledgers and negotiated rates; Commercial dashboard page. See **Groups & Commercial Profiles**. |
+| 11 | **Devices (door lock polish)** | _this branch_ | Persist room-access PINs on check-in/out, list/reissue API, Front Desk in-house PIN column; webhook adapter unchanged (`door.access_granted` / `door.access_revoked`). See **Devices & Door Locks**. |
+
+### Devices & Door Locks
+- **Webhook lock adapter** — on check-in/out the PMS emits `door.access_granted` / `door.access_revoked` with a CSPRNG 6-digit PIN for keypad locks; self-hosters point the webhook at Salto, Assa Abloy, Dormakaba middleware, etc. (no vendor SDKs in core).
+- **Credential persistence** — `door_lock_credentials` stores `propertyId`, `reservationId`, `roomId`, `credentialId`, `accessCode`, and `active` / `revoked` status.
+- **REST API** — `GET /door-lock/credentials` (list), `GET /door-lock/credentials/:reservationId`, optional `POST …/reissue` for a new PIN while in-house.
+- **Front Desk** — in-house queue shows the active door PIN per stay.
 
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
@@ -257,7 +264,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Full lifecycle state machine: `pending → confirmed → assigned → checked_in → stayover → due_out → checked_out`
 - Real-time availability engine with room type inventory
 - Room assignment with automatic status transitions
-- **Front desk stay ops** — arrivals / in-house queues (multi-status filters), walk-in create→assign→check-in, in-house **room move** (`PATCH …/move-room`, respects `doNotMove`), operational notes at the desk and on reservation detail
+- **Front desk stay ops** — arrivals / in-house queues (multi-status filters), walk-in create→assign→check-in, in-house **room move** (`PATCH …/move-room`, respects `doNotMove`), operational notes at the desk and on reservation detail, **door PIN** on the in-house list
 - **Guest registration at check-in** — registration card fields + `registrationSigned`; required when the property has `guestRegistrationRequired`
 - Group check-in (batch operations)
 - Bulk actions across multiple reservations (check-in / check-out / cancel) with per-reservation success/error results
@@ -465,7 +472,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (1185 tests across 144 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
+| Testing | Vitest (1193 tests across 147 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
 
@@ -586,7 +593,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (1185 tests across 144 test files)
+# All tests (1193 tests across 147 test files)
 
 # API tests only
 pnpm --filter @telivityhaip/api test
@@ -865,6 +872,16 @@ GET    /api/v1/cash/sessions/:id/report            # Cashier's report
 </details>
 
 <details>
+<summary><strong>Door lock</strong> — 3 endpoints</summary>
+
+```
+GET    /api/v1/door-lock/credentials               # List credentials (propertyId, status)
+GET    /api/v1/door-lock/credentials/:reservationId # Credential for one stay
+POST   /api/v1/door-lock/credentials/:reservationId/reissue # New PIN (in-house)
+```
+</details>
+
+<details>
 <summary><strong>Housekeeping</strong> — 15 endpoints</summary>
 
 ```
@@ -1107,7 +1124,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (1185 tests, 144 files)
+pnpm test             # Run all tests (1193 tests, 147 files)
 pnpm lint             # ESLint
 ```
 

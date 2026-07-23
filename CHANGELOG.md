@@ -8,6 +8,16 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Devices (door lock polish)
+
+- **Credential persistence** — `door_lock_credentials` table (`propertyId`, `reservationId`,
+  `roomId`, `credentialId`, `accessCode`, `active` / `revoked`).
+- **REST API** — `GET /door-lock/credentials`, `GET /door-lock/credentials/:reservationId`,
+  `POST /door-lock/credentials/:reservationId/reissue`.
+- **Webhook adapter** — `WebhookLockProvider` saves/updates rows on issue and revoke.
+- **Front Desk** — in-house queue shows active door PIN.
+- **Docs** — README slice 11, `docs/webhooks.md` door events.
+
 ### Added — Guest journey (ops + lifecycle triggers)
 
 - **Guest-comms event listener** — `reservation.created` / `checked_in` / `checked_out`

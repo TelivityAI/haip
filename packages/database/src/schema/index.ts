@@ -201,3 +201,9 @@ export {
   ratePlanComponents,
   reservationServices,
 } from './ancillary.js';
+
+// Door-lock credentials (devices / access control)
+export {
+  doorLockCredentialStatusEnum,
+  doorLockCredentials,
+} from './door-lock.js';

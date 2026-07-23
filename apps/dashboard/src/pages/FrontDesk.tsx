@@ -45,6 +45,12 @@ interface NoteRow {
   createdAt: string;
 }
 
+interface DoorLockCredential {
+  reservationId: string;
+  accessCode?: string | null;
+  status: 'active' | 'revoked';
+}
+
 export default function FrontDesk() {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
@@ -124,6 +130,17 @@ export default function FrontDesk() {
         })
         .then((r) => r.data),
     enabled: !!propertyId,
+  });
+
+  const { data: doorCredentials } = useQuery({
+    queryKey: ['door-lock', 'credentials', propertyId, 'active'],
+    queryFn: () =>
+      api
+        .get('/v1/door-lock/credentials', {
+          params: { propertyId, status: 'active', limit: 200 },
+        })
+        .then((r) => r.data),
+    enabled: !!propertyId && tab === 'in-house',
   });
 
   const { data: departureData } = useQuery({
@@ -379,6 +396,10 @@ export default function FrontDesk() {
   const arrList: Reservation[] = arrivals?.data ?? arrivals ?? [];
   const ihList: Reservation[] = inHouse?.data ?? inHouse ?? [];
   const depList: Reservation[] = departureData?.data ?? departureData ?? [];
+  const doorPinByReservation = useMemo(() => {
+    const rows: DoorLockCredential[] = doorCredentials?.data ?? [];
+    return new Map(rows.map((c) => [c.reservationId, c]));
+  }, [doorCredentials]);
   const roomList: Room[] = useMemo(() => {
     const raw = availableRooms?.data ?? availableRooms ?? [];
     return Array.isArray(raw) ? raw : [];
@@ -511,6 +532,11 @@ export default function FrontDesk() {
                   {t('frontDesk.departure')}
                 </th>
               )}
+              {tab === 'in-house' && (
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">
+                  {t('frontDesk.doorPin')}
+                </th>
+              )}
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">
                 {t('common.status')}
               </th>
@@ -566,6 +592,13 @@ export default function FrontDesk() {
                 </td>
                 {tab === 'in-house' && (
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.departureDate}</td>
+                )}
+                {tab === 'in-house' && (
+                  <td className="px-4 py-3 text-sm font-mono text-telivity-navy">
+                    {doorPinByReservation.get(r.id)?.accessCode ?? (
+                      <span className="text-telivity-mid-grey font-sans">{t('frontDesk.doorPinNone')}</span>
+                    )}
+                  </td>
                 )}
                 <td className="px-4 py-3">
                   <StatusBadge status={r.status} />

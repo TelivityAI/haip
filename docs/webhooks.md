@@ -155,6 +155,29 @@ municipal registrations, ...) — core never interprets either.
 List documents for a folio:
 `GET /api/v1/folios/:folioId/fiscal-documents?propertyId=…`
 
+## Door access (`door.*`)
+
+On check-in and check-out HAIP provisions or revokes room access via the lock
+provider (default: webhook adapter). Integrations subscribe to:
+
+- **`door.access_granted`** — emitted when a stay is checked in (or a PIN is
+  reissued). Payload includes `provider`, `credentialId`, `roomId`, `accessCode`
+  (6-digit keypad PIN), and `validFrom` / optional `validTo`.
+- **`door.access_revoked`** — emitted on check-out. Payload includes `provider`,
+  `credentialId`, and `roomId`.
+
+The PMS also persists credentials in `door_lock_credentials` for front-desk
+display and audit. Staff can list or reissue via:
+
+```
+GET  /api/v1/door-lock/credentials?propertyId=…&status=active
+GET  /api/v1/door-lock/credentials/:reservationId?propertyId=…
+POST /api/v1/door-lock/credentials/:reservationId/reissue?propertyId=…
+```
+
+Point your lock vendor middleware at these webhooks — core ships no Salto/Assa
+SDKs; swap the `LOCK_PROVIDER` binding for a vendor-specific adapter if needed.
+
 ## Example: government guest registration
 
 A minimal compliance integration for jurisdictions that require reporting
