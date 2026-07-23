@@ -249,7 +249,7 @@ function ReservationList() {
                 </button>
               )}
               {['confirmed', 'assigned'].includes(row.original.status) && (
-                <button onClick={() => { api.patch(`/v1/reservations/${row.original.id}/check-in`, {}).then(() => queryClient.invalidateQueries({ queryKey: ['reservations'] })); setActionMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-telivity-light-grey flex items-center gap-2">
+                <button onClick={() => { setActionMenu(null); navigate('/front-desk'); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-telivity-light-grey flex items-center gap-2">
                   <LogIn size={14} /> {t('reservations.checkIn')}
                 </button>
               )}
