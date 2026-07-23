@@ -12,6 +12,7 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - **HAIP AI** — optional local model (Ollama) that explains the deterministic
   agents' decisions in plain language, grounded so it can't invent figures.
   Runs on your own hardware, off by default.
+- Upsells & ancillaries (services catalog, packages, booking/front-desk/pre-arrival channels)
 
 ## Planned
 - New-property onboarding wizard
@@ -29,7 +30,7 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Production deployment path (compose, container images, docs)
 - Full dashboard localization (page-level i18n)
 - End-to-end + money-path test coverage
-- Upsells & ancillaries (services catalog, packages, booking/front-desk/pre-arrival channels)
+- Money policy (cancellation policies, deposit settlement on cancel/no-show/check-in)
 
 Contributions welcome — open an issue or a draft PR to claim an area, and tag a
 maintainer to coordinate before starting larger work.

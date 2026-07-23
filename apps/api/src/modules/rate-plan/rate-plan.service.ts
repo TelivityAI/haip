@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and, lte, gte } from 'drizzle-orm';
-import { ratePlans, rateRestrictions, roomTypes } from '@telivityhaip/database';
+import { ratePlans, rateRestrictions, roomTypes, cancellationPolicies } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
@@ -95,6 +95,22 @@ export class RatePlanService {
     if (!rt) {
       throw new BadRequestException(`room type ${dto.roomTypeId} not found in this property`);
     }
+    if (dto.cancellationPolicyId) {
+      const [policy] = await this.db
+        .select({ id: cancellationPolicies.id })
+        .from(cancellationPolicies)
+        .where(
+          and(
+            eq(cancellationPolicies.id, dto.cancellationPolicyId),
+            eq(cancellationPolicies.propertyId, dto.propertyId),
+          ),
+        );
+      if (!policy) {
+        throw new BadRequestException(
+          `cancellation policy ${dto.cancellationPolicyId} not found in this property`,
+        );
+      }
+    }
     if (dto.type === 'derived') {
       if (!dto.parentRatePlanId || !dto.derivedAdjustmentType || !dto.derivedAdjustmentValue) {
         throw new BadRequestException(
@@ -159,6 +175,22 @@ export class RatePlanService {
         .where(and(eq(ratePlans.id, dto.parentRatePlanId), eq(ratePlans.propertyId, propertyId)));
       if (!parent) {
         throw new BadRequestException(`parent rate plan ${dto.parentRatePlanId} not found in this property`);
+      }
+    }
+    if (dto.cancellationPolicyId) {
+      const [policy] = await this.db
+        .select({ id: cancellationPolicies.id })
+        .from(cancellationPolicies)
+        .where(
+          and(
+            eq(cancellationPolicies.id, dto.cancellationPolicyId),
+            eq(cancellationPolicies.propertyId, propertyId),
+          ),
+        );
+      if (!policy) {
+        throw new BadRequestException(
+          `cancellation policy ${dto.cancellationPolicyId} not found in this property`,
+        );
       }
     }
     const [ratePlan] = await this.db

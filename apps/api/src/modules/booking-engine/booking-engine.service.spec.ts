@@ -44,6 +44,14 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
     attachToReservation: vi.fn().mockResolvedValue({}),
     ensurePackageComponents: vi.fn().mockResolvedValue([]),
   };
+  const policy = {
+    getPolicySummary: vi.fn().mockResolvedValue({
+      type: 'tiered',
+      description: 'Free cancellation up to 24 hours before check-in. First night charge after.',
+      freeCancelHoursBeforeArrival: 24,
+    }),
+    evaluateCancellation: vi.fn(),
+  };
 
   const svc = new BookingEngineService(
     {} as any,
@@ -59,8 +67,9 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
     deposit as any,
     config as any,
     ancillary as any,
+    policy as any,
   );
-  return { svc, config, availability, ratePlan, tax, guest, reservation, folio, payment, deposit, ancillary };
+  return { svc, config, availability, ratePlan, tax, guest, reservation, folio, payment, deposit, ancillary, policy };
 }
 
 const bookDto = {

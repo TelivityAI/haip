@@ -67,6 +67,12 @@ export function PriceBreakdown({ quote }: { quote: QuoteResponse }) {
           value={money(quote.depositDue, currencyCode)}
         />
       </div>
+
+      {quote.cancellationPolicy?.description && (
+        <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
+          {quote.cancellationPolicy.description}
+        </p>
+      )}
     </div>
   );
 }

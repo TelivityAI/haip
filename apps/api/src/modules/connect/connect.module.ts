@@ -9,9 +9,10 @@ import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { AuthModule } from '../auth/auth.module';
 import { RatePlanModule } from '../rate-plan/rate-plan.module';
+import { PolicyModule } from '../policy/policy.module';
 
 @Module({
-  imports: [ReservationModule, WebhookModule, AuthModule, RatePlanModule],
+  imports: [ReservationModule, WebhookModule, AuthModule, RatePlanModule, PolicyModule],
   controllers: [ConnectController],
   providers: [
     ConnectSearchService,

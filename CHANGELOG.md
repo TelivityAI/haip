@@ -8,6 +8,17 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Money policy (cancellation + deposit settlement)
+
+- **Cancellation policies** — property-scoped rules (free-cancel hours, penalty type,
+  deposit handling) linked from rate plans via `cancellationPolicyId`.
+- **Policy evaluator** — shared cancel/no-show math for PMS, Connect, and booking engine.
+- **Deposit settlement** — cancel refunds or forfeits held deposits; check-in auto-applies
+  held deposits to the guest folio; night audit settles no-shows (plus optional property
+  `noShowFeeAmount`, honors `noShowCutoffHour`).
+- Permissions: `policies.read` / `policies.manage`.
+- Webhooks: `cancellation_policy.created|updated|deleted`; `reservation.no_show` emitted.
+
 ### Added — Stay extras & packages (upsells)
 
 - **Services catalog** — property-scoped sellable extras with charge type, price,

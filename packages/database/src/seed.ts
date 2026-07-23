@@ -171,17 +171,17 @@ async function main() {
     'housekeeping.read', 'housekeeping.manage', 'folios.read', 'folios.manage',
     'groups.read', 'groups.manage', 'cashier.access', 'houseaccounts.read', 'houseaccounts.manage',
     'accounting.view', 'tax.manage',
-    'rateplans.read', 'rateplans.manage', 'services.read', 'services.manage', 'revenue.manage', 'nightaudit.run',
+    'rateplans.read', 'rateplans.manage', 'services.read', 'services.manage', 'policies.read', 'policies.manage', 'revenue.manage', 'nightaudit.run',
     'reports.view', 'channels.manage', 'communications.manage', 'reviews.manage',
     'settings.manage', 'bookingengine.manage', 'admin.users.manage', 'admin.roles.manage',
   ];
   const ROLE_DEFS: { key: string; name: string; perms: string[] }[] = [
     { key: 'admin', name: 'Administrator', perms: ALL_PERMS },
-    { key: 'front_desk', name: 'Front Desk', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'folios.manage', 'groups.read', 'houseaccounts.read', 'houseaccounts.manage', 'rateplans.read', 'services.read', 'services.manage', 'communications.manage', 'reviews.manage'] },
+    { key: 'front_desk', name: 'Front Desk', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'folios.manage', 'groups.read', 'houseaccounts.read', 'houseaccounts.manage', 'rateplans.read', 'services.read', 'services.manage', 'policies.read', 'communications.manage', 'reviews.manage'] },
     { key: 'housekeeping', name: 'Housekeeping', perms: ['dashboard.view', 'rooms.read', 'housekeeping.read'] },
     { key: 'housekeeping_manager', name: 'Housekeeping Manager', perms: ['dashboard.view', 'rooms.read', 'rooms.write', 'housekeeping.read', 'housekeeping.manage'] },
     { key: 'night_auditor', name: 'Night Auditor', perms: ['dashboard.view', 'reservations.read', 'folios.read', 'nightaudit.run', 'reports.view', 'cashier.access', 'houseaccounts.read', 'accounting.view'] },
-    { key: 'readonly', name: 'Read Only', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'folios.read', 'rateplans.read', 'services.read', 'reports.view'] },
+    { key: 'readonly', name: 'Read Only', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'folios.read', 'rateplans.read', 'services.read', 'policies.read', 'reports.view'] },
   ];
 
   const roleIdByKey: Record<string, string> = {};
@@ -297,6 +297,48 @@ async function main() {
   // -----------------------------------------------------------------------
   // 4. Rate Plans (4 base + 1 derived)
   // -----------------------------------------------------------------------
+  const policyIds = {
+    flexible: sid('d0500001', 1),
+    moderate: sid('d0500001', 2),
+    nonRefundable: sid('d0500001', 3),
+  };
+
+  await db.insert(schema.cancellationPolicies).values([
+    {
+      id: policyIds.flexible,
+      propertyId,
+      name: 'Flexible',
+      code: 'FLEX-24',
+      description: 'Free cancellation up to 24 hours before check-in. First night charge after.',
+      freeCancelHoursBeforeArrival: 24,
+      penaltyType: 'first_night',
+      depositHandling: 'refund_if_refundable',
+      isActive: true,
+    },
+    {
+      id: policyIds.moderate,
+      propertyId,
+      name: 'Moderate',
+      code: 'MOD-48',
+      description: 'Free cancellation up to 48 hours before check-in. First night charge after.',
+      freeCancelHoursBeforeArrival: 48,
+      penaltyType: 'first_night',
+      depositHandling: 'refund_if_refundable',
+      isActive: true,
+    },
+    {
+      id: policyIds.nonRefundable,
+      propertyId,
+      name: 'Non-refundable',
+      code: 'NRFN',
+      description: 'Non-refundable — full charge applies on cancel or no-show.',
+      freeCancelHoursBeforeArrival: 0,
+      penaltyType: 'full',
+      depositHandling: 'always_forfeit',
+      isActive: true,
+    },
+  ]);
+
   const rpIds = {
     stdBar: sid('d0000001', 1),
     dlxBar: sid('d0000001', 2),
@@ -306,11 +348,11 @@ async function main() {
   };
 
   await db.insert(schema.ratePlans).values([
-    { id: rpIds.stdBar, propertyId, roomTypeId: roomTypeIds.standard, name: 'Standard BAR', code: 'STK-BAR', type: 'bar', baseAmount: '189.00', currencyCode: 'USD', mealPlan: 'room_only', sortOrder: 1 },
-    { id: rpIds.dlxBar, propertyId, roomTypeId: roomTypeIds.deluxe, name: 'Deluxe BAR', code: 'DOV-BAR', type: 'bar', baseAmount: '289.00', currencyCode: 'USD', mealPlan: 'breakfast', sortOrder: 2 },
-    { id: rpIds.suiteBar, propertyId, roomTypeId: roomTypeIds.suite, name: 'Suite BAR', code: 'JST-BAR', type: 'bar', baseAmount: '429.00', currencyCode: 'USD', mealPlan: 'breakfast', sortOrder: 3 },
-    { id: rpIds.phBar, propertyId, roomTypeId: roomTypeIds.penthouse, name: 'Penthouse BAR', code: 'PHS-BAR', type: 'bar', baseAmount: '799.00', currencyCode: 'USD', mealPlan: 'half_board', sortOrder: 4 },
-    { id: rpIds.dlxPromo, propertyId, roomTypeId: roomTypeIds.deluxe, name: 'Deluxe Summer Promo', code: 'DOV-SUM', type: 'promotional', baseAmount: '239.00', currencyCode: 'USD', mealPlan: 'breakfast', validFrom: dateStr(0), validTo: dateStr(90), channelCodes: ['booking_com', 'expedia'], sortOrder: 5 },
+    { id: rpIds.stdBar, propertyId, roomTypeId: roomTypeIds.standard, name: 'Standard BAR', code: 'STK-BAR', type: 'bar', baseAmount: '189.00', currencyCode: 'USD', mealPlan: 'room_only', cancellationPolicyId: policyIds.flexible, sortOrder: 1 },
+    { id: rpIds.dlxBar, propertyId, roomTypeId: roomTypeIds.deluxe, name: 'Deluxe BAR', code: 'DOV-BAR', type: 'bar', baseAmount: '289.00', currencyCode: 'USD', mealPlan: 'breakfast', cancellationPolicyId: policyIds.flexible, sortOrder: 2 },
+    { id: rpIds.suiteBar, propertyId, roomTypeId: roomTypeIds.suite, name: 'Suite BAR', code: 'JST-BAR', type: 'bar', baseAmount: '429.00', currencyCode: 'USD', mealPlan: 'breakfast', cancellationPolicyId: policyIds.moderate, sortOrder: 3 },
+    { id: rpIds.phBar, propertyId, roomTypeId: roomTypeIds.penthouse, name: 'Penthouse BAR', code: 'PHS-BAR', type: 'bar', baseAmount: '799.00', currencyCode: 'USD', mealPlan: 'half_board', cancellationPolicyId: policyIds.moderate, sortOrder: 4 },
+    { id: rpIds.dlxPromo, propertyId, roomTypeId: roomTypeIds.deluxe, name: 'Deluxe Summer Promo', code: 'DOV-SUM', type: 'promotional', baseAmount: '239.00', currencyCode: 'USD', mealPlan: 'breakfast', validFrom: dateStr(0), validTo: dateStr(90), channelCodes: ['booking_com', 'expedia'], cancellationPolicyId: policyIds.nonRefundable, sortOrder: 5 },
   ]);
 
   // Rate restrictions — weekend surcharges + min-LOS
@@ -1238,6 +1280,7 @@ async function main() {
   console.log('  Reservations:  23 (past, in-house, arrivals, future, no-show, cancelled)');
   console.log('  Folios:        16 with charges & payments');
   console.log('  Rate Plans:    5 with restrictions');
+  console.log('  Cancel policies: 3 (FLEX-24, MOD-48, NRFN)');
   console.log('  Services:      3 (BREAKFAST, PARKING, LATECO)');
   console.log('  HK Tasks:      18 (mix of statuses)');
   console.log('  Night Audit:   1 completed run');

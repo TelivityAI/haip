@@ -23,6 +23,8 @@ import { HousekeepingService } from '../housekeeping/housekeeping.service';
 import { RoomStatusService } from '../room/room-status.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { AncillaryService } from '../ancillary/ancillary.service';
+import { PolicyService } from '../policy/policy.service';
+import { DepositSettlementService } from '../accounting/deposit-settlement.service';
 import { RunAuditDto } from './dto/run-audit.dto';
 import type {
   AuditRunResult,
@@ -41,6 +43,8 @@ export class NightAuditService {
     private readonly roomStatusService: RoomStatusService,
     private readonly webhookService: WebhookService,
     private readonly ancillaryService: AncillaryService,
+    private readonly policyService: PolicyService,
+    private readonly depositSettlementService: DepositSettlementService,
   ) {}
 
   /**
@@ -268,52 +272,58 @@ export class NightAuditService {
       .select({ settings: properties.settings })
       .from(properties)
       .where(eq(properties.id, propertyId));
-    const noShowFeeAmount = (property?.settings as any)?.noShowFeeAmount;
+    const settings = (property?.settings ?? {}) as {
+      noShowFeeAmount?: number;
+      noShowCutoffHour?: number;
+    };
+    const noShowFeeAmount = settings.noShowFeeAmount;
+    const cutoffHour = settings.noShowCutoffHour;
+
+    // When cutoff hour is configured, only treat same-day arrivals as no-shows
+    // after that hour (UTC). Past-arrival dates are always eligible.
+    const now = new Date();
+    const eligible = noShowCandidates.filter((reservation: any) => {
+      if (reservation.arrivalDate < businessDate) return true;
+      if (cutoffHour === undefined || cutoffHour === null) return true;
+      return now.getUTCHours() >= cutoffHour;
+    });
 
     let count = 0;
     const reservationIds: string[] = [];
     const errors: Array<{ message: string; entity?: string }> = [];
 
-    for (const reservation of noShowCandidates) {
+    for (const reservation of eligible) {
       try {
-        // Mark as no-show
+        // Mark as no-show (emits reservation.no_show)
         await this.reservationService.markNoShow(reservation.id, propertyId);
         reservationIds.push(reservation.id);
         count++;
 
-        // Post no-show fee if configured
-        if (noShowFeeAmount && noShowFeeAmount > 0) {
-          try {
-            // Find or create folio
-            let [folio] = await this.db
-              .select()
-              .from(folios)
-              .where(
-                and(
-                  eq(folios.reservationId, reservation.id),
-                  eq(folios.propertyId, propertyId),
-                  eq(folios.type, 'guest' as any),
-                ),
-              );
-
-            if (!folio) {
-              folio = await this.folioService.createAutoFolio(reservation);
-            }
-
-            await this.folioService.postCharge(folio.id, {
-              propertyId,
-              type: 'fee',
-              description: 'No-show fee',
-              amount: String(noShowFeeAmount),
-              currencyCode: reservation.currencyCode,
-              serviceDate: new Date(businessDate + 'T00:00:00Z').toISOString(),
-            });
-          } catch (feeErr: any) {
-            errors.push({
-              message: `No-show fee failed for ${reservation.id}: ${feeErr.message}`,
-              entity: reservation.id,
-            });
-          }
+        // Policy-driven deposit settlement + penalty; property noShowFeeAmount is additive
+        try {
+          // No-shows are past arrival — evaluate as outside the free-cancel window.
+          const evaluation = await this.policyService.evaluateCancellation({
+            propertyId,
+            ratePlanId: reservation.ratePlanId,
+            arrivalDate: reservation.arrivalDate,
+            totalAmount: reservation.totalAmount,
+            nights: reservation.nights ?? 1,
+            now: new Date(`${reservation.arrivalDate}T23:59:59Z`),
+          });
+          await this.depositSettlementService.settleFromEvaluation({
+            reservationId: reservation.id,
+            propertyId,
+            currencyCode: reservation.currencyCode,
+            evaluation,
+            penaltyDescription: 'No-show penalty',
+            additionalFeeAmount: noShowFeeAmount,
+            additionalFeeDescription: 'No-show fee',
+          });
+        } catch (feeErr: any) {
+          errors.push({
+            message: `No-show settlement failed for ${reservation.id}: ${feeErr.message}`,
+            entity: reservation.id,
+          });
         }
 
         // Free assigned room if any
@@ -322,7 +332,12 @@ export class NightAuditService {
             await this.db
               .update(reservations)
               .set({ roomId: null, updatedAt: new Date() })
-              .where(eq(reservations.id, reservation.id));
+              .where(
+                and(
+                  eq(reservations.id, reservation.id),
+                  eq(reservations.propertyId, propertyId),
+                ),
+              );
           } catch {
             // Room unassignment failure is non-critical
           }

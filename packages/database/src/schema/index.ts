@@ -45,6 +45,13 @@ export {
   reservationNotes,
 } from './reservation.js';
 
+// Cancellation policies (rate-plan money outcomes)
+export {
+  cancellationPenaltyTypeEnum,
+  cancellationDepositHandlingEnum,
+  cancellationPolicies,
+} from './cancellation-policy.js';
+
 // Rate Plans & Restrictions
 export {
   ratePlanTypeEnum,

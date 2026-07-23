@@ -118,6 +118,11 @@ export interface QuoteResponse {
   grandTotal: string;
   depositPolicy: DepositPolicy;
   depositDue: string;
+  cancellationPolicy?: {
+    type?: string;
+    description?: string;
+    freeCancelHoursBeforeArrival?: number;
+  };
 }
 
 export interface QuoteRequest {

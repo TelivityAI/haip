@@ -11,6 +11,8 @@ import { RoomModule } from '../room/room.module';
 import { PaymentModule } from '../payment/payment.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { AncillaryModule } from '../ancillary/ancillary.module';
+import { AccountingModule } from '../accounting/accounting.module';
+import { PolicyModule } from '../policy/policy.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { AncillaryModule } from '../ancillary/ancillary.module';
     PaymentModule,
     WebhookModule,
     forwardRef(() => AncillaryModule),
+    AccountingModule,
+    PolicyModule,
   ],
   controllers: [ReservationController],
   providers: [

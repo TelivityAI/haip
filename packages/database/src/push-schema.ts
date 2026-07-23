@@ -66,6 +66,9 @@ async function main() {
     // Stay extras / packages
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'service_posting_rule') THEN CREATE TYPE service_posting_rule AS ENUM ('once','per_night','on_consumption','included_in_rate'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reservation_service_status') THEN CREATE TYPE reservation_service_status AS ENUM ('quoted','confirmed','posted','cancelled'); END IF; END $$`,
+    // Cancellation policies
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cancellation_penalty_type') THEN CREATE TYPE cancellation_penalty_type AS ENUM ('none','first_night','percentage','full'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cancellation_deposit_handling') THEN CREATE TYPE cancellation_deposit_handling AS ENUM ('refund_if_refundable','always_forfeit','always_refund'); END IF; END $$`,
   ];
 
   for (const e of enums) {
@@ -918,6 +921,32 @@ async function main() {
     )`,
     `CREATE INDEX IF NOT EXISTS reservation_services_property_idx ON reservation_services (property_id)`,
     `CREATE INDEX IF NOT EXISTS reservation_services_reservation_idx ON reservation_services (property_id, reservation_id)`,
+    // Cancellation policies (money outcomes for cancel / no-show)
+    `CREATE TABLE IF NOT EXISTS cancellation_policies (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      name varchar(100) NOT NULL,
+      code varchar(20) NOT NULL,
+      description text,
+      free_cancel_hours_before_arrival integer NOT NULL DEFAULT 24,
+      penalty_type cancellation_penalty_type NOT NULL DEFAULT 'first_night',
+      penalty_percentage numeric(5,2),
+      deposit_handling cancellation_deposit_handling NOT NULL DEFAULT 'refund_if_refundable',
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS cancellation_policies_property_idx ON cancellation_policies (property_id)`,
+    `CREATE INDEX IF NOT EXISTS cancellation_policies_property_code_idx ON cancellation_policies (property_id, code)`,
+    `DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'rate_plans_cancellation_policy_id_fkey'
+      ) THEN
+        ALTER TABLE rate_plans
+          ADD CONSTRAINT rate_plans_cancellation_policy_id_fkey
+          FOREIGN KEY (cancellation_policy_id) REFERENCES cancellation_policies(id);
+      END IF;
+    END $$`,
   ];
 
   for (const t of tables) {

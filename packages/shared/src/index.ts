@@ -107,6 +107,11 @@ export const WEBHOOK_EVENTS = {
   'reservation.service_cancelled': 'reservation.service_cancelled',
   'reservation.service_posted': 'reservation.service_posted',
 
+  // Cancellation policies
+  'cancellation_policy.created': 'cancellation_policy.created',
+  'cancellation_policy.updated': 'cancellation_policy.updated',
+  'cancellation_policy.deleted': 'cancellation_policy.deleted',
+
   // Split-folio events (KB 14.2)
   'folio.transactions_moved': 'folio.transactions_moved',
   'folio.routing_rule_created': 'folio.routing_rule_created',

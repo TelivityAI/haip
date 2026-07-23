@@ -9,6 +9,8 @@ import { HousekeepingService } from '../housekeeping/housekeeping.service';
 import { RoomStatusService } from '../room/room-status.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { AncillaryService } from '../ancillary/ancillary.service';
+import { PolicyService } from '../policy/policy.service';
+import { DepositSettlementService } from '../accounting/deposit-settlement.service';
 
 const mockFolioService = {
   postCharge: vi.fn().mockResolvedValue({
@@ -48,6 +50,28 @@ const mockWebhookService = { emit: vi.fn().mockResolvedValue(undefined) };
 
 const mockAncillaryService = {
   postPerNightForProperty: vi.fn().mockResolvedValue({ posted: [], skipped: [], errors: [] }),
+};
+
+const mockPolicyService = {
+  evaluateCancellation: vi.fn().mockResolvedValue({
+    withinFreeWindow: false,
+    penaltyAmount: '0.00',
+    depositAction: 'forfeit',
+    policyDescription: 'Default',
+    policyId: null,
+    policyCode: null,
+    penaltyType: 'first_night',
+  }),
+};
+
+const mockDepositSettlementService = {
+  settleFromEvaluation: vi.fn().mockResolvedValue({
+    penaltyPosted: false,
+    penaltyAmount: '0.00',
+    deposits: [],
+    policyDescription: 'Default',
+    withinFreeWindow: false,
+  }),
 };
 
 const mockReservation = {
@@ -197,6 +221,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
 
@@ -221,6 +247,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -247,6 +275,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -290,6 +320,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -324,6 +356,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -350,6 +384,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -379,6 +415,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -411,6 +449,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -440,17 +480,19 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
 
     await service.processNoShows('prop-001', '2026-04-06');
-    expect(mockFolioService.postCharge).toHaveBeenCalledWith(
-      'folio-noshowfee',
+    expect(mockDepositSettlementService.settleFromEvaluation).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'fee',
-        description: 'No-show fee',
-        amount: '150',
+        reservationId: 'res-001',
+        propertyId: 'prop-001',
+        additionalFeeAmount: 150,
+        additionalFeeDescription: 'No-show fee',
       }),
     );
   });
@@ -470,6 +512,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -494,6 +538,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -517,6 +563,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -555,6 +603,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -599,6 +649,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -642,6 +694,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -668,6 +722,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -688,6 +744,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -718,6 +776,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
@@ -747,6 +807,8 @@ describe('NightAuditService', () => {
         { provide: RoomStatusService, useValue: mockRoomStatusService },
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
       ],
     }).compile();
     service = module.get(NightAuditService);
