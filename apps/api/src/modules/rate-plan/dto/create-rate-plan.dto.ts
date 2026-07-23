@@ -100,6 +100,11 @@ export class CreateRatePlanDto {
   @IsString({ each: true })
   channelCodes?: string[];
 
+  @ApiPropertyOptional({ description: 'Linked cancellation policy ID' })
+  @IsOptional()
+  @IsUUID()
+  cancellationPolicyId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()

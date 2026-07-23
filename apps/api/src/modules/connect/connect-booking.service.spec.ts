@@ -54,12 +54,34 @@ describe('ConnectBookingService', () => {
 
     mockWebhookService = { emit: vi.fn().mockResolvedValue(undefined) };
     const mockRatePlanService = { assertSellable: vi.fn().mockResolvedValue(undefined) };
+    const mockReservationService = {
+      cancel: vi.fn().mockResolvedValue({
+        id: 'res-1',
+        status: 'cancelled',
+        cancellationSettlement: {
+          penaltyPosted: false,
+          penaltyAmount: '0.00',
+          deposits: [],
+          policyDescription: 'Free cancellation — cancelled before 24h deadline.',
+          withinFreeWindow: true,
+        },
+      }),
+    };
+    const mockPolicyService = {
+      getPolicySummary: vi.fn().mockResolvedValue({
+        type: 'tiered',
+        description: 'Free cancellation up to 24 hours before check-in. First night charge after.',
+      }),
+      evaluateCancellation: vi.fn(),
+    };
 
     service = new ConnectBookingService(
       mockDb,
       mockAvailabilityService,
+      mockReservationService as any,
       mockWebhookService,
       mockRatePlanService as any,
+      mockPolicyService as any,
     );
   });
 

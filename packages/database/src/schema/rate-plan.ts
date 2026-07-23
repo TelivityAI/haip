@@ -1,6 +1,7 @@
 import { pgTable, uuid, varchar, text, boolean, timestamp, jsonb, integer, numeric, date, pgEnum } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 import { roomTypes } from './room.js';
+import { cancellationPolicies } from './cancellation-policy.js';
 
 /**
  * Rate plan types (KB 5.3):
@@ -41,7 +42,7 @@ export const ratePlans = pgTable('rate_plans', {
   isTaxInclusive: boolean('is_tax_inclusive').notNull().default(false),
 
   // Cancellation policy reference
-  cancellationPolicyId: uuid('cancellation_policy_id'), // FK to future cancellation_policies table
+  cancellationPolicyId: uuid('cancellation_policy_id').references(() => cancellationPolicies.id),
 
   // Meal plan
   mealPlan: varchar('meal_plan', { length: 20 }), // "room_only", "breakfast", "half_board", "full_board", "all_inclusive"

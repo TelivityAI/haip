@@ -9,6 +9,8 @@ import { RoomStatusService } from '../room/room-status.service';
 import { PaymentService } from '../payment/payment.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { AncillaryService } from '../ancillary/ancillary.service';
+import { PolicyService } from '../policy/policy.service';
+import { DepositSettlementService } from '../accounting/deposit-settlement.service';
 
 /**
  * Cross-tenant FK ownership tests for ReservationService (security audit #4).
@@ -57,6 +59,8 @@ async function mkService(db: any) {
       { provide: PaymentService, useValue: {} },
       { provide: WebhookService, useValue: { emit: vi.fn() } },
       { provide: AncillaryService, useValue: { ensurePackageComponents: async () => [], postOnceForReservation: async () => ({ posted: [] }) } },
+      { provide: PolicyService, useValue: { evaluateCancellation: async () => ({ withinFreeWindow: true, penaltyAmount: '0.00', depositAction: 'refund', policyDescription: 'test', policyId: null, policyCode: null, penaltyType: 'none' }) } },
+      { provide: DepositSettlementService, useValue: { settleFromEvaluation: async () => null, applyHeldDeposits: async () => [] } },
     ],
   }).compile();
   return mod.get(ReservationService);

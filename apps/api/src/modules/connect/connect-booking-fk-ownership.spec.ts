@@ -4,8 +4,10 @@ import { Test } from '@nestjs/testing';
 import { ConnectBookingService } from './connect-booking.service';
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
+import { ReservationService } from '../reservation/reservation.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { RatePlanService } from '../rate-plan/rate-plan.service';
+import { PolicyService } from '../policy/policy.service';
 
 /**
  * Cross-tenant FK ownership for ConnectBookingService.modify — flagged by the
@@ -44,6 +46,8 @@ describe('ConnectBookingService — modify cross-tenant FK ownership', () => {
         { provide: AvailabilityService, useValue: { searchAvailability: vi.fn().mockResolvedValue([]) } },
         { provide: WebhookService, useValue: { emit: vi.fn() } },
         { provide: RatePlanService, useValue: { assertSellable: vi.fn().mockResolvedValue(undefined) } },
+        { provide: ReservationService, useValue: { cancel: vi.fn() } },
+        { provide: PolicyService, useValue: { getPolicySummary: vi.fn().mockResolvedValue({ description: 'test' }), evaluateCancellation: vi.fn() } },
       ],
     }).compile();
     const svc = mod.get(ConnectBookingService);

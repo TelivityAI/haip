@@ -84,7 +84,16 @@ describe('ConnectSearchService', () => {
       ]),
     };
 
-    service = new ConnectSearchService(mockDb, mockAvailabilityService);
+    service = new ConnectSearchService(mockDb, mockAvailabilityService, {
+      getPolicySummary: vi.fn().mockResolvedValue({
+        type: 'tiered',
+        penaltyType: 'first_night',
+        description: 'Free cancellation up to 24 hours before check-in. First night charge after.',
+        freeCancelHoursBeforeArrival: 24,
+        policyId: null,
+        policyCode: null,
+      }),
+    } as any);
   });
 
   describe('search', () => {

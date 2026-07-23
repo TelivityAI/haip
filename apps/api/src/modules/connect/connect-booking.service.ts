@@ -4,8 +4,10 @@ import Decimal from 'decimal.js';
 import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
+import { ReservationService } from '../reservation/reservation.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { RatePlanService } from '../rate-plan/rate-plan.service';
+import { PolicyService } from '../policy/policy.service';
 import type { AgentBookDto } from './dto/agent-book.dto';
 import type { AgentModifyDto } from './dto/agent-modify.dto';
 import { randomBytes } from 'crypto';
@@ -15,8 +17,10 @@ export class ConnectBookingService {
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     private readonly availabilityService: AvailabilityService,
+    private readonly reservationService: ReservationService,
     private readonly webhookService: WebhookService,
     private readonly ratePlanService: RatePlanService,
+    private readonly policyService: PolicyService,
   ) {}
 
   /**
@@ -154,7 +158,9 @@ export class ConnectBookingService {
       totalAmount: Math.round(totalAmount * 100) / 100,
       currencyCode: ratePlan.currencyCode,
       nightlyBreakdown,
-      cancellationPolicy: this.getCancellationPolicyText(ratePlan),
+      cancellationPolicy: (
+        await this.policyService.getPolicySummary(dto.propertyId, dto.ratePlanId)
+      ).description,
       paymentStatus,
       depositAmount,
       bookedAt: new Date().toISOString(),
@@ -401,6 +407,7 @@ export class ConnectBookingService {
 
   /**
    * Cancel booking — Agent 4.6 (Modification & Cancellation).
+   * Delegates status + money settlement to ReservationService.cancel.
    */
   async cancel(confirmationNumber: string, reason?: string) {
     const { booking, reservation } = await this.loadBookingByConfirmation(confirmationNumber);
@@ -409,39 +416,21 @@ export class ConnectBookingService {
       throw new BadRequestException(`Reservation already ${reservation.status}`);
     }
 
-    // Determine penalty
-    const [ratePlan] = await this.db
-      .select()
-      .from(ratePlans)
-      .where(
-        and(
-          eq(ratePlans.id, reservation.ratePlanId),
-          eq(ratePlans.propertyId, booking.propertyId),
-        ),
-      );
+    const cancelled = await this.reservationService.cancel(
+      reservation.id,
+      booking.propertyId,
+      { cancellationReason: reason ?? 'Cancelled by agent' },
+    );
 
-    const penaltyInfo = this.calculateCancellationPenalty(ratePlan, reservation);
+    const settlement = (cancelled as any).cancellationSettlement;
+    const totalAmountDec = new Decimal(reservation.totalAmount);
+    const penaltyAmount = settlement
+      ? Number(new Decimal(settlement.penaltyAmount).toFixed(2))
+      : 0;
+    const refundAmount = Number(totalAmountDec.minus(penaltyAmount).toFixed(2));
 
-    // Cancel the reservation
-    await this.db
-      .update(reservations)
-      .set({
-        status: 'cancelled',
-        cancelledAt: new Date(),
-        cancellationReason: reason ?? 'Cancelled by agent',
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(reservations.id, reservation.id),
-          eq(reservations.propertyId, booking.propertyId),
-        ),
-      );
-
-    // Generate cancellation number
     const cancellationNumber = `CXL-${Date.now().toString(36).toUpperCase()}`;
 
-    // Emit webhook
     await this.webhookService.emit(
       'connect.booking_cancelled',
       'reservation',
@@ -454,10 +443,12 @@ export class ConnectBookingService {
       cancelled: true,
       confirmationNumber,
       cancellationNumber,
-      penaltyApplied: penaltyInfo.penaltyApplied,
-      penaltyAmount: penaltyInfo.penaltyAmount,
-      refundAmount: penaltyInfo.refundAmount,
-      cancellationPolicy: penaltyInfo.policyDescription,
+      penaltyApplied: penaltyAmount > 0,
+      penaltyAmount,
+      refundAmount: Math.max(0, refundAmount),
+      cancellationPolicy:
+        settlement?.policyDescription ??
+        'Cancellation settled per rate plan policy.',
     };
   }
 
@@ -559,53 +550,6 @@ export class ConnectBookingService {
       });
     }
     return breakdown;
-  }
-
-  private getCancellationPolicyText(ratePlan: any): string {
-    if (ratePlan.type === 'promotional') {
-      return 'Non-refundable — no cancellation allowed.';
-    }
-    return 'Free cancellation up to 24 hours before check-in. First night charge after.';
-  }
-
-  private calculateCancellationPenalty(ratePlan: any, reservation: any) {
-    // Money math via Decimal; refundAmount / penaltyAmount are displayed as currency
-    const totalAmountDec = new Decimal(reservation.totalAmount);
-    const totalAmount = totalAmountDec.toNumber();
-
-    // Non-refundable rate
-    if (ratePlan?.type === 'promotional') {
-      return {
-        penaltyApplied: true,
-        penaltyAmount: totalAmount,
-        refundAmount: 0,
-        policyDescription: 'Non-refundable rate — full charge applies.',
-      };
-    }
-
-    // Default: free cancellation 24h before check-in
-    const checkInDate = new Date(reservation.arrivalDate + 'T15:00:00Z');
-    const now = new Date();
-    const hoursUntilCheckIn = (checkInDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-    if (hoursUntilCheckIn >= 24) {
-      return {
-        penaltyApplied: false,
-        penaltyAmount: 0,
-        refundAmount: totalAmount,
-        policyDescription: 'Free cancellation — cancelled before 24h deadline.',
-      };
-    }
-
-    // First night penalty
-    const nights = reservation.nights || 1;
-    const firstNightAmountDec = totalAmountDec.div(nights);
-    return {
-      penaltyApplied: true,
-      penaltyAmount: Number(firstNightAmountDec.toFixed(2)),
-      refundAmount: Number(totalAmountDec.minus(firstNightAmountDec).toFixed(2)),
-      policyDescription: 'First night charge applies — cancelled within 24 hours of check-in.',
-    };
   }
 }
 

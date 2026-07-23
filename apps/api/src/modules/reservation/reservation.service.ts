@@ -17,6 +17,8 @@ import { RoomStatusService } from '../room/room-status.service';
 import { PaymentService } from '../payment/payment.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { AncillaryService } from '../ancillary/ancillary.service';
+import { PolicyService } from '../policy/policy.service';
+import { DepositSettlementService } from '../accounting/deposit-settlement.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ModifyReservationDto } from './dto/modify-reservation.dto';
 import { AssignRoomDto } from './dto/assign-room.dto';
@@ -40,6 +42,8 @@ export class ReservationService {
     private readonly webhookService: WebhookService,
     @Inject(forwardRef(() => AncillaryService))
     private readonly ancillaryService: AncillaryService,
+    private readonly policyService: PolicyService,
+    private readonly depositSettlementService: DepositSettlementService,
   ) {}
 
   async create(dto: CreateReservationDto, opts?: { confirmationNumber?: string }) {
@@ -233,6 +237,29 @@ export class ReservationService {
       'cancelled',
     );
 
+    // Money settlement: evaluate cancellation policy → penalty + deposit refund/forfeit (KB §10.4).
+    let settlement: Awaited<
+      ReturnType<DepositSettlementService['settleFromEvaluation']>
+    > | null = null;
+    try {
+      const evaluation = await this.policyService.evaluateCancellation({
+        propertyId,
+        ratePlanId: reservation.ratePlanId,
+        arrivalDate: reservation.arrivalDate,
+        totalAmount: reservation.totalAmount,
+        nights: reservation.nights ?? 1,
+      });
+      settlement = await this.depositSettlementService.settleFromEvaluation({
+        reservationId: updated.id,
+        propertyId,
+        currencyCode: reservation.currencyCode,
+        evaluation,
+        penaltyDescription: 'Cancellation penalty',
+      });
+    } catch {
+      // Settlement failure must not undo the cancel status claim.
+    }
+
     // Emit reservation.cancelled so channel manager / ARI can push updated availability.
     await this.webhookService.emit(
       'reservation.cancelled',
@@ -244,11 +271,16 @@ export class ReservationService {
         departureDate: updated.departureDate,
         roomTypeId: updated.roomTypeId,
         cancellationReason: dto.cancellationReason,
+        penaltyAmount: settlement?.penaltyAmount ?? null,
+        withinFreeWindow: settlement?.withinFreeWindow ?? null,
       },
       updated.propertyId,
     );
 
-    return updated;
+    return {
+      ...updated,
+      cancellationSettlement: settlement,
+    };
   }
 
   async markNoShow(id: string, propertyId: string) {
@@ -263,6 +295,19 @@ export class ReservationService {
       { status: 'no_show', updatedAt: new Date() },
       'no_show',
     );
+
+    await this.webhookService.emit(
+      'reservation.no_show',
+      'reservation',
+      updated.id,
+      {
+        reservationId: updated.id,
+        arrivalDate: updated.arrivalDate,
+        roomTypeId: updated.roomTypeId,
+      },
+      updated.propertyId,
+    );
+
     return updated;
   }
 
@@ -427,6 +472,13 @@ export class ReservationService {
       await this.ancillaryService.postOnceForReservation(updated.id, propertyId);
     } catch {
       // Ancillary posting failure must not block check-in
+    }
+
+    // Apply held advance deposits to the guest folio (KB §10.3)
+    try {
+      await this.depositSettlementService.applyHeldDeposits(updated.id, propertyId, folio.id);
+    } catch {
+      // Deposit apply failure must not block check-in
     }
 
     // Emit webhook

@@ -15,6 +15,7 @@ import { FolioService } from '../folio/folio.service';
 import { PaymentService } from '../payment/payment.service';
 import { DepositService } from '../accounting/deposit.service';
 import { AncillaryService } from '../ancillary/ancillary.service';
+import { PolicyService } from '../policy/policy.service';
 import { BookingEngineConfigService } from './booking-engine-config.service';
 import type { BeSearchDto } from './dto/be-search.dto';
 import type { BeQuoteDto } from './dto/be-quote.dto';
@@ -43,6 +44,7 @@ export class BookingEngineService {
     private readonly depositService: DepositService,
     private readonly configService: BookingEngineConfigService,
     private readonly ancillaryService: AncillaryService,
+    private readonly policyService: PolicyService,
   ) {}
 
   // --- Search ---
@@ -286,6 +288,11 @@ export class BookingEngineService {
       nights,
     );
 
+    const cancellationPolicy = await this.policyService.getPolicySummary(
+      propertyId,
+      dto.ratePlanId,
+    );
+
     return {
       propertyId,
       roomTypeId: dto.roomTypeId,
@@ -303,6 +310,11 @@ export class BookingEngineService {
       grandTotal: grandTotal.toFixed(2),
       depositPolicy: config.depositPolicy,
       depositDue: depositAmount.toFixed(2),
+      cancellationPolicy: {
+        type: cancellationPolicy.type,
+        description: cancellationPolicy.description,
+        freeCancelHoursBeforeArrival: cancellationPolicy.freeCancelHoursBeforeArrival,
+      },
     };
   }
 
@@ -438,9 +450,8 @@ export class BookingEngineService {
       services: quote.services,
       servicesTotal: quote.servicesTotal,
       servicesTaxTotal: quote.servicesTaxTotal,
-      cancellationPolicy: (config.depositPolicy as DepositPolicy).refundable
-        ? 'Deposit refundable per property policy.'
-        : 'Deposit non-refundable.',
+      cancellationPolicy: quote.cancellationPolicy?.description
+        ?? 'See rate plan cancellation policy.',
     };
   }
 

@@ -4,6 +4,7 @@ import Decimal from 'decimal.js';
 import { properties, roomTypes, ratePlans, rateRestrictions } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
+import { PolicyService } from '../policy/policy.service';
 import type { AgentSearchDto } from './dto/agent-search.dto';
 import { randomUUID } from 'crypto';
 
@@ -12,6 +13,7 @@ export class ConnectSearchService {
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     private readonly availabilityService: AvailabilityService,
+    private readonly policyService: PolicyService,
   ) {}
 
   /**
@@ -345,8 +347,11 @@ export class ConnectSearchService {
     }
     const totalAmount = Number(totalAmountDec.toFixed(2));
 
-    // Build cancellation policy
-    const cancellationPolicy = this.buildCancellationPolicy(plan);
+    // Build cancellation policy from linked rate-plan policy (or default)
+    const cancellationPolicy = await this.policyService.getPolicySummary(
+      plan.propertyId,
+      plan.id,
+    );
 
     return {
       ratePlanId: plan.id,
@@ -356,29 +361,16 @@ export class ConnectSearchService {
       totalAmount,
       currencyCode: plan.currencyCode,
       nightlyBreakdown,
-      cancellationPolicy,
+      cancellationPolicy: {
+        type: cancellationPolicy.type,
+        penaltyType: cancellationPolicy.penaltyType,
+        description: cancellationPolicy.description,
+      },
       minLos: minLos ?? undefined,
       maxLos: maxLos === Infinity ? undefined : maxLos,
       closedToArrival,
       closedToDeparture,
       channelCodes: plan.channelCodes,
-    };
-  }
-
-  private buildCancellationPolicy(plan: any) {
-    // Since cancellation_policies table doesn't exist yet, use rate plan type heuristics
-    if (plan.type === 'promotional') {
-      return {
-        type: 'non_refundable' as const,
-        description: 'Non-refundable rate — no cancellation or modification allowed.',
-      };
-    }
-
-    // Default: free cancellation 24h before check-in
-    return {
-      type: 'tiered' as const,
-      penaltyType: 'first_night' as const,
-      description: 'Free cancellation up to 24 hours before check-in. First night charge after.',
     };
   }
 
