@@ -8,6 +8,7 @@ import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import { useTranslation } from 'react-i18next';
+import RatePlanCalendar from '../components/rates/RatePlanCalendar';
 
 interface RatePlan {
   id: string;
@@ -142,22 +143,33 @@ function RatePlanList() {
 function RatePlanDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
+  const { propertyId } = useProperty();
   const navigate = useNavigate();
   const [testDate, setTestDate] = useState('');
   const [effectiveRate, setEffectiveRate] = useState<number | null>(null);
 
   const { data } = useQuery({
-    queryKey: ['rate-plans', id],
-    queryFn: () => api.get(`/v1/rate-plans/${id}`).then((r) => r.data),
-    enabled: !!id,
+    queryKey: ['rate-plans', id, propertyId],
+    queryFn: () => api.get(`/v1/rate-plans/${id}`, { params: { propertyId } }).then((r) => r.data),
+    enabled: !!id && !!propertyId,
   });
 
   const plan: RatePlan | null = data?.data ?? data ?? null;
 
   const testMutation = useMutation({
-    mutationFn: () => api.get(`/v1/rate-plans/${id}/effective-rate`, { params: { date: testDate } }),
-    onSuccess: (res) => setEffectiveRate(res.data?.rate ?? res.data?.data?.rate ?? null),
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.get(`/v1/rate-plans/${id}/effective-rate`, { params: { propertyId } });
+    },
+    onSuccess: (res) => {
+      const payload = res.data?.data ?? res.data;
+      setEffectiveRate(payload?.effectiveRate ?? null);
+    },
   });
+
+  if (!propertyId) {
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('ratePlans.selectProperty')}</div>;
+  }
 
   if (!plan) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.loading')}</div>;
 
@@ -195,6 +207,14 @@ function RatePlanDetail() {
           )}
         </div>
       </div>
+
+      {id && (
+        <RatePlanCalendar
+          ratePlanId={id}
+          propertyId={propertyId}
+          baseAmount={Number(plan.baseAmount ?? 0)}
+        />
+      )}
     </div>
   );
 }

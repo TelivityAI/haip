@@ -771,4 +771,83 @@ export class ReportsService {
       byProperty,
     };
   }
+
+  /**
+   * Booking Pace — for each calendar day in the range, rooms on the books for
+   * that stay night plus new reservations created that day (KB 5.9 pace view).
+   */
+  async getBookingPace(propertyId: string, startDate: string, endDate: string) {
+    const bookedStatuses = [
+      'pending',
+      'confirmed',
+      'assigned',
+      'checked_in',
+      'stayover',
+      'due_out',
+      'checked_out',
+    ] as const;
+
+    const dailyOnBooks = await this.db
+      .select({
+        date: sql<string>`d.d::date`,
+        count: sql<number>`count(distinct r.id)::int`,
+      })
+      .from(sql`generate_series(${startDate}::date, ${endDate}::date, '1 day'::interval) as d(d)`)
+      .leftJoin(
+        reservations,
+        and(
+          eq(reservations.propertyId, propertyId),
+          inArray(reservations.status, bookedStatuses as any),
+          lte(reservations.arrivalDate, sql`d.d::date`),
+          sql`${reservations.departureDate} > d.d::date`,
+        ),
+      )
+      .groupBy(sql`d.d::date`)
+      .orderBy(sql`d.d::date`);
+
+    const dailyNewBookings = await this.db
+      .select({
+        date: sql<string>`${reservations.createdAt}::date`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.propertyId, propertyId),
+          sql`${reservations.createdAt}::date >= ${startDate}`,
+          sql`${reservations.createdAt}::date <= ${endDate}`,
+        ),
+      )
+      .groupBy(sql`${reservations.createdAt}::date`);
+
+    const newBookingsMap = new Map<string, number>();
+    for (const row of dailyNewBookings) {
+      const dateKey =
+        typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().split('T')[0]!;
+      newBookingsMap.set(dateKey, row.count);
+    }
+
+    const daily = dailyOnBooks.map((row: any) => {
+      const dateKey =
+        typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().split('T')[0]!;
+      return {
+        date: dateKey,
+        roomsOnBooks: row.count,
+        newBookings: newBookingsMap.get(dateKey) ?? 0,
+      };
+    });
+
+    const totalRoomsOnBooks = daily.reduce((s: number, d: any) => s + d.roomsOnBooks, 0);
+    const totalNewBookings = daily.reduce((s: number, d: any) => s + d.newBookings, 0);
+    const dayCount = daily.length || 1;
+
+    return {
+      period: { start: startDate, end: endDate },
+      daily,
+      summary: {
+        avgRoomsOnBooks: Math.round((totalRoomsOnBooks / dayCount) * 100) / 100,
+        totalNewBookings,
+      },
+    };
+  }
 }

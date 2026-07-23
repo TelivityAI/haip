@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-<img src="https://img.shields.io/badge/Tests-1185%20passing-brightgreen" alt="1185 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+<img src="https://img.shields.io/badge/Tests-1192%20passing-brightgreen" alt="1192 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -294,7 +294,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 ### Groups & Commercial Profiles
 - **Group profiles** — master records for corporate, travel-agent, wholesale, and event business, with an optional group (master) folio and computed group invoices.
 - **Commercial standing accounts** — billing address + payment terms on group profiles; optional links from **A/R ledgers** and **negotiated rate plans** (`groupProfileId`); Commercial dashboard page lists corporate / travel-agent / wholesale accounts and can create a linked A/R ledger (`GET /groups/profiles/:id/commercial`).
-- **Allotment blocks** — hold a quantity of rooms per date and room type at negotiated rates, with cutoff dates, shoulder dates, and Min/Max LOS. Inventory is validated against live availability so a block can't over-allot.
+- **Allotment blocks** — hold a quantity of rooms per date and room type at negotiated rates, with cutoff dates, shoulder dates, and Min/Max LOS. Inventory rows may be set across the shoulder-inclusive span; dates outside that span are rejected. Held rooms are validated against live availability so a block can't over-allot.
 - **Cutoff & auto-release** — release unsold rooms back to general inventory at the cutoff date, per block or via a sweep endpoint that processes all expired auto-release blocks.
 - **Pickup tracking** — rooms allotted vs. picked up, per date and room type, with pickup rate.
 - **Rooming lists** — batch-import a group's guest roster; each row creates and links a reservation and increments pickup, with per-row success/error handling that never aborts the batch.
@@ -465,7 +465,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (1185 tests across 144 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
+| Testing | Vitest (1192 tests across 144 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
 
@@ -586,7 +586,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (1185 tests across 144 test files)
+# All tests (1192 tests across 144 test files)
 
 # API tests only
 pnpm --filter @telivityhaip/api test
@@ -971,6 +971,7 @@ GET    /api/v1/reports/trial-balance               # Daily trial balance (deposi
 GET    /api/v1/reports/occupancy                   # Occupancy report
 GET    /api/v1/reports/financial-summary            # Financial summary
 GET    /api/v1/reports/occupancy-trend              # Occupancy trend
+GET    /api/v1/reports/booking-pace                 # Booking pace (rooms on books + new bookings)
 
 # Night Audit — 3 endpoints
 POST   /api/v1/night-audit/run                     # Execute night audit
@@ -1107,7 +1108,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (1185 tests, 144 files)
+pnpm test             # Run all tests (1192 tests, 144 files)
 pnpm lint             # ESLint
 ```
 
