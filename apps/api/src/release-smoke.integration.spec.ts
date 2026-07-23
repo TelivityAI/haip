@@ -121,7 +121,17 @@ describe.runIf(runSmoke)('release smoke (migrate → reservation lifecycle)', ()
     const checkInRes = await request(app.getHttpServer())
       .patch(`/api/v1/reservations/${reservationId}/check-in`)
       .query({ propertyId: PROPERTY_ID })
-      .send({ roomId: ROOM_ID, idType: 'passport', idNumber: 'SMOKE123', idCountry: 'US' })
+      .send({
+        roomId: ROOM_ID,
+        idType: 'passport',
+        idNumber: 'SMOKE123',
+        idCountry: 'US',
+        registrationSigned: true,
+        registrationData: {
+          signatureMethod: 'front_desk',
+          capturedBy: 'release-smoke',
+        },
+      })
       .expect(200);
 
     const folioId = checkInRes.body.folio?.id as string;
