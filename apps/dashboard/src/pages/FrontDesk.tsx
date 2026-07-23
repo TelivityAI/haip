@@ -63,6 +63,8 @@ export default function FrontDesk() {
   // Check-in form
   const [idType, setIdType] = useState('passport');
   const [idNumber, setIdNumber] = useState('');
+  const [idCountry, setIdCountry] = useState('');
+  const [idExpiry, setIdExpiry] = useState('');
   const [selectedRoom, setSelectedRoom] = useState('');
   const [registrationSigned, setRegistrationSigned] = useState(false);
   const [regAddress, setRegAddress] = useState('');
@@ -191,6 +193,8 @@ export default function FrontDesk() {
       roomId?: string;
       idType?: string;
       idNumber?: string;
+      idCountry?: string;
+      idExpiry?: string;
       registrationSigned?: boolean;
       registrationData?: Record<string, string>;
     }) => {
@@ -209,6 +213,8 @@ export default function FrontDesk() {
           roomId: data.roomId || undefined,
           idType: data.idType,
           idNumber: data.idNumber,
+          idCountry: data.idCountry || undefined,
+          idExpiry: data.idExpiry || undefined,
           registrationSigned: data.registrationSigned,
           registrationData: data.registrationData,
         },
@@ -348,6 +354,8 @@ export default function FrontDesk() {
   function resetCheckInForm() {
     setIdType('passport');
     setIdNumber('');
+    setIdCountry('');
+    setIdExpiry('');
     setSelectedRoom('');
     setRegistrationSigned(false);
     setRegAddress('');
@@ -703,6 +711,33 @@ export default function FrontDesk() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-telivity-navy mb-1">
+                  {t('frontDesk.idCountry')}
+                </label>
+                <input
+                  type="text"
+                  maxLength={2}
+                  value={idCountry}
+                  onChange={(e) => setIdCountry(e.target.value.toUpperCase())}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
+                  placeholder="US"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-telivity-navy mb-1">
+                  {t('frontDesk.idExpiry')}
+                </label>
+                <input
+                  type="date"
+                  value={idExpiry}
+                  onChange={(e) => setIdExpiry(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-telivity-navy mb-1">
                   {t('frontDesk.regNationality')}
                 </label>
                 <input
@@ -776,6 +811,8 @@ export default function FrontDesk() {
                     roomId: selectedRoom || undefined,
                     idType,
                     idNumber: idNumber || undefined,
+                    idCountry: idCountry || undefined,
+                    idExpiry: idExpiry || undefined,
                     registrationSigned,
                     registrationData: {
                       nationality: regNationality,

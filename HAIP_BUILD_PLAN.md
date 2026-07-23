@@ -12,14 +12,15 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - **HAIP AI** — optional local model (Ollama) that explains the deterministic
   agents' decisions in plain language, grounded so it can't invent figures.
   Runs on your own hardware, off by default.
-- Upsells & ancillaries (services catalog, packages, booking/front-desk/pre-arrival channels)
-- Money policy (cancellation policies, deposit settlement on cancel/no-show/check-in)
-- A/R & cashier desk polish (list drawers/sessions, ledger CRUD UI, folio→A/R, aging UX)
-- Commercial profiles (billing terms on group profiles, A/R + negotiated rate links)
+- Upsells & ancillaries — [#174](https://github.com/telivityai/haip/pull/174) (services catalog, packages, booking/front-desk/pre-arrival channels)
+- Money policy — [#175](https://github.com/telivityai/haip/pull/175) (cancellation policies, deposit settlement on cancel/no-show/check-in)
+- Front desk stay ops — [#181](https://github.com/telivityai/haip/pull/181) (room move, walk-in, arrivals queue, registration card, notes)
+- A/R & cashier desk polish — [#180](https://github.com/telivityai/haip/pull/180) (list drawers/sessions, ledger CRUD UI, folio→A/R, aging UX)
+- Commercial profiles — [#180](https://github.com/telivityai/haip/pull/180) / [#179](https://github.com/telivityai/haip/pull/179) (billing terms on group profiles, A/R + negotiated rate links)
 
 ## Planned
 - New-property onboarding wizard
-- Complete guest registration (ID, minors/guardian, per-jurisdiction compliance)
+- Complete guest registration (ID, minors/guardian, per-jurisdiction compliance — deeper than desk card)
 - Loyalty (guest recognition, tiers, rewards)
 - Expanded AI assistance (grounded explanations, suggestions, per-property calibration)
 - Expanded channel/OTA connectivity
@@ -28,13 +29,13 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Deeper reporting and exports
 - Hardening & reliability (integration retries/timeouts, observability, scale)
 - Additional localizations
-- Guest journey, HK ops depth, rates depth, groups depth
+- HK ops depth, rates depth, groups depth
 
 ## In progress
 - Production deployment path (compose, container images, docs)
 - Full dashboard localization (page-level i18n)
 - End-to-end + money-path test coverage
-- Front desk stay ops (room move, walk-in, arrivals queue, registration card, notes)
+- Guest journey (lifecycle guest-comms triggers, communications ops, registration settings, messaging UI)
 
 Contributions welcome — open an issue or a draft PR to claim an area, and tag a
 maintainer to coordinate before starting larger work.

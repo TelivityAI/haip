@@ -8,6 +8,20 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Guest journey (ops + lifecycle triggers)
+
+- **Guest-comms event listener** — `reservation.created` / `checked_in` / `checked_out`
+  draft confirmation / welcome / post-stay emails via the guest_comms agent (failures
+  never break reservation state changes).
+- **Communications desk** — reject pending drafts; manual **Run guest-comms** for
+  scheduled / bulk drafts.
+- **Registration policy** — Settings toggle for `guestRegistrationRequired`.
+- **Check-in ID fields** — Front Desk captures `idCountry` / `idExpiry` with type/number.
+- **Guest profile** — company name, marketing consent, ID document display/edit.
+- **Reservation messaging UI** — compose guest email from reservation detail
+  (`POST /reservations/:id/messages`, GDPR marketing flag).
+- **Docs** — README shipped-slices table (upsells → commercial) with PR links.
+
 ### Added — Front desk stay ops
 
 - **Room move** — `PATCH /reservations/:id/move-room` for assigned/in-house stays;

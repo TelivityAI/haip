@@ -21,6 +21,11 @@ interface Guest {
   preferences?: Record<string, unknown>;
   notes?: string;
   createdAt?: string;
+  companyName?: string;
+  idType?: string;
+  idNumber?: string;
+  idCountry?: string;
+  gdprConsentMarketing?: boolean;
 }
 
 // ---- Guest List ----
@@ -170,6 +175,8 @@ function GuestDetail() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [vipLevel, setVipLevel] = useState('none');
+  const [companyName, setCompanyName] = useState('');
+  const [gdprConsentMarketing, setGdprConsentMarketing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   const { data: guestData } = useQuery({
@@ -189,7 +196,19 @@ function GuestDetail() {
 
   const updateMutation = useMutation({
     mutationFn: () =>
-      api.patch(`/v1/guests/${id}`, { firstName, lastName, email: email || undefined, phone: phone || undefined, vipLevel }, { params: { propertyId } }),
+      api.patch(
+        `/v1/guests/${id}`,
+        {
+          firstName,
+          lastName,
+          email: email || undefined,
+          phone: phone || undefined,
+          vipLevel,
+          companyName: companyName || undefined,
+          gdprConsentMarketing,
+        },
+        { params: { propertyId } },
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guests'] });
       setEditing(false);
@@ -213,6 +232,8 @@ function GuestDetail() {
     setEmail(guest.email ?? '');
     setPhone(guest.phone ?? '');
     setVipLevel(guest.vipLevel ?? 'none');
+    setCompanyName(guest.companyName ?? '');
+    setGdprConsentMarketing(!!guest.gdprConsentMarketing);
     setEditing(true);
   }
 
@@ -259,6 +280,11 @@ function GuestDetail() {
                   <option value="diamond">Diamond</option>
                 </select>
               </div>
+              <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder={t('guests.company')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+              <label className="flex items-center gap-2 text-xs text-telivity-navy">
+                <input type="checkbox" checked={gdprConsentMarketing} onChange={(e) => setGdprConsentMarketing(e.target.checked)} className="rounded border-gray-300" />
+                {t('guests.marketingConsent')}
+              </label>
               <div className="flex gap-2">
                 <button onClick={() => setEditing(false)} className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold">{t('common.cancel')}</button>
                 <button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} className="flex-1 bg-telivity-teal text-white rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50">{t('common.save')}</button>
@@ -269,6 +295,9 @@ function GuestDetail() {
               <DetailRow label={t('common.email')} value={guest.email ?? '—'} />
               <DetailRow label={t('common.phone')} value={guest.phone ?? '—'} />
               <DetailRow label={t('guests.vipLevel')} value={guest.vipLevel ?? t('guests.none')} />
+              <DetailRow label={t('guests.company')} value={guest.companyName ?? '—'} />
+              <DetailRow label={t('guests.idDocument')} value={guest.idType ? `${guest.idType}${guest.idCountry ? ` (${guest.idCountry})` : ''}` : '—'} />
+              <DetailRow label={t('guests.marketingConsent')} value={guest.gdprConsentMarketing ? t('common.yes') : t('common.no')} />
               <DetailRow label={t('guests.totalStays')} value={String(guest.totalStays ?? 0)} />
             </div>
           )}

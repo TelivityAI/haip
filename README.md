@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-<img src="https://img.shields.io/badge/Tests-1181%20passing-brightgreen" alt="1181 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+<img src="https://img.shields.io/badge/Tests-1185%20passing-brightgreen" alt="1185 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -180,7 +180,7 @@ analyze() → recommend() → execute() → recordOutcome() → train()
 
 | Agent | What It Does |
 |-------|-------------|
-| **Guest Communication** | Template-based lifecycle emails triggered by reservation events: confirmation, pre-arrival (3 days), day-of arrival, welcome (on check-in), post-stay, and win-back (90 days). Repeat vs first-time guest personalization. GDPR opt-out enforcement — unsubscribed guests get no marketing emails. Duplicate prevention via decision log. Configurable SMTP transport (defaults to draft-only). |
+| **Guest Communication** | Template-based lifecycle emails: confirmation, pre-arrival (3 days), day-of arrival, welcome (on check-in), post-stay, and win-back (90 days). **Event-driven drafts** on `reservation.created` / `checked_in` / `checked_out` via `GuestCommsListener`; scheduled types still from manual/cron `guest_comms/run`. Repeat vs first-time personalization. GDPR opt-out enforcement. Duplicate prevention via decision log. Configurable SMTP (defaults to draft-only). |
 | **Review Response** | Drafts professional responses to guest reviews entered by staff. Keyword-based topic extraction across 10 categories (cleanliness, staff, value, noise, food, wifi, etc.). Sentiment classification from rating (1-2 negative, 3 mixed, 4-5 positive). Three response styles (formal/friendly/casual). Matches guests to reservations for stay-specific references. Template-based assembly — no LLM freeform text, no hallucination risk. |
 
 ### Decision Logging & per-property calibration
@@ -229,6 +229,18 @@ export HAIP_AI_MODEL=haip-ai
 
 ## Features
 
+### Shipped product slices
+
+Recent backlog deliveries, mapped to the feature sections below. Each slice is a mergeable vertical cut — API + dashboard + tests — not a rewrite of the domain.
+
+| # | Slice | Merged PR | What it does |
+|---|-------|-----------|--------------|
+| 1 | **Upsells / ancillaries** | [#174](https://github.com/telivityai/haip/pull/174) | Property services catalog, package components, attach extras to a stay, post on check-in / night audit, booking-engine extras step, optional pre-arrival upsell prompt. See **Stay Extras & Packages**. |
+| 2 | **Money policy** | [#175](https://github.com/telivityai/haip/pull/175) | Cancellation policies on rate plans, shared cancel/no-show evaluator, deposit refund/forfeit/apply on cancel · no-show · check-in. See **Reservation Management** and **Accounting & Cashiering**. |
+| 3 | **Front desk stay ops** | [#181](https://github.com/telivityai/haip/pull/181) | Arrivals / in-house queues, walk-in, in-house room move, registration card at check-in, operational notes at the desk. See **Reservation Management**. |
+| 4 | **A/R & cashier polish** | [#180](https://github.com/telivityai/haip/pull/180) | List cash drawers/sessions, A/R ledger CRUD + aging UX, folio→A/R from folio detail, reverse-transfer picker. See **Accounting & Cashiering** and **Folio & Billing**. |
+| 5 | **Commercial profiles** | [#180](https://github.com/telivityai/haip/pull/180) (also [#179](https://github.com/telivityai/haip/pull/179)) | Standing-account billing terms on group profiles; link A/R ledgers and negotiated rates; Commercial dashboard page. See **Groups & Commercial Profiles**. |
+
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
 - Authenticated by a per-property **publishable key** (`x-booking-key`): property-scoped, low-trust (it ships in client-side HTML), and restricted to search/quote/book and read-or-cancel-own-confirmation — it can never enumerate other reservations or tenants.
@@ -245,6 +257,8 @@ export HAIP_AI_MODEL=haip-ai
 - Full lifecycle state machine: `pending → confirmed → assigned → checked_in → stayover → due_out → checked_out`
 - Real-time availability engine with room type inventory
 - Room assignment with automatic status transitions
+- **Front desk stay ops** — arrivals / in-house queues (multi-status filters), walk-in create→assign→check-in, in-house **room move** (`PATCH …/move-room`, respects `doNotMove`), operational notes at the desk and on reservation detail
+- **Guest registration at check-in** — registration card fields + `registrationSigned`; required when the property has `guestRegistrationRequired`
 - Group check-in (batch operations)
 - Bulk actions across multiple reservations (check-in / check-out / cancel) with per-reservation success/error results
 - Reservation notes with active-count tracking
@@ -252,8 +266,16 @@ export HAIP_AI_MODEL=haip-ai
 - Unassigned-reservation finder (confirmed/assigned reservations with no room)
 - Batch reservation import with per-row error handling
 - Express checkout
+- **Money policy** — property cancellation policies (free-cancel window, penalty type, deposit handling) linked from rate plans; shared evaluator for PMS / Connect / booking engine; deposit settlement on cancel, no-show, and check-in auto-apply
 - No-show and cancellation handling with policy enforcement (reservation "un-cancel" is intentionally unsupported — a payment-integrity hazard; create a new reservation instead)
 - Every state transition fires a webhook event and is audit-logged
+
+### Stay Extras & Packages (Upsells)
+- Property **services catalog** — sellable extras with charge type, price, posting rule (`once` / `per_night` / `on_consumption` / `included_in_rate`), and sell channels (`booking_engine` / `front_desk` / `pre_arrival`)
+- **Package rate plans** can bundle catalog services as components
+- Attach extras to a reservation from front desk or booking; price snapshot + status lifecycle
+- **Posting** — check-in posts `once` / included lines; night audit posts `per_night` (idempotent); folio routing and tax apply as usual
+- Booking engine + embeddable widget optional extras step; guest-comms can prompt pre-arrival upsells when enabled
 
 ### Folio & Billing
 - Guest folios, master folios, and city ledger accounts
@@ -262,23 +284,25 @@ export HAIP_AI_MODEL=haip-ai
 - Charge reversal, transfer between folios, and city ledger transfer
 - Folio settlement and close workflows
 - Charge locking for night audit
+- **Transfer folio balance to A/R** from folio detail (direct-bill handoff)
 
 ### Split Folios & House Accounts
 - **Split folio** — multiple folios per reservation with config-driven routing rules (e.g. room & tax → company folio, incidentals → guest folio) and the ability to move transactions between folios individually or by charge type (night-audit-locked charges are protected).
 - **House accounts** — a non-guest ledger for walk-in retail, bar/restaurant, vendor, or internal sales not tied to any reservation. Open/close lifecycle, a product catalog for retail sales, and charge/payment posting on the same unified ledger as folios (keeps room vs. non-room revenue distinct in reports).
 - **Correction matrix** — a payment-state-aware correction policy that picks the safe operation automatically: **void** uncaptured authorizations (and same-day cash), **refund** captured card payments, or post a compensating **adjustment** when neither applies. Illegal overrides (e.g. voiding a captured card) are rejected.
 
-### Groups & Allotment
+### Groups & Commercial Profiles
 - **Group profiles** — master records for corporate, travel-agent, wholesale, and event business, with an optional group (master) folio and computed group invoices.
+- **Commercial standing accounts** — billing address + payment terms on group profiles; optional links from **A/R ledgers** and **negotiated rate plans** (`groupProfileId`); Commercial dashboard page lists corporate / travel-agent / wholesale accounts and can create a linked A/R ledger (`GET /groups/profiles/:id/commercial`).
 - **Allotment blocks** — hold a quantity of rooms per date and room type at negotiated rates, with cutoff dates, shoulder dates, and Min/Max LOS. Inventory is validated against live availability so a block can't over-allot.
 - **Cutoff & auto-release** — release unsold rooms back to general inventory at the cutoff date, per block or via a sweep endpoint that processes all expired auto-release blocks.
 - **Pickup tracking** — rooms allotted vs. picked up, per date and room type, with pickup rate.
 - **Rooming lists** — batch-import a group's guest roster; each row creates and links a reservation and increments pickup, with per-row success/error handling that never aborts the batch.
 
 ### Accounting & Cashiering
-- **Deposit Ledger** — advance deposits tracked as a liability (not revenue) with a full recognition lifecycle: `held → applied` (at check-in/checkout), `refunded`, or `forfeited`. Refundable vs. non-refundable handling, with status-transition guards.
-- **Accounts Receivable** — named A/R ledgers for post-stay direct billing; transfer an outstanding folio balance to A/R (zeroing the folio), record A/R payments, reverse transfers with a preserved audit trail, and aging buckets (0–30 / 31–60 / 61–90 / 90+).
-- **Cash Drawer & Cashiering** — per-drawer cash tracking with shift sessions, cash movements (payment, refund, paid-out, drop), shift close with expected-vs-counted **variance** detection, and a cashier's report.
+- **Deposit Ledger** — advance deposits tracked as a liability (not revenue) with a full recognition lifecycle: `held → applied` (at check-in/checkout), `refunded`, or `forfeited`. Refundable vs. non-refundable handling, with status-transition guards. Cancel/no-show/check-in settlement follows the property money policy.
+- **Accounts Receivable** — named A/R ledgers for post-stay direct billing; transfer an outstanding folio balance to A/R (zeroing the folio), record A/R payments, reverse transfers with a preserved audit trail, aging buckets (0–30 / 31–60 / 61–90 / 90+), and property-wide aging (`GET /ar/aging`). Dashboard create/close ledgers and reverse-transfer picker via `GET /ar/ledgers/:id/transactions`.
+- **Cash Drawer & Cashiering** — per-drawer cash tracking with shift sessions, cash movements (payment, refund, paid-out, drop), shift close with expected-vs-counted **variance** detection, and a cashier's report. Dashboard lists drawers (`GET /cash/drawers`) and can resume open sessions (`GET /cash/sessions`) using the drawer starting float.
 - **Daily Trial Balance** — reconciliation across the Deposit, Guest, and A/R ledgers (opening + activity = closing).
 - **Custom Accounting Codes** — user-defined transaction and General Ledger (GL) codes for export to external accounting systems.
 
@@ -305,10 +329,12 @@ export HAIP_AI_MODEL=haip-ai
 - Image mutations are admin-gated; reads are available to any authenticated user
 
 ### Guest Profiles
-- Full guest profiles with contact, preferences, and stay history
+- Full guest profiles with contact, preferences, company, and stay history
+- ID document fields captured at check-in (type, number, issuing country, expiry) and shown on the guest profile
 - VIP level tracking (standard, silver, gold, platinum, diamond)
 - Do Not Rent (DNR) flagging
-- GDPR consent tracking and data retention controls
+- GDPR consent tracking (including marketing opt-in/out) and data retention controls
+- Property setting `guestRegistrationRequired` — when on, check-in requires a signed registration card
 - Guest search with flexible filters
 
 ### Housekeeping
@@ -401,12 +427,13 @@ export HAIP_AI_MODEL=haip-ai
 - Host-agnostic — ships as a **Vercel** serverless function, a plain Node server, or a Docker container
 
 ### Admin Dashboard
-- React SPA with **15 pages**: Dashboard, Reservations, Check-In/Out, Guests, Rooms, Housekeeping, Rate Plans, Folios, Night Audit, Reports, Channel Manager, Revenue Management, Communications, Reviews, Settings
+- React SPA including Dashboard, Front Desk, Reservations, Guests, Rooms, Housekeeping, Folios, Groups, **Commercial**, Cashier, House Accounts, Accounting, Tax, Rate Plans, Night Audit, Reports, Channel Manager, Revenue Management, Communications, Reviews, Settings
 - Revenue Management page: KPI cards, pending AI recommendations with approve/reject, agent performance metrics, per-agent configuration
 - Night Audit page: AI anomaly detection section with severity-coded alerts
-- Communications page: email draft preview, send/approve workflow, delivery stats
+- Communications page: email draft preview, send / approve / reject workflow, manual **Run guest-comms** for scheduled drafts, delivery stats
 - Reviews page: add reviews, AI-drafted responses, edit/approve/mark-posted workflow, rating stats
-- Settings page: property settings with photo gallery, plus **Users & Roles administration** (user management + permission matrix)
+- Settings page: property settings (incl. registration-card requirement), photo gallery, plus **Users & Roles administration** (user management + permission matrix)
+- Reservations detail: operational notes + compose guest email (GDPR marketing flag enforced server-side)
 - Rooms & Room Types: photo galleries with primary/reorder, per-room editable features
 - Real-time updates via WebSocket (new reservations, room status changes, AI agent decisions)
 - Responsive layout with mobile sidebar drawer
@@ -438,7 +465,7 @@ export HAIP_AI_MODEL=haip-ai
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (1181 tests across 143 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
+| Testing | Vitest (1185 tests across 144 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
 
@@ -559,7 +586,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (1181 tests across 143 test files)
+# All tests (1185 tests across 144 test files)
 
 # API tests only
 pnpm --filter @telivityhaip/api test
@@ -1080,7 +1107,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (1181 tests, 143 files)
+pnpm test             # Run all tests (1185 tests, 144 files)
 pnpm lint             # ESLint
 ```
 

@@ -83,6 +83,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
   const [occWarnBelow, setOccWarnBelow] = useState('');
   const [adrWarnBelow, setAdrWarnBelow] = useState('');
   const [revparWarnBelow, setRevparWarnBelow] = useState('');
+  const [guestRegistrationRequired, setGuestRegistrationRequired] = useState(true);
 
   const { data } = useQuery({
     queryKey: ['properties', propertyId],
@@ -107,6 +108,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
       setStaffLogoMediaId(property.staffLogoMediaId ?? '');
       setStaffPrimaryColor(property.staffPrimaryColor ?? '');
       setStaffAccentColor(property.staffAccentColor ?? '');
+      setGuestRegistrationRequired(property.guestRegistrationRequired !== false);
       const thr = property.settings?.kpiThresholds ?? {};
       setOccWarnBelow(thr.occupancyRate?.warnBelow != null ? String(thr.occupancyRate.warnBelow) : '');
       setAdrWarnBelow(thr.adr?.warnBelow != null ? String(thr.adr.warnBelow) : '');
@@ -140,6 +142,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
         staffLogoMediaId: staffLogoMediaId || undefined,
         staffPrimaryColor: staffPrimaryColor || undefined,
         staffAccentColor: staffAccentColor || undefined,
+        guestRegistrationRequired,
         settings: {
           ...(property?.settings ?? {}),
           kpiThresholds,
@@ -170,6 +173,20 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
         <div className="grid grid-cols-2 gap-3">
           <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('settings.checkInTime')}</label><input type="time" value={checkInTime} onChange={(e) => setCheckInTime(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
           <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('settings.checkOutTime')}</label><input type="time" value={checkOutTime} onChange={(e) => setCheckOutTime(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
+        </div>
+
+        <div className="border-t border-gray-100 pt-4 mt-2">
+          <h3 className="text-sm font-semibold text-telivity-navy mb-3">{t('settings.guestRegistration')}</h3>
+          <p className="text-xs text-telivity-mid-grey mb-3">{t('settings.guestRegistrationDescription')}</p>
+          <label className="flex items-center gap-2 text-sm text-telivity-navy">
+            <input
+              type="checkbox"
+              checked={guestRegistrationRequired}
+              onChange={(e) => setGuestRegistrationRequired(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            {t('settings.requireRegistrationCard')}
+          </label>
         </div>
 
         <div className="border-t border-gray-100 pt-4 mt-2">

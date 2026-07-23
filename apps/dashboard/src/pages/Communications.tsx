@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Mail, Send, Clock, CheckCircle, Eye } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, Eye, X, Play } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -69,6 +69,17 @@ export default function Communications() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agent-decisions'] }),
   });
 
+  const rejectMutation = useMutation({
+    mutationFn: (id: string) =>
+      api.post(`/v1/agents/${propertyId}/decisions/${id}/reject`, { reason: 'Rejected from Communications' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agent-decisions'] }),
+  });
+
+  const runMutation = useMutation({
+    mutationFn: () => api.post(`/v1/agents/${propertyId}/guest_comms/run`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agent-decisions'] }),
+  });
+
   const comms: CommunicationDecision[] = Array.isArray(decisions) ? decisions : [];
   const previewItem = comms.find((c) => c.id === previewId);
 
@@ -87,6 +98,13 @@ export default function Communications() {
       <div className="flex items-center gap-3 mb-6">
         <Mail size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">{t('communications.guestCommunications')}</h1>
+        <button
+          onClick={() => runMutation.mutate()}
+          disabled={runMutation.isPending}
+          className="ml-auto flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey disabled:opacity-50"
+        >
+          <Play size={12} /> {t('communications.runAgent')}
+        </button>
       </div>
 
       {/* Stats */}
@@ -145,14 +163,24 @@ export default function Communications() {
                   <Eye size={16} />
                 </button>
                 {c.status === 'pending' && (
-                  <button
-                    onClick={() => approveMutation.mutate(c.id)}
-                    disabled={approveMutation.isPending}
-                    className="flex items-center gap-1 bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-teal disabled:opacity-50"
-                  >
-                    <Send size={12} />
-                    {t('communications.send')}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => approveMutation.mutate(c.id)}
+                      disabled={approveMutation.isPending}
+                      className="flex items-center gap-1 bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-teal disabled:opacity-50"
+                    >
+                      <Send size={12} />
+                      {t('communications.send')}
+                    </button>
+                    <button
+                      onClick={() => rejectMutation.mutate(c.id)}
+                      disabled={rejectMutation.isPending}
+                      className="flex items-center gap-1 border border-gray-200 text-telivity-slate rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey disabled:opacity-50"
+                    >
+                      <X size={12} />
+                      {t('communications.reject')}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
