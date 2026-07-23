@@ -8,6 +8,28 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Commercial profiles (KB 14.3 standing accounts)
+
+- **Billing fields on group profiles** — `billingAddress`, `paymentTermsDays` (same shape as
+  city-ledger / A/R).
+- **Links** — optional `groupProfileId` on `ar_ledgers` and `rate_plans` (FK ownership
+  scoped by propertyId).
+- **`GET /groups/profiles/:id/commercial`** — profile plus linked A/R ledgers and rate plans.
+- **Dashboard** — Commercial profiles page (corporate / travel agent / wholesale) with
+  create + create-linked A/R ledger.
+- Permission: `commercial.read`. Demo seed links Acme + Convention Bureau profiles to A/R.
+
+### Added — A/R & cashier desk polish
+
+- **Cash drawers list** — `GET /cash/drawers?propertyId=` (dashboard no longer relies on
+  `localStorage` drawer ids).
+- **Session resume** — `GET /cash/sessions?propertyId=&cashDrawerId=&status=open`; open
+  shift uses the drawer starting float when `openingFloat` is omitted.
+- **A/R ledger UX** — create/close ledgers in Accounting; `GET /ar/ledgers/:id/transactions`
+  for reverse-transfer picker; property-wide `GET /ar/aging`.
+- **Folio → A/R** — Transfer to A/R action on folio detail (existing `POST /ar/transfer`).
+- Demo seed: 2 A/R ledgers + 2 cash drawers.
+
 ### Added — Money policy (cancellation + deposit settlement)
 
 - **Cancellation policies** — property-scoped rules (free-cancel hours, penalty type,

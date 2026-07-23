@@ -19,7 +19,39 @@ interface ArLedger {
   id: string;
   name: string;
   balance?: string;
+  status?: string;
+  currencyCode?: string;
 }
+
+interface ArTransaction {
+  id: string;
+  type: string;
+  amount: string;
+  sourceFolioId?: string | null;
+  reversedById?: string | null;
+  createdAt?: string;
+  note?: string | null;
+}
+
+interface AgingBuckets {
+  current: string;
+  days31to60: string;
+  days61to90: string;
+  days90plus: string;
+}
+
+interface AgingReport {
+  buckets: AgingBuckets;
+  total: string;
+  arLedgerId?: string | null;
+}
+
+const AGING_LABELS: Record<keyof AgingBuckets, string> = {
+  current: '0–30 days',
+  days31to60: '31–60 days',
+  days61to90: '61–90 days',
+  days90plus: '90+ days',
+};
 
 function AccountingHome() {
   const { t } = useTranslation();
@@ -35,10 +67,14 @@ function AccountingHome() {
   const [depositActionOpen, setDepositActionOpen] = useState(false);
   const [applyFolioId, setApplyFolioId] = useState('');
   const [selectedLedger, setSelectedLedger] = useState<ArLedger | null>(null);
-  const [arActionOpen, setArActionOpen] = useState<'payment' | 'aging' | 'transfer' | 'reverse' | null>(null);
+  const [arActionOpen, setArActionOpen] = useState<
+    'payment' | 'aging' | 'transfer' | 'reverse' | 'create' | 'propertyAging' | null
+  >(null);
   const [arPaymentAmount, setArPaymentAmount] = useState('');
   const [transferFolioId, setTransferFolioId] = useState('');
   const [reverseTxId, setReverseTxId] = useState('');
+  const [ledgerName, setLedgerName] = useState('');
+  const [ledgerTerms, setLedgerTerms] = useState('NET30');
 
   const { data: depositsData } = useQuery({
     queryKey: ['deposits', propertyId],
@@ -60,13 +96,31 @@ function AccountingHome() {
 
   const { data: agingData, refetch: refetchAging } = useQuery({
     queryKey: ['ar-aging', selectedLedger?.id, propertyId],
-    queryFn: () => api.get(`/v1/ar/ledgers/${selectedLedger!.id}/aging`, { params: { propertyId } }).then((r) => r.data),
+    queryFn: () =>
+      api.get(`/v1/ar/ledgers/${selectedLedger!.id}/aging`, { params: { propertyId } }).then((r) => r.data),
     enabled: false,
+  });
+
+  const { data: propertyAgingData, refetch: refetchPropertyAging } = useQuery({
+    queryKey: ['ar-aging', 'property', propertyId],
+    queryFn: () => api.get('/v1/ar/aging', { params: { propertyId } }).then((r) => r.data),
+    enabled: false,
+  });
+
+  const { data: txnsData } = useQuery({
+    queryKey: ['ar-transactions', selectedLedger?.id, propertyId],
+    queryFn: () =>
+      api
+        .get(`/v1/ar/ledgers/${selectedLedger!.id}/transactions`, { params: { propertyId } })
+        .then((r) => r.data),
+    enabled: !!selectedLedger?.id && !!propertyId && arActionOpen === 'reverse',
   });
 
   const deposits: Deposit[] = depositsData?.data ?? depositsData ?? [];
   const codes = codesData?.data ?? codesData ?? [];
   const ledgers: ArLedger[] = arData?.data ?? arData ?? [];
+  const transactions: ArTransaction[] = txnsData?.data ?? txnsData ?? [];
+  const reversible = transactions.filter((tx) => tx.type === 'transfer_in' && !tx.reversedById);
 
   const recordDeposit = useMutation({
     mutationFn: () => {
@@ -100,6 +154,32 @@ function AccountingHome() {
       setCodeName('');
       setCodeValue('');
     },
+  });
+
+  const createLedger = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.post('/v1/ar/ledgers', {
+        propertyId,
+        name: ledgerName,
+        paymentTermsDays: ledgerTerms || undefined,
+        currencyCode: 'USD',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ar-ledgers'] });
+      setArActionOpen(null);
+      setLedgerName('');
+      setLedgerTerms('NET30');
+    },
+  });
+
+  const closeLedger = useMutation({
+    mutationFn: (ledger: ArLedger) => {
+      requirePropertyId(propertyId);
+      return api.post(`/v1/ar/ledgers/${ledger.id}/close`, null, { params: { propertyId } });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ar-ledgers'] }),
   });
 
   const applyDeposit = useMutation({
@@ -147,11 +227,12 @@ function AccountingHome() {
       return api.post(`/v1/ar/ledgers/${selectedLedger!.id}/payments`, {
         propertyId,
         amount: moneyString(arPaymentAmount),
-        currencyCode: 'USD',
+        currencyCode: selectedLedger?.currencyCode ?? 'USD',
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ar-ledgers'] });
+      queryClient.invalidateQueries({ queryKey: ['ar-transactions'] });
       setArActionOpen(null);
       setArPaymentAmount('');
     },
@@ -168,6 +249,7 @@ function AccountingHome() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ar-ledgers'] });
+      queryClient.invalidateQueries({ queryKey: ['ar-transactions'] });
       setArActionOpen(null);
       setTransferFolioId('');
     },
@@ -180,6 +262,7 @@ function AccountingHome() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ar-ledgers'] });
+      queryClient.invalidateQueries({ queryKey: ['ar-transactions'] });
       setArActionOpen(null);
       setReverseTxId('');
     },
@@ -192,7 +275,30 @@ function AccountingHome() {
   const exportUrl = (path: string) =>
     `/api/v1/accounting-export/${path}?propertyId=${propertyId}&date=${today}`;
 
-  const aging = agingData?.data ?? agingData;
+  const agingRaw = agingData?.data ?? agingData;
+  const aging: AgingReport | null = agingRaw?.buckets ? (agingRaw as AgingReport) : null;
+  const propertyAgingRaw = propertyAgingData?.data ?? propertyAgingData;
+  const propertyAging: AgingReport | null = propertyAgingRaw?.buckets
+    ? (propertyAgingRaw as AgingReport)
+    : null;
+
+  const renderAging = (report: AgingReport | null, loadingKey: string) =>
+    report ? (
+      <div className="space-y-2 text-sm">
+        {(Object.keys(AGING_LABELS) as (keyof AgingBuckets)[]).map((key) => (
+          <div key={key} className="flex justify-between border-b border-gray-50 py-1">
+            <span>{AGING_LABELS[key]}</span>
+            <span className="font-medium">${Number(report.buckets[key] ?? 0).toFixed(2)}</span>
+          </div>
+        ))}
+        <div className="flex justify-between pt-2 font-semibold">
+          <span>{t('accounting.total')}</span>
+          <span>${Number(report.total ?? 0).toFixed(2)}</span>
+        </div>
+      </div>
+    ) : (
+      <p className="text-sm text-telivity-mid-grey">{t(loadingKey)}</p>
+    );
 
   return (
     <div>
@@ -210,6 +316,16 @@ function AccountingHome() {
           <a href={exportUrl('trial-balance.csv')} className="inline-flex items-center gap-2 border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium hover:bg-telivity-light-grey">
             <Download size={14} /> {t('accounting.folioLedgerTrialBalance')}
           </a>
+          <button
+            type="button"
+            onClick={async () => {
+              setArActionOpen('propertyAging');
+              await refetchPropertyAging();
+            }}
+            className="inline-flex items-center gap-2 border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium hover:bg-telivity-light-grey"
+          >
+            {t('accounting.propertyAging')}
+          </button>
         </div>
       </div>
 
@@ -255,17 +371,37 @@ function AccountingHome() {
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-5 lg:col-span-2">
-          <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('accounting.arLedgers')}</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-telivity-navy">{t('accounting.arLedgers')}</h2>
+            <button onClick={() => setArActionOpen('create')} className="flex items-center gap-1 text-xs font-semibold text-telivity-teal">
+              <Plus size={14} /> {t('accounting.newLedger')}
+            </button>
+          </div>
           <ul className="space-y-2 text-sm">
             {ledgers.slice(0, 10).map((l) => (
-              <li key={l.id} className="flex justify-between items-center border-b border-gray-50 py-1">
-                <span>{l.name}</span>
-                <span className="font-medium">${Number(l.balance ?? 0).toFixed(2)}</span>
-                <div className="flex gap-2">
+              <li key={l.id} className="flex justify-between items-center border-b border-gray-50 py-1 gap-2">
+                <span className="min-w-0 truncate">
+                  {l.name}
+                  {l.status === 'closed' && (
+                    <span className="ml-2 text-xs text-telivity-mid-grey">({t('accounting.closed')})</span>
+                  )}
+                </span>
+                <span className="font-medium shrink-0">${Number(l.balance ?? 0).toFixed(2)}</span>
+                <div className="flex flex-wrap gap-2 justify-end">
                   <button onClick={() => { setSelectedLedger(l); setArActionOpen('payment'); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.payment')}</button>
                   <button onClick={async () => { setSelectedLedger(l); setArActionOpen('aging'); await refetchAging(); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.aging')}</button>
                   <button onClick={() => { setSelectedLedger(l); setArActionOpen('transfer'); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.transfer')}</button>
-                  <button onClick={() => { setSelectedLedger(l); setArActionOpen('reverse'); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.reverse')}</button>
+                  <button onClick={() => { setSelectedLedger(l); setReverseTxId(''); setArActionOpen('reverse'); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.reverse')}</button>
+                  {l.status !== 'closed' && (
+                    <button
+                      onClick={() => {
+                        if (confirm(t('accounting.confirmCloseLedger'))) closeLedger.mutate(l);
+                      }}
+                      className="text-xs text-telivity-mid-grey hover:underline"
+                    >
+                      {t('accounting.close')}
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
@@ -298,6 +434,14 @@ function AccountingHome() {
         </div>
       </Modal>
 
+      <Modal open={arActionOpen === 'create'} onClose={() => setArActionOpen(null)} title={t('accounting.createLedger')}>
+        <div className="space-y-4">
+          <input type="text" value={ledgerName} onChange={(e) => setLedgerName(e.target.value)} placeholder={t('accounting.name')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input type="text" value={ledgerTerms} onChange={(e) => setLedgerTerms(e.target.value)} placeholder={t('accounting.paymentTerms')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <button onClick={() => createLedger.mutate()} disabled={!ledgerName || createLedger.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.create')}</button>
+        </div>
+      </Modal>
+
       <Modal open={arActionOpen === 'payment'} onClose={() => setArActionOpen(null)} title={t('accounting.arPayment', { name: selectedLedger?.name ?? '' })}>
         <div className="space-y-4">
           <input type="number" step="0.01" value={arPaymentAmount} onChange={(e) => setArPaymentAmount(e.target.value)} placeholder={t('accounting.amount')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
@@ -314,24 +458,32 @@ function AccountingHome() {
 
       <Modal open={arActionOpen === 'reverse'} onClose={() => setArActionOpen(null)} title={t('accounting.reverseTransfer')}>
         <div className="space-y-4">
-          <input type="text" value={reverseTxId} onChange={(e) => setReverseTxId(e.target.value)} placeholder={t('accounting.transactionIdPlaceholder')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-xs" />
+          {reversible.length > 0 ? (
+            <select
+              value={reverseTxId}
+              onChange={(e) => setReverseTxId(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">{t('accounting.selectTransaction')}</option>
+              {reversible.map((tx) => (
+                <option key={tx.id} value={tx.id}>
+                  ${Number(tx.amount).toFixed(2)} · {tx.createdAt?.split('T')[0] ?? tx.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm text-telivity-mid-grey">{t('accounting.noReversibleTransfers')}</p>
+          )}
           <button onClick={() => reverseTransfer.mutate()} disabled={!reverseTxId || reverseTransfer.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.reverse')}</button>
         </div>
       </Modal>
 
       <Modal open={arActionOpen === 'aging'} onClose={() => setArActionOpen(null)} title={t('accounting.arAging', { name: selectedLedger?.name ?? '' })}>
-        {aging ? (
-          <div className="space-y-2 text-sm">
-            {Object.entries(aging as Record<string, unknown>).map(([key, val]) => (
-              <div key={key} className="flex justify-between border-b border-gray-50 py-1">
-                <span className="capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
-                <span className="font-medium">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-telivity-mid-grey">{t('accounting.loadingAgingReport')}</p>
-        )}
+        {renderAging(aging, 'accounting.loadingAgingReport')}
+      </Modal>
+
+      <Modal open={arActionOpen === 'propertyAging'} onClose={() => setArActionOpen(null)} title={t('accounting.propertyAging')}>
+        {renderAging(propertyAging, 'accounting.loadingAgingReport')}
       </Modal>
     </div>
   );

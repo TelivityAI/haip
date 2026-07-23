@@ -42,5 +42,16 @@ export class UpdateGroupProfileDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  billingAddress?: string;
+
+  @ApiPropertyOptional({ example: 'NET30' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  paymentTermsDays?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   notes?: string;
 }

@@ -32,6 +32,9 @@ export const arLedgers = pgTable('ar_ledgers', {
   balance: numeric('balance', { precision: 12, scale: 2 }).notNull().default('0'),
   currencyCode: varchar('currency_code', { length: 3 }).notNull(),
 
+  /** Optional link to group/corporate/agent profile (KB 14.3 commercial account). */
+  groupProfileId: uuid('group_profile_id'),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -13,6 +13,7 @@ Open-source, API-first hotel PMS (Apache 2.0).
   agents' decisions in plain language, grounded so it can't invent figures.
   Runs on your own hardware, off by default.
 - Upsells & ancillaries (services catalog, packages, booking/front-desk/pre-arrival channels)
+- Money policy (cancellation policies, deposit settlement on cancel/no-show/check-in)
 
 ## Planned
 - New-property onboarding wizard
@@ -25,12 +26,15 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Deeper reporting and exports
 - Hardening & reliability (integration retries/timeouts, observability, scale)
 - Additional localizations
+- Guest journey, HK ops depth, rates depth, groups depth
 
 ## In progress
 - Production deployment path (compose, container images, docs)
 - Full dashboard localization (page-level i18n)
 - End-to-end + money-path test coverage
-- Money policy (cancellation policies, deposit settlement on cancel/no-show/check-in)
+- Front desk stay ops (room move, walk-in, arrivals queue, registration at check-in)
+- A/R & cashier desk polish (list drawers/sessions, ledger CRUD UI, folio→A/R, aging UX)
+- Commercial profiles (billing terms on group profiles, A/R + negotiated rate links)
 
 Contributions welcome — open an issue or a draft PR to claim an area, and tag a
 maintainer to coordinate before starting larger work.

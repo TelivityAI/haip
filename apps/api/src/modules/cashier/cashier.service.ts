@@ -60,6 +60,20 @@ export class CashierService {
     return drawer;
   }
 
+  /** List cash drawers for a property (KB 12.1). */
+  async listDrawers(propertyId: string, activeOnly = true) {
+    const conditions = [eq(cashDrawers.propertyId, propertyId)];
+    if (activeOnly) {
+      conditions.push(eq(cashDrawers.isActive, true));
+    }
+    const data = await this.db
+      .select()
+      .from(cashDrawers)
+      .where(and(...conditions))
+      .orderBy(cashDrawers.name);
+    return { data, total: data.length };
+  }
+
   // --- Sessions (KB 12.2) ---
 
   async findSessionById(id: string, propertyId: string, tx?: any) {
@@ -74,6 +88,29 @@ export class CashierService {
       throw new NotFoundException(`Cash session ${id} not found`);
     }
     return session;
+  }
+
+  /**
+   * List sessions for a property, optionally filtered by drawer and status.
+   * Used by the dashboard to resume an open shift (KB 12.2 / 12.5).
+   */
+  async listSessions(
+    propertyId: string,
+    opts?: { cashDrawerId?: string; status?: 'open' | 'closed' },
+  ) {
+    const conditions: any[] = [eq(cashDrawerSessions.propertyId, propertyId)];
+    if (opts?.cashDrawerId) {
+      conditions.push(eq(cashDrawerSessions.cashDrawerId, opts.cashDrawerId));
+    }
+    if (opts?.status) {
+      conditions.push(eq(cashDrawerSessions.status, opts.status));
+    }
+    const data = await this.db
+      .select()
+      .from(cashDrawerSessions)
+      .where(and(...conditions))
+      .orderBy(sql`${cashDrawerSessions.openedAt} desc`);
+    return { data, total: data.length };
   }
 
   /**

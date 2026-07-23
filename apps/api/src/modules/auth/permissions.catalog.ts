@@ -31,6 +31,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { key: 'folios.manage', label: 'Post charges / payments', group: 'Billing' },
   { key: 'groups.read', label: 'View groups', group: 'Groups', navKey: '/groups' },
   { key: 'groups.manage', label: 'Manage groups & blocks', group: 'Groups' },
+  { key: 'commercial.read', label: 'View commercial profiles', group: 'Groups', navKey: '/commercial' },
   { key: 'cashier.access', label: 'Cash drawer operations', group: 'Cashier', navKey: '/cashier' },
   { key: 'houseaccounts.read', label: 'View house accounts', group: 'House Accounts', navKey: '/house-accounts' },
   { key: 'houseaccounts.manage', label: 'Manage house accounts', group: 'House Accounts' },
@@ -83,6 +84,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
     'folios.read',
     'folios.manage',
     'groups.read',
+    'commercial.read',
     'houseaccounts.read',
     'houseaccounts.manage',
     'rateplans.read',
@@ -109,6 +111,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
     'cashier.access',
     'houseaccounts.read',
     'accounting.view',
+    'commercial.read',
   ],
   readonly: [
     'dashboard.view',
@@ -120,6 +123,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
     'services.read',
     'policies.read',
     'reports.view',
+    'commercial.read',
   ],
 };
 
