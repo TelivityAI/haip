@@ -8,6 +8,7 @@ import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import { useTranslation } from 'react-i18next';
+import RatePlanCalendar from '../components/rates/RatePlanCalendar';
 
 interface RatePlan {
   id: string;
@@ -480,7 +481,6 @@ function RatePlanDetail() {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
   const { id } = useParams<{ id: string }>();
-  const { propertyId } = useProperty();
   const navigate = useNavigate();
   const [testDate, setTestDate] = useState('');
   const [testNights, setTestNights] = useState('7');
@@ -495,24 +495,18 @@ function RatePlanDetail() {
   const plan: RatePlan | null = data?.data ?? data ?? null;
 
   const testMutation = useMutation({
-<<<<<<< HEAD
     mutationFn: () => {
       requirePropertyId(propertyId);
       return api.get(`/v1/rate-plans/${id}/effective-rate`, {
-        params: { propertyId, date: testDate || undefined },
-      });
-    },
-=======
-    mutationFn: () =>
-      api.get(`/v1/rate-plans/${id}/effective-rate`, {
         params: {
           propertyId,
-          checkIn: testDate,
+          date: testDate || undefined,
+          checkIn: testDate || undefined,
           nights: Number(testNights) || 1,
-          stayDate: testDate,
+          stayDate: testDate || undefined,
         },
-      }),
->>>>>>> 97e186b (feat(rates-bi): LOS/occupancy pricing and pickup report)
+      });
+    },
     onSuccess: (res) => {
       const payload = res.data?.data ?? res.data;
       setEffectiveRate(payload?.effectiveRate ?? null);
@@ -560,16 +554,10 @@ function RatePlanDetail() {
 
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('ratePlans.calculator')}</h2>
-<<<<<<< HEAD
-          <div className="flex gap-2">
-            <input type="date" value={testDate} onChange={(e) => setTestDate(e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-            <button onClick={() => testMutation.mutate()} disabled={testMutation.isPending} className="bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('ratePlans.calculate')}</button>
-=======
           <div className="flex gap-2 flex-wrap">
             <input type="date" value={testDate} onChange={(e) => setTestDate(e.target.value)} className="flex-1 min-w-[140px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
             <input type="number" min={1} value={testNights} onChange={(e) => setTestNights(e.target.value)} placeholder="Nights" className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
             <button onClick={() => testMutation.mutate()} disabled={!testDate || !propertyId || testMutation.isPending} className="bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('ratePlans.calculate')}</button>
->>>>>>> 97e186b (feat(rates-bi): LOS/occupancy pricing and pickup report)
           </div>
           {effectiveRate != null && (
             <div className="mt-4 bg-telivity-light-grey rounded-lg p-4 text-center">
@@ -581,11 +569,19 @@ function RatePlanDetail() {
       </div>
 
       {id && <RestrictionsPanel ratePlanId={id} />}
+      {id && propertyId && (
+        <RatePlanCalendar
+          ratePlanId={id}
+          propertyId={propertyId}
+          baseAmount={Number(plan.baseAmount ?? 0)}
+        />
+      )}
     </div>
   );
 }
 
 export default function RatePlans() {
+
   return (
     <Routes>
       <Route index element={<RatePlanList />} />

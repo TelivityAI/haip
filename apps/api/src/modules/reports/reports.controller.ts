@@ -44,6 +44,7 @@ export class ReportsController {
         'trial-balance',
         'occupancy-trend',
         'pickup',
+        'booking-pace',
       ],
     };
   }
@@ -118,6 +119,19 @@ export class ReportsController {
     @Query('to') to: string,
   ) {
     return this.reportsService.getPickup(propertyId, stayDate, from, to);
+  }
+
+  @Get('/booking-pace')
+  @ApiOperation({ summary: 'Booking pace — rooms on books per stay date + daily new bookings' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'startDate', required: true })
+  @ApiQuery({ name: 'endDate', required: true })
+  async getBookingPace(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.reportsService.getBookingPace(propertyId, startDate, endDate);
   }
 
   @Get('/portfolio/financial-summary')

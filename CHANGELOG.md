@@ -8,6 +8,19 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Rates / groups / BI depth (slices 8–10)
+
+- **Shoulder-date inventory** — `PUT /groups/blocks/:id/inventory` validates
+  `stayDate` against the shoulder-inclusive span (`shoulderStart`/`shoulderEnd`
+  when set, else core block dates); pickup increment uses the same span.
+- **Rate calendar UI** — rate plan detail shows a date-range grid with base /
+  effective amounts and restriction badges (MinLOS, CTA, CTD, etc.) from existing
+  restrictions + effective-rate APIs.
+- **Booking pace report** — `GET /api/v1/reports/booking-pace` returns daily
+  rooms on books per stay date plus new bookings by `createdAt`; Reports dashboard
+  option with chart.
+
+
 ### Added — Loyalty / BI / admin polish
 
 - **Guests dashboard** — list, search, create, and edit `loyaltyNumber` (VIP level unchanged).

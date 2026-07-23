@@ -150,6 +150,32 @@ export class AllotmentService {
   }
 
   /**
+   * Inventory / pickup span: shoulder nights when set, else core block dates
+   * (KB 14.4). Stay nights use [spanStart, spanEnd) — spanEnd is exclusive
+   * (departure date), matching block startDate/endDate semantics.
+   */
+  getInventorySpan(block: {
+    startDate: string;
+    endDate: string;
+    shoulderStart?: string | null;
+    shoulderEnd?: string | null;
+  }) {
+    return {
+      spanStart: block.shoulderStart ?? block.startDate,
+      spanEndExclusive: block.shoulderEnd ?? block.endDate,
+    };
+  }
+
+  private assertStayDateInInventorySpan(block: any, stayDate: string) {
+    const { spanStart, spanEndExclusive } = this.getInventorySpan(block);
+    if (stayDate < spanStart || stayDate >= spanEndExclusive) {
+      throw new BadRequestException(
+        `stayDate ${stayDate} is outside the block inventory span (${spanStart} to ${spanEndExclusive}, exclusive end)`,
+      );
+    }
+  }
+
+  /**
    * Upsert the held inventory for a (date, room-type) on a block (KB 14.5).
    * Held rooms reduce sellable availability, so the requested allotment must
    * not exceed the rooms still sellable for that date/room-type per the
@@ -162,6 +188,7 @@ export class AllotmentService {
         `Cannot set inventory on a ${block.status} block`,
       );
     }
+    this.assertStayDateInInventorySpan(block, dto.stayDate);
     // FK ownership (security audit follow-on): the caller's roomTypeId must
     // belong to this propertyId. Without this, a foreign room type id still
     // inserts an allotment row (availability lookup just returns 0 sellable,
@@ -380,6 +407,9 @@ export class AllotmentService {
     roomTypeId: string,
     tx: any,
   ) {
+    const block = await this.findBlockById(blockId, propertyId);
+    this.assertStayDateInInventorySpan(block, stayDate);
+
     const db = tx ?? this.db;
     const [existing] = await db
       .select()

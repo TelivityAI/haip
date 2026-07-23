@@ -437,4 +437,62 @@ describe('ReportsService', () => {
       ]),
     );
   });
+  // --- Booking Pace ---
+
+  it('should return rooms on books and new bookings per day', async () => {
+    const db = createMockDb([
+      // daily on-books (generate_series join)
+      [
+        { date: '2026-04-04', count: 42 },
+        { date: '2026-04-05', count: 45 },
+        { date: '2026-04-06', count: 40 },
+      ],
+      // daily new bookings
+      [
+        { date: '2026-04-04', count: 3 },
+        { date: '2026-04-05', count: 5 },
+        { date: '2026-04-06', count: 2 },
+      ],
+    ]);
+    const module = await Test.createTestingModule({
+      providers: [
+        ReportsService,
+        { provide: DRIZZLE, useValue: db },
+      ],
+    }).compile();
+    service = module.get(ReportsService);
+
+    const result = await service.getBookingPace('prop-001', '2026-04-04', '2026-04-06');
+    expect(result.period.start).toBe('2026-04-04');
+    expect(result.period.end).toBe('2026-04-06');
+    expect(result.daily).toHaveLength(3);
+    expect(result.daily[0]).toEqual({
+      date: '2026-04-04',
+      roomsOnBooks: 42,
+      newBookings: 3,
+    });
+    expect(result.daily[1]!.newBookings).toBe(5);
+    expect(result.summary.totalNewBookings).toBe(10);
+    expect(result.summary.avgRoomsOnBooks).toBeCloseTo(42.33, 1);
+  });
+
+  it('should default new bookings to zero when none created that day', async () => {
+    const db = createMockDb([
+      [{ date: '2026-04-06', count: 30 }],
+      [],
+    ]);
+    const module = await Test.createTestingModule({
+      providers: [
+        ReportsService,
+        { provide: DRIZZLE, useValue: db },
+      ],
+    }).compile();
+    service = module.get(ReportsService);
+
+    const result = await service.getBookingPace('prop-001', '2026-04-06', '2026-04-06');
+    expect(result.daily[0]!.roomsOnBooks).toBe(30);
+    expect(result.daily[0]!.newBookings).toBe(0);
+    expect(result.summary.totalNewBookings).toBe(0);
+  });
+
 });

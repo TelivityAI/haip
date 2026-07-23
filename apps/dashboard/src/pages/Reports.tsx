@@ -9,7 +9,7 @@ import { useProperty } from '../context/PropertyContext';
 import KpiCard from '../components/ui/KpiCard';
 import { useTranslation } from 'react-i18next';
 
-type ReportType = 'financial-summary' | 'occupancy' | 'daily-revenue' | 'occupancy-trend' | 'trial-balance' | 'pickup';
+type ReportType = 'financial-summary' | 'occupancy' | 'daily-revenue' | 'occupancy-trend' | 'trial-balance' | 'pickup' | 'booking-pace';
 
 const REPORT_OPTIONS: { value: ReportType; labelKey: string }[] = [
   { value: 'financial-summary', labelKey: 'financialSummary' },
@@ -18,6 +18,7 @@ const REPORT_OPTIONS: { value: ReportType; labelKey: string }[] = [
   { value: 'trial-balance', labelKey: 'trialBalance' },
   { value: 'occupancy-trend', labelKey: 'occupancyTrend' },
   { value: 'pickup', labelKey: 'pickup' },
+  { value: 'booking-pace', labelKey: 'bookingPace' },
 ];
 
 const DEMO_FAVORITES_KEY = 'haip.reportFavorites';
@@ -89,8 +90,10 @@ export default function Reports() {
   const portfolioReport =
     isPortfolioMode && (report === 'financial-summary' || report === 'occupancy');
 
+  const usesDateRange = report === 'occupancy-trend' || report === 'booking-pace';
+
   const { data } = useQuery({
-    queryKey: ['reports', portfolioReport ? 'portfolio' : report, propertyId, report === 'occupancy-trend' ? startDate : report === 'pickup' ? stayDate : date, report === 'occupancy-trend' ? endDate : report === 'pickup' ? pickupTo : null, report === 'pickup' ? pickupFrom : null],
+    queryKey: ['reports', portfolioReport ? 'portfolio' : report, propertyId, usesDateRange ? startDate : report === 'pickup' ? stayDate : date, usesDateRange ? endDate : report === 'pickup' ? pickupTo : null, report === 'pickup' ? pickupFrom : null],
     queryFn: () => {
       if (portfolioReport) {
         const path =
@@ -100,7 +103,7 @@ export default function Reports() {
         return api.get(path, { params: { date } }).then((r) => r.data);
       }
       const params: Record<string, string> = { propertyId: propertyId! };
-      if (report === 'occupancy-trend') {
+      if (usesDateRange) {
         params.startDate = startDate;
         params.endDate = endDate;
       } else if (report === 'pickup') {
@@ -205,12 +208,12 @@ export default function Reports() {
             </button>
           </div>
         </div>
-        {report !== 'occupancy-trend' && report !== 'pickup' ? (
+        {report !== 'occupancy-trend' && report !== 'booking-pace' && report !== 'pickup' ? (
           <div>
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.date')}</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
-        ) : report === 'occupancy-trend' ? (
+        ) : usesDateRange ? (
           <>
             <div>
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reports.from')}</label>
@@ -466,6 +469,44 @@ export default function Reports() {
           )}
         </div>
       )}
+
+      {/* Booking Pace */}
+      {report === 'booking-pace' && (
+        <div className="space-y-4">
+          {reportData.summary && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <KpiCard
+                title={t('reports.avgRoomsOnBooks')}
+                value={reportData.summary.avgRoomsOnBooks != null ? Number(reportData.summary.avgRoomsOnBooks).toFixed(1) : '—'}
+                icon={TrendingUp}
+              />
+              <KpiCard
+                title={t('reports.totalNewBookings')}
+                value={reportData.summary.totalNewBookings ?? 0}
+                icon={BarChart3}
+              />
+            </div>
+          )}
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-telivity-navy mb-3">{t('reports.bookingPace')}</h3>
+            {Array.isArray(reportData.daily) && reportData.daily.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={reportData.daily as { date: string; roomsOnBooks: number; newBookings: number }[]}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="roomsOnBooks" stroke="#06bdb4" strokeWidth={2} dot={{ r: 3 }} name={t('reports.roomsOnBooks')} />
+                  <Line type="monotone" dataKey="newBookings" stroke="#1e3a5f" strokeWidth={2} dot={{ r: 3 }} name={t('reports.newBookings')} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-sm text-telivity-mid-grey">{t('reports.noPace')}</p>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

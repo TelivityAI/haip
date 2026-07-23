@@ -937,7 +937,10 @@
     "selectProperty": "Selecione uma propriedade",
     "startDate": "Data inicial",
     "title": "Planos Tarifários",
-    "type": "Tipo"
+    "type": "Tipo",
+    "calendar": "Calendário de tarifas",
+    "calendarEmpty": "Selecione um intervalo de datas válido",
+    "effectiveRate": "Tarifa efetiva"
   },
   "reports": {
     "addFavorite": "Adicionar aos favoritos",
@@ -986,7 +989,13 @@
     "trialBalanceNetActivity": "Movimento líquido",
     "trialBalanceOpening": "Saldo inicial",
     "trialBalanceTransfersIn": "Transferências recebidas",
-    "trialBalanceTransfersOut": "Transferências enviadas"
+    "trialBalanceTransfersOut": "Transferências enviadas",
+    "avgRoomsOnBooks": "Média de quartos reservados",
+    "bookingPace": "Ritmo de reservas",
+    "newBookings": "Novas reservas",
+    "noPace": "Não há dados de ritmo de reservas",
+    "roomsOnBooks": "Quartos reservados",
+    "totalNewBookings": "Total de novas reservas"
   },
   "reservations": {
     "actions": "Ações",

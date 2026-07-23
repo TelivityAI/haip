@@ -1014,7 +1014,10 @@
     "selectProperty": "Select a property",
     "startDate": "Start date",
     "title": "Rate Plans",
-    "type": "Type"
+    "type": "Type",
+    "calendar": "Rate Calendar",
+    "calendarEmpty": "Select a valid date range",
+    "effectiveRate": "Effective Rate"
   },
   "reports": {
     "addFavorite": "Add favorite",
@@ -1063,7 +1066,13 @@
     "trialBalanceNetActivity": "Net activity",
     "trialBalanceOpening": "Opening",
     "trialBalanceTransfersIn": "Transfers in",
-    "trialBalanceTransfersOut": "Transfers out"
+    "trialBalanceTransfersOut": "Transfers out",
+    "avgRoomsOnBooks": "Avg Rooms on Books",
+    "bookingPace": "Booking Pace",
+    "newBookings": "New Bookings",
+    "noPace": "No booking pace data available",
+    "roomsOnBooks": "Rooms on Books",
+    "totalNewBookings": "Total New Bookings"
   },
   "reservations": {
     "actions": "Actions",
