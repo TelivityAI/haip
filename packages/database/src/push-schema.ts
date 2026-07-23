@@ -1047,6 +1047,11 @@ async function main() {
     // circular FK at table-create time (group_profiles references nothing of
     // reservations, but reservations is created before group_profiles).
     `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS group_profile_id uuid`,
+    // Commercial profile billing fields + links (KB 14.3 standing accounts)
+    `ALTER TABLE group_profiles ADD COLUMN IF NOT EXISTS billing_address text`,
+    `ALTER TABLE group_profiles ADD COLUMN IF NOT EXISTS payment_terms_days varchar(10)`,
+    `ALTER TABLE ar_ledgers ADD COLUMN IF NOT EXISTS group_profile_id uuid`,
+    `ALTER TABLE rate_plans ADD COLUMN IF NOT EXISTS group_profile_id uuid`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));

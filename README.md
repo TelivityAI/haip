@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-  <img src="https://img.shields.io/badge/Tests-1177%20passing-brightgreen" alt="1177 Tests Passing" />
+  <img src="https://img.shields.io/badge/Tests-1178%20passing-brightgreen" alt="1178 Tests Passing" />
   <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
@@ -439,7 +439,7 @@ export HAIP_AI_MODEL=haip-ai
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (1177 tests across 142 test files) | Unit and integration tests |
+| Testing | Vitest (1178 tests across 142 test files) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -561,7 +561,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (1177 tests across 142 test files)
+# All tests (1178 tests across 142 test files)
 pnpm test
 
 # API tests only
@@ -774,6 +774,7 @@ POST   /api/v1/house-accounts/:id/sell             # Sell a product (retail)
 POST   /api/v1/groups/profiles                     # Create group profile
 GET    /api/v1/groups/profiles                     # List group profiles
 GET    /api/v1/groups/profiles/:id                  # Get group profile
+GET    /api/v1/groups/profiles/:id/commercial       # Commercial links (A/R + rates)
 PATCH  /api/v1/groups/profiles/:id                  # Update group profile
 POST   /api/v1/groups/profiles/:id/reservations    # Link a reservation to the group
 GET    /api/v1/groups/profiles/:id/folio            # Get the group (master) folio
@@ -1082,7 +1083,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (1177 tests, 142 files)
+pnpm test             # Run all tests (1178 tests, 142 files)
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```

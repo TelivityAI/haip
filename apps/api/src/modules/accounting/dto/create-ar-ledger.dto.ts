@@ -35,4 +35,11 @@ export class CreateArLedgerDto {
   @IsNotEmpty()
   @MaxLength(3)
   currencyCode!: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional group/corporate profile link (KB 14.3)',
+  })
+  @IsOptional()
+  @IsUUID()
+  groupProfileId?: string;
 }

@@ -44,6 +44,17 @@ export class CreateGroupProfileDto {
   @MaxLength(30)
   contactPhone?: string;
 
+  @ApiPropertyOptional({ description: 'Billing address for direct-bill / A/R' })
+  @IsOptional()
+  @IsString()
+  billingAddress?: string;
+
+  @ApiPropertyOptional({ example: 'NET30', description: 'Payment terms (same shape as A/R / city ledger)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  paymentTermsDays?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { arLedgers, arTransactions } from '@telivityhaip/database';
+import { arLedgers, arTransactions, groupProfiles } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
@@ -33,6 +33,23 @@ export class ArService {
   ) {}
 
   async createLedger(dto: CreateArLedgerDto) {
+    if (dto.groupProfileId) {
+      const [gp] = await this.db
+        .select({ id: groupProfiles.id })
+        .from(groupProfiles)
+        .where(
+          and(
+            eq(groupProfiles.id, dto.groupProfileId),
+            eq(groupProfiles.propertyId, dto.propertyId),
+          ),
+        );
+      if (!gp) {
+        throw new BadRequestException(
+          `group profile ${dto.groupProfileId} not found in this property`,
+        );
+      }
+    }
+
     const [ledger] = await this.db
       .insert(arLedgers)
       .values({
@@ -41,6 +58,7 @@ export class ArService {
         description: dto.description,
         paymentTermsDays: dto.paymentTermsDays,
         currencyCode: dto.currencyCode,
+        groupProfileId: dto.groupProfileId,
         status: 'open',
         balance: '0.00',
       })

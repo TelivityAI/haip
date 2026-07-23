@@ -105,6 +105,13 @@ export class CreateRatePlanDto {
   @IsUUID()
   cancellationPolicyId?: string;
 
+  @ApiPropertyOptional({
+    description: 'Link negotiated (or other) rate to a corporate/agent profile (KB 14.3)',
+  })
+  @IsOptional()
+  @IsUUID()
+  groupProfileId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
