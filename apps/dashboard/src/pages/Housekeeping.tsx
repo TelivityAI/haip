@@ -123,7 +123,10 @@ function HousekeepingDashboard() {
     queryFn: () =>
       api
         .get('/v1/housekeeping/ops-forecast', { params: { propertyId, date: tomorrow } })
-        .then((r) => r.data as OpsForecast),
+        .then((r) => {
+          const body = r.data as OpsForecast | { data: OpsForecast };
+          return 'expectedCheckouts' in body ? body : body.data;
+        }),
     enabled: !!propertyId,
   });
 
@@ -132,7 +135,11 @@ function HousekeepingDashboard() {
   const roomSummary: RoomSummary = dash.roomSummary ?? {};
   const housekeeperSummary: HousekeeperSummaryRow[] = dash.housekeeperSummary ?? [];
   const urgentRooms: UrgentRoom[] = dash.urgentRooms ?? [];
-  const forecast = forecastData?.data ?? forecastData ?? {};
+  const forecast: OpsForecast = forecastData ?? {
+    date: tomorrow,
+    expectedCheckouts: 0,
+    expectedStayovers: 0,
+  };
 
   if (!propertyId) {
     return (
