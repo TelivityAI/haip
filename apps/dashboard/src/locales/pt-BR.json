@@ -412,6 +412,8 @@
     "confirmation": "Confirmação",
     "departure": "Saída",
     "departures": "Partidas",
+    "doorPin": "PIN do quarto",
+    "doorPinNone": "—",
     "driversLicense": "Carteira de motorista",
     "enterIdNumber": "Informe o número do documento",
     "express": "Expresso",

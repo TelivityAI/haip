@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
 import { WebhookService } from '../../webhook/webhook.service';
+import { DoorLockCredentialService } from '../door-lock-credential.service';
 import type {
   AccessCredential,
   AccessCredentialRequest,
@@ -20,7 +21,10 @@ import type {
 export class WebhookLockProvider implements LockProvider {
   readonly name = 'webhook';
 
-  constructor(private readonly webhooks: WebhookService) {}
+  constructor(
+    private readonly webhooks: WebhookService,
+    private readonly credentials: DoorLockCredentialService,
+  ) {}
 
   async issueCredential(req: AccessCredentialRequest): Promise<AccessCredential> {
     // 6-digit PIN, zero-padded. CSPRNG so codes aren't predictable.
@@ -42,7 +46,16 @@ export class WebhookLockProvider implements LockProvider {
       req.propertyId,
     );
 
-    return { provider: this.name, credentialId, accessCode };
+    const credential: AccessCredential = { provider: this.name, credentialId, accessCode };
+
+    await this.credentials.recordIssued({
+      propertyId: req.propertyId,
+      reservationId: req.reservationId,
+      roomId: req.roomId,
+      credential,
+    });
+
+    return credential;
   }
 
   async revokeCredential(req: {
@@ -57,5 +70,7 @@ export class WebhookLockProvider implements LockProvider {
       { provider: this.name, credentialId: `wlp-${req.reservationId}`, roomId: req.roomId ?? null },
       req.propertyId,
     );
+
+    await this.credentials.recordRevoked(req.propertyId, req.reservationId);
   }
 }
