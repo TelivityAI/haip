@@ -10,8 +10,10 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { RoomService } from './room.service';
 import { RoomStatusService } from './room-status.service';
+import { RoomDiscrepancyService } from './room-discrepancy.service';
 import { CreateRoomTypeDto } from './dto/create-room-type.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
@@ -23,6 +25,7 @@ export class RoomController {
   constructor(
     private readonly roomService: RoomService,
     private readonly roomStatusService: RoomStatusService,
+    private readonly roomDiscrepancyService: RoomDiscrepancyService,
   ) {}
 
   // --- Room Type routes (before :id to avoid conflicts) ---
@@ -75,6 +78,19 @@ export class RoomController {
     @Query('status') status: string,
   ) {
     return this.roomStatusService.getRoomsByStatus(propertyId, status);
+  }
+
+  @Get('discrepancies')
+  @RequirePermissions('ops.read')
+  @ApiOperation({ summary: 'List room status discrepancies for a business date' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'date', required: true, description: 'Business date (YYYY-MM-DD)' })
+  @ApiResponse({ status: 200, description: 'Computed room status discrepancies' })
+  getDiscrepancies(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('date') date: string,
+  ) {
+    return this.roomDiscrepancyService.getDiscrepancies(propertyId, date);
   }
 
   // --- Room routes ---

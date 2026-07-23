@@ -351,6 +351,9 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Stayover task generation for occupied rooms
 - Dashboard with room summary, task summary, housekeeper performance, and urgent rooms
 - Analytics: average turn time, median turn time, inspection pass rate, maintenance issue rate, breakdown by room type and housekeeper
+- **Lost & found** — log tagged items with a 90-day hold period; list/filter by status
+- **Service requests** — guest/staff work orders linked to housekeeping tasks
+- **Room status discrepancies** — computed mismatch report (occupied without in-house stay, vacant with in-house reservation)
 
 ### Night Audit & Reporting
 - Automated night audit: room revenue posting, no-show processing, rate validation, day close
@@ -885,6 +888,21 @@ PATCH  /api/v1/housekeeping/tasks/:id/unassign     # Unassign task
 PATCH  /api/v1/housekeeping/tasks/:id/complete     # Complete with checklist
 PATCH  /api/v1/housekeeping/tasks/:id/inspect      # Inspect (pass/fail)
 PATCH  /api/v1/housekeeping/tasks/:id/skip         # Skip task
+
+# Lost & Found — 5 endpoints
+POST   /api/v1/lost-and-found                      # Log item
+GET    /api/v1/lost-and-found                      # List items (filter by status)
+GET    /api/v1/lost-and-found/:id                  # Get item
+PATCH  /api/v1/lost-and-found/:id                  # Update item
+DELETE /api/v1/lost-and-found/:id                  # Delete item
+
+# Service Requests — 6 endpoints
+POST   /api/v1/service-requests                    # Create request
+GET    /api/v1/service-requests                    # List requests
+GET    /api/v1/service-requests/:id                # Get request
+PATCH  /api/v1/service-requests/:id                # Update request
+POST   /api/v1/service-requests/:id/create-task    # Spawn linked HK task
+DELETE /api/v1/service-requests/:id                # Delete request
 ```
 </details>
 
@@ -935,6 +953,7 @@ PATCH  /api/v1/guests/:id                          # Update guest
 DELETE /api/v1/guests/:id                          # Delete guest
 
 # Rooms — 10 endpoints
+GET    /api/v1/rooms/discrepancies                 # Room status discrepancy report
 POST   /api/v1/rooms/types                         # Create room type
 GET    /api/v1/rooms/types                         # List room types
 GET    /api/v1/rooms/types/:id                     # Get room type

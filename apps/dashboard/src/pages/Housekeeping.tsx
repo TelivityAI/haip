@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Routes, Route } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, LayoutGrid, List, Play, CheckCircle, Eye, UserPlus, Zap, X } from 'lucide-react';
+import { Sparkles, LayoutGrid, List, Play, CheckCircle, Eye, UserPlus, Zap, X, Package, ClipboardList, Plus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { format } from 'date-fns';
 import { api } from '../lib/api';
@@ -326,10 +326,200 @@ function HousekeepingAnalytics() {
   );
 }
 
+// ---- Lost & Found ----
+function LostAndFoundPanel() {
+  const { t } = useTranslation();
+  const { propertyId } = useProperty();
+  const queryClient = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [description, setDescription] = useState('');
+
+  const { data } = useQuery({
+    queryKey: ['lost-and-found', propertyId, statusFilter],
+    queryFn: () =>
+      api.get('/v1/lost-and-found', { params: { propertyId, status: statusFilter || undefined } }).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+
+  const items = data?.data ?? data ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: () => api.post('/v1/lost-and-found', { propertyId, description }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lost-and-found'] });
+      setCreateOpen(false);
+      setDescription('');
+    },
+  });
+
+  if (!propertyId) {
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.selectProperty')}</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 items-center">
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          <option value="">{t('housekeeping.allStatus')}</option>
+          {(['held', 'returned', 'disposed'] as const).map((s) => (
+            <option key={s} value={s}>{t(`housekeeping.lostFound.statuses.${s}`)}</option>
+          ))}
+        </select>
+        <button onClick={() => setCreateOpen(true)} className="ml-auto flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold">
+          <Plus size={16} /> {t('housekeeping.lostFound.logItem')}
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-telivity-teal/5 border-b border-gray-100">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('housekeeping.lostFound.tagCode')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('housekeeping.lostFound.description')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('housekeeping.lostFound.foundAt')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('housekeeping.lostFound.disposeAfter')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item: { id: string; tagCode: string; description: string; status: string; foundAt: string; disposeAfter: string }) => (
+              <tr key={item.id} className="border-b border-gray-50">
+                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{item.tagCode}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{item.description}</td>
+                <td className="px-4 py-3"><StatusBadge status={item.status} label={t(`housekeeping.lostFound.statuses.${item.status}`, { defaultValue: item.status })} /></td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{format(new Date(item.foundAt), 'yyyy-MM-dd')}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{format(new Date(item.disposeAfter), 'yyyy-MM-dd')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {items.length === 0 && <p className="p-6 text-center text-telivity-mid-grey text-sm">{t('housekeeping.lostFound.noItems')}</p>}
+      </div>
+
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('housekeeping.lostFound.logItem')}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('housekeeping.lostFound.description')} *</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" rows={3} />
+          </div>
+          <button onClick={() => createMutation.mutate()} disabled={!description.trim() || createMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
+            {createMutation.isPending ? t('common.creating') : t('common.create')}
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ---- Service Requests ----
+function ServiceRequestsPanel() {
+  const { t } = useTranslation();
+  const { propertyId } = useProperty();
+  const queryClient = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [type, setType] = useState('service_request');
+
+  const { data } = useQuery({
+    queryKey: ['service-requests', propertyId, statusFilter],
+    queryFn: () =>
+      api.get('/v1/service-requests', { params: { propertyId, status: statusFilter || undefined } }).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+
+  const requests = data?.data ?? data ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: () => api.post('/v1/service-requests', { propertyId, title, type }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['service-requests'] });
+      setCreateOpen(false);
+      setTitle('');
+    },
+  });
+
+  const taskMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/v1/service-requests/${id}/create-task`, { propertyId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['service-requests', 'housekeeping'] }),
+  });
+
+  if (!propertyId) {
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.selectProperty')}</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 items-center">
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          <option value="">{t('housekeeping.allStatus')}</option>
+          {(['open', 'in_progress', 'done', 'cancelled'] as const).map((s) => (
+            <option key={s} value={s}>{t(`housekeeping.serviceRequests.statuses.${s}`)}</option>
+          ))}
+        </select>
+        <button onClick={() => setCreateOpen(true)} className="ml-auto flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold">
+          <Plus size={16} /> {t('housekeeping.serviceRequests.newRequest')}
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-telivity-teal/5 border-b border-gray-100">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.title', { defaultValue: 'Title' })}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('housekeeping.type')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {requests.map((req: { id: string; title: string; type: string; status: string; linkedTaskId?: string; roomId?: string }) => (
+              <tr key={req.id} className="border-b border-gray-50">
+                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{req.title}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{t(`housekeeping.serviceRequests.types.${req.type}`, { defaultValue: req.type })}</td>
+                <td className="px-4 py-3"><StatusBadge status={req.status} label={t(`housekeeping.serviceRequests.statuses.${req.status}`, { defaultValue: req.status })} /></td>
+                <td className="px-4 py-3 text-right">
+                  {!req.linkedTaskId && req.roomId && req.status === 'open' && (
+                    <button onClick={() => taskMutation.mutate(req.id)} disabled={taskMutation.isPending} className="text-xs text-telivity-teal font-medium hover:underline">
+                      {t('housekeeping.serviceRequests.createTask')}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {requests.length === 0 && <p className="p-6 text-center text-telivity-mid-grey text-sm">{t('housekeeping.serviceRequests.noRequests')}</p>}
+      </div>
+
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('housekeeping.serviceRequests.newRequest')}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.title', { defaultValue: 'Title' })} *</label>
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('housekeeping.type')}</label>
+            <select value={type} onChange={(e) => setType(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+              {(['maintenance', 'turndown', 'deep_clean', 'service_request'] as const).map((tp) => (
+                <option key={tp} value={tp}>{t(`housekeeping.serviceRequests.types.${tp}`)}</option>
+              ))}
+            </select>
+          </div>
+          <button onClick={() => createMutation.mutate()} disabled={!title.trim() || createMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
+            {createMutation.isPending ? t('common.creating') : t('common.create')}
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
 // ---- Main Router ----
 export default function Housekeeping() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<'dashboard' | 'tasks' | 'analytics'>('tasks');
+  const [tab, setTab] = useState<'dashboard' | 'tasks' | 'analytics' | 'lostFound' | 'serviceRequests'>('tasks');
 
   return (
     <div>
@@ -339,7 +529,7 @@ export default function Housekeeping() {
       </div>
 
       <div className="flex gap-1 bg-white rounded-xl shadow-sm p-1 mb-4">
-        {(['dashboard', 'tasks', 'analytics'] as const).map((tabName) => (
+        {(['dashboard', 'tasks', 'lostFound', 'serviceRequests', 'analytics'] as const).map((tabName) => (
           <button
             key={tabName}
             onClick={() => setTab(tabName)}
@@ -347,6 +537,8 @@ export default function Housekeeping() {
               tab === tabName ? 'bg-telivity-teal text-white' : 'text-telivity-slate hover:bg-telivity-light-grey'
             }`}
           >
+            {tabName === 'lostFound' && <Package size={14} className="inline mr-1" />}
+            {tabName === 'serviceRequests' && <ClipboardList size={14} className="inline mr-1" />}
             {t(`housekeeping.tabs.${tabName}`)}
           </button>
         ))}
@@ -354,6 +546,8 @@ export default function Housekeeping() {
 
       {tab === 'dashboard' && <HousekeepingDashboard />}
       {tab === 'tasks' && <TaskBoard />}
+      {tab === 'lostFound' && <LostAndFoundPanel />}
+      {tab === 'serviceRequests' && <ServiceRequestsPanel />}
       {tab === 'analytics' && <HousekeepingAnalytics />}
     </div>
   );
