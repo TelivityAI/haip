@@ -774,7 +774,29 @@
         "inspection": "Inspection",
         "service_request": "General"
       }
-    }
+    },
+    "floor": "Floor",
+    "housekeeperSummary": "Housekeeper Workload",
+    "maintenanceNotesPlaceholder": "Describe the maintenance issue…",
+    "maintenanceRate": "Maintenance Issue Rate",
+    "reason": "Reason",
+    "roomSummary": "Room Status Summary",
+    "roomStatuses": {
+      "clean": "Clean",
+      "guest_ready": "Guest Ready",
+      "inspected": "Inspected",
+      "occupied": "Occupied",
+      "out_of_order": "Out of Order",
+      "out_of_service": "Out of Service",
+      "vacant_clean": "Vacant Clean",
+      "vacant_dirty": "Vacant Dirty"
+    },
+    "saveChecklist": "Save Checklist",
+    "selectStaff": "Select staff…",
+    "staff": "Staff",
+    "totalRooms": "Total Rooms",
+    "unassign": "Unassign",
+    "urgentRooms": "Urgent Rooms"
   },
   "import": {
     "choose": "1. Choose what to import",

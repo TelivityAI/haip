@@ -47,9 +47,19 @@ export class HousekeepingService {
     }
 
     let checklist = dto.checklist;
+    let priority = dto.priority ?? 0;
 
     if (!checklist) {
-      checklist = await this.generateChecklist(dto.type, dto.roomId, dto.propertyId);
+      const generated = await this.generateChecklist(dto.type, dto.roomId, dto.propertyId);
+      checklist = generated.items;
+      if (generated.isVip && priority <= 0) {
+        priority = 5;
+      }
+    } else {
+      const isVip = await this.nextGuestIsVip(dto.roomId, dto.propertyId);
+      if (isVip && priority <= 0) {
+        priority = 5;
+      }
     }
 
     const [task] = await this.db
@@ -59,7 +69,7 @@ export class HousekeepingService {
         roomId: dto.roomId,
         type: dto.type,
         status: 'pending',
-        priority: dto.priority ?? 0,
+        priority,
         // serviceDate arrives as a YYYY-MM-DD string; the column is a timestamp, so Drizzle
         // needs a Date (a raw string throws "value.toISOString is not a function").
         serviceDate: new Date(dto.serviceDate),
@@ -166,6 +176,7 @@ export class HousekeepingService {
     if (dto.notes !== undefined) updates['notes'] = dto.notes;
     if (dto.maintenanceRequired !== undefined) updates['maintenanceRequired'] = dto.maintenanceRequired;
     if (dto.maintenanceNotes !== undefined) updates['maintenanceNotes'] = dto.maintenanceNotes;
+    if (dto.checklist !== undefined) updates['checklist'] = dto.checklist;
 
     const [updated] = await this.db
       .update(housekeepingTasks)
@@ -555,23 +566,7 @@ export class HousekeepingService {
   // roomId comes from the request body, so without an `eq(...propertyId)` filter a
   // caller at property A could pass a roomId from property B and leak that room's
   // ADA status / next-guest VIP level (cross-tenant IDOR).
-  private async generateChecklist(taskType: string, roomId: string, propertyId: string) {
-    const template = CHECKLIST_TEMPLATES[taskType];
-    if (!template) return [];
-
-    const items = template.map((item) => ({ ...item }));
-
-    // Check if room is ADA accessible (scoped to the property)
-    const [room] = await this.db
-      .select({ isAccessible: rooms.isAccessible })
-      .from(rooms)
-      .where(and(eq(rooms.id, roomId), eq(rooms.propertyId, propertyId)));
-
-    if (room?.isAccessible) {
-      items.push(...ADA_EXTRA_ITEMS.map((item) => ({ ...item })));
-    }
-
-    // Check if next guest is VIP (scoped to the property)
+  private async nextGuestIsVip(roomId: string, propertyId: string): Promise<boolean> {
     const [nextReservation] = await this.db
       .select({ vipLevel: guests.vipLevel })
       .from(reservations)
@@ -586,11 +581,35 @@ export class HousekeepingService {
       .orderBy(asc(reservations.arrivalDate))
       .limit(1);
 
-    if (nextReservation?.vipLevel && nextReservation.vipLevel !== 'none') {
+    return !!(nextReservation?.vipLevel && nextReservation.vipLevel !== 'none');
+  }
+
+  private async generateChecklist(
+    taskType: string,
+    roomId: string,
+    propertyId: string,
+  ): Promise<{ items: Array<{ item: string; checked: boolean; notes?: string }>; isVip: boolean }> {
+    const template = CHECKLIST_TEMPLATES[taskType];
+    if (!template) return { items: [], isVip: false };
+
+    const items = template.map((item) => ({ ...item }));
+
+    // Check if room is ADA accessible (scoped to the property)
+    const [room] = await this.db
+      .select({ isAccessible: rooms.isAccessible })
+      .from(rooms)
+      .where(and(eq(rooms.id, roomId), eq(rooms.propertyId, propertyId)));
+
+    if (room?.isAccessible) {
+      items.push(...ADA_EXTRA_ITEMS.map((item) => ({ ...item })));
+    }
+
+    const isVip = await this.nextGuestIsVip(roomId, propertyId);
+    if (isVip) {
       items.push(...VIP_EXTRA_ITEMS.map((item) => ({ ...item })));
     }
 
-    return items;
+    return { items, isVip };
   }
 
   async getDashboard(propertyId: string, serviceDate: string) {

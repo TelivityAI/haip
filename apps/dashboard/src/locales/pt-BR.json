@@ -698,7 +698,29 @@
         "inspection": "Inspeção",
         "service_request": "Geral"
       }
-    }
+    },
+    "floor": "Andar",
+    "housekeeperSummary": "Carga de trabalho da equipe",
+    "maintenanceNotesPlaceholder": "Descreva o problema de manutenção…",
+    "maintenanceRate": "Taxa de problemas de manutenção",
+    "reason": "Motivo",
+    "roomSummary": "Resumo do status dos quartos",
+    "roomStatuses": {
+      "clean": "Limpo",
+      "guest_ready": "Pronto para hóspede",
+      "inspected": "Inspecionado",
+      "occupied": "Ocupado",
+      "out_of_order": "Fora de serviço",
+      "out_of_service": "Indisponível",
+      "vacant_clean": "Vago limpo",
+      "vacant_dirty": "Vago sujo"
+    },
+    "saveChecklist": "Salvar lista de verificação",
+    "selectStaff": "Selecionar equipe…",
+    "staff": "Equipe",
+    "totalRooms": "Total de quartos",
+    "unassign": "Desatribuir",
+    "urgentRooms": "Quartos urgentes"
   },
   "import": {
     "choose": "1. Escolha o que importar",

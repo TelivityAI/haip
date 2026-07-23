@@ -8,6 +8,18 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Housekeeping ops depth
+
+- **VIP auto-priority** — tasks for rooms with an incoming VIP guest default to priority 5
+  (unless an explicit priority > 0 is set); applies to generated and custom checklists.
+- **Checklist PATCH** — `UpdateTaskDto.checklist` persists in-progress checklist state.
+- **Permissions** — `housekeeping.read` on GET endpoints; `housekeeping.manage` on mutations.
+- **Ops desk dashboard** — room status summary, housekeeper workload table, urgent rooms list.
+- **Tasks UI** — HK staff picker (housekeeping / housekeeping_manager / admin roles), unassign,
+  interactive checklist save, complete with maintenance flags, inspect with signed-in `user.sub`.
+- **Analytics UI** — `metrics.avgTurnTimeMinutes`, pass rate, maintenance issue rate; chart by room type.
+
+
 ### Added — Rates / groups / BI depth (slices 8–10)
 
 - **Shoulder-date inventory** — `PUT /groups/blocks/:id/inventory` validates
