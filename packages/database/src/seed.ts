@@ -1270,6 +1270,48 @@ async function main() {
     keyPrefix: DEMO_BOOKING_KEY.slice(0, 12),
   });
 
+  // ---------------------------------------------------------------------------
+  // A/R ledgers + cash drawers (KB 11 / 12) — demo desk polish
+  // ---------------------------------------------------------------------------
+  await db.insert(schema.arLedgers).values([
+    {
+      id: sid('af000001', 1),
+      propertyId,
+      name: 'Acme Corp',
+      description: 'Corporate direct bill — NET30',
+      paymentTermsDays: 'NET30',
+      status: 'open',
+      balance: '0.00',
+      currencyCode: 'USD',
+    },
+    {
+      id: sid('af000001', 2),
+      propertyId,
+      name: 'City Convention Bureau',
+      description: 'Group / city account',
+      paymentTermsDays: 'NET60',
+      status: 'open',
+      balance: '0.00',
+      currencyCode: 'USD',
+    },
+  ]);
+  await db.insert(schema.cashDrawers).values([
+    {
+      id: sid('b8000001', 1),
+      propertyId,
+      name: 'Front Desk 1',
+      startingFloat: '200.00',
+      isActive: true,
+    },
+    {
+      id: sid('b8000001', 2),
+      propertyId,
+      name: 'Front Desk 2',
+      startingFloat: '150.00',
+      isActive: true,
+    },
+  ]);
+
   console.log('Seed complete.');
   console.log('  Property:      Telivity Grand Hotel (TGH)');
   console.log('  Room Types:    4');
@@ -1282,6 +1324,8 @@ async function main() {
   console.log('  Rate Plans:    5 with restrictions');
   console.log('  Cancel policies: 3 (FLEX-24, MOD-48, NRFN)');
   console.log('  Services:      3 (BREAKFAST, PARKING, LATECO)');
+  console.log('  A/R Ledgers:   2 (Acme Corp, City Convention Bureau)');
+  console.log('  Cash Drawers:  2 (Front Desk 1/2)');
   console.log('  HK Tasks:      18 (mix of statuses)');
   console.log('  Night Audit:   1 completed run');
   console.log('  Channels:      2 connections');

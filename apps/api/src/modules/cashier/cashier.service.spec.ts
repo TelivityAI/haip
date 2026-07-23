@@ -253,4 +253,43 @@ describe('CashierService', () => {
       ).rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('listDrawers', () => {
+    it('returns drawers scoped to propertyId', async () => {
+      const db: any = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockResolvedValue([mockDrawer]),
+            }),
+          }),
+        })),
+      };
+      const svc = await buildService(db);
+      const result = await svc.listDrawers('prop-001');
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe('Front Desk 1');
+    });
+  });
+
+  describe('listSessions', () => {
+    it('filters open sessions for a drawer', async () => {
+      const db: any = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockResolvedValue([mockSession]),
+            }),
+          }),
+        })),
+      };
+      const svc = await buildService(db);
+      const result = await svc.listSessions('prop-001', {
+        cashDrawerId: 'drawer-001',
+        status: 'open',
+      });
+      expect(result.total).toBe(1);
+      expect(result.data[0].status).toBe('open');
+    });
+  });
 });

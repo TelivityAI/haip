@@ -134,6 +134,8 @@ function FolioDetail() {
   const { toast } = useToast();
   const [chargeOpen, setChargeOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [arTransferOpen, setArTransferOpen] = useState(false);
+  const [arLedgerId, setArLedgerId] = useState('');
   const [chargeType, setChargeType] = useState('room');
   const [chargeAmount, setChargeAmount] = useState('');
   const [chargeDesc, setChargeDesc] = useState('');
@@ -157,6 +159,15 @@ function FolioDetail() {
     queryFn: () => api.get('/v1/payments', { params: { folioId: id } }).then((r) => r.data),
     enabled: !!id,
   });
+
+  const { data: arLedgersData } = useQuery({
+    queryKey: ['ar-ledgers', propertyId, 'open'],
+    queryFn: () =>
+      api.get('/v1/ar/ledgers', { params: { propertyId, status: 'open' } }).then((r) => r.data),
+    enabled: !!propertyId && arTransferOpen,
+  });
+  const arLedgers: { id: string; name: string; balance?: string }[] =
+    arLedgersData?.data ?? arLedgersData ?? [];
 
   const folio: Folio | null = folioData?.data ?? folioData ?? null;
   const charges: Charge[] = chargesData?.data ?? chargesData ?? [];
@@ -218,6 +229,25 @@ function FolioDetail() {
 
   const settleMutation = useMutation({ mutationFn: () => api.patch(`/v1/folios/${id}/settle`), onSuccess: invalidate });
   const closeMutation = useMutation({ mutationFn: () => api.patch(`/v1/folios/${id}/close`), onSuccess: invalidate });
+
+  const transferToArMutation = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.post('/v1/ar/transfer', {
+        propertyId,
+        folioId: id,
+        arLedgerId,
+      });
+    },
+    onSuccess: () => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ['ar-ledgers'] });
+      setArTransferOpen(false);
+      setArLedgerId('');
+      toast('success', t('folios.transferredToAr'));
+    },
+    onError: (e) => toast('error', `${t('folios.transferToArFailed')}: ${errMsg(e)}`),
+  });
 
   if (!folio) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.loading')}</div>;
 
@@ -324,6 +354,14 @@ function FolioDetail() {
 
           <div className="bg-white rounded-xl shadow-sm p-5 space-y-2">
             <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('common.actions')}</h2>
+            {folio.status === 'open' && Number(folio.balance ?? 0) !== 0 && (
+              <button
+                onClick={() => setArTransferOpen(true)}
+                className="w-full border border-gray-200 text-telivity-navy rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-grey"
+              >
+                {t('folios.transferToAr')}
+              </button>
+            )}
             {folio.status === 'open' && (
               <button onClick={() => settleMutation.mutate()} disabled={settleMutation.isPending} className="w-full bg-telivity-dark-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
                 {t('folios.settleFolio')}
@@ -373,6 +411,34 @@ function FolioDetail() {
             <input type="number" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
           <button onClick={() => recordPaymentMutation.mutate()} disabled={!payAmount || recordPaymentMutation.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('folios.recordPayment')}</button>
+        </div>
+      </Modal>
+
+      <Modal open={arTransferOpen} onClose={() => setArTransferOpen(false)} title={t('folios.transferToAr')}>
+        <div className="space-y-4">
+          <p className="text-sm text-telivity-mid-grey">
+            {t('folios.transferToArHint', { balance: Number(folio.balance ?? 0).toFixed(2) })}
+          </p>
+          <select
+            value={arLedgerId}
+            onChange={(e) => setArLedgerId(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">{t('folios.selectArLedger')}</option>
+            {arLedgers.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+          {arLedgers.length === 0 && (
+            <p className="text-xs text-telivity-mid-grey">{t('folios.noOpenArLedgers')}</p>
+          )}
+          <button
+            onClick={() => transferToArMutation.mutate()}
+            disabled={!arLedgerId || transferToArMutation.isPending}
+            className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {t('folios.transferBalance')}
+          </button>
         </div>
       </Modal>
     </div>

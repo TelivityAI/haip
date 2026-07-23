@@ -124,6 +124,22 @@ export class ArService {
     return updated;
   }
 
+  /** List transactions on an A/R ledger (newest first). */
+  async listTransactions(arLedgerId: string, propertyId: string) {
+    await this.findLedgerById(arLedgerId, propertyId);
+    const data = await this.db
+      .select()
+      .from(arTransactions)
+      .where(
+        and(
+          eq(arTransactions.arLedgerId, arLedgerId),
+          eq(arTransactions.propertyId, propertyId),
+        ),
+      )
+      .orderBy(sql`${arTransactions.createdAt} desc`);
+    return { data, total: data.length };
+  }
+
   /**
    * Transfer an outstanding folio balance into an A/R ledger (KB 11.3).
    * The folio balance is reduced to 0.00 by posting an offsetting adjustment

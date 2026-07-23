@@ -368,4 +368,35 @@ describe('ArService', () => {
       expect(result.total).toBe('1000.00');
     });
   });
+
+  describe('listTransactions', () => {
+    it('lists transactions for a ledger after tenancy check', async () => {
+      const txns = [
+        { id: 'txn-1', type: 'transfer_in', amount: '50.00', arLedgerId: 'arl-001' },
+      ];
+      let selectCall = 0;
+      const db: any = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() => {
+              selectCall++;
+              if (selectCall === 1) {
+                return {
+                  then: (resolve: any) =>
+                    resolve([{ id: 'arl-001', propertyId: 'prop-001', name: 'Acme', status: 'open', balance: '50.00' }]),
+                };
+              }
+              return {
+                orderBy: vi.fn().mockResolvedValue(txns),
+              };
+            }),
+          }),
+        })),
+      };
+      const svc = await buildService(db, {});
+      const result = await svc.listTransactions('arl-001', 'prop-001');
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].type).toBe('transfer_in');
+    });
+  });
 });

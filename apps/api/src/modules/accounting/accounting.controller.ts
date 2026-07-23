@@ -159,6 +159,17 @@ export class AccountingController {
     return this.arService.closeLedger(id, propertyId);
   }
 
+  @Get('ar/ledgers/:id/transactions')
+  @ApiOperation({ summary: 'List A/R ledger transactions' })
+  @ApiResponse({ status: 200, description: 'Transactions' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  listArTransactions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.arService.listTransactions(id, propertyId);
+  }
+
   @Post('ar/transfer')
   @Roles('admin', 'front_desk', 'night_auditor')
   @ApiOperation({ summary: 'Transfer an outstanding folio balance into an A/R ledger (KB 11.3)' })
@@ -188,6 +199,14 @@ export class AccountingController {
     @Body() dto: RecordArPaymentDto,
   ) {
     return this.arService.recordARPayment(id, dto);
+  }
+
+  @Get('ar/aging')
+  @ApiOperation({ summary: 'Property-wide A/R aging report (KB 11.5)' })
+  @ApiResponse({ status: 200, description: 'Aging buckets' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  propertyArAging(@Query('propertyId', ParseUUIDPipe) propertyId: string) {
+    return this.arService.aging(propertyId);
   }
 
   @Get('ar/ledgers/:id/aging')
