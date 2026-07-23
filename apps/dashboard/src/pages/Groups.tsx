@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UsersRound, Plus, ChevronLeft, FileText, Receipt } from 'lucide-react';
+import { UsersRound, Plus, ChevronLeft, FileText, Receipt, Pencil, Link2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { api } from '../lib/api';
 import { requirePropertyId } from '../lib/api-helpers';
@@ -25,6 +25,196 @@ interface AllotmentBlock {
   startDate?: string;
   endDate?: string;
   status?: string;
+  ratePlanId?: string | null;
+  cutoffDate?: string | null;
+  autoRelease?: boolean;
+  shoulderStart?: string | null;
+  shoulderEnd?: string | null;
+  minLos?: number | null;
+  maxLos?: number | null;
+  groupCode?: string | null;
+}
+
+interface RoomingEntry {
+  id: string;
+  guestName: string;
+  arrival?: string | null;
+  departure?: string | null;
+  roomTypeId?: string | null;
+  reservationId?: string | null;
+  status: string;
+  errorNote?: string | null;
+}
+
+interface BlockFormState {
+  name: string;
+  startDate: string;
+  endDate: string;
+  cutoffDate: string;
+  ratePlanId: string;
+  shoulderStart: string;
+  shoulderEnd: string;
+  groupCode: string;
+  minLos: string;
+  maxLos: string;
+  status: string;
+}
+
+const BLOCK_STATUSES = ['tentative', 'definite', 'released', 'cancelled'] as const;
+
+function emptyBlockForm(): BlockFormState {
+  return {
+    name: '',
+    startDate: format(new Date(), 'yyyy-MM-dd'),
+    endDate: format(new Date(Date.now() + 86400000 * 3), 'yyyy-MM-dd'),
+    cutoffDate: '',
+    ratePlanId: '',
+    shoulderStart: '',
+    shoulderEnd: '',
+    groupCode: '',
+    minLos: '',
+    maxLos: '',
+    status: 'tentative',
+  };
+}
+
+function blockToForm(block: AllotmentBlock): BlockFormState {
+  return {
+    name: block.name ?? '',
+    startDate: block.startDate ?? '',
+    endDate: block.endDate ?? '',
+    cutoffDate: block.cutoffDate ?? '',
+    ratePlanId: block.ratePlanId ?? '',
+    shoulderStart: block.shoulderStart ?? '',
+    shoulderEnd: block.shoulderEnd ?? '',
+    groupCode: block.groupCode ?? '',
+    minLos: block.minLos != null ? String(block.minLos) : '',
+    maxLos: block.maxLos != null ? String(block.maxLos) : '',
+    status: block.status ?? 'tentative',
+  };
+}
+
+/** Build create/update payload from form fields already supported by the API. */
+function blockPayload(form: BlockFormState, propertyId: string, groupProfileId?: string) {
+  const payload: Record<string, unknown> = {
+    propertyId,
+    name: form.name,
+    startDate: form.startDate,
+    endDate: form.endDate,
+    status: form.status,
+  };
+  if (groupProfileId) payload.groupProfileId = groupProfileId;
+  if (form.cutoffDate) payload.cutoffDate = form.cutoffDate;
+  if (form.ratePlanId) payload.ratePlanId = form.ratePlanId;
+  if (form.shoulderStart) payload.shoulderStart = form.shoulderStart;
+  if (form.shoulderEnd) payload.shoulderEnd = form.shoulderEnd;
+  if (form.groupCode) payload.groupCode = form.groupCode;
+  if (form.minLos !== '') payload.minLos = Number(form.minLos);
+  if (form.maxLos !== '') payload.maxLos = Number(form.maxLos);
+  return payload;
+}
+
+/**
+ * Parse rooming-list CSV rows.
+ * Columns: guestName, arrival, departure, guestId, roomTypeId, ratePlanId, totalAmount
+ * (ratePlanId may be omitted; totalAmount maps to API `totalAmount`).
+ */
+function parseRoomingCsv(csvText: string) {
+  return csvText
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const cols = line.split(',').map((s) => s.trim());
+      const [guestName, arrival, departure, guestId, roomTypeId, ratePlanId, totalAmount] = cols;
+      return {
+        guestName: guestName || '',
+        arrival: arrival || undefined,
+        departure: departure || undefined,
+        guestId: guestId || undefined,
+        roomTypeId: roomTypeId || undefined,
+        ratePlanId: ratePlanId || undefined,
+        totalAmount: totalAmount || undefined,
+      };
+    })
+    .filter((e) => e.guestName);
+}
+
+function BlockFormFields({
+  form,
+  setForm,
+  ratePlans,
+}: {
+  form: BlockFormState;
+  setForm: (next: BlockFormState) => void;
+  ratePlans: { id: string; name: string; code?: string }[];
+}) {
+  const { t } = useTranslation();
+  const set = (patch: Partial<BlockFormState>) => setForm({ ...form, ...patch });
+
+  return (
+    <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+      <div>
+        <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.blockName')}</label>
+        <input type="text" value={form.name} onChange={(e) => set({ name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.start')}</label>
+          <input type="date" value={form.startDate} onChange={(e) => set({ startDate: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.end')}</label>
+          <input type="date" value={form.endDate} onChange={(e) => set({ endDate: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.cutoffDate')}</label>
+        <input type="date" value={form.cutoffDate} onChange={(e) => set({ cutoffDate: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.shoulderStart')}</label>
+          <input type="date" value={form.shoulderStart} onChange={(e) => set({ shoulderStart: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.shoulderEnd')}</label>
+          <input type="date" value={form.shoulderEnd} onChange={(e) => set({ shoulderEnd: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.ratePlan')}</label>
+        <select value={form.ratePlanId} onChange={(e) => set({ ratePlanId: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          <option value="">{t('groups.selectOptional')}</option>
+          {ratePlans.map((rp) => (
+            <option key={rp.id} value={rp.id}>{rp.name}{rp.code ? ` (${rp.code})` : ''}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.groupCode')}</label>
+        <input type="text" value={form.groupCode} onChange={(e) => set({ groupCode: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.minLos')}</label>
+          <input type="number" min={1} value={form.minLos} onChange={(e) => set({ minLos: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.maxLos')}</label>
+          <input type="number" min={1} value={form.maxLos} onChange={(e) => set({ maxLos: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.status')}</label>
+        <select value={form.status} onChange={(e) => set({ status: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          {BLOCK_STATUSES.map((s) => (
+            <option key={s} value={s}>{t(`groups.blockStatuses.${s}`, { defaultValue: s })}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
 }
 
 function GroupList() {
@@ -156,10 +346,9 @@ function GroupDetail() {
   const queryClient = useQueryClient();
   const [blockOpen, setBlockOpen] = useState(false);
   const [folioOpen, setFolioOpen] = useState(false);
-  const [blockName, setBlockName] = useState('');
-  const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(new Date(Date.now() + 86400000 * 3), 'yyyy-MM-dd'));
-  const [cutoffDate, setCutoffDate] = useState('');
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkReservationId, setLinkReservationId] = useState('');
+  const [blockForm, setBlockForm] = useState<BlockFormState>(emptyBlockForm());
 
   const { data } = useQuery({
     queryKey: ['groups', id, propertyId],
@@ -173,6 +362,12 @@ function GroupDetail() {
     enabled: !!id && !!propertyId,
   });
 
+  const { data: ratePlansData } = useQuery({
+    queryKey: ['rate-plans', propertyId],
+    queryFn: () => api.get('/v1/rate-plans', { params: { propertyId } }).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+
   const { data: folioData, refetch: refetchFolio } = useQuery({
     queryKey: ['groups', 'folio', id, propertyId],
     queryFn: () => api.get(`/v1/groups/profiles/${id}/folio`, { params: { propertyId } }).then((r) => r.data),
@@ -181,24 +376,34 @@ function GroupDetail() {
 
   const profile: GroupProfile | null = data?.data ?? data ?? null;
   const blocks: AllotmentBlock[] = blocksData?.data ?? blocksData ?? [];
+  const ratePlans: { id: string; name: string; code?: string }[] = ratePlansData?.data ?? ratePlansData ?? [];
 
   const createBlock = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
       return api.post('/v1/groups/blocks', {
-        propertyId,
-        groupProfileId: id,
-        name: blockName,
-        startDate,
-        endDate,
-        cutoffDate: cutoffDate || undefined,
+        ...blockPayload(blockForm, propertyId, id),
         autoRelease: true,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['groups', 'blocks'] });
       setBlockOpen(false);
-      setBlockName('');
+      setBlockForm(emptyBlockForm());
+    },
+  });
+
+  const linkReservation = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.post(`/v1/groups/profiles/${id}/reservations`, {
+        propertyId,
+        reservationId: linkReservationId.trim(),
+      });
+    },
+    onSuccess: () => {
+      setLinkOpen(false);
+      setLinkReservationId('');
     },
   });
 
@@ -221,6 +426,12 @@ function GroupDetail() {
         <h1 className="text-2xl font-semibold text-telivity-navy">{profile.name}</h1>
         <StatusBadge status="info" label={t(`groups.types.${profile.type}`, { defaultValue: profile.type })} />
         <div className="ml-auto flex gap-2">
+          <button
+            onClick={() => setLinkOpen(true)}
+            className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey"
+          >
+            <Link2 size={14} /> {t('groups.linkReservation')}
+          </button>
           <button
             onClick={async () => { await refetchFolio(); setFolioOpen(true); }}
             className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey"
@@ -246,7 +457,12 @@ function GroupDetail() {
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-telivity-navy">{t('groups.allotmentBlocks')}</h2>
-          <button onClick={() => setBlockOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-telivity-teal"><Plus size={14} /> {t('groups.newBlock')}</button>
+          <button
+            onClick={() => { setBlockForm(emptyBlockForm()); setBlockOpen(true); }}
+            className="flex items-center gap-1 text-xs font-semibold text-telivity-teal"
+          >
+            <Plus size={14} /> {t('groups.newBlock')}
+          </button>
         </div>
         <table className="w-full">
           <thead>
@@ -279,13 +495,43 @@ function GroupDetail() {
 
       <Modal open={blockOpen} onClose={() => setBlockOpen(false)} title={t('groups.newBlock')}>
         <div className="space-y-4">
-          <input type="text" value={blockName} onChange={(e) => setBlockName(e.target.value)} placeholder={t('groups.blockName')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          <div className="grid grid-cols-2 gap-3">
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <BlockFormFields form={blockForm} setForm={setBlockForm} ratePlans={ratePlans} />
+          <button
+            onClick={() => createBlock.mutate()}
+            disabled={!blockForm.name || createBlock.isPending}
+            className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {t('groups.createBlock')}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal open={linkOpen} onClose={() => setLinkOpen(false)} title={t('groups.linkReservation')}>
+        <div className="space-y-4">
+          <p className="text-xs text-telivity-mid-grey">{t('groups.linkReservationHint')}</p>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.reservationId')}</label>
+            <input
+              type="text"
+              value={linkReservationId}
+              onChange={(e) => setLinkReservationId(e.target.value)}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono"
+            />
           </div>
-          <input type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)} placeholder={t('groups.cutoffDate')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          <button onClick={() => createBlock.mutate()} disabled={!blockName || createBlock.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('groups.createBlock')}</button>
+          {linkReservation.isError && (
+            <p className="text-xs text-red-600">{(linkReservation.error as Error)?.message ?? t('groups.linkFailed')}</p>
+          )}
+          {linkReservation.isSuccess && (
+            <p className="text-xs text-green-700">{t('groups.linkSuccess')}</p>
+          )}
+          <button
+            onClick={() => linkReservation.mutate()}
+            disabled={!linkReservationId.trim() || linkReservation.isPending}
+            className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {t('groups.link')}
+          </button>
         </div>
       </Modal>
 
@@ -317,7 +563,13 @@ function BlockDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [roomingOpen, setRoomingOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
   const [csvText, setCsvText] = useState('');
+  const [editForm, setEditForm] = useState<BlockFormState>(emptyBlockForm());
+  const [invStayDate, setInvStayDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [invRoomTypeId, setInvRoomTypeId] = useState('');
+  const [invRoomsAllotted, setInvRoomsAllotted] = useState('1');
 
   const { data: blockData } = useQuery({
     queryKey: ['groups', 'block', blockId, propertyId],
@@ -331,9 +583,33 @@ function BlockDetail() {
     enabled: !!blockId && !!propertyId,
   });
 
+  const { data: roomingData } = useQuery({
+    queryKey: ['groups', 'rooming', blockId, propertyId],
+    queryFn: () => api.get(`/v1/groups/blocks/${blockId}/rooming-list`, { params: { propertyId } }).then((r) => r.data),
+    enabled: !!blockId && !!propertyId,
+  });
+
+  const { data: roomTypesData } = useQuery({
+    queryKey: ['room-types', propertyId],
+    queryFn: () => api.get('/v1/room-types', { params: { propertyId } }).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+
+  const { data: ratePlansData } = useQuery({
+    queryKey: ['rate-plans', propertyId],
+    queryFn: () => api.get('/v1/rate-plans', { params: { propertyId } }).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+
   const block: AllotmentBlock | null = blockData?.data ?? blockData ?? null;
   const pickup = pickupData?.data ?? pickupData;
-  const detail: { stayDate: string; roomsAllotted: number; roomsPickedUp: number; remaining: number; pickupRate: number }[] = pickup?.detail ?? [];
+  const detail: { stayDate: string; roomTypeId?: string; roomsAllotted: number; roomsPickedUp: number; remaining: number; pickupRate: number }[] =
+    pickup?.detail ?? [];
+  const roomingEntries: RoomingEntry[] = Array.isArray(roomingData) ? roomingData : roomingData?.data ?? [];
+  const roomTypes: { id: string; name: string }[] = roomTypesData?.data ?? roomTypesData ?? [];
+  const ratePlans: { id: string; name: string; code?: string }[] = ratePlansData?.data ?? ratePlansData ?? [];
+
+  const roomTypeName = (id?: string | null) => roomTypes.find((rt) => rt.id === id)?.name ?? (id ? id.slice(0, 8) : '—');
 
   const releaseBlock = useMutation({
     mutationFn: () => {
@@ -346,23 +622,45 @@ function BlockDetail() {
     },
   });
 
+  const updateBlock = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      const body = blockPayload(editForm, propertyId);
+      delete body.propertyId;
+      return api.patch(`/v1/groups/blocks/${blockId}`, body, { params: { propertyId } });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups', 'block', blockId] });
+      queryClient.invalidateQueries({ queryKey: ['groups', 'blocks'] });
+      setEditOpen(false);
+    },
+  });
+
+  const setInventory = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.put(`/v1/groups/blocks/${blockId}/inventory`, {
+        propertyId,
+        stayDate: invStayDate,
+        roomTypeId: invRoomTypeId,
+        roomsAllotted: Number(invRoomsAllotted),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups', 'pickup', blockId] });
+      setInventoryOpen(false);
+    },
+  });
+
   const importRoomingList = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
-      const lines = csvText.trim().split('\n').filter(Boolean);
-      const entries = lines.map((line) => {
-        const [guestName, arrival, departure, guestId] = line.split(',').map((s) => s.trim());
-        return {
-          guestName,
-          arrival: arrival || undefined,
-          departure: departure || undefined,
-          guestId: guestId || undefined,
-        };
-      });
+      const entries = parseRoomingCsv(csvText);
       return api.post(`/v1/groups/blocks/${blockId}/rooming-list`, { propertyId, entries });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['groups', 'pickup'] });
+      queryClient.invalidateQueries({ queryKey: ['groups', 'rooming', blockId] });
       setRoomingOpen(false);
       setCsvText('');
     },
@@ -372,11 +670,28 @@ function BlockDetail() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
         <button onClick={() => navigate(`/groups/${profileId}`)} className="p-1.5 rounded hover:bg-telivity-light-grey"><ChevronLeft size={20} /></button>
         <h1 className="text-2xl font-semibold text-telivity-navy">{block.name ?? t('groups.block')}</h1>
         <StatusBadge status={block.status ?? 'pending'} label={block.status ?? '—'} />
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex gap-2 flex-wrap">
+          <button
+            onClick={() => { setEditForm(blockToForm(block)); setEditOpen(true); }}
+            className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey"
+          >
+            <Pencil size={14} /> {t('groups.editBlock')}
+          </button>
+          <button
+            onClick={() => {
+              setInvStayDate(block.startDate ?? format(new Date(), 'yyyy-MM-dd'));
+              setInvRoomTypeId(roomTypes[0]?.id ?? '');
+              setInvRoomsAllotted('1');
+              setInventoryOpen(true);
+            }}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey"
+          >
+            {t('groups.setInventory')}
+          </button>
           <button onClick={() => setRoomingOpen(true)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey">{t('groups.uploadRoomingList')}</button>
           <button
             onClick={() => releaseBlock.mutate()}
@@ -385,6 +700,31 @@ function BlockDetail() {
           >
             {t('groups.releaseBlock')}
           </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm p-4 mb-4 text-sm grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div>
+          <p className="text-xs text-telivity-mid-grey">{t('groups.groupCode')}</p>
+          <p className="font-medium text-telivity-navy">{block.groupCode || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs text-telivity-mid-grey">{t('groups.ratePlan')}</p>
+          <p className="font-medium text-telivity-navy">
+            {ratePlans.find((rp) => rp.id === block.ratePlanId)?.name ?? (block.ratePlanId ? block.ratePlanId.slice(0, 8) : '—')}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-telivity-mid-grey">{t('groups.shoulders')}</p>
+          <p className="font-medium text-telivity-navy">
+            {(block.shoulderStart || '—') + ' → ' + (block.shoulderEnd || '—')}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-telivity-mid-grey">{t('groups.los')}</p>
+          <p className="font-medium text-telivity-navy">
+            {block.minLos ?? '—'} / {block.maxLos ?? '—'}
+          </p>
         </div>
       </div>
 
@@ -409,7 +749,7 @@ function BlockDetail() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
         <div className="px-5 py-3 border-b border-gray-100">
           <h2 className="text-sm font-semibold text-telivity-navy">{t('groups.pickupReport')}</h2>
         </div>
@@ -417,6 +757,7 @@ function BlockDetail() {
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('groups.stayDate')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('groups.roomType')}</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('groups.allotted')}</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('groups.pickedUp')}</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('groups.remaining')}</th>
@@ -425,8 +766,9 @@ function BlockDetail() {
           </thead>
           <tbody>
             {detail.map((row) => (
-              <tr key={row.stayDate} className="border-b border-gray-50">
+              <tr key={`${row.stayDate}-${row.roomTypeId ?? ''}`} className="border-b border-gray-50">
                 <td className="px-4 py-3 text-sm text-telivity-slate">{row.stayDate}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{roomTypeName(row.roomTypeId)}</td>
                 <td className="px-4 py-3 text-sm text-right">{row.roomsAllotted}</td>
                 <td className="px-4 py-3 text-sm text-right">{row.roomsPickedUp}</td>
                 <td className="px-4 py-3 text-sm text-right">{row.remaining}</td>
@@ -434,11 +776,101 @@ function BlockDetail() {
               </tr>
             ))}
             {detail.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('groups.noInventory')}</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('groups.noInventory')}</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-telivity-navy">{t('groups.roomingEntries')}</h2>
+        </div>
+        <table className="w-full">
+          <thead>
+            <tr className="bg-telivity-teal/5 border-b border-gray-100">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('groups.guestName')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('groups.arrival')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('groups.departure')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('groups.roomType')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {roomingEntries.map((e, i) => (
+              <tr key={e.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
+                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{e.guestName}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{e.arrival ?? '—'}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{e.departure ?? '—'}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{roomTypeName(e.roomTypeId)}</td>
+                <td className="px-4 py-3">
+                  <StatusBadge status={e.status === 'created' ? 'success' : e.status === 'error' ? 'error' : 'pending'} label={e.status} />
+                  {e.errorNote && <p className="text-xs text-red-600 mt-1">{e.errorNote}</p>}
+                </td>
+              </tr>
+            ))}
+            {roomingEntries.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('groups.noRoomingEntries')}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={t('groups.editBlock')}>
+        <div className="space-y-4">
+          <BlockFormFields form={editForm} setForm={setEditForm} ratePlans={ratePlans} />
+          <button
+            onClick={() => updateBlock.mutate()}
+            disabled={!editForm.name || updateBlock.isPending}
+            className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {t('groups.saveBlock')}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal open={inventoryOpen} onClose={() => setInventoryOpen(false)} title={t('groups.setInventory')}>
+        <div className="space-y-4">
+          <p className="text-xs text-telivity-mid-grey">{t('groups.setInventoryHint')}</p>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.stayDate')}</label>
+            <input type="date" value={invStayDate} onChange={(e) => setInvStayDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.roomType')}</label>
+            <select value={invRoomTypeId} onChange={(e) => setInvRoomTypeId(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">{t('groups.selectRequired')}</option>
+              {roomTypes.map((rt) => (
+                <option key={rt.id} value={rt.id}>{rt.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.roomsAllotted')}</label>
+            <input
+              type="number"
+              min={0}
+              value={invRoomsAllotted}
+              onChange={(e) => setInvRoomsAllotted(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          {setInventory.isError && (
+            <p className="text-xs text-red-600">
+              {(setInventory.error as { response?: { data?: { message?: string } } })?.response?.data?.message
+                ?? (setInventory.error as Error)?.message
+                ?? t('groups.inventoryFailed')}
+            </p>
+          )}
+          <button
+            onClick={() => setInventory.mutate()}
+            disabled={!invStayDate || !invRoomTypeId || invRoomsAllotted === '' || setInventory.isPending}
+            className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {t('groups.saveInventory')}
+          </button>
+        </div>
+      </Modal>
 
       <Modal open={roomingOpen} onClose={() => setRoomingOpen(false)} title={t('groups.importRoomingList')}>
         <div className="space-y-4">
@@ -447,10 +879,16 @@ function BlockDetail() {
             value={csvText}
             onChange={(e) => setCsvText(e.target.value)}
             rows={6}
-            placeholder="Jane Doe, 2026-06-01, 2026-06-04&#10;John Smith, 2026-06-01, 2026-06-03"
+            placeholder={'Jane Doe,2026-06-01,2026-06-04,<guestId>,<roomTypeId>,<ratePlanId>,599.00'}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono"
           />
-          <button onClick={() => importRoomingList.mutate()} disabled={!csvText.trim() || importRoomingList.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('groups.import')}</button>
+          <button
+            onClick={() => importRoomingList.mutate()}
+            disabled={!csvText.trim() || importRoomingList.isPending}
+            className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {t('groups.import')}
+          </button>
         </div>
       </Modal>
     </div>

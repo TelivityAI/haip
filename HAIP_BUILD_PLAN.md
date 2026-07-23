@@ -17,6 +17,7 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Front desk stay ops — [#181](https://github.com/telivityai/haip/pull/181) (room move, walk-in, arrivals queue, registration card, notes)
 - A/R & cashier desk polish — [#180](https://github.com/telivityai/haip/pull/180) (list drawers/sessions, ledger CRUD UI, folio→A/R, aging UX)
 - Commercial profiles — [#180](https://github.com/telivityai/haip/pull/180) / [#179](https://github.com/telivityai/haip/pull/179) (billing terms on group profiles, A/R + negotiated rate links)
+- **Groups depth** — allotment inventory UI, block create/edit fields, rooming-list CSV + list endpoint, link reservation (slice 9)
 
 ## Planned
 - New-property onboarding wizard
@@ -29,7 +30,7 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Deeper reporting and exports
 - Hardening & reliability (integration retries/timeouts, observability, scale)
 - Additional localizations
-- HK ops depth, rates depth, groups depth
+- HK ops depth, rates depth
 
 ## In progress
 - Production deployment path (compose, container images, docs)

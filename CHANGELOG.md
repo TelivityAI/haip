@@ -8,6 +8,19 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Groups depth (slice 9)
+
+- **Allotment inventory UI** — block detail can set held rooms via
+  `PUT /groups/blocks/:id/inventory` (stay date, room type, rooms allotted) and
+  refreshes the pickup report.
+- **Block create/edit fields** — dashboard exposes API fields already on create/update:
+  `ratePlanId`, shoulder dates, `groupCode`, min/max LOS, and status.
+- **Rooming list** — CSV mapping includes `guestId`, `roomTypeId`, `ratePlanId`, and
+  `totalAmount`; `GET /groups/blocks/:id/rooming-list` lists entries (service already
+  had `listEntries`).
+- **Link reservation** — group profile detail can link an existing reservation via
+  `POST /groups/profiles/:id/reservations`.
+
 ### Added — Guest journey (ops + lifecycle triggers)
 
 - **Guest-comms event listener** — `reservation.created` / `checked_in` / `checked_out`

@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-<img src="https://img.shields.io/badge/Tests-1185%20passing-brightgreen" alt="1185 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+<img src="https://img.shields.io/badge/Tests-1188%20passing-brightgreen" alt="1188 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -240,6 +240,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | 3 | **Front desk stay ops** | [#181](https://github.com/telivityai/haip/pull/181) | Arrivals / in-house queues, walk-in, in-house room move, registration card at check-in, operational notes at the desk. See **Reservation Management**. |
 | 4 | **A/R & cashier polish** | [#180](https://github.com/telivityai/haip/pull/180) | List cash drawers/sessions, A/R ledger CRUD + aging UX, folio→A/R from folio detail, reverse-transfer picker. See **Accounting & Cashiering** and **Folio & Billing**. |
 | 5 | **Commercial profiles** | [#180](https://github.com/telivityai/haip/pull/180) (also [#179](https://github.com/telivityai/haip/pull/179)) | Standing-account billing terms on group profiles; link A/R ledgers and negotiated rates; Commercial dashboard page. See **Groups & Commercial Profiles**. |
+| 9 | **Groups depth** | _PR pending_ | Allotment block inventory UI (`PUT …/inventory`); create/edit block fields (rate plan, shoulders, group code, min/max LOS, status); rooming-list CSV mapping (`guestId`, `roomTypeId`, `ratePlanId`/rate) + `GET …/rooming-list`; link reservation to profile. See **Groups & Commercial Profiles**. |
 
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
@@ -294,10 +295,11 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 ### Groups & Commercial Profiles
 - **Group profiles** — master records for corporate, travel-agent, wholesale, and event business, with an optional group (master) folio and computed group invoices.
 - **Commercial standing accounts** — billing address + payment terms on group profiles; optional links from **A/R ledgers** and **negotiated rate plans** (`groupProfileId`); Commercial dashboard page lists corporate / travel-agent / wholesale accounts and can create a linked A/R ledger (`GET /groups/profiles/:id/commercial`).
-- **Allotment blocks** — hold a quantity of rooms per date and room type at negotiated rates, with cutoff dates, shoulder dates, and Min/Max LOS. Inventory is validated against live availability so a block can't over-allot.
+- **Allotment blocks** — hold a quantity of rooms per date and room type at negotiated rates, with cutoff dates, shoulder dates, and Min/Max LOS. Inventory is validated against live availability so a block can't over-allot. Dashboard block detail can set inventory and edit the full block field set already on the API.
 - **Cutoff & auto-release** — release unsold rooms back to general inventory at the cutoff date, per block or via a sweep endpoint that processes all expired auto-release blocks.
-- **Pickup tracking** — rooms allotted vs. picked up, per date and room type, with pickup rate.
-- **Rooming lists** — batch-import a group's guest roster; each row creates and links a reservation and increments pickup, with per-row success/error handling that never aborts the batch.
+- **Pickup tracking** — rooms allotted vs. picked up, per date and room type, with pickup rate (refreshed after inventory set / rooming import).
+- **Rooming lists** — batch-import a group's guest roster (CSV: name, dates, guestId, roomTypeId, ratePlanId, totalAmount); list entries via `GET /groups/blocks/:id/rooming-list`; each row creates and links a reservation and increments pickup, with per-row success/error handling that never aborts the batch.
+- **Link reservation** — attach an existing member reservation to a group profile from the dashboard (`POST /groups/profiles/:id/reservations`).
 
 ### Accounting & Cashiering
 - **Deposit Ledger** — advance deposits tracked as a liability (not revenue) with a full recognition lifecycle: `held → applied` (at check-in/checkout), `refunded`, or `forfeited`. Refundable vs. non-refundable handling, with status-transition guards. Cancel/no-show/check-in settlement follows the property money policy.
@@ -465,7 +467,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (1185 tests across 144 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
+| Testing | Vitest (1188 tests across 145 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
 
@@ -586,7 +588,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (1185 tests across 144 test files)
+# All tests (1188 tests across 145 test files)
 
 # API tests only
 pnpm --filter @telivityhaip/api test
@@ -791,7 +793,7 @@ POST   /api/v1/house-accounts/:id/sell             # Sell a product (retail)
 </details>
 
 <details>
-<summary><strong>Groups & Allotment</strong> — 16 endpoints</summary>
+<summary><strong>Groups & Allotment</strong> — 17 endpoints</summary>
 
 ```
 # Group Profiles
@@ -812,6 +814,7 @@ PATCH  /api/v1/groups/blocks/:id                     # Update block
 PUT    /api/v1/groups/blocks/:id/inventory          # Set per-date/room-type allotment
 GET    /api/v1/groups/blocks/:id/pickup             # Pickup vs. allotted
 POST   /api/v1/groups/blocks/:id/release            # Release block (free unsold rooms)
+GET    /api/v1/groups/blocks/:id/rooming-list       # List rooming-list entries
 POST   /api/v1/groups/blocks/:id/rooming-list       # Import rooming list
 ```
 </details>
@@ -1107,7 +1110,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (1185 tests, 144 files)
+pnpm test             # Run all tests (1188 tests, 145 files)
 pnpm lint             # ESLint
 ```
 
