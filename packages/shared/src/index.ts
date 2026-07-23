@@ -100,6 +100,13 @@ export const WEBHOOK_EVENTS = {
   'houseaccount.charge_posted': 'houseaccount.charge_posted',
   'houseaccount.payment_recorded': 'houseaccount.payment_recorded',
 
+  // Stay extras / ancillary services
+  'service.created': 'service.created',
+  'service.updated': 'service.updated',
+  'reservation.service_attached': 'reservation.service_attached',
+  'reservation.service_cancelled': 'reservation.service_cancelled',
+  'reservation.service_posted': 'reservation.service_posted',
+
   // Split-folio events (KB 14.2)
   'folio.transactions_moved': 'folio.transactions_moved',
   'folio.routing_rule_created': 'folio.routing_rule_created',

@@ -185,3 +185,12 @@ export {
   bookingEngineConfig,
 } from './booking-engine.js';
 export type { DepositPolicy } from './booking-engine.js';
+
+// Stay extras / packages (upsells & ancillaries)
+export {
+  servicePostingRuleEnum,
+  reservationServiceStatusEnum,
+  services,
+  ratePlanComponents,
+  reservationServices,
+} from './ancillary.js';
