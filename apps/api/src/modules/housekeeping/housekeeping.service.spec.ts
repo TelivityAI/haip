@@ -157,7 +157,13 @@ describe('HousekeepingService — CRUD', () => {
 
   it('should create task with custom checklist', async () => {
     const customChecklist = [{ item: 'Custom item', checked: false }];
-    const db = createMockDb({ insertResult: [{ ...mockTask, checklist: customChecklist }] });
+    const db = createMockDb({
+      selectResult: [
+        [{ id: 'room-001' }],       // FK ownership check
+        [],                          // VIP check for priority
+      ],
+      insertResult: [{ ...mockTask, checklist: customChecklist }],
+    });
     const svc = await createService(db);
     const result = await svc.create({
       propertyId: 'prop-001',
@@ -232,6 +238,48 @@ describe('HousekeepingService — CRUD', () => {
     });
     const insertValues = db.insert.mock.results[0].value.values.mock.calls[0][0];
     expect(insertValues.checklist.length).toBe(CHECKLIST_TEMPLATES.checkout.length + VIP_EXTRA_ITEMS.length);
+    expect(insertValues.priority).toBe(5);
+  });
+
+  it('should set priority 5 for VIP room without explicit priority', async () => {
+    const db = createMockDb({
+      selectResult: [
+        [{ id: 'room-001' }],
+        [{ isAccessible: false }],
+        [{ vipLevel: 'platinum' }],
+      ],
+      insertResult: [{ ...mockTask, priority: 5 }],
+    });
+    const svc = await createService(db);
+    await svc.create({
+      propertyId: 'prop-001',
+      roomId: 'room-001',
+      type: 'checkout',
+      serviceDate: '2026-04-06',
+    });
+    const insertValues = db.insert.mock.results[0].value.values.mock.calls[0][0];
+    expect(insertValues.priority).toBe(5);
+  });
+
+  it('should preserve explicit priority > 0 for VIP room', async () => {
+    const db = createMockDb({
+      selectResult: [
+        [{ id: 'room-001' }],
+        [{ isAccessible: false }],
+        [{ vipLevel: 'gold' }],
+      ],
+      insertResult: [{ ...mockTask, priority: 8 }],
+    });
+    const svc = await createService(db);
+    await svc.create({
+      propertyId: 'prop-001',
+      roomId: 'room-001',
+      type: 'checkout',
+      serviceDate: '2026-04-06',
+      priority: 8,
+    });
+    const insertValues = db.insert.mock.results[0].value.values.mock.calls[0][0];
+    expect(insertValues.priority).toBe(8);
   });
 
   it('should find task by id with room details', async () => {
@@ -294,6 +342,23 @@ describe('HousekeepingService — CRUD', () => {
     expect(result.priority).toBe(10);
   });
 
+  it('should persist checklist on update', async () => {
+    const newChecklist = [
+      { item: 'Strip linens', checked: true },
+      { item: 'Clean bathroom', checked: false },
+    ];
+    const updatedTask = { ...mockTask, checklist: newChecklist };
+    const db = createMockDb({
+      selectResult: [[mockTask]],
+      updateResult: [updatedTask],
+    });
+    const svc = await createService(db);
+    const result = await svc.update('task-001', 'prop-001', { checklist: newChecklist });
+    expect(result.checklist).toEqual(newChecklist);
+    const setCall = db.update.mock.results[0].value.set.mock.calls[0][0];
+    expect(setCall.checklist).toEqual(newChecklist);
+  });
+
   it('should reject update on completed task', async () => {
     const completedTask = { ...mockTask, status: 'completed' };
     const db = createMockDb({ selectResult: [[completedTask]] });
@@ -337,10 +402,11 @@ describe('HousekeepingService — CRUD', () => {
   it('should auto-create checkout task on room.status_changed (vacant_dirty)', async () => {
     const db = createMockDb({
       selectResult: [
-        [{ timezone: 'UTC' }],     // 1st select: property timezone (Bug 6)
-        [],                         // 2nd select: no existing checkout task (duplicate check)
-        [{ isAccessible: false }], // 3rd select: room accessibility check
-        [],                         // 4th select: VIP check
+        [{ timezone: 'UTC' }],     // property timezone (Bug 6)
+        [],                         // no existing checkout task (duplicate check)
+        [{ id: 'room-001' }],      // FK ownership check in create()
+        [{ isAccessible: false }], // room accessibility check
+        [],                         // VIP check
       ],
     });
     const svc = await createService(db);

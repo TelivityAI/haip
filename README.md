@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-<img src="https://img.shields.io/badge/Tests-1185%20passing-brightgreen" alt="1185 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+<img src="https://img.shields.io/badge/Tests-1188%20passing-brightgreen" alt="1188 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -240,6 +240,8 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | 3 | **Front desk stay ops** | [#181](https://github.com/telivityai/haip/pull/181) | Arrivals / in-house queues, walk-in, in-house room move, registration card at check-in, operational notes at the desk. See **Reservation Management**. |
 | 4 | **A/R & cashier polish** | [#180](https://github.com/telivityai/haip/pull/180) | List cash drawers/sessions, A/R ledger CRUD + aging UX, folio→A/R from folio detail, reverse-transfer picker. See **Accounting & Cashiering** and **Folio & Billing**. |
 | 5 | **Commercial profiles** | [#180](https://github.com/telivityai/haip/pull/180) (also [#179](https://github.com/telivityai/haip/pull/179)) | Standing-account billing terms on group profiles; link A/R ledgers and negotiated rates; Commercial dashboard page. See **Groups & Commercial Profiles**. |
+| 6 | **Guest journey ops** | [#182](https://github.com/telivityai/haip/pull/182) | Lifecycle guest-comms triggers, communications desk reject/run, registration settings, guest messaging UI, ID fields at check-in. See **Guest Management**. |
+| 7 | **Housekeeping ops depth** | _(this PR)_ | Ops desk: room/housekeeper summaries, urgent rooms, interactive checklists, staff assign/unassign, VIP auto-priority, analytics KPIs, `housekeeping.read` / `housekeeping.manage` permissions. See **Housekeeping**. |
 
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
@@ -340,15 +342,17 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 ### Housekeeping
 - Task CRUD with 6 task types: checkout clean, stayover, deep clean, inspection, turndown, maintenance
 - Auto-task creation on checkout (event-driven via `room.status_changed`)
-- Digital checklists with templates per task type
-- ADA and VIP-aware checklist augmentation (automatic extra items)
-- Staff assignment, auto-assignment (round-robin by floor/priority), and workload tracking
+- Digital checklists with templates per task type — editable in-task via PATCH; saved progress before complete
+- ADA and VIP-aware checklist augmentation (automatic extra items); VIP arrivals auto-bump task priority to 5 unless explicitly overridden
+- Staff assignment with housekeeper picker (filtered by HK roles), unassign, auto-assignment (round-robin by floor/priority), and workload tracking
 - Task lifecycle: `pending → assigned → in_progress → completed → inspected`
-- Inspection pass/fail with automatic re-clean on failure
+- Inspection pass/fail with automatic re-clean on failure; `inspectedBy` from the signed-in user
+- Complete with maintenance flag — auto-spawns a maintenance task when flagged
 - Room status integration — completing a task transitions the room through `clean → inspected → guest_ready`
 - Stayover task generation for occupied rooms
-- Dashboard with room summary, task summary, housekeeper performance, and urgent rooms
+- **Ops desk dashboard** — room status summary, task KPIs, per-housekeeper workload, urgent rooms (high priority / maintenance flagged)
 - Analytics: average turn time, median turn time, inspection pass rate, maintenance issue rate, breakdown by room type and housekeeper
+- RBAC: `housekeeping.read` on GET endpoints; `housekeeping.manage` on mutations (alongside role checks)
 
 ### Night Audit & Reporting
 - Automated night audit: room revenue posting, no-show processing, rate validation, day close
@@ -465,7 +469,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (1185 tests across 144 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
+| Testing | Vitest (1188 tests across 144 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
 
@@ -586,7 +590,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (1185 tests across 144 test files)
+# All tests (1188 tests across 144 test files)
 
 # API tests only
 pnpm --filter @telivityhaip/api test
@@ -1107,7 +1111,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (1185 tests, 144 files)
+pnpm test             # Run all tests (1188 tests, 144 files)
 pnpm lint             # ESLint
 ```
 
