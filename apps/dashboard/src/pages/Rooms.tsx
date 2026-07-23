@@ -4,6 +4,8 @@ import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon } from 'lucide-react';
+import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon, AlertTriangle } from 'lucide-react';
+import { format } from 'date-fns';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
@@ -258,6 +260,16 @@ function RoomList() {
   const [newRoomType, setNewRoomType] = useState('');
   const [newFloor, setNewFloor] = useState('1');
 
+  const today = format(new Date(), 'yyyy-MM-dd');
+
+  const { data: discrepanciesData } = useQuery({
+    queryKey: ['rooms', 'discrepancies', propertyId, today],
+    queryFn: () => api.get('/v1/rooms/discrepancies', { params: { propertyId, date: today } }).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+
+  const discrepancies = discrepanciesData?.discrepancies ?? discrepanciesData?.data?.discrepancies ?? [];
+
   const { data: roomsData } = useQuery({
     queryKey: ['rooms', propertyId],
     queryFn: () => api.get('/v1/rooms', { params: { propertyId } }).then((r) => r.data),
@@ -350,6 +362,29 @@ function RoomList() {
           </button>
         </div>
       </div>
+
+      {/* Room status discrepancies */}
+      {discrepancies.length > 0 && (
+        <div className="bg-telivity-orange/10 border border-telivity-orange/30 rounded-xl p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle size={18} className="text-telivity-orange" />
+            <h3 className="text-sm font-semibold text-telivity-navy">{t('rooms.discrepancies.title')}</h3>
+            <span className="text-xs text-telivity-mid-grey ml-auto">{t('rooms.discrepancies.count', { count: discrepancies.length })}</span>
+          </div>
+          <ul className="space-y-2">
+            {discrepancies.map((d: { roomId: string; roomNumber: string; kind: string; message: string }) => (
+              <li key={`${d.roomId}-${d.kind}`} className="text-sm text-telivity-slate flex items-start gap-2">
+                <span className="font-medium text-telivity-navy">{d.roomNumber}</span>
+                <span>
+                  {d.kind === 'occupied_without_reservation'
+                    ? t('rooms.discrepancies.occupiedWithoutReservation')
+                    : t('rooms.discrepancies.vacantWithReservation')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Status Summary */}
       <div className="flex flex-wrap gap-2 mb-4">

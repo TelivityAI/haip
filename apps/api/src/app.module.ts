@@ -16,6 +16,8 @@ import { FolioModule } from './modules/folio/folio.module';
 import { RatePlanModule } from './modules/rate-plan/rate-plan.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
+import { LostAndFoundModule } from './modules/lost-and-found/lost-and-found.module';
+import { ServiceRequestsModule } from './modules/service-requests/service-requests.module';
 import { NightAuditModule } from './modules/night-audit/night-audit.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
@@ -60,6 +62,8 @@ const imports: any[] = [
   RatePlanModule,
   PaymentModule,
   HousekeepingModule,
+  LostAndFoundModule,
+  ServiceRequestsModule,
   NightAuditModule,
   ReportsModule,
   WebhookModule,
