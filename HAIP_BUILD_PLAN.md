@@ -29,9 +29,10 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Deeper reporting and exports
 - Hardening & reliability (integration retries/timeouts, observability, scale)
 - Additional localizations
-- HK ops depth, rates depth, groups depth
+- HK ops depth, groups depth
 
 ## In progress
+- **Rates depth** — restrictions CRUD UI, derived-rate create, effective-rate calculator fix, PMS `assertSellable` on create
 - Production deployment path (compose, container images, docs)
 - Full dashboard localization (page-level i18n)
 - End-to-end + money-path test coverage

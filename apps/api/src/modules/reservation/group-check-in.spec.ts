@@ -9,6 +9,7 @@ import { WebhookService } from '../webhook/webhook.service';
 import { AncillaryService } from '../ancillary/ancillary.service';
 import { PolicyService } from '../policy/policy.service';
 import { DepositSettlementService } from '../accounting/deposit-settlement.service';
+import { RatePlanService } from '../rate-plan/rate-plan.service';
 import { DRIZZLE } from '../../database/database.module';
 
 const makeReservation = (id: string, propertyId = 'prop-001', status = 'assigned') => ({
@@ -125,6 +126,7 @@ async function createService(db: any) {
       { provide: AncillaryService, useValue: { ensurePackageComponents: async () => [], postOnceForReservation: async () => ({ posted: [] }) } },
       { provide: PolicyService, useValue: { evaluateCancellation: async () => ({ withinFreeWindow: true, penaltyAmount: '0.00', depositAction: 'refund', policyDescription: 'test', policyId: null, policyCode: null, penaltyType: 'none' }) } },
       { provide: DepositSettlementService, useValue: { settleFromEvaluation: async () => null, applyHeldDeposits: async () => [] } },
+      { provide: RatePlanService, useValue: { assertSellable: vi.fn().mockResolvedValue(undefined) } },
     ],
   }).compile();
   return module.get<ReservationService>(ReservationService);

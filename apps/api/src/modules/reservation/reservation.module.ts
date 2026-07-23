@@ -13,6 +13,7 @@ import { WebhookModule } from '../webhook/webhook.module';
 import { AncillaryModule } from '../ancillary/ancillary.module';
 import { AccountingModule } from '../accounting/accounting.module';
 import { PolicyModule } from '../policy/policy.module';
+import { RatePlanModule } from '../rate-plan/rate-plan.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { PolicyModule } from '../policy/policy.module';
     forwardRef(() => AncillaryModule),
     AccountingModule,
     PolicyModule,
+    RatePlanModule,
   ],
   controllers: [ReservationController],
   providers: [

@@ -8,6 +8,19 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Rates depth (slice 8)
+
+- **Restrictions panel** — dashboard rate-plan detail lists/creates/edits/deletes
+  MinLOS, MaxLOS, CTA, CTD, `isClosed`, and optional `dayOfWeekOverrides` via the
+  existing `/rate-plans/:id/restrictions` API.
+- **Derived rate create** — when type is `derived`, collect `parentRatePlanId` plus
+  adjustment type/value.
+- **Effective-rate calculator** — passes `propertyId`; reads `effectiveRate` from
+  the API response.
+- **BOOK gate on PMS create** — `ReservationService.create` calls
+  `RatePlanService.assertSellable` (property-scoped) so direct PMS creates honor
+  stop-sell / CTA / CTD / MinLOS / MaxLOS.
+
 ### Added — Guest journey (ops + lifecycle triggers)
 
 - **Guest-comms event listener** — `reservation.created` / `checked_in` / `checked_out`
