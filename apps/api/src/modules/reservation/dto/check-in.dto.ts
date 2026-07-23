@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsUUID,
   IsDateString,
+  IsObject,
   MaxLength,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -92,4 +93,13 @@ export class CheckInDto {
   @IsOptional()
   @IsBoolean()
   registrationSigned?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Registration card field values (jurisdiction-configured)',
+    type: 'object',
+    additionalProperties: true,
+  })
+  @IsOptional()
+  @IsObject()
+  registrationData?: Record<string, unknown>;
 }

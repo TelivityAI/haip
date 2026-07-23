@@ -1,4 +1,4 @@
-import { IsUUID, IsDateString, IsInt, IsOptional, IsString, Min, MaxLength } from 'class-validator';
+import { IsUUID, IsDateString, IsInt, IsOptional, IsString, IsBoolean, Min, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ModifyReservationDto {
@@ -43,4 +43,9 @@ export class ModifyReservationDto {
   @IsOptional()
   @IsString()
   specialRequests?: string;
+
+  @ApiPropertyOptional({ description: 'Block room moves unless overridden' })
+  @IsOptional()
+  @IsBoolean()
+  doNotMove?: boolean;
 }

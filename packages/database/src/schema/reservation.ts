@@ -131,6 +131,9 @@ export const reservations = pgTable('reservations', {
   // Registration card acknowledgment
   registrationSignedAt: timestamp('registration_signed_at', { withTimezone: true }),
 
+  /** When true, room moves are blocked unless explicitly overridden. */
+  doNotMove: boolean('do_not_move').notNull().default(false),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

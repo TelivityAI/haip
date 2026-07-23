@@ -412,6 +412,7 @@ function ReservationList() {
                   <p className="text-sm bg-telivity-light-grey rounded-lg p-3">{detailRes.notes}</p>
                 </div>
               )}
+              <ReservationOpsNotes reservationId={detailRes.id} propertyId={propertyId!} />
               <div className="flex gap-2 pt-2">
                 {detailRes.guestId && (
                   <button onClick={() => { navigate(`/guests/${detailRes.guestId}`); setDetailRes(null); }} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-3 py-2 text-sm font-semibold hover:bg-telivity-light-grey">
@@ -641,6 +642,65 @@ function AvailabilityCalendar() {
 }
 
 // ---- Router ----
+function ReservationOpsNotes({
+  reservationId,
+  propertyId,
+}: {
+  reservationId: string;
+  propertyId: string;
+}) {
+  const { t } = useTranslation();
+  const [body, setBody] = useState('');
+  const { data, refetch } = useQuery({
+    queryKey: ['reservation-notes', reservationId, propertyId],
+    queryFn: () =>
+      api
+        .get(`/v1/reservations/${reservationId}/notes`, { params: { propertyId } })
+        .then((r) => r.data),
+    enabled: !!reservationId && !!propertyId,
+  });
+  const add = useMutation({
+    mutationFn: () =>
+      api.post(`/v1/reservations/${reservationId}/notes`, { propertyId, body: body.trim() }),
+    onSuccess: () => {
+      setBody('');
+      refetch();
+    },
+  });
+  const notes = data?.notes ?? data?.data ?? (Array.isArray(data) ? data : []);
+
+  return (
+    <div className="space-y-2 border-t border-gray-100 pt-4">
+      <p className="text-xs font-medium text-telivity-mid-grey">{t('reservations.opsNotes')}</p>
+      <ul className="space-y-1 max-h-32 overflow-y-auto">
+        {notes.map((n: { id: string; body: string; isActive?: boolean }) => (
+          <li key={n.id} className="text-sm bg-telivity-light-grey rounded-lg p-2">
+            {n.body}
+          </li>
+        ))}
+        {notes.length === 0 && (
+          <li className="text-xs text-telivity-mid-grey">{t('reservations.noOpsNotes')}</li>
+        )}
+      </ul>
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={2}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+        placeholder={t('reservations.addOpsNote')}
+      />
+      <button
+        type="button"
+        onClick={() => add.mutate()}
+        disabled={!body.trim() || add.isPending}
+        className="w-full border border-gray-200 text-telivity-slate rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey disabled:opacity-50"
+      >
+        {t('reservations.saveNote')}
+      </button>
+    </div>
+  );
+}
+
 export default function Reservations() {
   return (
     <Routes>

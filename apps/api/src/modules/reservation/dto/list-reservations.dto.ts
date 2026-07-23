@@ -1,18 +1,36 @@
-import { IsUUID, IsOptional, IsEnum, IsDateString, IsInt, Min, Max } from 'class-validator';
+import { IsUUID, IsOptional, IsEnum, IsDateString, IsInt, Min, Max, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+
+const RESERVATION_STATUSES = [
+  'pending',
+  'confirmed',
+  'assigned',
+  'checked_in',
+  'stayover',
+  'due_out',
+  'checked_out',
+  'no_show',
+  'cancelled',
+] as const;
 
 export class ListReservationsDto {
   @ApiProperty({ description: 'Property ID (required for tenant scoping)' })
   @IsUUID()
   propertyId!: string;
 
+  @ApiPropertyOptional({ enum: RESERVATION_STATUSES })
+  @IsOptional()
+  @IsEnum(RESERVATION_STATUSES)
+  status?: string;
+
   @ApiPropertyOptional({
-    enum: ['pending', 'confirmed', 'assigned', 'checked_in', 'stayover', 'due_out', 'checked_out', 'no_show', 'cancelled'],
+    description: 'Comma-separated statuses (takes precedence over status)',
+    example: 'confirmed,assigned',
   })
   @IsOptional()
-  @IsEnum(['pending', 'confirmed', 'assigned', 'checked_in', 'stayover', 'due_out', 'checked_out', 'no_show', 'cancelled'])
-  status?: string;
+  @IsString()
+  statuses?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

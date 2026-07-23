@@ -15,6 +15,7 @@ export const WEBHOOK_EVENTS = {
   'reservation.note_added': 'reservation.note_added',
   'reservation.message_sent': 'reservation.message_sent',
   'reservation.bulk_action_completed': 'reservation.bulk_action_completed',
+  'reservation.room_moved': 'reservation.room_moved',
 
   // Folio events
   'folio.created': 'folio.created',

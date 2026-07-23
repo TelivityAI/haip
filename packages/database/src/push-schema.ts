@@ -279,6 +279,7 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS do_not_move boolean NOT NULL DEFAULT false`,
     // folios
     `CREATE TABLE IF NOT EXISTS folios (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

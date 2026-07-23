@@ -8,6 +8,18 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Front desk stay ops
+
+- **Room move** — `PATCH /reservations/:id/move-room` for assigned/in-house stays;
+  vacates old room / occupies new; respects `doNotMove` with optional override.
+- **Walk-in** — Front Desk Walk-In creates guest → reservation (`walk_in`) → assign,
+  then opens check-in.
+- **Arrivals queue** — lists `confirmed` + `assigned`; unassigned badge; in-house
+  includes `stayover` / `due_out`.
+- **Registration card** — check-in persists `registrationData` and requires signed
+  card when `guestRegistrationRequired`.
+- **Notes** — Front Desk + Reservations detail surface operational notes API.
+
 ### Added — Money policy (cancellation + deposit settlement)
 
 - **Cancellation policies** — property-scoped rules (free-cancel hours, penalty type,
