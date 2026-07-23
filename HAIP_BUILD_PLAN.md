@@ -17,11 +17,12 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Front desk stay ops — [#181](https://github.com/telivityai/haip/pull/181) (room move, walk-in, arrivals queue, registration card, notes)
 - A/R & cashier desk polish — [#180](https://github.com/telivityai/haip/pull/180) (list drawers/sessions, ledger CRUD UI, folio→A/R, aging UX)
 - Commercial profiles — [#180](https://github.com/telivityai/haip/pull/180) / [#179](https://github.com/telivityai/haip/pull/179) (billing terms on group profiles, A/R + negotiated rate links)
+- Loyalty / BI / admin polish — guest loyalty # on Guests + Front Desk cards; trial-balance report on Reports (no tiers/points/rewards)
 
 ## Planned
 - New-property onboarding wizard
 - Complete guest registration (ID, minors/guardian, per-jurisdiction compliance — deeper than desk card)
-- Loyalty (guest recognition, tiers, rewards)
+- Loyalty tiers, points, and rewards (beyond guest recognition fields)
 - Expanded AI assistance (grounded explanations, suggestions, per-property calibration)
 - Expanded channel/OTA connectivity
 - Revenue management (pricing, demand, booking pace, forecasting)

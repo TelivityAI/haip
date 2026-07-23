@@ -8,6 +8,12 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Loyalty / BI / admin polish
+
+- **Guests dashboard** — list, search, create, and edit `loyaltyNumber` (VIP level unchanged).
+- **Front Desk** — arrivals and in-house cards show guest VIP level and loyalty number.
+- **Reports** — trial-balance option wired to `GET /api/v1/reports/trial-balance` (deposit / guest / A/R ledgers).
+
 ### Added — Guest journey (ops + lifecycle triggers)
 
 - **Guest-comms event listener** — `reservation.created` / `checked_in` / `checked_out`
