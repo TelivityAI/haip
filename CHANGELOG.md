@@ -8,6 +8,18 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Property ops (lost & found / discrepancies / service requests)
+
+- **Lost & found** — `lost_and_found_items` table and CRUD API; items tagged with
+  auto-generated codes and a 90-day hold period before disposal.
+- **Room status discrepancies** — `GET /rooms/discrepancies?propertyId=&date=`
+  computes mismatches between room status and in-house reservations.
+- **Service requests** — guest/staff work orders that can spawn linked housekeeping
+  tasks (`POST /service-requests/:id/create-task`).
+- **Permissions** — `ops.read` / `ops.manage` for property ops endpoints.
+- **Dashboard** — Lost & Found and Service Requests tabs under Housekeeping;
+  discrepancies panel on the Rooms page.
+
 ### Added — HK property ops depth (Slice 7)
 
 Beyond housekeeping desk wiring ([#185](https://github.com/telivityai/haip/pull/185)):

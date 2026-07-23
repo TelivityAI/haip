@@ -3,9 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon } from 'lucide-react';
 import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon, AlertTriangle } from 'lucide-react';
-import { format } from 'date-fns';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
@@ -259,8 +257,6 @@ function RoomList() {
   const [newRoomNumber, setNewRoomNumber] = useState('');
   const [newRoomType, setNewRoomType] = useState('');
   const [newFloor, setNewFloor] = useState('1');
-
-  const today = format(new Date(), 'yyyy-MM-dd');
 
   const { data: discrepanciesData } = useQuery({
     queryKey: ['rooms', 'discrepancies', propertyId, today],

@@ -13,8 +13,11 @@ import {
   AlertTriangle,
   Users,
   CalendarClock,
+  X,
+  Package,
+  ClipboardList,
+  Plus,
 } from 'lucide-react';
-import { Sparkles, LayoutGrid, List, Play, CheckCircle, Eye, UserPlus, Zap, X, Package, ClipboardList, Plus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { addDays, format } from 'date-fns';
 import { api } from '../lib/api';
@@ -1052,7 +1055,6 @@ function ServiceRequestsPanel() {
 // ---- Main Router ----
 export default function Housekeeping() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<'dashboard' | 'tasks' | 'analytics'>('dashboard');
   const [tab, setTab] = useState<'dashboard' | 'tasks' | 'analytics' | 'lostFound' | 'serviceRequests'>('tasks');
 
   return (
