@@ -578,6 +578,8 @@
     "tabs": {
       "analytics": "Análises",
       "dashboard": "Painel",
+      "lostFound": "Achados e perdidos",
+      "serviceRequests": "Solicitações de serviço",
       "tasks": "Tarefas"
     },
     "taskForRoom": "Tarefa — Quarto {{number}}",
@@ -590,7 +592,42 @@
     },
     "tasksCompleted": "Tarefas concluídas",
     "title": "Governança",
-    "type": "Tipo"
+    "type": "Tipo",
+    "lostFound": {
+      "title": "Achados e perdidos",
+      "tagCode": "Etiqueta",
+      "description": "Descrição",
+      "foundAt": "Encontrado em",
+      "disposeAfter": "Descartar após",
+      "noItems": "Nenhum item registrado",
+      "logItem": "Registrar item",
+      "statuses": {
+        "held": "Em guarda",
+        "returned": "Devolvido",
+        "disposed": "Descartado"
+      }
+    },
+    "serviceRequests": {
+      "title": "Solicitações de serviço",
+      "createTask": "Criar tarefa",
+      "noRequests": "Nenhuma solicitação",
+      "newRequest": "Nova solicitação",
+      "statuses": {
+        "open": "Aberta",
+        "in_progress": "Em andamento",
+        "done": "Concluída",
+        "cancelled": "Cancelada"
+      },
+      "types": {
+        "maintenance": "Manutenção",
+        "turndown": "Serviço noturno",
+        "deep_clean": "Limpeza profunda",
+        "checkout": "Saída",
+        "stayover": "Permanência",
+        "inspection": "Inspeção",
+        "service_request": "Geral"
+      }
+    }
   },
   "import": {
     "choose": "1. Escolha o que importar",
@@ -749,6 +786,10 @@
         "manage": "Atribuir / inspecionar a governança",
         "read": "Ver governança"
       },
+      "ops": {
+        "manage": "Gerenciar operações da propriedade",
+        "read": "Ver operações da propriedade"
+      },
       "media": {
         "manage": "Gerenciar fotos"
       },
@@ -816,6 +857,15 @@
     "noTrend": "Não há dados de tendência disponíveis",
     "occupancy": "Ocupação",
     "occupancyTrend": "Tendência de ocupação",
+    "pickup": "Pickup",
+    "stayDate": "Data da estadia",
+    "baselineRoomNights": "Diárias base",
+    "currentRoomNights": "Diárias atuais",
+    "netPickup": "Pickup líquido",
+    "dailyPickup": "Pickup diário",
+    "added": "Adicionadas",
+    "lost": "Perdidas",
+    "noPickup": "Sem atividade de pickup no período",
     "occupied": "Ocupados",
     "otherRevenue": "Outras receitas",
     "portfolioNotice": "A receita diária e a tendência de ocupação são relatórios por propriedade.",
@@ -1036,7 +1086,14 @@
     "selectProperty": "Selecione uma propriedade para ver os quartos",
     "selectType": "Selecione o tipo",
     "title": "Quartos",
-    "type": "Tipo"
+    "type": "Tipo",
+    "discrepancies": {
+      "title": "Divergências de status do quarto",
+      "none": "Nenhuma divergência para esta data",
+      "occupiedWithoutReservation": "Ocupado sem reserva em casa",
+      "vacantWithReservation": "Vago com reserva em casa",
+      "count": "{{count}} divergência(s)"
+    }
   },
   "search": {
     "allPropertiesPlaceholder": "Pesquisar todas as propriedades…",

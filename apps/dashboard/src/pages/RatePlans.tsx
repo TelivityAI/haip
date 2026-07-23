@@ -141,9 +141,11 @@ function RatePlanList() {
 // ---- Rate Plan Detail ----
 function RatePlanDetail() {
   const { t } = useTranslation();
+  const { propertyId } = useProperty();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [testDate, setTestDate] = useState('');
+  const [testNights, setTestNights] = useState('7');
   const [effectiveRate, setEffectiveRate] = useState<number | null>(null);
 
   const { data } = useQuery({
@@ -155,8 +157,19 @@ function RatePlanDetail() {
   const plan: RatePlan | null = data?.data ?? data ?? null;
 
   const testMutation = useMutation({
-    mutationFn: () => api.get(`/v1/rate-plans/${id}/effective-rate`, { params: { date: testDate } }),
-    onSuccess: (res) => setEffectiveRate(res.data?.rate ?? res.data?.data?.rate ?? null),
+    mutationFn: () =>
+      api.get(`/v1/rate-plans/${id}/effective-rate`, {
+        params: {
+          propertyId,
+          checkIn: testDate,
+          nights: Number(testNights) || 1,
+          stayDate: testDate,
+        },
+      }),
+    onSuccess: (res) => {
+      const payload = res.data?.data ?? res.data;
+      setEffectiveRate(payload?.effectiveRate ?? null);
+    },
   });
 
   if (!plan) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.loading')}</div>;
@@ -183,9 +196,10 @@ function RatePlanDetail() {
 
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('ratePlans.calculator')}</h2>
-          <div className="flex gap-2">
-            <input type="date" value={testDate} onChange={(e) => setTestDate(e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-            <button onClick={() => testMutation.mutate()} disabled={!testDate || testMutation.isPending} className="bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('ratePlans.calculate')}</button>
+          <div className="flex gap-2 flex-wrap">
+            <input type="date" value={testDate} onChange={(e) => setTestDate(e.target.value)} className="flex-1 min-w-[140px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+            <input type="number" min={1} value={testNights} onChange={(e) => setTestNights(e.target.value)} placeholder="Nights" className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+            <button onClick={() => testMutation.mutate()} disabled={!testDate || !propertyId || testMutation.isPending} className="bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('ratePlans.calculate')}</button>
           </div>
           {effectiveRate != null && (
             <div className="mt-4 bg-telivity-light-grey rounded-lg p-4 text-center">

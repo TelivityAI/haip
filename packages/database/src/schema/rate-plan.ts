@@ -58,6 +58,25 @@ export const ratePlans = pgTable('rate_plans', {
   // Channel distribution
   channelCodes: jsonb('channel_codes').$type<string[]>(), // Which channels this rate is distributed to
 
+  /** LOS pricing tiers: minNights → percent or fixed amount off base (7+/14+/21+ pattern). */
+  losAdjustments: jsonb('los_adjustments').$type<
+    Array<{
+      minNights: number;
+      adjustmentType: 'percentage' | 'fixed';
+      adjustmentValue: number;
+    }>
+  >(),
+
+  /** Occupancy-based pricing bands: occupancyPctMin/Max → adjustment. */
+  occupancyBands: jsonb('occupancy_bands').$type<
+    Array<{
+      occupancyPctMin: number;
+      occupancyPctMax: number;
+      adjustmentType: 'percentage' | 'fixed';
+      adjustmentValue: number;
+    }>
+  >(),
+
   // Metadata
   sortOrder: integer('sort_order').notNull().default(0),
 
