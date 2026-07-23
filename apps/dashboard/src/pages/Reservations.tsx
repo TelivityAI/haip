@@ -413,6 +413,7 @@ function ReservationList() {
                 </div>
               )}
               <ReservationOpsNotes reservationId={detailRes.id} propertyId={propertyId!} />
+              <ReservationMessageCompose reservationId={detailRes.id} propertyId={propertyId!} />
               <div className="flex gap-2 pt-2">
                 {detailRes.guestId && (
                   <button onClick={() => { navigate(`/guests/${detailRes.guestId}`); setDetailRes(null); }} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-3 py-2 text-sm font-semibold hover:bg-telivity-light-grey">
@@ -642,6 +643,78 @@ function AvailabilityCalendar() {
 }
 
 // ---- Router ----
+function ReservationMessageCompose({
+  reservationId,
+  propertyId,
+}: {
+  reservationId: string;
+  propertyId: string;
+}) {
+  const { t } = useTranslation();
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [isMarketing, setIsMarketing] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const send = useMutation({
+    mutationFn: () =>
+      api.post(`/v1/reservations/${reservationId}/messages`, {
+        propertyId,
+        subject: subject.trim(),
+        body: body.trim(),
+        isMarketing,
+      }),
+    onSuccess: (res) => {
+      const sent = res.data?.sent ?? res.data?.data?.sent;
+      setStatus(sent ? t('reservations.messageSent') : t('reservations.messageDrafted'));
+      setSubject('');
+      setBody('');
+    },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setStatus(msg ?? t('reservations.messageFailed'));
+    },
+  });
+
+  return (
+    <div className="space-y-2 border-t border-gray-100 pt-4">
+      <p className="text-xs font-medium text-telivity-mid-grey">{t('reservations.guestMessage')}</p>
+      <input
+        type="text"
+        value={subject}
+        onChange={(e) => setSubject(e.target.value)}
+        placeholder={t('reservations.messageSubject')}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+      />
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={3}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+        placeholder={t('reservations.messageBody')}
+      />
+      <label className="flex items-center gap-2 text-xs text-telivity-navy">
+        <input
+          type="checkbox"
+          checked={isMarketing}
+          onChange={(e) => setIsMarketing(e.target.checked)}
+          className="rounded border-gray-300"
+        />
+        {t('reservations.marketingMessage')}
+      </label>
+      <button
+        type="button"
+        onClick={() => send.mutate()}
+        disabled={!subject.trim() || !body.trim() || send.isPending}
+        className="w-full bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+      >
+        {t('reservations.sendMessage')}
+      </button>
+      {status && <p className="text-xs text-telivity-mid-grey">{status}</p>}
+    </div>
+  );
+}
+
 function ReservationOpsNotes({
   reservationId,
   propertyId,

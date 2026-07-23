@@ -231,6 +231,7 @@
     "saving": "Salvando…",
     "selectProperty": "Selecione uma propriedade",
     "status": "Status",
+    "no": "Não",
     "yes": "Sim"
   },
   "communications": {
@@ -249,6 +250,8 @@
     "guestCommunications": "Comunicações com hóspedes",
     "pendingReview": "Aguardando revisão",
     "preview": "Visualizar",
+    "reject": "Rejeitar",
+    "runAgent": "Executar guest-comms",
     "send": "Enviar",
     "sent": "Enviadas",
     "statuses": {
@@ -384,6 +387,8 @@
     "groupCheckIn": "Check-in em grupo ({{count}})",
     "guest": "Hóspede",
     "idDocumentType": "Tipo de documento",
+    "idCountry": "País do documento",
+    "idExpiry": "Validade do documento",
     "idNumber": "Número do documento",
     "inHouse": "Hóspedes Hospedados",
     "nationalId": "Documento nacional",
@@ -449,6 +454,7 @@
     "uploadRoomingList": "Enviar Lista de Hóspedes"
   },
   "guests": {
+    "company": "Empresa",
     "confirmDeletion": "Confirmar exclusão do hóspede",
     "confirmDeletionPrompt": "Você tem certeza absoluta? Essa ação não pode ser desfeita.",
     "createGuest": "Criar hóspede",
@@ -456,10 +462,12 @@
     "deletionDescription": "Todos os dados pessoais de {{name}} serão excluídos permanentemente de acordo com o direito de eliminação previsto na LGPD.",
     "firstName": "Nome",
     "flags": "Sinalizações",
+    "idDocument": "Documento de identidade",
     "irreversible": "Esta ação é irreversível.",
     "lastName": "Sobrenome",
     "lastVisit": "Última visita",
     "markDnr": "Marcar como DNR",
+    "marketingConsent": "Consentimento de marketing",
     "newGuest": "Novo hóspede",
     "noGuestsFound": "Nenhum hóspede encontrado",
     "noStayHistory": "Sem histórico de estadias",
@@ -884,7 +892,15 @@
     "unassigned": "Não atribuído",
     "viewDetails": "Ver detalhes",
     "viewFolio": "Ver conta",
-    "viewGuest": "Ver hóspede"
+    "viewGuest": "Ver hóspede",
+    "guestMessage": "Mensagem ao hóspede",
+    "messageSubject": "Assunto",
+    "messageBody": "Corpo da mensagem",
+    "marketingMessage": "Mensagem de marketing (exige consentimento do hóspede)",
+    "sendMessage": "Enviar mensagem",
+    "messageSent": "Mensagem enviada",
+    "messageDrafted": "Mensagem rascunhada (SMTP não configurado ou envio adiado)",
+    "messageFailed": "Falha ao enviar mensagem"
   },
   "revenue": {
     "activeAgents": "Agentes Ativos",
@@ -1047,6 +1063,8 @@
     "email": "E-mail",
     "events": "Eventos",
     "failures": "Falhas",
+    "guestRegistration": "Registro do hóspede",
+    "guestRegistrationDescription": "Quando ativado, o check-in na recepção exige um cartão de registro assinado antes do início da estadia.",
     "kpiWarningThresholds": "Limites de alerta dos KPIs",
     "kpiWarningThresholdsDescription": "Valores abaixo destes marcam os KPIs do painel como alerta (a ocupação vai de 0 a 1).",
     "logoMediaId": "ID da mídia do logotipo",
@@ -1058,6 +1076,7 @@
     "primaryColor": "Cor primária",
     "propertyInformation": "Informações da propriedade",
     "propertyPhotos": "Fotos da propriedade",
+    "requireRegistrationCard": "Exigir cartão de registro assinado no check-in",
     "revparWarnBelow": "Alerta de ReQD abaixo de",
     "saveChanges": "Salvar alterações",
     "saved": "Configurações salvas.",

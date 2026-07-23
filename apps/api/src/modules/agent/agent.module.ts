@@ -11,6 +11,7 @@ import { NightAuditAnomalyAgent } from './night-audit/night-audit-anomaly.agent'
 import { HousekeepingOptimizerAgent } from './housekeeping/housekeeping-optimizer.agent';
 import { CancellationPredictorAgent } from './cancellation/cancellation-predictor.agent';
 import { GuestCommunicationAgent } from './guest-comms/guest-communication.agent';
+import { GuestCommsListener } from './guest-comms/guest-comms.listener';
 import { ReviewResponseAgent } from './review-response/review-response.agent';
 import { ArCollectionsAgent } from './ar-collections/ar-collections.agent';
 import { GroupPickupAgent } from './group-pickup/group-pickup.agent';
@@ -31,6 +32,7 @@ import { EmailService } from './guest-comms/email.service';
     HousekeepingOptimizerAgent,
     CancellationPredictorAgent,
     GuestCommunicationAgent,
+    GuestCommsListener,
     ReviewResponseAgent,
     ArCollectionsAgent,
     GroupPickupAgent,

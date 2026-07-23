@@ -242,6 +242,7 @@
     "saving": "Saving…",
     "selectProperty": "Select a property",
     "status": "Status",
+    "no": "No",
     "yes": "Yes"
   },
   "commercial": {
@@ -286,6 +287,8 @@
     "guestCommunications": "Guest Communications",
     "pendingReview": "Pending Review",
     "preview": "Preview",
+    "reject": "Reject",
+    "runAgent": "Run guest-comms",
     "send": "Send",
     "sent": "Sent",
     "statuses": {
@@ -437,7 +440,9 @@
     "firstName": "First name",
     "groupCheckIn": "Group Check-In ({{count}})",
     "guest": "Guest",
+    "idCountry": "ID country",
     "idDocumentType": "ID Document Type",
+    "idExpiry": "ID expiry",
     "idNumber": "ID Number",
     "inHouse": "In-House",
     "lastName": "Last name",
@@ -525,6 +530,7 @@
     "uploadRoomingList": "Upload Rooming List"
   },
   "guests": {
+    "company": "Company",
     "confirmDeletion": "Confirm Guest Deletion",
     "confirmDeletionPrompt": "Are you absolutely sure? This cannot be undone.",
     "createGuest": "Create Guest",
@@ -532,10 +538,12 @@
     "deletionDescription": "All personal data for {{name}} will be permanently deleted in accordance with the GDPR right to erasure.",
     "firstName": "First Name",
     "flags": "Flags",
+    "idDocument": "ID document",
     "irreversible": "This action is irreversible.",
     "lastName": "Last Name",
     "lastVisit": "Last Visit",
     "markDnr": "Mark DNR",
+    "marketingConsent": "Marketing consent",
     "newGuest": "New Guest",
     "noGuestsFound": "No guests found",
     "noStayHistory": "No stay history",
@@ -965,7 +973,15 @@
     "opsNotes": "Operational notes",
     "noOpsNotes": "No operational notes yet",
     "addOpsNote": "Add a front-desk note…",
-    "saveNote": "Save note"
+    "saveNote": "Save note",
+    "guestMessage": "Guest message",
+    "messageSubject": "Subject",
+    "messageBody": "Message body",
+    "marketingMessage": "Marketing message (requires guest consent)",
+    "sendMessage": "Send message",
+    "messageSent": "Message sent",
+    "messageDrafted": "Message drafted (SMTP not configured or send deferred)",
+    "messageFailed": "Failed to send message"
   },
   "revenue": {
     "activeAgents": "Active Agents",
@@ -1128,6 +1144,8 @@
     "email": "Email",
     "events": "Events",
     "failures": "Failures",
+    "guestRegistration": "Guest registration",
+    "guestRegistrationDescription": "When enabled, front-desk check-in requires a signed registration card before the stay can start.",
     "kpiWarningThresholds": "KPI warn thresholds",
     "kpiWarningThresholdsDescription": "Values below these mark dashboard KPIs as warning (occupancy is 0–1).",
     "logoMediaId": "Logo media ID",
@@ -1139,6 +1157,7 @@
     "primaryColor": "Primary color",
     "propertyInformation": "Property Information",
     "propertyPhotos": "Property Photos",
+    "requireRegistrationCard": "Require signed registration card at check-in",
     "revparWarnBelow": "RevPAR warn below",
     "saveChanges": "Save Changes",
     "saved": "Settings saved.",
