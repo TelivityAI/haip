@@ -1067,12 +1067,17 @@
     "addOpsNote": "Add a front-desk note…",
     "saveNote": "Save note",
     "guestMessage": "Guest message",
+    "messageChannel": "Channel",
+    "messageChannelEmail": "Email",
+    "messageChannelSms": "SMS",
     "messageSubject": "Subject",
     "messageBody": "Message body",
     "marketingMessage": "Marketing message (requires guest consent)",
     "sendMessage": "Send message",
     "messageSent": "Message sent",
     "messageDrafted": "Message drafted (SMTP not configured or send deferred)",
+    "smsSent": "SMS sent",
+    "smsDrafted": "SMS drafted (provider not configured or send deferred)",
     "messageFailed": "Failed to send message"
   },
   "revenue": {

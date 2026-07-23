@@ -13,7 +13,11 @@ import { WebhookModule } from '../webhook/webhook.module';
 import { AncillaryModule } from '../ancillary/ancillary.module';
 import { AccountingModule } from '../accounting/accounting.module';
 import { PolicyModule } from '../policy/policy.module';
+<<<<<<< HEAD
 import { RatePlanModule } from '../rate-plan/rate-plan.module';
+=======
+import { NotificationsModule } from '../notifications/notifications.module';
+>>>>>>> 6185d84 (feat(guest-journey): Slice 6 depth — pre-register API and SMS messaging)
 
 @Module({
   imports: [
@@ -24,7 +28,11 @@ import { RatePlanModule } from '../rate-plan/rate-plan.module';
     forwardRef(() => AncillaryModule),
     AccountingModule,
     PolicyModule,
+<<<<<<< HEAD
     RatePlanModule,
+=======
+    NotificationsModule,
+>>>>>>> 6185d84 (feat(guest-journey): Slice 6 depth — pre-register API and SMS messaging)
   ],
   controllers: [ReservationController],
   providers: [

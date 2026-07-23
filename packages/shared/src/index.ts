@@ -10,6 +10,7 @@ export const WEBHOOK_EVENTS = {
   'reservation.modified': 'reservation.modified',
   'reservation.cancelled': 'reservation.cancelled',
   'reservation.checked_in': 'reservation.checked_in',
+  'reservation.pre_registered': 'reservation.pre_registered',
   'reservation.checked_out': 'reservation.checked_out',
   'reservation.no_show': 'reservation.no_show',
   'reservation.note_added': 'reservation.note_added',

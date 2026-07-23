@@ -20,6 +20,7 @@ import { BookingEngineConfigService } from './booking-engine-config.service';
 import type { BeSearchDto } from './dto/be-search.dto';
 import type { BeQuoteDto } from './dto/be-quote.dto';
 import type { BeCreateBookingDto } from './dto/be-create-booking.dto';
+import type { PreRegisterDto } from '../reservation/dto/pre-register.dto';
 
 /**
  * Orchestrates the guest-facing direct booking flow. Adds NO new hotel domain
@@ -497,6 +498,43 @@ export class BookingEngineService {
       confirmationNumber,
       reservationId: reservation.id,
       status: updated.status,
+    };
+  }
+
+  async preRegister(propertyId: string, confirmationNumber: string, dto: PreRegisterDto) {
+    const [booking] = await this.db
+      .select()
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.confirmationNumber, confirmationNumber),
+          eq(bookings.propertyId, propertyId),
+        ),
+      );
+    if (!booking) {
+      throw new ForbiddenException('Booking key is not scoped to this booking');
+    }
+    const [reservation] = await this.db
+      .select()
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.bookingId, booking.id),
+          eq(reservations.propertyId, propertyId),
+        ),
+      );
+    if (!reservation) {
+      throw new BadRequestException('Reservation not found for this booking');
+    }
+
+    const updated = await this.reservationService.preRegister(reservation.id, propertyId, dto);
+
+    return {
+      confirmationNumber,
+      reservationId: updated.id,
+      status: updated.status,
+      registrationSignedAt: updated.registrationSignedAt,
+      registrationSubmittedAt: updated.registrationSubmittedAt,
     };
   }
 

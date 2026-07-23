@@ -986,12 +986,17 @@
     "viewFolio": "Ver conta",
     "viewGuest": "Ver hóspede",
     "guestMessage": "Mensagem ao hóspede",
+    "messageChannel": "Canal",
+    "messageChannelEmail": "E-mail",
+    "messageChannelSms": "SMS",
     "messageSubject": "Assunto",
     "messageBody": "Corpo da mensagem",
     "marketingMessage": "Mensagem de marketing (exige consentimento do hóspede)",
     "sendMessage": "Enviar mensagem",
     "messageSent": "Mensagem enviada",
     "messageDrafted": "Mensagem rascunhada (SMTP não configurado ou envio adiado)",
+    "smsSent": "SMS enviado",
+    "smsDrafted": "SMS rascunhado (provedor não configurado ou envio adiado)",
     "messageFailed": "Falha ao enviar mensagem"
   },
   "revenue": {

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsUUID, IsBoolean, MinLength } from 'class-validator';
+import { IsString, IsOptional, IsUUID, IsBoolean, MinLength, IsIn, ValidateIf } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ComposeMessageDto {
@@ -6,12 +6,22 @@ export class ComposeMessageDto {
   @IsUUID()
   propertyId!: string;
 
-  @ApiProperty({ description: 'Email subject line' })
+  @ApiPropertyOptional({
+    description: 'Delivery channel (defaults to email)',
+    enum: ['email', 'sms'],
+    default: 'email',
+  })
+  @IsOptional()
+  @IsIn(['email', 'sms'])
+  channel?: 'email' | 'sms';
+
+  @ApiPropertyOptional({ description: 'Email subject line (required for email channel)' })
+  @ValidateIf((o) => o.channel !== 'sms')
   @IsString()
   @MinLength(1)
-  subject!: string;
+  subject?: string;
 
-  @ApiProperty({ description: 'Message body (used as both html and text)' })
+  @ApiProperty({ description: 'Message body (used as both html and text for email)' })
   @IsString()
   @MinLength(1)
   body!: string;

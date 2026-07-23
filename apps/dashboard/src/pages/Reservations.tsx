@@ -651,6 +651,7 @@ function ReservationMessageCompose({
   propertyId: string;
 }) {
   const { t } = useTranslation();
+  const [channel, setChannel] = useState<'email' | 'sms'>('email');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [isMarketing, setIsMarketing] = useState(false);
@@ -660,13 +661,18 @@ function ReservationMessageCompose({
     mutationFn: () =>
       api.post(`/v1/reservations/${reservationId}/messages`, {
         propertyId,
-        subject: subject.trim(),
+        channel,
+        ...(channel === 'email' ? { subject: subject.trim() } : {}),
         body: body.trim(),
         isMarketing,
       }),
     onSuccess: (res) => {
       const sent = res.data?.sent ?? res.data?.data?.sent;
-      setStatus(sent ? t('reservations.messageSent') : t('reservations.messageDrafted'));
+      if (channel === 'sms') {
+        setStatus(sent ? t('reservations.smsSent') : t('reservations.smsDrafted'));
+      } else {
+        setStatus(sent ? t('reservations.messageSent') : t('reservations.messageDrafted'));
+      }
       setSubject('');
       setBody('');
     },
@@ -676,16 +682,32 @@ function ReservationMessageCompose({
     },
   });
 
+  const canSend =
+    body.trim().length > 0 && (channel === 'sms' || subject.trim().length > 0) && !send.isPending;
+
   return (
     <div className="space-y-2 border-t border-gray-100 pt-4">
       <p className="text-xs font-medium text-telivity-mid-grey">{t('reservations.guestMessage')}</p>
-      <input
-        type="text"
-        value={subject}
-        onChange={(e) => setSubject(e.target.value)}
-        placeholder={t('reservations.messageSubject')}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-      />
+      <label className="block text-xs text-telivity-navy">
+        <span className="sr-only">{t('reservations.messageChannel')}</span>
+        <select
+          value={channel}
+          onChange={(e) => setChannel(e.target.value as 'email' | 'sms')}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+        >
+          <option value="email">{t('reservations.messageChannelEmail')}</option>
+          <option value="sms">{t('reservations.messageChannelSms')}</option>
+        </select>
+      </label>
+      {channel === 'email' && (
+        <input
+          type="text"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          placeholder={t('reservations.messageSubject')}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+        />
+      )}
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
@@ -705,7 +727,7 @@ function ReservationMessageCompose({
       <button
         type="button"
         onClick={() => send.mutate()}
-        disabled={!subject.trim() || !body.trim() || send.isPending}
+        disabled={!canSend}
         className="w-full bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
       >
         {t('reservations.sendMessage')}
