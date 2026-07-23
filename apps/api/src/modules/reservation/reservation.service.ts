@@ -26,6 +26,7 @@ import { MoveRoomDto } from './dto/move-room.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { ListReservationsDto } from './dto/list-reservations.dto';
 import { CheckInDto } from './dto/check-in.dto';
+import { PreRegisterDto } from './dto/pre-register.dto';
 import { CheckOutDto } from './dto/check-out.dto';
 import { GroupCheckInDto } from './dto/group-check-in.dto';
 import { BulkActionDto } from './dto/bulk-action.dto';
@@ -384,6 +385,65 @@ export class ReservationService {
         roomTypeId: updated.roomTypeId,
       },
       updated.propertyId,
+    );
+
+    return updated;
+  }
+
+  /**
+   * Advance check-in / pre-register — persist registration card + ID fields without
+   * transitioning the reservation to checked_in.
+   */
+  async preRegister(id: string, propertyId: string, dto: PreRegisterDto = {}) {
+    const reservation = await this.findByIdRaw(id, propertyId);
+
+    if (!['confirmed', 'assigned'].includes(reservation.status)) {
+      throw new BadRequestException(
+        `Pre-register is only allowed for confirmed or assigned reservations (current: ${reservation.status})`,
+      );
+    }
+
+    const now = new Date();
+
+    let guestIdDocument: Record<string, string> | undefined;
+    if (dto.idNumber) {
+      const encrypted = this.encryptIdNumber(dto.idNumber);
+      guestIdDocument = {
+        type: dto.idType ?? 'unknown',
+        encryptedNumber: encrypted.encrypted,
+        iv: encrypted.iv,
+        authTag: encrypted.authTag,
+        country: dto.idCountry ?? '',
+        expiry: dto.idExpiry ?? '',
+      };
+    }
+
+    const updateData: Record<string, unknown> = {
+      updatedAt: now,
+    };
+    if (guestIdDocument) updateData['guestIdDocument'] = guestIdDocument;
+    if (dto.registrationSigned) updateData['registrationSignedAt'] = now;
+    if (dto.registrationData) {
+      updateData['registrationData'] = dto.registrationData;
+      updateData['registrationSubmittedAt'] = now;
+    }
+
+    const [updated] = await this.db
+      .update(reservations)
+      .set(updateData)
+      .where(and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)))
+      .returning();
+
+    await this.webhookService.emit(
+      'reservation.pre_registered',
+      'reservation',
+      updated.id,
+      {
+        registrationSigned: dto.registrationSigned ?? false,
+        hasRegistrationData: !!dto.registrationData,
+        hasIdDocument: !!guestIdDocument,
+      },
+      propertyId,
     );
 
     return updated;

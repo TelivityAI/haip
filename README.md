@@ -240,6 +240,19 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | 3 | **Front desk stay ops** | [#181](https://github.com/telivityai/haip/pull/181) | Arrivals / in-house queues, walk-in, in-house room move, registration card at check-in, operational notes at the desk. See **Reservation Management**. |
 | 4 | **A/R & cashier polish** | [#180](https://github.com/telivityai/haip/pull/180) | List cash drawers/sessions, A/R ledger CRUD + aging UX, folio→A/R from folio detail, reverse-transfer picker. See **Accounting & Cashiering** and **Folio & Billing**. |
 | 5 | **Commercial profiles** | [#180](https://github.com/telivityai/haip/pull/180) (also [#179](https://github.com/telivityai/haip/pull/179)) | Standing-account billing terms on group profiles; link A/R ledgers and negotiated rates; Commercial dashboard page. See **Groups & Commercial Profiles**. |
+| 6 | **Guest journey (polish)** | [#182](https://github.com/telivityai/haip/pull/182) | Lifecycle guest-comms triggers, communications desk, registration settings toggle, check-in ID fields, guest profile marketing/ID, reservation email compose UI. See **Guest Engagement Agents** and **Reservation Management**. |
+| 6b | **Guest journey (depth)** | _(in progress)_ | Advance check-in / pre-register API (staff + booking engine), SMS channel on reservation messages. WhatsApp provider, guest app, and kiosk UI remain planned. See **Reservation Management**. |
+
+### Guest journey — polish vs depth
+
+**Slice 6 polish** ([#182](https://github.com/telivityai/haip/pull/182)) shipped the operational layer: event-driven guest-comms drafts on reservation lifecycle changes, a communications desk for draft review, `guestRegistrationRequired` in Settings, ID capture fields at check-in, guest profile company/marketing/ID display, and email compose from reservation detail.
+
+**Slice 6 depth** (this branch) adds guest self-service and multi-channel ops without auto check-in:
+
+- **Pre-register** — guests or staff can submit registration card + ID data before arrival; reservation stays `confirmed`/`assigned` until desk check-in.
+- **SMS messaging** — front desk can send SMS (not just email) from reservation detail when the guest has a phone on file; marketing consent rules match email.
+
+Still planned for a later Slice 6 cut: WhatsApp provider integration, dedicated guest mobile app, and kiosk check-in UI.
 
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
@@ -259,10 +272,11 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Room assignment with automatic status transitions
 - **Front desk stay ops** — arrivals / in-house queues (multi-status filters), walk-in create→assign→check-in, in-house **room move** (`PATCH …/move-room`, respects `doNotMove`), operational notes at the desk and on reservation detail
 - **Guest registration at check-in** — registration card fields + `registrationSigned`; required when the property has `guestRegistrationRequired`
+- **Advance check-in / pre-register** — `POST …/pre-register` (staff or booking-engine guest) captures registration + ID without checking in; emits `reservation.pre_registered`
 - Group check-in (batch operations)
 - Bulk actions across multiple reservations (check-in / check-out / cancel) with per-reservation success/error results
 - Reservation notes with active-count tracking
-- Guest messaging from a reservation (GDPR marketing opt-out enforced)
+- Guest messaging from a reservation (email or SMS; GDPR marketing opt-out enforced)
 - Unassigned-reservation finder (confirmed/assigned reservations with no room)
 - Batch reservation import with per-row error handling
 - Express checkout

@@ -8,6 +8,17 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Guest journey depth (Slice 6)
+
+- **Advance check-in / pre-register** — `POST /reservations/:id/pre-register?propertyId=` (staff,
+  `confirmed`/`assigned` only) and `POST /booking-engine/bookings/:confirmationNumber/pre-register`
+  (guest self-service behind booking key). Persists registration card + ID fields without changing
+  reservation status; emits `reservation.pre_registered`.
+- **SMS on reservation messages** — `ComposeMessageDto.channel` (`email` | `sms`, default email);
+  SMS path uses `NotificationService.sendSms` with the same GDPR marketing opt-out as email.
+- **Dashboard** — channel selector on reservation guest-message compose.
+- **Docs** — README Slice 6 depth vs polish (#182); HAIP_BUILD_PLAN notes remaining Slice 6 items.
+
 ### Added — Guest journey (ops + lifecycle triggers)
 
 - **Guest-comms event listener** — `reservation.created` / `checked_in` / `checked_out`
