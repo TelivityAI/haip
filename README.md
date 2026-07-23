@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-<img src="https://img.shields.io/badge/Tests-1185%20passing-brightgreen" alt="1185 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+<img src="https://img.shields.io/badge/Tests-1187%20passing-brightgreen" alt="1187 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -240,6 +240,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | 3 | **Front desk stay ops** | [#181](https://github.com/telivityai/haip/pull/181) | Arrivals / in-house queues, walk-in, in-house room move, registration card at check-in, operational notes at the desk. See **Reservation Management**. |
 | 4 | **A/R & cashier polish** | [#180](https://github.com/telivityai/haip/pull/180) | List cash drawers/sessions, A/R ledger CRUD + aging UX, folio→A/R from folio detail, reverse-transfer picker. See **Accounting & Cashiering** and **Folio & Billing**. |
 | 5 | **Commercial profiles** | [#180](https://github.com/telivityai/haip/pull/180) (also [#179](https://github.com/telivityai/haip/pull/179)) | Standing-account billing terms on group profiles; link A/R ledgers and negotiated rates; Commercial dashboard page. See **Groups & Commercial Profiles**. |
+| 8 | **Rates depth** | _PR pending_ | Rate-plan restrictions CRUD (MinLOS / MaxLOS / CTA / CTD / stop-sell + day-of-week overrides) on the dashboard detail page; derived-rate create fields; effective-rate calculator fix; PMS `reservation.create` calls `assertSellable`. See **Rate Plans & Pricing**. |
 
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
@@ -309,8 +310,9 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 ### Rate Plans & Pricing
 - BAR (Best Available Rate), derived rates, and negotiated rates
 - Rate derivation: amount or percentage adjustments from parent plans
-- Restrictions: MinLOS, MaxLOS, CTA (Closed to Arrival), CTD (Closed to Departure)
-- Effective rate calculation with date-range awareness
+- Restrictions: MinLOS, MaxLOS, CTA (Closed to Arrival), CTD (Closed to Departure), stop-sell (`isClosed`), optional day-of-week overrides — dashboard detail panel + existing REST sub-resource
+- Effective rate calculation (resolves derived parent chain); calculator UI passes `propertyId` and reads `effectiveRate`
+- PMS reservation create enforces restrictions via `RatePlanService.assertSellable` (same gate as Connect / booking-engine BOOK)
 - Occupancy-based rate adjustments
 
 ### Room Management
@@ -465,7 +467,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (1185 tests across 144 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
+| Testing | Vitest (1187 tests across 145 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
 
@@ -586,7 +588,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (1185 tests across 144 test files)
+# All tests (1187 tests across 145 test files)
 
 # API tests only
 pnpm --filter @telivityhaip/api test
@@ -1107,7 +1109,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (1185 tests, 144 files)
+pnpm test             # Run all tests (1187 tests, 145 files)
 pnpm lint             # ESLint
 ```
 

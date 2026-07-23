@@ -19,6 +19,7 @@ import { WebhookService } from '../webhook/webhook.service';
 import { AncillaryService } from '../ancillary/ancillary.service';
 import { PolicyService } from '../policy/policy.service';
 import { DepositSettlementService } from '../accounting/deposit-settlement.service';
+import { RatePlanService } from '../rate-plan/rate-plan.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ModifyReservationDto } from './dto/modify-reservation.dto';
 import { AssignRoomDto } from './dto/assign-room.dto';
@@ -45,6 +46,7 @@ export class ReservationService {
     private readonly ancillaryService: AncillaryService,
     private readonly policyService: PolicyService,
     private readonly depositSettlementService: DepositSettlementService,
+    private readonly ratePlanService: RatePlanService,
   ) {}
 
   async create(dto: CreateReservationDto, opts?: { confirmationNumber?: string }) {
@@ -85,6 +87,15 @@ export class ReservationService {
     // leak its details back on read. Verify same-property before any insert.
     await this.assertSamePropertyFk(roomTypes, dto.roomTypeId, dto.propertyId, 'room type');
     await this.assertSamePropertyFk(ratePlans, dto.ratePlanId, dto.propertyId, 'rate plan');
+
+    // RatePlanService.assertSellable docs: BOOK path MUST call this. PMS create
+    // was the gap — Connect / booking-engine already gate; keep propertyId scoped.
+    await this.ratePlanService.assertSellable(
+      dto.propertyId,
+      dto.ratePlanId,
+      dto.arrivalDate,
+      dto.departureDate,
+    );
 
     // TOCTOU: availability check + insert run inside the same transaction so the
     // race window between "there's space" and "we wrote the booking" is minimized.

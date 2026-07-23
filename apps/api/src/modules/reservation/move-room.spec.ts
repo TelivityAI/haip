@@ -10,6 +10,7 @@ import { WebhookService } from '../webhook/webhook.service';
 import { AncillaryService } from '../ancillary/ancillary.service';
 import { PolicyService } from '../policy/policy.service';
 import { DepositSettlementService } from '../accounting/deposit-settlement.service';
+import { RatePlanService } from '../rate-plan/rate-plan.service';
 import { DRIZZLE } from '../../database/database.module';
 
 describe('ReservationService.moveRoom', () => {
@@ -80,6 +81,7 @@ describe('ReservationService.moveRoom', () => {
           provide: DepositSettlementService,
           useValue: { settleFromEvaluation: async () => null, applyHeldDeposits: async () => [] },
         },
+      { provide: RatePlanService, useValue: { assertSellable: vi.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
 
