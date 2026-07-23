@@ -233,7 +233,7 @@ export class BookingEngineService {
 
         // once | per_night | included_in_rate (selected separately → charge unit price)
         const quantity = postingRule === 'per_night' ? nights : 1;
-        let lineTotal = unitPrice.times(quantity);
+        const lineTotal = unitPrice.times(quantity);
         let lineTax = new Decimal(0);
 
         if (postingRule === 'per_night') {
