@@ -26,6 +26,16 @@ interface Guest {
   idNumber?: string;
   idCountry?: string;
   gdprConsentMarketing?: boolean;
+  loyaltyNumber?: string;
+}
+
+function guestListSearchParams(term: string): { search?: string; loyaltyNumber?: string } {
+  const trimmed = term.trim();
+  if (!trimmed) return {};
+  if (/^[A-Za-z0-9-]+$/.test(trimmed) && !trimmed.includes('@') && trimmed.length >= 2) {
+    return { loyaltyNumber: trimmed };
+  }
+  return { search: trimmed };
 }
 
 // ---- Guest List ----
@@ -40,10 +50,14 @@ function GuestList() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [loyaltyNumber, setLoyaltyNumber] = useState('');
 
   const { data } = useQuery({
     queryKey: ['guests', propertyId, searchTerm],
-    queryFn: () => api.get('/v1/guests', { params: { propertyId, search: searchTerm || undefined } }).then((r) => r.data),
+    queryFn: () =>
+      api
+        .get('/v1/guests', { params: { propertyId, ...guestListSearchParams(searchTerm) } })
+        .then((r) => r.data),
     enabled: !!propertyId,
   });
 
@@ -51,11 +65,17 @@ function GuestList() {
 
   const createMutation = useMutation({
     mutationFn: () =>
-      api.post('/v1/guests', { firstName, lastName, email: email || undefined, phone: phone || undefined }),
+      api.post('/v1/guests', {
+        firstName,
+        lastName,
+        email: email || undefined,
+        phone: phone || undefined,
+        loyaltyNumber: loyaltyNumber || undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guests'] });
       setCreateOpen(false);
-      setFirstName(''); setLastName(''); setEmail(''); setPhone('');
+      setFirstName(''); setLastName(''); setEmail(''); setPhone(''); setLoyaltyNumber('');
     },
   });
 
@@ -95,6 +115,7 @@ function GuestList() {
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('common.email')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('common.phone')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">VIP</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.loyaltyNumber')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.stays')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.lastVisit')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.flags')}</th>
@@ -113,6 +134,7 @@ function GuestList() {
                 <td className="px-4 py-3">
                   {g.vipLevel && g.vipLevel !== 'none' ? <StatusBadge status={g.vipLevel} /> : <span className="text-sm text-telivity-mid-grey">—</span>}
                 </td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{g.loyaltyNumber ?? '—'}</td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{g.totalStays ?? 0}</td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{g.lastVisit ?? '—'}</td>
                 <td className="px-4 py-3">
@@ -121,7 +143,7 @@ function GuestList() {
               </tr>
             ))}
             {guests.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('guests.noGuestsFound')}</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('guests.noGuestsFound')}</td></tr>
             )}
           </tbody>
         </table>
@@ -147,6 +169,10 @@ function GuestList() {
           <div>
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.phone')}</label>
             <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.loyaltyNumber')}</label>
+            <input type="text" value={loyaltyNumber} onChange={(e) => setLoyaltyNumber(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
           </div>
           <button
             onClick={() => createMutation.mutate()}
@@ -175,6 +201,7 @@ function GuestDetail() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [vipLevel, setVipLevel] = useState('none');
+  const [loyaltyNumber, setLoyaltyNumber] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [gdprConsentMarketing, setGdprConsentMarketing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -204,6 +231,7 @@ function GuestDetail() {
           email: email || undefined,
           phone: phone || undefined,
           vipLevel,
+          loyaltyNumber: loyaltyNumber || undefined,
           companyName: companyName || undefined,
           gdprConsentMarketing,
         },
@@ -232,6 +260,7 @@ function GuestDetail() {
     setEmail(guest.email ?? '');
     setPhone(guest.phone ?? '');
     setVipLevel(guest.vipLevel ?? 'none');
+    setLoyaltyNumber(guest.loyaltyNumber ?? '');
     setCompanyName(guest.companyName ?? '');
     setGdprConsentMarketing(!!guest.gdprConsentMarketing);
     setEditing(true);
@@ -280,6 +309,10 @@ function GuestDetail() {
                   <option value="diamond">Diamond</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.loyaltyNumber')}</label>
+                <input type="text" value={loyaltyNumber} onChange={(e) => setLoyaltyNumber(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+              </div>
               <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder={t('guests.company')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
               <label className="flex items-center gap-2 text-xs text-telivity-navy">
                 <input type="checkbox" checked={gdprConsentMarketing} onChange={(e) => setGdprConsentMarketing(e.target.checked)} className="rounded border-gray-300" />
@@ -295,6 +328,7 @@ function GuestDetail() {
               <DetailRow label={t('common.email')} value={guest.email ?? '—'} />
               <DetailRow label={t('common.phone')} value={guest.phone ?? '—'} />
               <DetailRow label={t('guests.vipLevel')} value={guest.vipLevel ?? t('guests.none')} />
+              <DetailRow label={t('guests.loyaltyNumber')} value={guest.loyaltyNumber ?? '—'} />
               <DetailRow label={t('guests.company')} value={guest.companyName ?? '—'} />
               <DetailRow label={t('guests.idDocument')} value={guest.idType ? `${guest.idType}${guest.idCountry ? ` (${guest.idCountry})` : ''}` : '—'} />
               <DetailRow label={t('guests.marketingConsent')} value={guest.gdprConsentMarketing ? t('common.yes') : t('common.no')} />

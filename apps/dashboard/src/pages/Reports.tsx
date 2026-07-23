@@ -9,12 +9,13 @@ import { useProperty } from '../context/PropertyContext';
 import KpiCard from '../components/ui/KpiCard';
 import { useTranslation } from 'react-i18next';
 
-type ReportType = 'financial-summary' | 'occupancy' | 'daily-revenue' | 'occupancy-trend';
+type ReportType = 'financial-summary' | 'occupancy' | 'daily-revenue' | 'occupancy-trend' | 'trial-balance';
 
 const REPORT_OPTIONS: { value: ReportType; labelKey: string }[] = [
   { value: 'financial-summary', labelKey: 'financialSummary' },
   { value: 'occupancy', labelKey: 'occupancy' },
   { value: 'daily-revenue', labelKey: 'dailyRevenue' },
+  { value: 'trial-balance', labelKey: 'trialBalance' },
   { value: 'occupancy-trend', labelKey: 'occupancyTrend' },
 ];
 
@@ -125,6 +126,20 @@ export default function Reports() {
       </div>
     );
   }
+
+  type LedgerRow = {
+    opening: string;
+    netActivity: string;
+    transfersIn: string;
+    transfersOut: string;
+    closing: string;
+  };
+  const ledgers = (reportData.ledgers ?? {}) as Record<string, LedgerRow>;
+  const ledgerOrder: { key: string; labelKey: string }[] = [
+    { key: 'deposit', labelKey: 'trialBalanceDeposit' },
+    { key: 'guest', labelKey: 'trialBalanceGuest' },
+    { key: 'ar', labelKey: 'trialBalanceAr' },
+  ];
 
   return (
     <div>
@@ -338,6 +353,51 @@ export default function Reports() {
             </ResponsiveContainer>
           ) : (
             <p className="text-sm text-telivity-mid-grey">{t('reports.noTrend')}</p>
+          )}
+        </div>
+      )}
+
+      {/* Trial Balance */}
+      {report === 'trial-balance' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl shadow-sm p-5 overflow-x-auto">
+            <h3 className="text-sm font-semibold text-telivity-navy mb-3">{t('reports.trialBalance')}</h3>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-telivity-mid-grey border-b border-gray-100">
+                  <th className="pb-2 font-medium">{t('reports.trialBalanceLedger')}</th>
+                  <th className="pb-2 font-medium text-right">{t('reports.trialBalanceOpening')}</th>
+                  <th className="pb-2 font-medium text-right">{t('reports.trialBalanceNetActivity')}</th>
+                  <th className="pb-2 font-medium text-right">{t('reports.trialBalanceTransfersIn')}</th>
+                  <th className="pb-2 font-medium text-right">{t('reports.trialBalanceTransfersOut')}</th>
+                  <th className="pb-2 font-medium text-right">{t('reports.trialBalanceClosing')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ledgerOrder.map(({ key, labelKey }) => {
+                  const row = ledgers[key];
+                  if (!row) return null;
+                  return (
+                    <tr key={key} className="border-b border-gray-50">
+                      <td className="py-2 font-medium text-telivity-navy">{t(`reports.${labelKey}`)}</td>
+                      <td className="py-2 text-right">${Number(row.opening).toFixed(2)}</td>
+                      <td className="py-2 text-right">${Number(row.netActivity).toFixed(2)}</td>
+                      <td className="py-2 text-right">${Number(row.transfersIn).toFixed(2)}</td>
+                      <td className="py-2 text-right">${Number(row.transfersOut).toFixed(2)}</td>
+                      <td className="py-2 text-right font-medium">${Number(row.closing).toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {reportData.interLedgerTransfers != null && (
+            <div className="bg-white rounded-xl shadow-sm p-5">
+              <div className="flex justify-between text-sm">
+                <span className="text-telivity-slate">{t('reports.trialBalanceInterLedger')}</span>
+                <span className="font-medium text-telivity-navy">${Number(reportData.interLedgerTransfers).toFixed(2)}</span>
+              </div>
+            </div>
           )}
         </div>
       )}

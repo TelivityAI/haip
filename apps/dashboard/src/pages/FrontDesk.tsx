@@ -22,7 +22,7 @@ interface Reservation {
   roomTypeId?: string;
   roomTypeName?: string;
   guestName?: string;
-  guest?: { firstName: string; lastName: string };
+  guest?: { firstName: string; lastName: string; vipLevel?: string; loyaltyNumber?: string | null };
   balance?: number;
   doNotMove?: boolean;
   totalAmount?: string;
@@ -393,6 +393,20 @@ export default function FrontDesk() {
     r.guestName ??
     (r.guest ? `${r.guest.firstName} ${r.guest.lastName}` : t('frontDesk.unknownGuest'));
 
+  const guestRecognition = (r: Reservation) => {
+    const vipLevel = r.guest?.vipLevel;
+    const loyaltyNumber = r.guest?.loyaltyNumber;
+    if ((!vipLevel || vipLevel === 'none') && !loyaltyNumber) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+        {vipLevel && vipLevel !== 'none' && <StatusBadge status={vipLevel} />}
+        {loyaltyNumber && (
+          <span className="text-[11px] text-telivity-mid-grey">{t('frontDesk.loyaltyNumber', { number: loyaltyNumber })}</span>
+        )}
+      </div>
+    );
+  };
+
   const arrList: Reservation[] = arrivals?.data ?? arrivals ?? [];
   const ihList: Reservation[] = inHouse?.data ?? inHouse ?? [];
   const depList: Reservation[] = departureData?.data ?? departureData ?? [];
@@ -572,7 +586,10 @@ export default function FrontDesk() {
                     />
                   </td>
                 )}
-                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{guestName(r)}</td>
+                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">
+                  <div>{guestName(r)}</div>
+                  {(tab === 'arrivals' || tab === 'in-house') && guestRecognition(r)}
+                </td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{r.confirmationNumber}</td>
                 {tab === 'arrivals' && (
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.roomTypeName ?? '—'}</td>

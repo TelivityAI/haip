@@ -1200,6 +1200,8 @@ export class ReservationService {
           reservation: reservations,
           guestFirstName: guests.firstName,
           guestLastName: guests.lastName,
+          guestVipLevel: guests.vipLevel,
+          guestLoyaltyNumber: guests.loyaltyNumber,
           roomNumber: rooms.number,
           roomTypeName: roomTypes.name,
           ratePlanName: ratePlans.name,
@@ -1222,6 +1224,14 @@ export class ReservationService {
     const data = rows.map((r: any) => ({
       ...r.reservation,
       guestName: r.guestFirstName ? `${r.guestFirstName} ${r.guestLastName}` : null,
+      guest: r.guestFirstName
+        ? {
+            firstName: r.guestFirstName,
+            lastName: r.guestLastName,
+            vipLevel: r.guestVipLevel,
+            loyaltyNumber: r.guestLoyaltyNumber,
+          }
+        : null,
       roomNumber: r.roomNumber,
       roomTypeName: r.roomTypeName,
       ratePlanName: r.ratePlanName,
