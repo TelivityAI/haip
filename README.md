@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-<img src="https://img.shields.io/badge/Tests-1185%20passing-brightgreen" alt="1185 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+<img src="https://img.shields.io/badge/Tests-1193%20passing-brightgreen" alt="1193 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -479,7 +479,7 @@ Still planned for a later Slice 6 cut: WhatsApp provider integration, dedicated 
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (1185 tests across 144 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
+| Testing | Vitest (1193 tests across 145 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
 
@@ -600,7 +600,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (1185 tests across 144 test files)
+# All tests (1193 tests across 145 test files)
 
 # API tests only
 pnpm --filter @telivityhaip/api test
@@ -1121,7 +1121,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (1185 tests, 144 files)
+pnpm test             # Run all tests (1193 tests, 145 files)
 pnpm lint             # ESLint
 ```
 
