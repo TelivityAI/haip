@@ -1,4 +1,4 @@
-import { IsDateString, IsInt, IsOptional, IsUUID, Min } from 'class-validator';
+import { IsArray, IsDateString, IsInt, IsOptional, IsUUID, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /** Firm price quote for a specific room type + rate plan + dates + occupancy. */
@@ -29,4 +29,10 @@ export class BeQuoteDto {
   @IsInt()
   @Min(0)
   children?: number;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  serviceIds?: string[];
 }

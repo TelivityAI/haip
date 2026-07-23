@@ -171,17 +171,17 @@ async function main() {
     'housekeeping.read', 'housekeeping.manage', 'folios.read', 'folios.manage',
     'groups.read', 'groups.manage', 'cashier.access', 'houseaccounts.read', 'houseaccounts.manage',
     'accounting.view', 'tax.manage',
-    'rateplans.read', 'rateplans.manage', 'revenue.manage', 'nightaudit.run',
+    'rateplans.read', 'rateplans.manage', 'services.read', 'services.manage', 'revenue.manage', 'nightaudit.run',
     'reports.view', 'channels.manage', 'communications.manage', 'reviews.manage',
     'settings.manage', 'bookingengine.manage', 'admin.users.manage', 'admin.roles.manage',
   ];
   const ROLE_DEFS: { key: string; name: string; perms: string[] }[] = [
     { key: 'admin', name: 'Administrator', perms: ALL_PERMS },
-    { key: 'front_desk', name: 'Front Desk', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'folios.manage', 'groups.read', 'houseaccounts.read', 'houseaccounts.manage', 'rateplans.read', 'communications.manage', 'reviews.manage'] },
+    { key: 'front_desk', name: 'Front Desk', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'folios.manage', 'groups.read', 'houseaccounts.read', 'houseaccounts.manage', 'rateplans.read', 'services.read', 'services.manage', 'communications.manage', 'reviews.manage'] },
     { key: 'housekeeping', name: 'Housekeeping', perms: ['dashboard.view', 'rooms.read', 'housekeeping.read'] },
     { key: 'housekeeping_manager', name: 'Housekeeping Manager', perms: ['dashboard.view', 'rooms.read', 'rooms.write', 'housekeeping.read', 'housekeeping.manage'] },
     { key: 'night_auditor', name: 'Night Auditor', perms: ['dashboard.view', 'reservations.read', 'folios.read', 'nightaudit.run', 'reports.view', 'cashier.access', 'houseaccounts.read', 'accounting.view'] },
-    { key: 'readonly', name: 'Read Only', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'folios.read', 'rateplans.read', 'reports.view'] },
+    { key: 'readonly', name: 'Read Only', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'folios.read', 'rateplans.read', 'services.read', 'reports.view'] },
   ];
 
   const roleIdByKey: Record<string, string> = {};
@@ -318,6 +318,54 @@ async function main() {
     { id: sid('d1000001', 1), propertyId, ratePlanId: rpIds.stdBar, startDate: dateStr(0), endDate: dateStr(90), minLos: 1, maxLos: 14, dayOfWeekOverrides: { friday: 20, saturday: 30 } },
     { id: sid('d1000001', 2), propertyId, ratePlanId: rpIds.dlxBar, startDate: dateStr(0), endDate: dateStr(90), minLos: 2, dayOfWeekOverrides: { friday: 30, saturday: 40 } },
     { id: sid('d1000001', 3), propertyId, ratePlanId: rpIds.suiteBar, startDate: dateStr(0), endDate: dateStr(60), minLos: 2, maxLos: 7 },
+  ]);
+
+  // -----------------------------------------------------------------------
+  // 4b. Ancillary services (breakfast / parking / late checkout)
+  // -----------------------------------------------------------------------
+  await db.insert(schema.services).values([
+    {
+      id: sid('d2000001', 1),
+      propertyId,
+      code: 'BREAKFAST',
+      name: 'Breakfast Buffet',
+      description: 'Full breakfast buffet per person per night',
+      chargeType: 'food_beverage',
+      price: '28.00',
+      currencyCode: 'USD',
+      postingRule: 'per_night',
+      sellChannels: ['booking_engine', 'front_desk', 'pre_arrival'],
+      isActive: true,
+      sortOrder: 1,
+    },
+    {
+      id: sid('d2000001', 2),
+      propertyId,
+      code: 'PARKING',
+      name: 'Valet Parking',
+      description: 'Covered valet parking for the stay',
+      chargeType: 'parking',
+      price: '45.00',
+      currencyCode: 'USD',
+      postingRule: 'once',
+      sellChannels: ['booking_engine', 'front_desk', 'pre_arrival'],
+      isActive: true,
+      sortOrder: 2,
+    },
+    {
+      id: sid('d2000001', 3),
+      propertyId,
+      code: 'LATECO',
+      name: 'Late Checkout',
+      description: 'Checkout extended until 14:00',
+      chargeType: 'fee',
+      price: '50.00',
+      currencyCode: 'USD',
+      postingRule: 'once',
+      sellChannels: ['front_desk'],
+      isActive: true,
+      sortOrder: 3,
+    },
   ]);
 
   // -----------------------------------------------------------------------
@@ -1190,6 +1238,7 @@ async function main() {
   console.log('  Reservations:  23 (past, in-house, arrivals, future, no-show, cancelled)');
   console.log('  Folios:        16 with charges & payments');
   console.log('  Rate Plans:    5 with restrictions');
+  console.log('  Services:      3 (BREAKFAST, PARKING, LATECO)');
   console.log('  HK Tasks:      18 (mix of statuses)');
   console.log('  Night Audit:   1 completed run');
   console.log('  Channels:      2 connections');

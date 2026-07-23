@@ -16,6 +16,7 @@ import { FolioService } from '../folio/folio.service';
 import { RoomStatusService } from '../room/room-status.service';
 import { PaymentService } from '../payment/payment.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { AncillaryService } from '../ancillary/ancillary.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ModifyReservationDto } from './dto/modify-reservation.dto';
 import { AssignRoomDto } from './dto/assign-room.dto';
@@ -37,6 +38,8 @@ export class ReservationService {
     private readonly roomStatusService: RoomStatusService,
     private readonly paymentService: PaymentService,
     private readonly webhookService: WebhookService,
+    @Inject(forwardRef(() => AncillaryService))
+    private readonly ancillaryService: AncillaryService,
   ) {}
 
   async create(dto: CreateReservationDto, opts?: { confirmationNumber?: string }) {
@@ -417,6 +420,14 @@ export class ReservationService {
 
     // Mark room occupied
     await this.roomStatusService.markOccupied(roomId, reservation.propertyId);
+
+    // Attach package components (if any) and post once / included-in-rate extras
+    try {
+      await this.ancillaryService.ensurePackageComponents(updated.id, propertyId);
+      await this.ancillaryService.postOnceForReservation(updated.id, propertyId);
+    } catch {
+      // Ancillary posting failure must not block check-in
+    }
 
     // Emit webhook
     await this.webhookService.emit(

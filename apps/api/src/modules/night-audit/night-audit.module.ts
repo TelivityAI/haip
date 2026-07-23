@@ -4,6 +4,7 @@ import { ReservationModule } from '../reservation/reservation.module';
 import { HousekeepingModule } from '../housekeeping/housekeeping.module';
 import { RoomModule } from '../room/room.module';
 import { WebhookModule } from '../webhook/webhook.module';
+import { AncillaryModule } from '../ancillary/ancillary.module';
 import { NightAuditController } from './night-audit.controller';
 import { NightAuditService } from './night-audit.service';
 
@@ -14,6 +15,7 @@ import { NightAuditService } from './night-audit.service';
     HousekeepingModule,
     RoomModule,
     WebhookModule,
+    AncillaryModule,
   ],
   controllers: [NightAuditController],
   providers: [NightAuditService],

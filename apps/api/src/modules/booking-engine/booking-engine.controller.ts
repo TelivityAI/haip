@@ -51,6 +51,12 @@ export class BookingEngineController {
     return this.configService.getPublicConfig(this.propertyId(req));
   }
 
+  @Get('services')
+  @ApiOperation({ summary: 'List active extras sellable on the booking engine' })
+  async listServices(@Req() req: any) {
+    return this.service.listSellableServices(this.propertyId(req));
+  }
+
   @Post('search')
   @ApiOperation({ summary: 'Search availability for publicly sellable rooms/rates' })
   @ApiResponse({ status: 200, description: 'Available room types and rates' })

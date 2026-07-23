@@ -45,7 +45,7 @@ export function GuestDetails() {
 
   return (
     <div className="space-y-4">
-      <Button variant="ghost" onClick={() => navigate('/room')}>
+      <Button variant="ghost" onClick={() => navigate('/extras')}>
         ← Back
       </Button>
       <h1 className="text-xl font-semibold text-gray-900">Guest details</h1>

@@ -10,6 +10,7 @@ import type {
   QuoteResponse,
   SearchRequest,
   SearchResponse,
+  SellableServicesResponse,
 } from './types';
 
 /**
@@ -55,6 +56,11 @@ export const bookingApi = {
 
   quote: async (body: QuoteRequest): Promise<QuoteResponse> => {
     const { data } = await api.post<QuoteResponse>('/quote', body);
+    return data;
+  },
+
+  listServices: async (): Promise<SellableServicesResponse> => {
+    const { data } = await api.get<SellableServicesResponse>('/services');
     return data;
   },
 

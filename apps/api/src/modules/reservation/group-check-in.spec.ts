@@ -6,6 +6,7 @@ import { FolioService } from '../folio/folio.service';
 import { RoomStatusService } from '../room/room-status.service';
 import { PaymentService } from '../payment/payment.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { AncillaryService } from '../ancillary/ancillary.service';
 import { DRIZZLE } from '../../database/database.module';
 
 const makeReservation = (id: string, propertyId = 'prop-001', status = 'assigned') => ({
@@ -119,6 +120,7 @@ async function createService(db: any) {
       { provide: RoomStatusService, useValue: mockRoomStatusService },
       { provide: PaymentService, useValue: mockPaymentService },
       { provide: WebhookService, useValue: mockWebhookService },
+      { provide: AncillaryService, useValue: { ensurePackageComponents: async () => [], postOnceForReservation: async () => ({ posted: [] }) } },
     ],
   }).compile();
   return module.get<ReservationService>(ReservationService);

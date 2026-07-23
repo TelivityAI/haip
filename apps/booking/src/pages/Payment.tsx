@@ -15,7 +15,7 @@ import type { BookResponse } from '../api/types';
 export function Payment() {
   const navigate = useNavigate();
   const { config } = useConfig();
-  const { criteria, roomType, rate, quote, guest } = useBookingFlow();
+  const { criteria, roomType, rate, quote, guest, serviceIds } = useBookingFlow();
 
   useEffect(() => {
     if (!criteria || !roomType || !rate || !quote || !guest) {
@@ -40,6 +40,7 @@ export function Payment() {
         paymentToken: payment?.paymentToken,
         cardLastFour: payment?.cardLastFour,
         cardBrand: payment?.cardBrand,
+        serviceIds: serviceIds.length ? serviceIds : undefined,
       }),
     onSuccess: (res: BookResponse) => {
       navigate('/confirmation', { state: { booking: res, email: guest!.email } });

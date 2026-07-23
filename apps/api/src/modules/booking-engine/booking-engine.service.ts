@@ -14,6 +14,7 @@ import { GuestService } from '../guest/guest.service';
 import { FolioService } from '../folio/folio.service';
 import { PaymentService } from '../payment/payment.service';
 import { DepositService } from '../accounting/deposit.service';
+import { AncillaryService } from '../ancillary/ancillary.service';
 import { BookingEngineConfigService } from './booking-engine-config.service';
 import type { BeSearchDto } from './dto/be-search.dto';
 import type { BeQuoteDto } from './dto/be-quote.dto';
@@ -22,9 +23,9 @@ import type { BeCreateBookingDto } from './dto/be-create-booking.dto';
 /**
  * Orchestrates the guest-facing direct booking flow. Adds NO new hotel domain
  * logic — it composes the existing availability / rate / tax / reservation /
- * folio / payment / deposit services and applies the property's booking-engine
- * config (sellable inventory + deposit policy). KB §10.5: booking-engine payments
- * are classified as a deposit liability.
+ * folio / payment / deposit / ancillary services and applies the property's
+ * booking-engine config (sellable inventory + deposit policy). Booking-engine
+ * payments are classified as a deposit liability.
  */
 @Injectable()
 export class BookingEngineService {
@@ -41,6 +42,7 @@ export class BookingEngineService {
     private readonly paymentService: PaymentService,
     private readonly depositService: DepositService,
     private readonly configService: BookingEngineConfigService,
+    private readonly ancillaryService: AncillaryService,
   ) {}
 
   // --- Search ---
@@ -89,6 +91,37 @@ export class BookingEngineService {
         accentColor: config.accentColor,
       },
       results: filteredResults,
+    };
+  }
+
+  // --- Sellable extras ---
+
+  async listSellableServices(propertyId: string) {
+    const config = await this.configService.getPublicConfig(propertyId);
+    if (!config.isEnabled) {
+      throw new ForbiddenException('Direct booking is not enabled for this property');
+    }
+
+    const result = await this.ancillaryService.listServices({
+      propertyId,
+      isActive: 'true',
+      channel: 'booking_engine',
+      page: 1,
+      limit: 100,
+    });
+
+    return {
+      propertyId,
+      data: result.data.map((s: any) => ({
+        id: s.id,
+        code: s.code,
+        name: s.name,
+        description: s.description,
+        chargeType: s.chargeType,
+        price: s.price,
+        currencyCode: s.currencyCode,
+        postingRule: s.postingRule,
+      })),
     };
   }
 
@@ -152,7 +185,99 @@ export class BookingEngineService {
       lineItems.push({ date: serviceDate, rate: nightlyRate.toFixed(2), tax: nightTax.toFixed(2) });
     }
 
-    const grandTotal = roomTotal.plus(taxTotal);
+    // Optional ancillary extras selected at booking time.
+    const services: Array<{
+      serviceId: string;
+      code: string;
+      name: string;
+      postingRule: string;
+      unitPrice: string;
+      quantity: number;
+      lineTotal: string;
+      taxTotal: string;
+    }> = [];
+    let servicesTotal = new Decimal(0);
+    let servicesTaxTotal = new Decimal(0);
+
+    if (dto.serviceIds?.length) {
+      const seen = new Set<string>();
+      for (const serviceId of dto.serviceIds) {
+        if (seen.has(serviceId)) continue;
+        seen.add(serviceId);
+
+        const service = await this.ancillaryService.findServiceById(serviceId, propertyId);
+        if (!service.isActive) {
+          throw new BadRequestException(`Service ${service.code} is not available`);
+        }
+        const channels: string[] = Array.isArray(service.sellChannels) ? service.sellChannels : [];
+        if (!channels.includes('booking_engine')) {
+          throw new BadRequestException(`Service ${service.code} is not available for direct booking`);
+        }
+
+        const unitPrice = new Decimal(service.price);
+        const postingRule = service.postingRule as string;
+
+        if (postingRule === 'on_consumption') {
+          services.push({
+            serviceId: service.id,
+            code: service.code,
+            name: service.name,
+            postingRule,
+            unitPrice: unitPrice.toFixed(2),
+            quantity: 1,
+            lineTotal: '0.00',
+            taxTotal: '0.00',
+          });
+          continue;
+        }
+
+        // once | per_night | included_in_rate (selected separately → charge unit price)
+        const quantity = postingRule === 'per_night' ? nights : 1;
+        const lineTotal = unitPrice.times(quantity);
+        let lineTax = new Decimal(0);
+
+        if (postingRule === 'per_night') {
+          for (let i = 0; i < nights; i++) {
+            const d = new Date(arrival);
+            d.setUTCDate(d.getUTCDate() + i);
+            const serviceDate = d.toISOString().slice(0, 10);
+            const taxes = await this.taxService.calculateTaxes(
+              unitPrice.toFixed(2),
+              service.chargeType,
+              propertyId,
+              serviceDate,
+              { numberOfNights: nights, nightNumber: i + 1 },
+            );
+            lineTax = lineTax.plus(
+              taxes.reduce((acc, t) => acc.plus(new Decimal(t.amount)), new Decimal(0)),
+            );
+          }
+        } else {
+          const taxes = await this.taxService.calculateTaxes(
+            unitPrice.toFixed(2),
+            service.chargeType,
+            propertyId,
+            dto.checkIn,
+          );
+          lineTax = taxes.reduce((acc, t) => acc.plus(new Decimal(t.amount)), new Decimal(0));
+        }
+
+        servicesTotal = servicesTotal.plus(lineTotal);
+        servicesTaxTotal = servicesTaxTotal.plus(lineTax);
+        services.push({
+          serviceId: service.id,
+          code: service.code,
+          name: service.name,
+          postingRule,
+          unitPrice: unitPrice.toFixed(2),
+          quantity: 1,
+          lineTotal: lineTotal.toFixed(2),
+          taxTotal: lineTax.toFixed(2),
+        });
+      }
+    }
+
+    const grandTotal = roomTotal.plus(taxTotal).plus(servicesTotal).plus(servicesTaxTotal);
     const depositAmount = this.computeDeposit(
       config.depositPolicy,
       grandTotal,
@@ -172,6 +297,9 @@ export class BookingEngineService {
       lineItems,
       roomTotal: roomTotal.toFixed(2),
       taxTotal: taxTotal.toFixed(2),
+      services,
+      servicesTotal: servicesTotal.toFixed(2),
+      servicesTaxTotal: servicesTaxTotal.toFixed(2),
       grandTotal: grandTotal.toFixed(2),
       depositPolicy: config.depositPolicy,
       depositDue: depositAmount.toFixed(2),
@@ -198,6 +326,7 @@ export class BookingEngineService {
       checkOut: dto.checkOut,
       adults: dto.adults,
       children: dto.children,
+      serviceIds: dto.serviceIds,
     });
 
     const depositDue = new Decimal(quote.depositDue);
@@ -246,7 +375,24 @@ export class BookingEngineService {
       currencyCode: quote.currencyCode,
     });
 
-    // 5 + 6. Take the deposit (hold) and classify it as a deposit liability (§10.5).
+    // 4b. Attach selected extras (posting deferred to check-in / night audit).
+    if (dto.serviceIds?.length) {
+      const seen = new Set<string>();
+      for (const serviceId of dto.serviceIds) {
+        if (seen.has(serviceId)) continue;
+        seen.add(serviceId);
+        await this.ancillaryService.attachToReservation(reservation.id, {
+          propertyId,
+          serviceId,
+          sourceChannel: 'booking_engine',
+        });
+      }
+      await this.ancillaryService.ensurePackageComponents(reservation.id, propertyId);
+    } else {
+      await this.ancillaryService.ensurePackageComponents(reservation.id, propertyId);
+    }
+
+    // 5 + 6. Take the deposit (hold) and classify it as a deposit liability.
     let depositInfo: { paymentId: string; amount: string; status: string } | null = null;
     if (depositDue.greaterThan(0) && dto.paymentToken) {
       const payment = await this.paymentService.authorizePayment({
@@ -289,6 +435,9 @@ export class BookingEngineService {
       grandTotal: quote.grandTotal,
       deposit: depositInfo,
       lineItems: quote.lineItems,
+      services: quote.services,
+      servicesTotal: quote.servicesTotal,
+      servicesTaxTotal: quote.servicesTaxTotal,
       cancellationPolicy: (config.depositPolicy as DepositPolicy).refundable
         ? 'Deposit refundable per property policy.'
         : 'Deposit non-refundable.',
@@ -367,9 +516,8 @@ export class BookingEngineService {
   }
 
   /**
-   * Deposit amount from policy. KB §10.5 default classification is "deposit";
-   * the AMOUNT (first night / percentage / full) is property-configurable. These
-   * defaults are conservative and flagged to confirm against finance policy.
+   * Deposit amount from policy. Default classification is "deposit";
+   * the AMOUNT (first night / percentage / full) is property-configurable.
    */
   private computeDeposit(
     policy: DepositPolicy,

@@ -101,8 +101,8 @@ export function RoomSelect() {
       {quote && (
         <>
           <PriceBreakdown quote={quote} />
-          <Button className="w-full" onClick={() => navigate('/guest')}>
-            Continue to guest details
+          <Button className="w-full" onClick={() => navigate('/extras')}>
+            Continue
           </Button>
         </>
       )}

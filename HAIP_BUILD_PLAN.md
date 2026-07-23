@@ -13,16 +13,10 @@ Open-source, API-first hotel PMS (Apache 2.0).
   agents' decisions in plain language, grounded so it can't invent figures.
   Runs on your own hardware, off by default.
 
-## In progress
-- Production deployment path (compose, container images, docs)
-- Full dashboard localization (page-level i18n)
-- End-to-end + money-path test coverage
-
 ## Planned
 - New-property onboarding wizard
 - Complete guest registration (ID, minors/guardian, per-jurisdiction compliance)
 - Loyalty (guest recognition, tiers, rewards)
-- Upsells & ancillaries (rooms, add-ons, packages, and third-party content hotels can resell)
 - Expanded AI assistance (grounded explanations, suggestions, per-property calibration)
 - Expanded channel/OTA connectivity
 - Revenue management (pricing, demand, booking pace, forecasting)
@@ -30,6 +24,12 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Deeper reporting and exports
 - Hardening & reliability (integration retries/timeouts, observability, scale)
 - Additional localizations
+
+## In progress
+- Production deployment path (compose, container images, docs)
+- Full dashboard localization (page-level i18n)
+- End-to-end + money-path test coverage
+- Upsells & ancillaries (services catalog, packages, booking/front-desk/pre-arrival channels)
 
 Contributions welcome — open an issue or a draft PR to claim an area, and tag a
 maintainer to coordinate before starting larger work.

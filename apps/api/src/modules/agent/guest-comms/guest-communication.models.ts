@@ -150,6 +150,7 @@ const BODY_TEMPLATES: Record<EmailType, { firstTime: string; repeat: string }> =
       '- Check-in time: {check_in_time}',
       '- Address: {property_address}',
       '{local_tips_section}',
+      '{upsell_section}',
       '',
       'If you have any questions, contact us at {property_phone} or {property_email}.',
       '',
@@ -164,6 +165,7 @@ const BODY_TEMPLATES: Record<EmailType, { firstTime: string; repeat: string }> =
       'Quick reminder:',
       '- Check-in: {check_in_time}',
       '{local_tips_section}',
+      '{upsell_section}',
       '',
       'We look forward to seeing you again.',
       '{property_name}',
@@ -328,6 +330,9 @@ export function generateEmailDraft(
       : '',
     local_tips_section: config.localTips.length > 0
       ? '\nLocal tips:\n' + config.localTips.slice(0, 3).map((t) => `- ${t}`).join('\n')
+      : '',
+    upsell_section: config.upsellEnabled
+      ? '\nEnhance your stay — ask us about breakfast, parking, spa, and other extras when you arrive, or reply to this email to add them before check-in.\n'
       : '',
     review_links: buildReviewLinks(config),
   };

@@ -28,6 +28,7 @@ import { AgentModule } from './modules/agent/agent.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { CashierModule } from './modules/cashier/cashier.module';
 import { HouseAccountModule } from './modules/house-account/house-account.module';
+import { AncillaryModule } from './modules/ancillary/ancillary.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
@@ -70,6 +71,7 @@ const imports: any[] = [
   AccountingModule,
   CashierModule,
   HouseAccountModule,
+  AncillaryModule,
   GroupsModule,
   AdminModule,
   BookingEngineModule,

@@ -63,6 +63,9 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'media_category') THEN CREATE TYPE media_category AS ENUM ('hero','exterior','room','amenity','dining','other'); END IF; END $$`,
     // RBAC (local authz + Keycloak login)
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_status') THEN CREATE TYPE user_status AS ENUM ('active','disabled','invited'); END IF; END $$`,
+    // Stay extras / packages
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'service_posting_rule') THEN CREATE TYPE service_posting_rule AS ENUM ('once','per_night','on_consumption','included_in_rate'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reservation_service_status') THEN CREATE TYPE reservation_service_status AS ENUM ('quoted','confirmed','posted','cancelled'); END IF; END $$`,
   ];
 
   for (const e of enums) {
@@ -862,6 +865,59 @@ async function main() {
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS bookings_property_external_channel_unique ON bookings (property_id, external_confirmation, channel_code) WHERE external_confirmation IS NOT NULL AND channel_code IS NOT NULL`,
+    // Stay extras / packages
+    `CREATE TABLE IF NOT EXISTS services (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      code varchar(40) NOT NULL,
+      name varchar(255) NOT NULL,
+      description text,
+      charge_type charge_type NOT NULL DEFAULT 'incidental',
+      price numeric(12,2) NOT NULL,
+      currency_code varchar(3) NOT NULL,
+      tax_code varchar(20),
+      posting_rule service_posting_rule NOT NULL DEFAULT 'once',
+      sell_channels jsonb NOT NULL DEFAULT '[]'::jsonb,
+      is_active boolean NOT NULL DEFAULT true,
+      sort_order integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS services_property_idx ON services (property_id)`,
+    `CREATE INDEX IF NOT EXISTS services_property_code_idx ON services (property_id, code)`,
+    `CREATE TABLE IF NOT EXISTS rate_plan_components (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      rate_plan_id uuid NOT NULL REFERENCES rate_plans(id),
+      service_id uuid NOT NULL REFERENCES services(id),
+      quantity integer NOT NULL DEFAULT 1,
+      amount_override numeric(12,2),
+      included_in_rate boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS rate_plan_components_property_idx ON rate_plan_components (property_id)`,
+    `CREATE INDEX IF NOT EXISTS rate_plan_components_rate_plan_idx ON rate_plan_components (property_id, rate_plan_id)`,
+    `CREATE TABLE IF NOT EXISTS reservation_services (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      reservation_id uuid NOT NULL REFERENCES reservations(id),
+      service_id uuid NOT NULL REFERENCES services(id),
+      quantity integer NOT NULL DEFAULT 1,
+      unit_price numeric(12,2) NOT NULL,
+      currency_code varchar(3) NOT NULL,
+      start_date date,
+      end_date date,
+      status reservation_service_status NOT NULL DEFAULT 'confirmed',
+      source_channel varchar(40) NOT NULL DEFAULT 'front_desk',
+      posting_rule service_posting_rule NOT NULL,
+      charge_type charge_type NOT NULL,
+      notes text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS reservation_services_property_idx ON reservation_services (property_id)`,
+    `CREATE INDEX IF NOT EXISTS reservation_services_reservation_idx ON reservation_services (property_id, reservation_id)`,
   ];
 
   for (const t of tables) {
