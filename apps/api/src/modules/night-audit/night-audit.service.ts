@@ -22,6 +22,7 @@ import { ReservationService } from '../reservation/reservation.service';
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
 import { RoomStatusService } from '../room/room-status.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { AncillaryService } from '../ancillary/ancillary.service';
 import { RunAuditDto } from './dto/run-audit.dto';
 import type {
   AuditRunResult,
@@ -39,6 +40,7 @@ export class NightAuditService {
     private readonly housekeepingService: HousekeepingService,
     private readonly roomStatusService: RoomStatusService,
     private readonly webhookService: WebhookService,
+    private readonly ancillaryService: AncillaryService,
   ) {}
 
   /**
@@ -75,6 +77,12 @@ export class NightAuditService {
       // 4. Post room tariffs to all in-house folios
       const tariffResult = await this.postRoomTariffs(dto.propertyId, dto.businessDate);
 
+      // Post per-night stay extras (idempotent per service + business date)
+      const serviceTariffResult = await this.ancillaryService.postPerNightForProperty(
+        dto.propertyId,
+        dto.businessDate,
+      );
+
       // 5. Process no-shows
       const noShowResult = await this.processNoShows(dto.propertyId, dto.businessDate);
 
@@ -100,7 +108,16 @@ export class NightAuditService {
         taxChargesPosted: tariffResult.totalTax,
         noShowsProcessed: String(noShowResult.count),
         summary,
-        errors: [...tariffResult.errors, ...noShowResult.errors],
+        errors: [
+          ...tariffResult.errors,
+          ...noShowResult.errors,
+          ...(serviceTariffResult.errors ?? []).map(
+            (e: { id?: string; message: string }) => ({
+              message: e.message,
+              entity: e.id,
+            }),
+          ),
+        ],
       });
 
       // 12. Emit audit.completed webhook

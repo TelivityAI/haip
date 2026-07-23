@@ -8,6 +8,7 @@ import { FolioService } from '../folio/folio.service';
 import { RoomStatusService } from '../room/room-status.service';
 import { PaymentService } from '../payment/payment.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { AncillaryService } from '../ancillary/ancillary.service';
 
 /**
  * Cross-tenant FK ownership tests for ReservationService (security audit #4).
@@ -55,6 +56,7 @@ async function mkService(db: any) {
       { provide: RoomStatusService, useValue: {} },
       { provide: PaymentService, useValue: {} },
       { provide: WebhookService, useValue: { emit: vi.fn() } },
+      { provide: AncillaryService, useValue: { ensurePackageComponents: async () => [], postOnceForReservation: async () => ({ posted: [] }) } },
     ],
   }).compile();
   return mod.get(ReservationService);

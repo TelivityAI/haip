@@ -8,6 +8,21 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Stay extras & packages (upsells)
+
+- **Services catalog** — property-scoped sellable extras with charge type, price,
+  posting rule (`once` / `per_night` / `on_consumption` / `included_in_rate`), and
+  sell channels (`booking_engine` / `front_desk` / `pre_arrival`).
+- **Rate plan components** — package rate plans can bundle catalog services.
+- **Reservation services** — attach extras to a stay from front desk or booking;
+  price snapshot + status lifecycle.
+- **Posting** — check-in posts `once` / included lines; night audit posts `per_night`
+  (idempotent); folio routing and tax apply as usual.
+- **Booking engine + widget** — optional `serviceIds` on quote/book; `/extras` step
+  in the guest booking flow; `GET /booking-engine/services`.
+- **Pre-arrival** — guest-comms includes an extras prompt when `upsellEnabled`.
+- Permissions: `services.read` / `services.manage`.
+
 ### Added — DerbySoft Property Connector adapter
 
 - **DerbySoft channel adapter** (`adapterType: derbysoft`) — REST/JSON + OAuth Bearer,

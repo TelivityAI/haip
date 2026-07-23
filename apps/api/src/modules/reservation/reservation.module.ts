@@ -10,6 +10,7 @@ import { FolioModule } from '../folio/folio.module';
 import { RoomModule } from '../room/room.module';
 import { PaymentModule } from '../payment/payment.module';
 import { WebhookModule } from '../webhook/webhook.module';
+import { AncillaryModule } from '../ancillary/ancillary.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { WebhookModule } from '../webhook/webhook.module';
     RoomModule,
     PaymentModule,
     WebhookModule,
+    forwardRef(() => AncillaryModule),
   ],
   controllers: [ReservationController],
   providers: [
