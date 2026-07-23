@@ -84,6 +84,15 @@ export {
   housekeepingTasks,
 } from './housekeeping.js';
 
+// Property ops — lost & found, service requests
+export {
+  lostAndFoundStatusEnum,
+  lostAndFoundItems,
+  serviceRequestStatusEnum,
+  serviceRequestTypeEnum,
+  serviceRequests,
+} from './ops.js';
+
 // Audit
 export {
   auditRunStatusEnum,

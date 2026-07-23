@@ -654,6 +654,8 @@
     "tabs": {
       "analytics": "Analytics",
       "dashboard": "Dashboard",
+      "lostFound": "Lost & Found",
+      "serviceRequests": "Service Requests",
       "tasks": "Tasks"
     },
     "taskForRoom": "Task — Room {{number}}",
@@ -666,7 +668,42 @@
     },
     "tasksCompleted": "Tasks Completed",
     "title": "Housekeeping",
-    "type": "Type"
+    "type": "Type",
+    "lostFound": {
+      "title": "Lost & Found",
+      "tagCode": "Tag",
+      "description": "Description",
+      "foundAt": "Found",
+      "disposeAfter": "Dispose after",
+      "noItems": "No items logged",
+      "logItem": "Log item",
+      "statuses": {
+        "held": "Held",
+        "returned": "Returned",
+        "disposed": "Disposed"
+      }
+    },
+    "serviceRequests": {
+      "title": "Service Requests",
+      "createTask": "Create task",
+      "noRequests": "No service requests",
+      "newRequest": "New request",
+      "statuses": {
+        "open": "Open",
+        "in_progress": "In Progress",
+        "done": "Done",
+        "cancelled": "Cancelled"
+      },
+      "types": {
+        "maintenance": "Maintenance",
+        "turndown": "Turndown",
+        "deep_clean": "Deep Clean",
+        "checkout": "Checkout",
+        "stayover": "Stayover",
+        "inspection": "Inspection",
+        "service_request": "General"
+      }
+    }
   },
   "import": {
     "choose": "1. Choose what to import",
@@ -825,6 +862,10 @@
       "housekeeping": {
         "manage": "Assign / Inspect Housekeeping",
         "read": "View Housekeeping"
+      },
+      "ops": {
+        "manage": "Manage Property Ops",
+        "read": "View Property Ops"
       },
       "media": {
         "manage": "Manage Property Photos"
@@ -1117,7 +1158,14 @@
     "selectProperty": "Select a property to view rooms",
     "selectType": "Select type",
     "title": "Rooms",
-    "type": "Type"
+    "type": "Type",
+    "discrepancies": {
+      "title": "Room status discrepancies",
+      "none": "No discrepancies for this date",
+      "occupiedWithoutReservation": "Occupied without in-house reservation",
+      "vacantWithReservation": "Vacant with in-house reservation",
+      "count": "{{count}} discrepancy(ies)"
+    }
   },
   "search": {
     "allPropertiesPlaceholder": "Search all properties…",
