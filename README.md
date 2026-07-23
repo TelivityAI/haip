@@ -240,6 +240,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | 3 | **Front desk stay ops** | [#181](https://github.com/telivityai/haip/pull/181) | Arrivals / in-house queues, walk-in, in-house room move, registration card at check-in, operational notes at the desk. See **Reservation Management**. |
 | 4 | **A/R & cashier polish** | [#180](https://github.com/telivityai/haip/pull/180) | List cash drawers/sessions, A/R ledger CRUD + aging UX, folio→A/R from folio detail, reverse-transfer picker. See **Accounting & Cashiering** and **Folio & Billing**. |
 | 5 | **Commercial profiles** | [#180](https://github.com/telivityai/haip/pull/180) (also [#179](https://github.com/telivityai/haip/pull/179)) | Standing-account billing terms on group profiles; link A/R ledgers and negotiated rates; Commercial dashboard page. See **Groups & Commercial Profiles**. |
+| 12 | **Distribution polish** | _pending_ | Channels dashboard aligned to existing APIs: rate-parity grid (`baseAmount`, per-channel `effectiveRate` / `isParity`), rate-override form (POST/DELETE), connection mapping editor (room/rate codes via PATCH), content-push error surfacing (e.g. SiteMinder unsupported). See **Channel Manager**. |
 
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
@@ -361,12 +362,12 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 
 ### Channel Manager
 - ARI (Availability, Rates, Inventory) push to connected OTAs
-- **Content distribution** — push descriptive content (photos, descriptions, amenities) to OTAs via each adapter's content API, with content-sync logging and **auto-resync** when property or media content changes (`property.content_updated` / `roomtype.content_updated` events)
-- Channel connection management with credentials and mapping
+- **Content distribution** — push descriptive content (photos, descriptions, amenities) to OTAs via each adapter's content API, with content-sync logging and **auto-resync** when property or media content changes (`property.content_updated` / `roomtype.content_updated` events); dashboard surfaces adapter errors (e.g. SiteMinder pmsXchange has no content API)
+- Channel connection management with credentials and mapping — **dashboard mapping editor** for `roomTypeMapping` / `ratePlanMapping` (PATCH connection)
 - Inbound reservation processing from OTA channels
 - Reservation pull from channels
-- Rate parity monitoring and enforcement
-- Rate override capabilities per channel
+- Rate parity monitoring — **dashboard grid** shows `baseAmount`, per-channel `effectiveRate`, `isParity`, `parityViolations`, and override badges
+- Rate override capabilities per channel — **dashboard form** wired to POST/DELETE `/channels/rate-parity/override`
 - Stop-sell functionality
 - Sync logging for audit trails (ARI **and** content pushes)
 

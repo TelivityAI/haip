@@ -8,6 +8,20 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Distribution polish (slice 12)
+
+- **Rate parity dashboard** — grid matches API shape (`baseAmount`, per-channel
+  `effectiveRate` / `isParity` / `parityViolations`); override badge when
+  `hasOverride`.
+- **Rate override form** — POST/DELETE `/channels/rate-parity/override` from the
+  Channels → Rate Parity page (percentage or fixed adjustment, optional date
+  range).
+- **Connection mapping editor** — edit `roomTypeMapping` and `ratePlanMapping` on
+  connection detail via PATCH `/channels/connections/:id?propertyId=`.
+- **Content-push errors** — toast surfaces adapter errors returned by the API
+  (e.g. SiteMinder pmsXchange unsupported).
+- **Docs** — README shipped-slices row #12, HAIP_BUILD_PLAN, i18n (en + pt-BR).
+
 ### Added — Guest journey (ops + lifecycle triggers)
 
 - **Guest-comms event listener** — `reservation.created` / `checked_in` / `checked_out`

@@ -17,6 +17,7 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - Front desk stay ops — [#181](https://github.com/telivityai/haip/pull/181) (room move, walk-in, arrivals queue, registration card, notes)
 - A/R & cashier desk polish — [#180](https://github.com/telivityai/haip/pull/180) (list drawers/sessions, ledger CRUD UI, folio→A/R, aging UX)
 - Commercial profiles — [#180](https://github.com/telivityai/haip/pull/180) / [#179](https://github.com/telivityai/haip/pull/179) (billing terms on group profiles, A/R + negotiated rate links)
+- **Distribution polish** — Channels dashboard: rate-parity grid + override form, connection mapping editor, content-push error surfacing (no new OTA adapters)
 
 ## Planned
 - New-property onboarding wizard
