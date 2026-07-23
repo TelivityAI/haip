@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsDateString,
   IsEmail,
   IsInt,
@@ -92,4 +93,10 @@ export class BeCreateBookingDto {
   @IsString()
   @MaxLength(20)
   cardBrand?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  serviceIds?: string[];
 }

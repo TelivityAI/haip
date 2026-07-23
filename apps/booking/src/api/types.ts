@@ -95,12 +95,26 @@ export interface QuoteLineItem {
   tax: string;
 }
 
+export interface QuoteServiceLine {
+  serviceId: string;
+  code: string;
+  name: string;
+  postingRule: string;
+  unitPrice: string;
+  quantity: number;
+  lineTotal: string;
+  taxTotal: string;
+}
+
 export interface QuoteResponse {
   nights: number;
   currencyCode: string;
   lineItems: QuoteLineItem[];
   roomTotal: string;
   taxTotal: string;
+  services?: QuoteServiceLine[];
+  servicesTotal?: string;
+  servicesTaxTotal?: string;
   grandTotal: string;
   depositPolicy: DepositPolicy;
   depositDue: string;
@@ -113,6 +127,7 @@ export interface QuoteRequest {
   checkOut: string;
   adults: number;
   children?: number;
+  serviceIds?: string[];
 }
 
 // --- Book ---
@@ -132,6 +147,7 @@ export interface BookRequest {
   paymentToken?: string;
   cardLastFour?: string;
   cardBrand?: string;
+  serviceIds?: string[];
 }
 
 export interface BookResponse {
@@ -166,4 +182,22 @@ export interface CancelResponse {
   confirmationNumber: string;
   reservationId: string;
   status: string;
+}
+
+// --- Extras ---
+
+export interface SellableService {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  chargeType: string;
+  price: string;
+  currencyCode: string;
+  postingRule: string;
+}
+
+export interface SellableServicesResponse {
+  propertyId: string;
+  data: SellableService[];
 }

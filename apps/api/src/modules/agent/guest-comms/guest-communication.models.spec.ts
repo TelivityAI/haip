@@ -167,6 +167,29 @@ describe('generateEmailDraft', () => {
     expect(draft!.bodyText).toContain('Lot B');
   });
 
+  it('includes upsell section in pre-arrival when enabled', () => {
+    const draft = generateEmailDraft(
+      'pre_arrival',
+      makeGuest(),
+      makeReservation(),
+      makeProperty(),
+      makeConfig({ upsellEnabled: true }),
+    );
+    expect(draft!.bodyText).toContain('Enhance your stay');
+    expect(draft!.bodyText).toContain('breakfast, parking, spa');
+  });
+
+  it('omits upsell section in pre-arrival when disabled', () => {
+    const draft = generateEmailDraft(
+      'pre_arrival',
+      makeGuest(),
+      makeReservation(),
+      makeProperty(),
+      makeConfig({ upsellEnabled: false }),
+    );
+    expect(draft!.bodyText).not.toContain('Enhance your stay');
+  });
+
   it('includes review links in post-stay email', () => {
     const config = makeConfig({
       reviewLinkGoogle: 'https://g.page/r/test',

@@ -34,6 +34,9 @@ interface BookingFlowState {
   rate?: SearchRate;
   setSelection: (roomType: SearchRoomType, rate: SearchRate) => void;
 
+  serviceIds: string[];
+  setServiceIds: (ids: string[]) => void;
+
   quote?: QuoteResponse;
   setQuote: (q?: QuoteResponse) => void;
 
@@ -50,6 +53,7 @@ export function BookingFlowProvider({ children }: { children: React.ReactNode })
   const [branding, setBranding] = useState<Branding>();
   const [roomType, setRoomType] = useState<SearchRoomType>();
   const [rate, setRate] = useState<SearchRate>();
+  const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [quote, setQuote] = useState<QuoteResponse>();
   const [guest, setGuest] = useState<GuestInfo>();
 
@@ -64,7 +68,10 @@ export function BookingFlowProvider({ children }: { children: React.ReactNode })
       setSelection: (rt, r) => {
         setRoomType(rt);
         setRate(r);
+        setServiceIds([]);
       },
+      serviceIds,
+      setServiceIds,
       quote,
       setQuote,
       guest,
@@ -72,11 +79,12 @@ export function BookingFlowProvider({ children }: { children: React.ReactNode })
       reset: () => {
         setRoomType(undefined);
         setRate(undefined);
+        setServiceIds([]);
         setQuote(undefined);
         setGuest(undefined);
       },
     }),
-    [criteria, branding, roomType, rate, quote, guest],
+    [criteria, branding, roomType, rate, serviceIds, quote, guest],
   );
 
   return (

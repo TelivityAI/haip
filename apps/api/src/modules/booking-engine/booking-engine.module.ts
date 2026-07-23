@@ -15,6 +15,7 @@ import { FolioModule } from '../folio/folio.module';
 import { PaymentModule } from '../payment/payment.module';
 import { AccountingModule } from '../accounting/accounting.module';
 import { AuthModule } from '../auth/auth.module';
+import { AncillaryModule } from '../ancillary/ancillary.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AuthModule } from '../auth/auth.module';
     PaymentModule,
     AccountingModule, // DepositService
     AuthModule,
+    AncillaryModule,
   ],
   controllers: [BookingEngineController, BookingEngineAdminController],
   providers: [

@@ -38,6 +38,12 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
   const deposit = { recordDeposit: vi.fn().mockResolvedValue({ id: 'dep-1', status: 'held' }) };
   const search = { search: vi.fn() };
   const bookingSvc = { verify: vi.fn() };
+  const ancillary = {
+    findServiceById: vi.fn(),
+    listServices: vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 100 }),
+    attachToReservation: vi.fn().mockResolvedValue({}),
+    ensurePackageComponents: vi.fn().mockResolvedValue([]),
+  };
 
   const svc = new BookingEngineService(
     {} as any,
@@ -52,8 +58,9 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
     payment as any,
     deposit as any,
     config as any,
+    ancillary as any,
   );
-  return { svc, config, availability, ratePlan, tax, guest, reservation, folio, payment, deposit };
+  return { svc, config, availability, ratePlan, tax, guest, reservation, folio, payment, deposit, ancillary };
 }
 
 const bookDto = {
@@ -82,7 +89,7 @@ describe('BookingEngineService.quote', () => {
 });
 
 describe('BookingEngineService.book', () => {
-  it('classifies the payment as a held deposit (KB §10.5)', async () => {
+  it('classifies the payment as a held deposit', async () => {
     const { svc, deposit, payment } = makeService();
     const res = await svc.book(PROP, bookDto as any);
 

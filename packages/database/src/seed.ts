@@ -321,6 +321,54 @@ async function main() {
   ]);
 
   // -----------------------------------------------------------------------
+  // 4b. Ancillary services (breakfast / parking / late checkout)
+  // -----------------------------------------------------------------------
+  await db.insert(schema.services).values([
+    {
+      id: sid('d2000001', 1),
+      propertyId,
+      code: 'BREAKFAST',
+      name: 'Breakfast Buffet',
+      description: 'Full breakfast buffet per person per night',
+      chargeType: 'food_beverage',
+      price: '28.00',
+      currencyCode: 'USD',
+      postingRule: 'per_night',
+      sellChannels: ['booking_engine', 'front_desk', 'pre_arrival'],
+      isActive: true,
+      sortOrder: 1,
+    },
+    {
+      id: sid('d2000001', 2),
+      propertyId,
+      code: 'PARKING',
+      name: 'Valet Parking',
+      description: 'Covered valet parking for the stay',
+      chargeType: 'parking',
+      price: '45.00',
+      currencyCode: 'USD',
+      postingRule: 'once',
+      sellChannels: ['booking_engine', 'front_desk', 'pre_arrival'],
+      isActive: true,
+      sortOrder: 2,
+    },
+    {
+      id: sid('d2000001', 3),
+      propertyId,
+      code: 'LATECO',
+      name: 'Late Checkout',
+      description: 'Checkout extended until 14:00',
+      chargeType: 'fee',
+      price: '50.00',
+      currencyCode: 'USD',
+      postingRule: 'once',
+      sellChannels: ['front_desk'],
+      isActive: true,
+      sortOrder: 3,
+    },
+  ]);
+
+  // -----------------------------------------------------------------------
   // 5. Guests (15)
   // -----------------------------------------------------------------------
   interface GuestDef {
@@ -1190,6 +1238,7 @@ async function main() {
   console.log('  Reservations:  23 (past, in-house, arrivals, future, no-show, cancelled)');
   console.log('  Folios:        16 with charges & payments');
   console.log('  Rate Plans:    5 with restrictions');
+  console.log('  Services:      3 (BREAKFAST, PARKING, LATECO)');
   console.log('  HK Tasks:      18 (mix of statuses)');
   console.log('  Night Audit:   1 completed run');
   console.log('  Channels:      2 connections');
