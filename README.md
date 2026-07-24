@@ -607,7 +607,7 @@ pnpm --filter @inhotel-io/booking dev             # booking widget dev server (:
 One-click deploy a hosted demo (provisions Postgres + Redis, builds, migrates, and
 seeds automatically) using the included [`render.yaml`](./render.yaml) blueprint:
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/TelivityAI/haip)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/inhotel-io/inpms)
 
 Any Docker host works too — the [`apps/api/Dockerfile`](./apps/api/Dockerfile)
 builds a single image serving the API, dashboard (`/`), and booking engine (`/booking/`) on port 3000.
