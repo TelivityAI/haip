@@ -73,9 +73,9 @@ export default function Integrations() {
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['property-integrations', propertyId] });
-      toast({ title: t('integrations.saved'), variant: 'success' });
+      toast('success', t('integrations.saved'));
     },
-    onError: (e) => toast({ title: errMsg(e), variant: 'error' }),
+    onError: (e) => toast('error', errMsg(e)),
   });
 
   if (!propertyId) {
