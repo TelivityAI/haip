@@ -38,6 +38,7 @@ import { BookingEngineModule } from './modules/booking-engine/booking-engine.mod
 import { ImportModule } from './modules/import/import.module';
 import { AccountingExportModule } from './modules/accounting-export/accounting-export.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 import { PosModule } from './modules/pos/pos.module';
 import { DoorLockModule } from './modules/door-lock/door-lock.module';
 import { LlmModule } from './modules/llm/llm.module';
@@ -88,6 +89,7 @@ const imports: any[] = [
   ImportModule,
   AccountingExportModule,
   NotificationsModule,
+  ReviewsModule,
   PosModule,
   FolioInboundModule,
   DoorLockModule,

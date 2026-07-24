@@ -19,6 +19,9 @@ For event delivery (signatures, payloads, retries, subscriptions), start with **
 | [Accounting CSV](accounting-csv.md) | Revenue journal / trial balance export |
 | [BI on Postgres](bi-postgres.md) | Read-only DB access for Metabase, Grafana, etc. |
 | [iCal calendar bridge](ical-calendar-bridge.md) | Planned calendar sync (Airbnb, Vrbo, Google Calendar) |
+| [SendGrid email](sendgrid-email.md) | Transactional email via SendGrid API |
+| [Bird SMS](bird-sms.md) | Guest SMS via Bird/MessageBird |
+| [Review sources (Google / TripAdvisor)](review-sources.md) | Pull external reviews into HAIP |
 
 ## Base URL
 
