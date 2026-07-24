@@ -517,6 +517,17 @@ hotel with the AI agents already running**, and serves everything at one URL:
 - **Booking:** `http://localhost:3000/booking/` — live guest booking widget (search → quote → book)
 - **Preview page:** `http://localhost:3000/booking-preview.html` — optional static walkthrough of every booking screen
 
+**Wire a shipped or adapter integration in one command** (API must be up):
+
+```bash
+./integrations/demos/run.sh list shipped  # 21 product paths
+./integrations/demos/run.sh list adapters # 37 console fiscal/guest-reg packs
+./integrations/demos/run.sh stripe        # toggle ON + mock/console path
+./integrations/demos/run.sh all shipped
+```
+
+Each pack has \`GO_LIVE.md\` for live credentials. Details: [\`integrations/demos/\`](./integrations/demos/).
+
 Dashboard UI: English and Deutsch (header language switcher).
 
 The first run builds the image and can take a few minutes; subsequent starts are

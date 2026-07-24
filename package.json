@@ -23,7 +23,8 @@
     "db:studio": "pnpm --filter @telivityhaip/database run db:studio",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "clean": "pnpm -r run clean && rm -rf node_modules"
+    "clean": "pnpm -r run clean && rm -rf node_modules",
+    "integrations:demo": "bash integrations/demos/run.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

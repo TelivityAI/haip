@@ -4,6 +4,8 @@ Short, practical how-tos for wiring HAIP to common automation and back-office to
 
 For the full integration catalog, see **[Integration catalog](../INTEGRATIONS.md)**.
 
+**Shipped demos (one command):** [`integrations/demos/`](../../integrations/demos/) — `./integrations/demos/run.sh stripe` (or `all`). Turns the Integrations toggle on and wires mock/console paths without vendor keys.
+
 For event delivery (signatures, payloads, retries, subscriptions), start with **[Webhooks & events](../webhooks.md)**.
 
 ## Recipes
