@@ -1,15 +1,17 @@
 # Un-thin backlog — research-backed plan
 
-**Status:** Research synthesis (2026-07-24). **Not domain law** until the KB owner
-confirms open questions and lands definitions in the private knowledge base.
-Do not invent hotel operations beyond confirmed KB + this research.
+**Status:** Defaults locked (2026-07-24). Implementation in
+[#205](https://github.com/TelivityAI/haip/pull/205)
+(`cursor/unthin-wave-a-ci1-aeea`). Do not invent further hotel operations beyond
+confirmed KB + these locked MVP defaults.
 
 **Trigger:** These areas were previously marked “thin / partner-gated.” Six
 parallel research passes + a HAIP code-anchor map produced the cut below.
 
 **Related ship vehicle:** merge stack [#202](https://github.com/telivityai/haip/pull/202)
-already carries discrepancy *compute*, lost & found, service requests, SMS,
-loyaltyNumber/VIP display, and four channel adapters.
+carried discrepancy *compute*, lost & found, service requests, SMS,
+loyaltyNumber/VIP display, and four channel adapters. Un-thin execution extends
+that stack.
 
 ---
 
@@ -24,41 +26,56 @@ loyaltyNumber/VIP display, and four channel adapters.
 
 ---
 
+## Locked defaults (coding unblocked)
+
+| Area | Locked MVP |
+|------|------------|
+| **A1 discrepancy** | Skip/Sleep as UI aliases for FO/HK mismatch codes; **no** sell hard-block; night audit **acknowledge** open cases (not hard stop) |
+| **A2 items** | In-core L&F categories: `general \| baggage \| parcel \| valet` |
+| **A3 folio inbound** | Amount-only; reject if room not in-house; `vendorTxnId` idempotency |
+| **B1 turnaway** | Separate append-only entity; anonymous by default; manual desk |
+| **B2 waitlist** | Separate **non-deduct** entity (not a reservation status); offer → convert |
+| **C1 loyalty** | HAIP points bank; **org-scoped** program; txs attribute `propertyId`; award-points only (keep `vipLevel` manual); earn = nights × `pointsPerNight` on checkout (`delayDays` default **3**); burn = folio rebate |
+| **C2 WhatsApp** | **Twilio** Content API (same vendor as SMS); reuse `gdprConsentMarketing` for marketing templates; transactional utility templates when guest has phone (no marketing needed); outbound only |
+| **D1–D3** | Deep-link contract on booking engine; meta/GDS via existing CM adapters first; no SynXis SDK unless mandated |
+
+---
+
 ## Slice map (build order)
 
 ### Wave A — Ops truth (code anchors already hot)
 
-| ID | Topic | HAIP today | Research-backed MVP | Owner must confirm |
-|----|-------|------------|---------------------|--------------------|
-| **A1** | Room discrepancy workflow | Compute-only `GET /rooms/discrepancies` (`occupied_without_reservation` / `vacant_with_in_house_reservation`) | HK observation write + persisted cases + resolve via check-in/out / correct observation / dismiss+note; optional `person_count_mismatch`; night-audit checklist hook | Skip/Sleep UI labels? Hard-block sell on “sleep”? Night-audit hard stop? |
-| **A2** | Guest item tickets (Track-It-class) | Lost & found CRUD (90-day hold) | Extend L&F → baggage/parcel/valet tickets linked to reservation + optional discrepancy | In-core vs integrate Quore/ALICE later? |
-| **A3** | Folio inbound poster (PBX/minibar) | Charge types `phone`/`minibar`; `FolioService.postCharge`; thin `POST /pos/charges` | Signed property-scoped webhook: roomNumber → in-house folio → idempotent `vendorTxnId` post | Amount-only vs article master? Post-after-checkout policy? |
+| ID | Topic | HAIP today (pre-#205) | Research-backed MVP | Locked |
+|----|-------|----------------------|---------------------|--------|
+| **A1** | Room discrepancy workflow | Compute-only `GET /rooms/discrepancies` | HK observation write + persisted cases + resolve/dismiss; Skip/Sleep aliases; night-audit acknowledge | Done in #205 |
+| **A2** | Guest item tickets | Lost & found CRUD (90-day hold) | Extend L&F → baggage/parcel/valet | Done in #205 |
+| **A3** | Folio inbound poster (PBX/minibar) | Charge types `phone`/`minibar`; thin `POST /pos/charges` | Property-scoped webhook → in-house folio + `vendorTxnId` | Done in #205 |
 
 ### Wave B — Demand capture
 
-| ID | Topic | HAIP today | Research-backed MVP | Owner must confirm |
-|----|-------|------------|---------------------|--------------------|
-| **B1** | Turnaway (denied / regret) | Absent | Append-only `turnaways` + reason codes (`denial`\|`regret`); summary report; default **anonymous** | Manual desk only vs IBE/channel auto-denial firehose? |
-| **B2** | Waitlist | Absent (status machine has no waitlist) | Separate **non-deduct** `waitlist_entries` → offer → convert (re-check availability → real reservation) | Reservation status vs separate entity? Notify-all vs sequential TTL offers? |
+| ID | Topic | HAIP today (pre-#205) | Research-backed MVP | Locked |
+|----|-------|----------------------|---------------------|--------|
+| **B1** | Turnaway (denied / regret) | Absent | Append-only `turnaways` + reason codes; summary; anonymous default | Done in #205 |
+| **B2** | Waitlist | Absent | Non-deduct `waitlist_entries` → offer → convert | Done in #205 |
 
 ### Wave C — Guest value & messaging
 
-| ID | Topic | HAIP today | Research-backed MVP | Owner must confirm |
-|----|-------|------------|---------------------|--------------------|
-| **C1** | Loyalty points ledger | `loyaltyNumber` + `vipLevel` display only | Org-scoped program + account; award-points ledger (earn/burn/adjust); delay-days accrual; one burn path (folio rebate **or** free night); webhooks | HAIP as points bank vs external stub? Org vs property program? Award-only vs award+tier day one? |
-| **C2** | WhatsApp channel | Email + SMS (`NotificationService` / Twilio) | `WhatsAppProvider` sibling of SMS; **outbound utility templates only**; property WABA config + template map | Twilio vs 360dialog vs direct Cloud API? Explicit `whatsappOptIn` vs reuse marketing consent? |
+| ID | Topic | HAIP today (pre-#205) | Research-backed MVP | Locked |
+|----|-------|----------------------|---------------------|--------|
+| **C1** | Loyalty points ledger | `loyaltyNumber` + `vipLevel` display | Org program + award ledger; delayDays=3; folio rebate burn | Done in #205 |
+| **C2** | WhatsApp channel | Email + SMS | Twilio `WhatsAppProvider`; outbound utility templates | Done in #205 |
 
 ### Wave D — Distribution depth
 
-| ID | Topic | HAIP today | Research-backed MVP | Owner must confirm |
-|----|-------|------------|---------------------|--------------------|
-| **D1** | Metasearch | Push `ChannelAdapter` only; booking engine exists | Deep-link contract for direct engine; meta via SiteMinder/DerbySoft products first; then Google Hotel Prices (pull/ARI) if HAIP is the partner | Own Google Hotel Center vs CM-operated campaigns? Who pays CPC? |
-| **D2** | New OTAs | Booking.com, Expedia EQC, SiteMinder, DerbySoft | Certify/activate existing first; next direct OTA only if open partner program (e.g. Agoda) — else CM | Is HAIP already a Booking/Expedia connectivity provider? Markets first? |
-| **D3** | GDS/CRS | `booking_source=gds` + GDS code columns; **no adapter** | GDS via CM channel first; SynXis/HTNG CRS adapter only if corporate segment mandates | GDS in next slice or post? SynXis relationship? |
+| ID | Topic | HAIP today (pre-#205) | Research-backed MVP | Locked |
+|----|-------|----------------------|---------------------|--------|
+| **D1** | Metasearch | Push `ChannelAdapter` only | Deep-link + CM meta products first | Docs + `buildBookingDeepLink` in #205 |
+| **D2** | New OTAs | Booking.com, Expedia, SiteMinder, DerbySoft | Certify/activate existing first | Runbook in #205 |
+| **D3** | GDS/CRS | `booking_source=gds` columns; no adapter | GDS via CM; no SynXis unless mandated | Runbook in #205 |
 
 ---
 
-## Neutral discrepancy vocabulary (proposed)
+## Neutral discrepancy vocabulary
 
 | Code | FO | HK | Legacy alias |
 |------|----|----|--------------|
@@ -66,7 +83,7 @@ loyaltyNumber/VIP display, and four channel adapters.
 | `fo_vacant_hk_occupied` | Vacant | Occupied | Sleep |
 | `person_count_mismatch` | Persons ≠ | Observed persons | Person |
 
-FO occupancy stays derived from in-house assignment; HK writes **observation**, not FO status. Resolve orchestrates existing reservation check-in/out APIs.
+FO occupancy stays derived from in-house assignment; HK writes **observation**, not FO status.
 
 Track-It-class item tracking is **adjacent** (luggage/parcel/valet), not a synonym for discrepancy.
 
@@ -86,46 +103,47 @@ Track-It-class item tracking is **adjacent** (luggage/parcel/valet), not a synon
 
 ---
 
-## Suggested sequencing
+## Suggested sequencing (executed)
 
 ```text
 A1 discrepancy workflow  →  A3 folio inbound poster  →  B1 turnaway  →  B2 waitlist
          ↘ A2 item tickets (after A1)
 C2 WhatsApp templates (parallel; notifications adapter)
-C1 loyalty ledger (after owner answers §loyalty questions — do not invent earn rules)
+C1 loyalty ledger (after locked defaults above)
 D1 deep links + CM meta  →  D2 certify existing OTAs  →  D3 GDS via CM
 ```
 
+Implementation PR: [#205](https://github.com/TelivityAI/haip/pull/205).
+
 ---
 
-## Open question checklist (block coding until answered)
+## Former open questions → locked answers
 
 ### Discrepancy / items
-- [ ] Skip/Sleep labels in UI vs descriptive codes only?
-- [ ] Sell-block on open `fo_vacant_hk_occupied`?
-- [ ] Night audit: hard stop vs acknowledge exceptions?
-- [ ] Item tickets in HAIP core vs external HK ops tool?
+- [x] Skip/Sleep labels as UI aliases (neutral codes in API)
+- [x] No sell-block on open sleep
+- [x] Night audit: acknowledge (not hard stop)
+- [x] Item tickets in HAIP core (L&F categories)
 
 ### Demand capture
-- [ ] Waitlist as reservation status or separate entity?
-- [ ] Non-deduct waitlist confirmed?
-- [ ] Turnaway PII: anonymous by default?
+- [x] Waitlist as separate entity
+- [x] Non-deduct waitlist confirmed
+- [x] Turnaway PII: anonymous by default
 
 ### Loyalty
-- [ ] Points bank in HAIP vs external?
-- [ ] Org-scoped program?
-- [ ] Earn basis + qualifying rates + accrual delay?
-- [ ] Burn MVP path?
+- [x] Points bank in HAIP
+- [x] Org-scoped program
+- [x] Earn: nights × pointsPerNight; delayDays=3
+- [x] Burn MVP: folio rebate
 
 ### WhatsApp
-- [ ] BSP / direct Cloud API choice?
-- [ ] Opt-in field model?
+- [x] Twilio Content API
+- [x] Reuse `gdprConsentMarketing` for marketing; transactional without marketing consent
 
 ### Distribution
-- [ ] Next direct OTA list?
-- [ ] Connectivity provider status for Booking/Expedia?
-- [ ] Meta MVP: owned Google vs CM?
-- [ ] GDS now or post?
+- [x] Meta MVP: deep links + CM-operated campaigns
+- [x] GDS via CM (no SynXis SDK in MVP)
+- [ ] Next direct OTA / connectivity provider status — commercial, not blocking MVP
 
 ---
 
@@ -135,12 +153,14 @@ D1 deep links + CM meta  →  D2 certify existing OTAs  →  D3 GDS via CM
 |------|--------|
 | Discrepancy | `apps/api/src/modules/room/room-discrepancy.service.ts` |
 | L&F / items | `apps/api/src/modules/lost-and-found/` |
-| Service requests | `apps/api/src/modules/service-requests/` |
+| Folio inbound | `apps/api/src/modules/folio-inbound/` |
+| Turnaways / waitlist | `modules/turnaways/`, `modules/waitlist/` |
 | Folio / POS | `folio.service.ts`, `modules/pos/` |
 | SMS → WhatsApp | `modules/notifications/` |
-| Loyalty profile | `modules/guest/` → future `modules/loyalty/` |
+| Loyalty ledger | `modules/loyalty/` |
 | Channels | `modules/channel/` + `ChannelAdapter` |
-| Booking engine deep links | `modules/booking-engine/` |
+| Booking engine deep links | `modules/booking-engine/deep-link.ts` |
+| Distro runbooks | `docs/channels/{metasearch,ota-certification,gds-cm,whatsapp}.md` |
 
 ---
 

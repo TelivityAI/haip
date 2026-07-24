@@ -1,9 +1,11 @@
 # WhatsApp as a guest messaging channel (research brief)
 
-**Status:** Research only — not implemented.  
-**Audience:** Owner decision + NestJS adapter design.  
+**Status:** Defaults locked — Twilio Content API + reuse `gdprConsentMarketing`
+for marketing; outbound utility templates MVP. Implemented in
+[#205](https://github.com/TelivityAI/haip/pull/205).  
+**Audience:** NestJS adapter design + operator onboarding.  
 **Date:** 2026-07-24  
-**Context:** HAIP already has email guest-comms (`guest-comms` agent + `EmailService`) and SMS via `NotificationService` / `SmsProvider`. Build plan lists WhatsApp as later guest-journey work (`HAIP_BUILD_PLAN.md`).
+**Context:** HAIP already has email guest-comms (`guest-comms` agent + `EmailService`) and SMS via `NotificationService` / `SmsProvider`. WhatsApp is a sibling provider under the same module.
 
 This brief maps Meta’s WhatsApp Business Platform rules onto HAIP’s existing notification abstraction. It does **not** invent hotel domain concepts beyond the lifecycle types already in guest-comms (`confirmation`, `pre_arrival`, day-of, `post_stay`).
 
@@ -11,11 +13,12 @@ This brief maps Meta’s WhatsApp Business Platform rules onto HAIP’s existing
 
 ## Executive recommendation
 
-| Decision | Recommendation |
-|----------|----------------|
+| Decision | Recommendation (locked) |
+|----------|-------------------------|
 | MVP | **Outbound transactional templates only** (utility: confirmation / pre-arrival / ops alerts). No free-form staff inbox yet. |
-| Access path | Prefer **one BSP** for v1 if Twilio is already the SMS reference adapter; otherwise **direct Cloud API** if you want zero BSP markup and accept Meta-ops burden. |
-| “Self-host WhatsApp” | **Do not.** On-Premises API is deprecated; Cloud API is Meta-hosted. The real fork is **direct Cloud API vs BSP**, not self-host vs cloud. |
+| Access path | **Twilio** Content API (same vendor as existing SMS). |
+| Consent | Reuse **`gdprConsentMarketing`** for marketing templates; transactional utility sends when guest has phone (no marketing consent required). |
+| “Self-host WhatsApp” | **Do not.** On-Premises API is deprecated; Cloud API is Meta-hosted. |
 | Two-way | Phase 2: inbound webhooks → staff notifications / service-request stubs. |
 
 ---

@@ -22,14 +22,9 @@ Open-source, API-first hotel PMS (Apache 2.0).
 ## Planned
 - New-property onboarding wizard
 - Complete guest registration (ID, minors/guardian, per-jurisdiction compliance — deeper than desk card)
-- **Un-thin backlog** (research-backed, pending KB owner confirmation) — see
-  [`docs/plans/unthin-backlog.md`](docs/plans/unthin-backlog.md):
-  discrepancy workflow + item tickets, turnaway/waitlist, loyalty points ledger,
-  WhatsApp templates, folio inbound poster (PBX/minibar), metasearch deep links,
-  OTA cert path, GDS via CM/CRS
-- Loyalty (guest recognition → points ledger / tiers — after owner answers in un-thin plan)
+- Loyalty tiers / external points-bank adapters (MVP award ledger ships in un-thin #205; tiers still later)
 - Expanded AI assistance (grounded explanations, suggestions, per-property calibration)
-- Expanded channel/OTA connectivity (certify existing adapters; meta/GDS via plan)
+- Expanded channel/OTA connectivity (next direct OTAs after certify path; Google Hotel Center partner if needed)
 - Revenue management (pricing, demand, booking pace, forecasting)
 - Business intelligence & analytics (own-property demand, pickup, pace, RevPAR)
 - Deeper reporting and exports
@@ -38,12 +33,17 @@ Open-source, API-first hotel PMS (Apache 2.0).
 - HK ops depth, groups depth
 
 ## In progress
+- **Un-thin backlog** (defaults locked; implementation [#205](https://github.com/TelivityAI/haip/pull/205)) — see
+  [`docs/plans/unthin-backlog.md`](docs/plans/unthin-backlog.md):
+  discrepancy workflow + item tickets, turnaway/waitlist, loyalty points ledger,
+  WhatsApp templates, folio inbound poster (PBX/minibar), metasearch deep links,
+  OTA cert path, GDS via CM
 - **Rates depth** — restrictions CRUD UI, derived-rate create, effective-rate calculator fix, PMS `assertSellable` on create
 - Production deployment path (compose, container images, docs)
 - Full dashboard localization (page-level i18n)
 - End-to-end + money-path test coverage
 - Guest journey polish — [#182](https://github.com/telivityai/haip/pull/182) (lifecycle triggers, communications desk, registration settings, email compose)
-- Guest journey depth — advance pre-register API, SMS on reservation messages _(WhatsApp provider, guest app, kiosk UI still later)_
+- Guest journey depth — advance pre-register API, SMS + WhatsApp templates on reservation messages _(guest app, kiosk UI still later)_
 
 Contributions welcome — open an issue or a draft PR to claim an area, and tag a
 maintainer to coordinate before starting larger work.
