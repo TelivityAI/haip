@@ -53,3 +53,33 @@ export interface WhatsAppProvider {
 
 /** DI token so the service can resolve all registered WhatsApp providers. */
 export const WHATSAPP_PROVIDERS = Symbol('WHATSAPP_PROVIDERS');
+
+export interface TelegramMessage {
+  /** Telegram chat id (numeric or @username for public chats). */
+  to: string;
+  body: string;
+  /** Optional parse mode: HTML or MarkdownV2. */
+  parseMode?: 'HTML' | 'MarkdownV2';
+}
+
+export interface TelegramResult {
+  sent: boolean;
+  messageId?: string;
+  provider: string;
+  error?: string;
+}
+
+export interface TelegramProvider {
+  readonly name: string;
+  isConfigured(): boolean;
+  send(message: TelegramMessage): Promise<TelegramResult>;
+}
+
+/** All registered Telegram providers (factory input). */
+export const TELEGRAM_PROVIDERS = Symbol('TELEGRAM_PROVIDERS');
+
+/** Active Telegram adapter resolved from env via {@link NotificationProviderFactory}. */
+export const TELEGRAM_PROVIDER = Symbol('TELEGRAM_PROVIDER');
+
+/** Active SMS adapter resolved from env via {@link NotificationProviderFactory}. */
+export const SMS_PROVIDER = Symbol('SMS_PROVIDER');

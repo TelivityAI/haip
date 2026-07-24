@@ -15,11 +15,14 @@ import { WebhookService } from '../webhook/webhook.service';
 import type {
   SmsProvider,
   SmsResult,
+  TelegramMessage,
+  TelegramProvider,
+  TelegramResult,
   WhatsAppMessage,
   WhatsAppProvider,
   WhatsAppResult,
 } from './notification-provider.interface';
-import { SMS_PROVIDERS, WHATSAPP_PROVIDERS } from './notification-provider.interface';
+import { SMS_PROVIDER, TELEGRAM_PROVIDER, WHATSAPP_PROVIDERS } from './notification-provider.interface';
 
 /**
  * Outbound guest-notification dispatcher (SMS).
@@ -36,16 +39,12 @@ export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
 
   constructor(
-    @Inject(SMS_PROVIDERS) private readonly smsProviders: SmsProvider[],
+    @Inject(SMS_PROVIDER) private readonly smsProvider: SmsProvider,
+    @Inject(TELEGRAM_PROVIDER) private readonly telegramProvider: TelegramProvider,
     @Inject(WHATSAPP_PROVIDERS) private readonly whatsappProviders: WhatsAppProvider[],
     private readonly webhooks: WebhookService,
     @Inject(DRIZZLE) private readonly db: any,
   ) {}
-
-  /** The active SMS provider: Twilio when configured, else the console fallback. */
-  private smsProvider(): SmsProvider {
-    return this.pickProvider(this.smsProviders);
-  }
 
   /** The active WhatsApp provider: Twilio when configured, else console. */
   private whatsappProvider(): WhatsAppProvider {
@@ -85,8 +84,7 @@ export class NotificationService {
    */
   async sendSms(propertyId: string, to: string, body: string): Promise<SmsResult> {
     this.assertSmsQuota(propertyId);
-    const provider = this.smsProvider();
-    const result = await provider.send({ to, body });
+    const result = await this.smsProvider.send({ to, body });
 
     // Audit the dispatch attempt, scoped to the tenant. Reuses the existing
     // guest.communication_sent event (entity.action pattern).
@@ -147,6 +145,38 @@ export class NotificationService {
       );
     }
 
+    return result;
+  }
+
+  async sendTelegram(
+    propertyId: string,
+    to: string,
+    body: string,
+    opts?: { parseMode?: TelegramMessage['parseMode'] },
+  ): Promise<TelegramResult> {
+    this.assertSmsQuota(propertyId);
+    const result = await this.telegramProvider.send({
+      to,
+      body,
+      parseMode: opts?.parseMode,
+    });
+
+    await this.webhooks.emit(
+      'guest.communication_sent',
+      'notification',
+      to,
+      {
+        channel: 'telegram',
+        provider: result.provider,
+        success: result.sent,
+        ...(result.error ? { error: result.error } : {}),
+      },
+      propertyId,
+    );
+
+    if (!result.sent) {
+      this.logger.warn(`Telegram to ${to} not delivered via ${result.provider}: ${result.error}`);
+    }
     return result;
   }
 
