@@ -180,7 +180,7 @@ analyze() → recommend() → execute() → recordOutcome() → train()
 
 | Agent | What It Does |
 |-------|-------------|
-| **Guest Communication** | Template-based lifecycle emails: confirmation, pre-arrival (3 days), day-of arrival, welcome (on check-in), post-stay, and win-back (90 days). **Event-driven drafts** on `reservation.created` / `checked_in` / `checked_out` via `GuestCommsListener`; scheduled types still from manual/cron `guest_comms/run`. Repeat vs first-time personalization. GDPR opt-out enforcement. Duplicate prevention via decision log. Configurable SMTP (defaults to draft-only). |
+| **Guest Communication** | Template-based lifecycle emails: confirmation, pre-arrival (3 days), day-of arrival, welcome (on check-in), post-stay, and win-back (90 days). **Event-driven drafts** on `reservation.created` / `checked_in` / `checked_out` via `GuestCommsListener`; scheduled types still from manual/cron `guest_comms/run`. Repeat vs first-time personalization. GDPR opt-out enforcement. Duplicate prevention via decision log. Configurable SMTP (defaults to draft-only). Outbound **SMS** and **WhatsApp** templates via Twilio providers (console fallback when not configured). |
 | **Review Response** | Drafts professional responses to guest reviews entered by staff. Keyword-based topic extraction across 10 categories (cleanliness, staff, value, noise, food, wifi, etc.). Sentiment classification from rating (1-2 negative, 3 mixed, 4-5 positive). Three response styles (formal/friendly/casual). Matches guests to reservations for stay-specific references. Template-based assembly — no LLM freeform text, no hallucination risk. |
 
 ### Decision Logging & per-property calibration
@@ -240,13 +240,23 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | 3 | **Front desk stay ops** | [#181](https://github.com/telivityai/haip/pull/181) | Arrivals / in-house queues, walk-in, in-house room move, registration card at check-in, operational notes at the desk. See **Reservation Management**. |
 | 4 | **A/R & cashier polish** | [#180](https://github.com/telivityai/haip/pull/180) | List cash drawers/sessions, A/R ledger CRUD + aging UX, folio→A/R from folio detail, reverse-transfer picker. See **Accounting & Cashiering** and **Folio & Billing**. |
 | 5 | **Commercial profiles** | [#180](https://github.com/telivityai/haip/pull/180) (also [#179](https://github.com/telivityai/haip/pull/179)) | Standing-account billing terms on group profiles; link A/R ledgers and negotiated rates; Commercial dashboard page. See **Groups & Commercial Profiles**. |
-| 8 | **Rates depth** | _PR pending_ | Rate-plan restrictions CRUD (MinLOS / MaxLOS / CTA / CTD / stop-sell + day-of-week overrides) on the dashboard detail page; derived-rate create fields; effective-rate calculator fix; PMS `reservation.create` calls `assertSellable`. See **Rate Plans & Pricing**. |
+| 6 | **Distribution polish** | [#202](https://github.com/telivityai/haip/pull/202) | Channels dashboard: rate-parity grid + overrides, connection mapping editor, content-push error surfacing. See **Channel Manager**. |
+| 7 | **Guest journey** | [#202](https://github.com/telivityai/haip/pull/202) | Advance pre-register API, reservation SMS via Twilio (or console in demo), loyalty number / VIP display polish. See **Reservation Management** and **Guest Profiles**. |
+| 8 | **Rates depth** | [#183](https://github.com/telivityai/haip/pull/183) | Rate-plan restrictions CRUD (MinLOS / MaxLOS / CTA / CTD / stop-sell + day-of-week overrides); derived-rate create; effective-rate calculator fix; PMS `reservation.create` calls `assertSellable`. See **Rate Plans & Pricing**. |
+| 9 | **Property ops** | [#202](https://github.com/telivityai/haip/pull/202) | Lost & found, room status discrepancy compute, service requests, door-lock credentials, HK checklist / VIP / forecast depth. See **Housekeeping** and **Room Management**. |
+| 10 | **Room discrepancies** | [#205](https://github.com/telivityai/haip/pull/205) | Housekeeping occupancy observation, persisted discrepancy cases, resolve / dismiss, night-audit open-count. See **Room Management**. |
+| 11 | **Demand capture** | [#205](https://github.com/telivityai/haip/pull/205) | Turnaway logging with reason codes + summary; non-deducting waitlist → offer → convert to reservation. See **Reservation Management**. |
+| 12 | **Loyalty ledger** | [#205](https://github.com/telivityai/haip/pull/205) | Organization loyalty program, guest accounts, earn/burn/adjust transactions (folio rebate burn). See **Guest Profiles**. |
+| 13 | **WhatsApp messaging** | [#205](https://github.com/telivityai/haip/pull/205) | Outbound WhatsApp templates via Twilio (console fallback in demo); marketing uses existing GDPR marketing consent. See **Guest Engagement Agents**. |
+| 14 | **Folio inbound posting** | [#205](https://github.com/telivityai/haip/pull/205) | Property-scoped inbound charges (e.g. phone / minibar) to in-house folios with vendor transaction idempotency. See **Folio & Billing**. |
+| 15 | **Booking deep links** | [#205](https://github.com/telivityai/haip/pull/205) | Direct-booking deep-link helper for marketing / metasearch landings; channel activation notes under `docs/channels/`. See **Direct Booking Engine**. |
 
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
 - Authenticated by a per-property **publishable key** (`x-booking-key`): property-scoped, low-trust (it ships in client-side HTML), and restricted to search/quote/book and read-or-cancel-own-confirmation — it can never enumerate other reservations or tenants.
 - Reuses the existing availability, rate, tax, reservation, folio and payment engines — prices are **re-quoted server-side** (never trusts a client price), payments are classified as a **deposit** liability (KB §10.5), and `reservation.created` fires so the channel manager pushes updated availability everywhere.
 - **Embeddable widget app** (`apps/booking`) plus a dashboard **Settings → Booking Engine** tab to generate/rotate keys, choose sellable room types & rates, set branding, and configure the deposit policy.
+- **Deep links** — build guest-facing search/book URLs (property, dates, occupancy, optional room/rate preselect, click attribution) for the hotel’s own booking page.
 
 ### Data Migration & Import
 - A generic **CSV import** on-ramp (`/api/v1/import/*`) for hotels switching from another PMS: upload a CSV, map columns, **dry-run** to validate, then commit — with **per-row error reporting** (one bad row never aborts the batch). Importers for guests, room types and rate plans, trivially extensible to more entities.
@@ -263,7 +273,10 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Group check-in (batch operations)
 - Bulk actions across multiple reservations (check-in / check-out / cancel) with per-reservation success/error results
 - Reservation notes with active-count tracking
-- Guest messaging from a reservation (GDPR marketing opt-out enforced)
+- Guest messaging from a reservation (email / SMS / WhatsApp templates; GDPR marketing opt-out enforced)
+- Advance **pre-register** fields on a reservation before arrival
+- **Waitlist** — non-deducting entries (offer → convert to a real reservation when inventory allows)
+- **Turnaways** — append-only denied / regret demand with reason codes and summary reporting
 - Unassigned-reservation finder (confirmed/assigned reservations with no room)
 - Batch reservation import with per-row error handling
 - Express checkout
@@ -286,6 +299,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Folio settlement and close workflows
 - Charge locking for night audit
 - **Transfer folio balance to A/R** from folio detail (direct-bill handoff)
+- **Inbound posting** — property-scoped webhook posts (e.g. phone / minibar) onto the in-house guest folio, idempotent by vendor transaction id
 
 ### Split Folios & House Accounts
 - **Split folio** — multiple folios per reservation with config-driven routing rules (e.g. room & tax → company folio, incidentals → guest folio) and the ability to move transactions between folios individually or by charge type (night-audit-locked charges are protected).
@@ -322,6 +336,8 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - ADA/accessible room tracking
 - Real-time status summary dashboard
 - Per-room photo and editable features/amenities from the room detail panel (primary image falls back to the room type's photo)
+- **Discrepancy workflow** — housekeeping occupancy observation vs front-office in-house state; open cases with resolve / dismiss; open-count for night audit
+- Optional door-lock credential issuance hooks for in-house stays
 
 ### Media & Photos
 - Image management for **properties, room types, and rooms** — a polymorphic `media` model with a denormalized `property_id` on every row for multi-tenant scoping
@@ -334,6 +350,8 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Full guest profiles with contact, preferences, company, and stay history
 - ID document fields captured at check-in (type, number, issuing country, expiry) and shown on the guest profile
 - VIP level tracking (standard, silver, gold, platinum, diamond)
+- Loyalty membership number on the guest profile
+- **Loyalty points ledger** — organization-scoped program, guest accounts, earn / burn / adjust transactions (burn as folio rebate)
 - Do Not Rent (DNR) flagging
 - GDPR consent tracking (including marketing opt-in/out) and data retention controls
 - Property setting `guestRegistrationRequired` — when on, check-in requires a signed registration card
@@ -349,6 +367,8 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Inspection pass/fail with automatic re-clean on failure
 - Room status integration — completing a task transitions the room through `clean → inspected → guest_ready`
 - Stayover task generation for occupied rooms
+- **Lost & found** — held / returned / disposed items, including baggage / parcel / valet categories
+- **Service requests** — maintenance and guest-service tickets linked to rooms / reservations
 - Dashboard with room summary, task summary, housekeeper performance, and urgent rooms
 - Analytics: average turn time, median turn time, inspection pass rate, maintenance issue rate, breakdown by room type and housekeeper
 
@@ -380,6 +400,8 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | **Expedia (EQC)** | Direct integration | EQC Availability & Rates (XML) for ARI, Booking Notification push for inbound reservations, and the **Image API** for content (with Expedia's own image limits). |
 | **SiteMinder** | Aggregator (pmsXchange) | SOAP / OTA XML. Connect once, distribute to 450+ OTAs — ARI push, reservation delivery, rate parity. (Content is managed in the SiteMinder extranet — no PMS content push.) |
 | **DerbySoft** | Aggregator (Property Connector) | REST/JSON + OAuth Bearer. ARI (inventory/rate/availability) with Delta/Overlay, property profile sync, inbound LiveCheck/Book/Modify/Cancel. See [`docs/channels/derbysoft.md`](./docs/channels/derbysoft.md). |
+
+Operator notes for activating existing adapters, metasearch landings on the direct booking engine, and GDS via a channel manager: [`docs/channels/`](./docs/channels/).
 
 ### Payments (Stripe)
 - PCI DSS compliant — never stores raw card data
