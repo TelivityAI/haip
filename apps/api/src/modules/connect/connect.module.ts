@@ -5,6 +5,8 @@ import { ConnectContentService } from './connect-content.service';
 import { ConnectBookingService } from './connect-booking.service';
 import { ConnectEventsService } from './connect-events.service';
 import { ConnectInsightsService } from './connect-insights.service';
+import { ConnectCredentialsController } from './connect-credentials.controller';
+import { ConnectCredentialsService } from './connect-credentials.service';
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { AuthModule } from '../auth/auth.module';
@@ -13,13 +15,14 @@ import { PolicyModule } from '../policy/policy.module';
 
 @Module({
   imports: [ReservationModule, WebhookModule, AuthModule, RatePlanModule, PolicyModule],
-  controllers: [ConnectController],
+  controllers: [ConnectController, ConnectCredentialsController],
   providers: [
     ConnectSearchService,
     ConnectContentService,
     ConnectBookingService,
     ConnectEventsService,
     ConnectInsightsService,
+    ConnectCredentialsService,
   ],
   exports: [ConnectSearchService, ConnectBookingService],
 })
