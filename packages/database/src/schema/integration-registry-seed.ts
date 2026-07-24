@@ -13,7 +13,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'pmsxchange-siteminder',
     category: 'Channel Managers',
     name: 'pmsXchange (SiteMinder)',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/INTEGRATIONS.md#channel-managers',
     adapterKey: 'siteminder',
     description:
@@ -23,7 +23,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'derbysoft-property-connector',
     category: 'Channel Managers',
     name: 'DerbySoft Property Connector',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/INTEGRATIONS.md#channel-managers',
     adapterKey: 'derbysoft',
     description:
@@ -33,7 +33,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'beds24',
     category: 'Channel Managers',
     name: 'Beds24',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/channel-beds24-channex.md',
     adapterKey: 'beds24',
     description:
@@ -43,7 +43,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'channex',
     category: 'Channel Managers',
     name: 'Channex',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/channel-beds24-channex.md',
     adapterKey: 'channex',
     description:
@@ -343,7 +343,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'adyen',
     category: 'Payments',
     name: 'Adyen',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/payments-adyen-mollie-square-braintree.md',
     adapterKey: 'adyen',
     description:
@@ -353,7 +353,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'mollie',
     category: 'Payments',
     name: 'Mollie',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/payments-adyen-mollie-square-braintree.md',
     adapterKey: 'mollie',
     description:
@@ -363,7 +363,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'square',
     category: 'Payments',
     name: 'Square',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/payments-adyen-mollie-square-braintree.md',
     adapterKey: 'square',
     description:
@@ -373,7 +373,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'braintree',
     category: 'Payments',
     name: 'Braintree standalone',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/payments-adyen-mollie-square-braintree.md',
     adapterKey: 'braintree',
     description:
@@ -393,7 +393,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'infobip-omnichannel',
     category: 'Guest Messaging',
     name: 'Infobip Omnichannel',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/messaging-infobip-vonage-telegram.md',
     adapterKey: 'infobip',
     description:
@@ -403,7 +403,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'vonage-messages',
     category: 'Guest Messaging',
     name: 'Vonage Messages',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/messaging-infobip-vonage-telegram.md',
     adapterKey: 'vonage',
     description:
@@ -413,7 +413,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'telegram-bot',
     category: 'Guest Messaging',
     name: 'Telegram Bot',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/messaging-infobip-vonage-telegram.md',
     adapterKey: 'telegram',
     description:
@@ -423,7 +423,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'bird',
     category: 'Guest Messaging',
     name: 'Bird',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/bird-sms.md',
     adapterKey: 'bird',
     description:
@@ -523,7 +523,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'sendgrid',
     category: 'Email, Marketing & CRM',
     name: 'SendGrid',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/sendgrid-email.md',
     adapterKey: 'sendgrid',
     description:
@@ -623,7 +623,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'google-business-profile-reviews',
     category: 'Reviews & Reputation',
     name: 'Google Business Profile Reviews',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/review-sources.md',
     adapterKey: 'google',
     description:
@@ -633,7 +633,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'tripadvisor-content-api',
     category: 'Reviews & Reputation',
     name: 'TripAdvisor Content API',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/review-sources.md',
     adapterKey: 'tripadvisor',
     description:
@@ -1023,7 +1023,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'salto-ks',
     category: 'Door Locks & Access',
     name: 'Salto KS',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/door-locks-nuki-ttlock-salto.md',
     adapterKey: 'salto_ks',
     description:
@@ -1033,7 +1033,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'nuki',
     category: 'Door Locks & Access',
     name: 'Nuki',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/door-locks-nuki-ttlock-salto.md',
     adapterKey: 'nuki',
     description:
@@ -1043,7 +1043,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'ttlock',
     category: 'Door Locks & Access',
     name: 'TTLock',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/door-locks-nuki-ttlock-salto.md',
     adapterKey: 'ttlock',
     description:
@@ -1133,7 +1133,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'serbia-eturista',
     category: 'ID Verification & Online Check-in',
     name: 'Serbia eTurista',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/serbia-fiscal.md',
     adapterKey: 'serbia_eturista',
     description:
@@ -1463,7 +1463,7 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
     slug: 'serbia-suf-esir',
     category: 'Fiscalization & Tax Compliance (worldwide)',
     name: 'Serbia SUF/ESIR',
-    status: 'adapter',
+    status: 'shipped',
     docsPath: 'docs/integrations/serbia-fiscal.md',
     adapterKey: 'serbia_suf_esir',
     description:

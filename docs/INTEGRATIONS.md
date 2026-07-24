@@ -19,6 +19,19 @@ Selling rooms is global; receipts and guest registration are local law. HAIP tre
 
 19 categories, ~230 integrations, phased: automation/notifications/email/BI/standards first; vendor adapters next; certified distribution and country compliance as onboarding/market entry demand.
 
+### Catalog status (registry)
+
+The property Integrations dashboard / `GET /api/v1/admin/integrations` uses four statuses — **not** “only shipped counts”:
+
+| Status | Meaning |
+|--------|---------|
+| `shipped` | In-product path you can enable (payments, channels, locks, SMS/email, etc.) |
+| `adapter` | Provider key wired (often console/demo until partner credentials / authority clients) |
+| `recipe` | Works today via docs + existing REST/webhooks/CSV/SQL — no vendor SDK required |
+| `planned` | Partner/cert or country pack not started yet |
+
+The flat list below is the full public surface. Registry seed status is the maturity filter on top of that list.
+
 ### Channel Managers
 
 - **pmsXchange (SiteMinder)** - Channel manager connectivity for rates, availability, restrictions, reservations, and inventory updates through SiteMinder's PMS exchange model.
