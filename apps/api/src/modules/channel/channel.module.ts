@@ -16,6 +16,8 @@ import { ExpediaAdapter } from './adapters/expedia/expedia.adapter';
 import { ExpediaInboundController } from './adapters/expedia/expedia-inbound.controller';
 import { DerbySoftAdapter } from './adapters/derbysoft/derbysoft.adapter';
 import { DerbySoftInboundController } from './adapters/derbysoft/derbysoft-inbound.controller';
+import { Beds24Adapter } from './adapters/beds24/beds24.adapter';
+import { ChannexAdapter } from './adapters/channex/channex.adapter';
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { MediaModule } from '../media/media.module';
@@ -40,6 +42,8 @@ import { MediaModule } from '../media/media.module';
     SiteMinderAdapter,
     ExpediaAdapter,
     DerbySoftAdapter,
+    Beds24Adapter,
+    ChannexAdapter,
   ],
   exports: [ChannelService, AriService, InboundReservationService],
 })
