@@ -20,6 +20,9 @@ For event delivery (signatures, payloads, retries, subscriptions), start with **
 | [BI on Postgres](bi-postgres.md) | Read-only DB access for Metabase, Grafana, etc. |
 | [iCal calendar bridge](ical-calendar-bridge.md) | Planned calendar sync (Airbnb, Vrbo, Google Calendar) |
 | [Serbia fiscal & guest registration](serbia-fiscal.md) | Property fiscal config, `invoice.requested`, eTurista check-in hooks |
+| [SendGrid email](sendgrid-email.md) | Transactional email via SendGrid API |
+| [Bird SMS](bird-sms.md) | Guest SMS via Bird/MessageBird |
+| [Review sources (Google / TripAdvisor)](review-sources.md) | Pull external reviews into HAIP |
 
 ## Base URL
 

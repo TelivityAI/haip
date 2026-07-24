@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, notInArray, lte, gte, sql } from 'drizzle-orm';
-import { reservations, roomTypes, properties, rooms } from '@telivityhaip/database';
+import { eq, and, notInArray, sql, lt, gt } from 'drizzle-orm';
+import { reservations, roomTypes, properties, rooms, icalBlocks, icalFeeds } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 
 export interface AvailabilityResult {
@@ -91,6 +91,35 @@ export class AvailabilityService {
       roomCountRows.map((r: any) => [r.roomTypeId, Number(r.count ?? 0)]),
     );
 
+    // Active import feeds reduce availability as one busy unit per feed/date.
+    // Counting distinct feedIds avoids double-counting overlapping events from
+    // the same external calendar.
+    const overlappingIcalBlocks = await conn
+      .select({
+        roomTypeId: icalBlocks.roomTypeId,
+        feedId: icalBlocks.feedId,
+        startDate: icalBlocks.startDate,
+        endDate: icalBlocks.endDate,
+      })
+      .from(icalBlocks)
+      .innerJoin(
+        icalFeeds,
+        and(
+          eq(icalFeeds.id, icalBlocks.feedId),
+          eq(icalFeeds.propertyId, propertyId),
+          eq(icalFeeds.isActive, true),
+          eq(icalFeeds.direction, 'import'),
+        ),
+      )
+      .where(
+        and(
+          eq(icalBlocks.propertyId, propertyId),
+          lt(icalBlocks.startDate, checkOut),
+          gt(icalBlocks.endDate, checkIn),
+          ...(roomTypeId ? [eq(icalBlocks.roomTypeId, roomTypeId)] : []),
+        ),
+      );
+
     // Generate date-level availability
     const results: AvailabilityResult[] = [];
     const startDate = new Date(checkIn);
@@ -115,16 +144,26 @@ export class AvailabilityService {
             r.arrivalDate <= dateStr &&
             r.departureDate > dateStr,
         ).length;
+        const importedBusy = new Set(
+          overlappingIcalBlocks
+            .filter(
+              (b: any) =>
+                b.roomTypeId === type.id &&
+                b.startDate <= dateStr &&
+                b.endDate > dateStr,
+            )
+            .map((b: any) => b.feedId),
+        ).size;
 
         const overbookingBuffer = Math.floor(totalRooms * (overbookingPct / 100));
-        const available = totalRooms + overbookingBuffer - sold;
+        const available = totalRooms + overbookingBuffer - sold - importedBusy;
 
         results.push({
           roomTypeId: type.id,
           roomTypeName: type.name,
           date: dateStr,
           totalRooms,
-          sold,
+          sold: sold + importedBusy,
           available: Math.max(0, available),
           overbookingBuffer,
         });

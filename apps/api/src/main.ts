@@ -69,6 +69,7 @@ async function bootstrap() {
     .addTag('admin', 'Users, roles, and permissions (local authz)')
     .addTag('folios', 'Billing and charges')
     .addTag('payments', 'Payment processing')
+    .addTag('integrations', 'Public integration catalog and property connections')
     .addTag('rate-plans', 'Rate plans and restrictions')
     .addTag('housekeeping', 'Housekeeping tasks')
     .addTag('health', 'System health checks')
