@@ -13,7 +13,7 @@ vi.mock('../context/PropertyContext', () => ({
 
 // Mock the API client.
 vi.mock('../lib/api', () => ({
-  api: { get: vi.fn(), post: vi.fn() },
+  api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
 import { api } from '../lib/api';
@@ -93,5 +93,64 @@ describe('Channels — push content', () => {
     await userEvent.click(btn);
 
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/v1/channels/push/content', { propertyId: 'prop-1', channelConnectionId: 'cc-1' }));
+  });
+
+  it('surfaces adapter errors returned in the push response', async () => {
+    (api.post as any).mockResolvedValue({
+      data: [{
+        channelConnectionId: 'cc-1',
+        result: {
+          success: false,
+          errors: [{ item: 'content', message: 'Content push is not supported by SiteMinder pmsXchange' }],
+        },
+      }],
+    });
+
+    renderAt('/cc-1');
+    const btn = await screen.findByText(/Push Content/i);
+    await userEvent.click(btn);
+
+    await waitFor(() => expect(screen.getByText(/SiteMinder pmsXchange/i)).toBeInTheDocument());
+  });
+});
+
+describe('Channels — rate parity', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/v1/channels/connections') {
+        return Promise.resolve({ data: [{ id: 'cc-1', channelCode: 'booking_com', channelName: 'Booking.com' }] });
+      }
+      if (url === '/v1/channels/rate-parity') {
+        return Promise.resolve({
+          data: [{
+            ratePlanId: 'rp-1',
+            ratePlanName: 'BAR',
+            baseAmount: 150,
+            parityViolations: 1,
+            channels: [{
+              channelConnectionId: 'cc-1',
+              channelCode: 'booking_com',
+              channelName: 'Booking.com',
+              channelRateCode: 'BAR',
+              effectiveRate: 165,
+              hasOverride: true,
+              isParity: false,
+              variance: 15,
+            }],
+          }],
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+  });
+
+  it('renders baseAmount and per-channel effectiveRate from the API', async () => {
+    renderAt('/rate-parity');
+    expect(await screen.findByText('BAR')).toBeInTheDocument();
+    expect(screen.getByText('$150.00')).toBeInTheDocument();
+    expect(screen.getByText('$165.00')).toBeInTheDocument();
+    expect(screen.getByText('Violation')).toBeInTheDocument();
+    expect(screen.getByText('Override')).toBeInTheDocument();
   });
 });

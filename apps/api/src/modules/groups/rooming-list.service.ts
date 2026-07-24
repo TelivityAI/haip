@@ -161,6 +161,8 @@ export class RoomingListService {
   }
 
   async listEntries(blockId: string, propertyId: string) {
+    // Confirm the block exists at this property before listing (404 vs empty).
+    await this.allotmentService.findBlockById(blockId, propertyId);
     return this.db
       .select()
       .from(roomingListEntries)

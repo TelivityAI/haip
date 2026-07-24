@@ -24,6 +24,7 @@ import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { SearchAvailabilityDto } from './dto/search-availability.dto';
 import { ListReservationsDto } from './dto/list-reservations.dto';
 import { CheckInDto } from './dto/check-in.dto';
+import { PreRegisterDto } from './dto/pre-register.dto';
 import { CheckOutDto } from './dto/check-out.dto';
 import { GroupCheckInDto } from './dto/group-check-in.dto';
 import { BulkActionDto } from './dto/bulk-action.dto';
@@ -233,6 +234,22 @@ export class ReservationController {
     return this.reservationService.markNoShow(id, propertyId);
   }
 
+  @Post(':id/pre-register')
+  @Roles('admin', 'front_desk')
+  @ApiOperation({
+    summary:
+      'Advance check-in / pre-register — capture registration card and ID without checking in',
+  })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 200, description: 'Registration fields saved; status unchanged' })
+  preRegister(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: PreRegisterDto,
+  ) {
+    return this.reservationService.preRegister(id, propertyId, dto);
+  }
+
   @Patch(':id/check-in')
   @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Check in reservation with optional ID capture, deposit auth, room override' })
@@ -299,7 +316,7 @@ export class ReservationController {
 
   @Post(':id/messages')
   @Roles('admin', 'front_desk')
-  @ApiOperation({ summary: 'Compose and send an email to the reservation guest (GDPR-aware)' })
+  @ApiOperation({ summary: 'Compose and send an email or SMS to the reservation guest (GDPR-aware)' })
   @ApiResponse({ status: 201, description: 'Email send/draft result' })
   composeMessage(
     @Param('id', ParseUUIDPipe) id: string,

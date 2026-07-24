@@ -16,6 +16,8 @@ import { FolioModule } from './modules/folio/folio.module';
 import { RatePlanModule } from './modules/rate-plan/rate-plan.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
+import { LostAndFoundModule } from './modules/lost-and-found/lost-and-found.module';
+import { ServiceRequestsModule } from './modules/service-requests/service-requests.module';
 import { NightAuditModule } from './modules/night-audit/night-audit.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
@@ -42,6 +44,10 @@ import { LlmModule } from './modules/llm/llm.module';
 import { SearchModule } from './modules/search/search.module';
 import { StaffNotificationsModule } from './modules/staff-notifications/staff-notifications.module';
 import { HelpModule } from './modules/help/help.module';
+import { FolioInboundModule } from './modules/folio-inbound/folio-inbound.module';
+import { TurnawaysModule } from './modules/turnaways/turnaways.module';
+import { WaitlistModule } from './modules/waitlist/waitlist.module';
+import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -60,6 +66,8 @@ const imports: any[] = [
   RatePlanModule,
   PaymentModule,
   HousekeepingModule,
+  LostAndFoundModule,
+  ServiceRequestsModule,
   NightAuditModule,
   ReportsModule,
   WebhookModule,
@@ -81,11 +89,15 @@ const imports: any[] = [
   AccountingExportModule,
   NotificationsModule,
   PosModule,
+  FolioInboundModule,
   DoorLockModule,
   LlmModule,
   SearchModule,
   StaffNotificationsModule,
   HelpModule,
+  TurnawaysModule,
+  WaitlistModule,
+  LoyaltyModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or

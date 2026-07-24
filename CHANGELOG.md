@@ -8,6 +8,116 @@ All notable changes to HAIP are documented here. This project adheres to
 > Version numbers and release tags are assigned automatically by the release
 > workflow on merge — this section is intentionally left as _Unreleased_.
 
+### Added — Property ops (lost & found / discrepancies / service requests)
+
+- **Lost & found** — `lost_and_found_items` table and CRUD API; items tagged with
+  auto-generated codes and a 90-day hold period before disposal.
+- **Room status discrepancies** — `GET /rooms/discrepancies?propertyId=&date=`
+  computes mismatches between room status and in-house reservations.
+- **Service requests** — guest/staff work orders that can spawn linked housekeeping
+  tasks (`POST /service-requests/:id/create-task`).
+- **Permissions** — `ops.read` / `ops.manage` for property ops endpoints.
+- **Dashboard** — Lost & Found and Service Requests tabs under Housekeeping;
+  discrepancies panel on the Rooms page.
+
+### Added — HK property ops depth (Slice 7)
+
+Beyond housekeeping desk wiring ([#185](https://github.com/telivityai/haip/pull/185)):
+
+- **Room rack diary** — Rooms rack view overlays today's assigned guest and
+  arrival→departure dates from the reservation list API (no new tables).
+- **Ops forecast** — `GET /housekeeping/ops-forecast?propertyId=&date=` returns
+  expected checkout vs stayover task counts derived from in-house reservation
+  statuses; dashboard shows tomorrow's forecast.
+- **Attendant console polish** — staff picker for assign, editable checklist,
+  maintenance flag on complete, room status + urgent-room summaries on the HK
+  dashboard.
+
+
+### Added — Housekeeping ops depth
+
+- **VIP auto-priority** — tasks for rooms with an incoming VIP guest default to priority 5
+  (unless an explicit priority > 0 is set); applies to generated and custom checklists.
+- **Checklist PATCH** — `UpdateTaskDto.checklist` persists in-progress checklist state.
+- **Permissions** — `housekeeping.read` on GET endpoints; `housekeeping.manage` on mutations.
+- **Ops desk dashboard** — room status summary, housekeeper workload table, urgent rooms list.
+- **Tasks UI** — HK staff picker (housekeeping / housekeeping_manager / admin roles), unassign,
+  interactive checklist save, complete with maintenance flags, inspect with signed-in `user.sub`.
+- **Analytics UI** — `metrics.avgTurnTimeMinutes`, pass rate, maintenance issue rate; chart by room type.
+
+
+### Added — Rates / groups / BI depth (slices 8–10)
+
+- **Shoulder-date inventory** — `PUT /groups/blocks/:id/inventory` validates
+  `stayDate` against the shoulder-inclusive span (`shoulderStart`/`shoulderEnd`
+  when set, else core block dates); pickup increment uses the same span.
+- **Rate calendar UI** — rate plan detail shows a date-range grid with base /
+  effective amounts and restriction badges (MinLOS, CTA, CTD, etc.) from existing
+  restrictions + effective-rate APIs.
+- **Booking pace report** — `GET /api/v1/reports/booking-pace` returns daily
+  rooms on books per stay date plus new bookings by `createdAt`; Reports dashboard
+  option with chart.
+
+
+### Added — Loyalty / BI / admin polish
+
+- **Guests dashboard** — list, search, create, and edit `loyaltyNumber` (VIP level unchanged).
+- **Front Desk** — arrivals and in-house cards show guest VIP level and loyalty number.
+- **Reports** — trial-balance option wired to `GET /api/v1/reports/trial-balance` (deposit / guest / A/R ledgers).
+
+
+### Added — Guest journey depth (Slice 6)
+
+- **Advance check-in / pre-register** — `POST /reservations/:id/pre-register?propertyId=` (staff,
+  `confirmed`/`assigned` only) and `POST /booking-engine/bookings/:confirmationNumber/pre-register`
+  (guest self-service behind booking key). Persists registration card + ID fields without changing
+  reservation status; emits `reservation.pre_registered`.
+- **SMS on reservation messages** — `ComposeMessageDto.channel` (`email` | `sms`, default email);
+  SMS path uses `NotificationService.sendSms` with the same GDPR marketing opt-out as email.
+- **Dashboard** — channel selector on reservation guest-message compose.
+- **Docs** — README Slice 6 depth vs polish (#182); HAIP_BUILD_PLAN notes remaining Slice 6 items.
+
+
+### Added — Devices (door lock polish)
+
+- **Credential persistence** — `door_lock_credentials` table (`propertyId`, `reservationId`,
+  `roomId`, `credentialId`, `accessCode`, `active` / `revoked`).
+- **REST API** — `GET /door-lock/credentials`, `GET /door-lock/credentials/:reservationId`,
+  `POST /door-lock/credentials/:reservationId/reissue`.
+- **Webhook adapter** — `WebhookLockProvider` saves/updates rows on issue and revoke.
+- **Front Desk** — in-house queue shows active door PIN.
+- **Docs** — README slice 11, `docs/webhooks.md` door events.
+
+
+### Added — Distribution polish (slice 12)
+
+- **Rate parity dashboard** — grid matches API shape (`baseAmount`, per-channel
+  `effectiveRate` / `isParity` / `parityViolations`); override badge when
+  `hasOverride`.
+- **Rate override form** — POST/DELETE `/channels/rate-parity/override` from the
+  Channels → Rate Parity page (percentage or fixed adjustment, optional date
+  range).
+- **Connection mapping editor** — edit `roomTypeMapping` and `ratePlanMapping` on
+  connection detail via PATCH `/channels/connections/:id?propertyId=`.
+- **Content-push errors** — toast surfaces adapter errors returned by the API
+  (e.g. SiteMinder pmsXchange unsupported).
+- **Docs** — README shipped-slices row #12, HAIP_BUILD_PLAN, i18n (en + pt-BR).
+
+
+### Added — Groups depth (slice 9)
+
+- **Allotment inventory UI** — block detail can set held rooms via
+  `PUT /groups/blocks/:id/inventory` (stay date, room type, rooms allotted) and
+  refreshes the pickup report.
+- **Block create/edit fields** — dashboard exposes API fields already on create/update:
+  `ratePlanId`, shoulder dates, `groupCode`, min/max LOS, and status.
+- **Rooming list** — CSV mapping includes `guestId`, `roomTypeId`, `ratePlanId`, and
+  `totalAmount`; `GET /groups/blocks/:id/rooming-list` lists entries (service already
+  had `listEntries`).
+- **Link reservation** — group profile detail can link an existing reservation via
+  `POST /groups/profiles/:id/reservations`.
+
+
 ### Added — Rates depth (slice 8)
 
 - **Restrictions panel** — dashboard rate-plan detail lists/creates/edits/deletes
