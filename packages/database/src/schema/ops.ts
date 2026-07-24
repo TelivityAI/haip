@@ -6,6 +6,13 @@ import { guests } from './guest.js';
 import { housekeepingTasks } from './housekeeping.js';
 
 /** Lost-and-found item lifecycle: held in storage, returned to guest, or disposed. */
+export const lostAndFoundCategoryEnum = pgEnum('lost_and_found_category', [
+  'general',
+  'baggage',
+  'parcel',
+  'valet',
+]);
+
 export const lostAndFoundStatusEnum = pgEnum('lost_and_found_status', [
   'held',
   'returned',
@@ -22,6 +29,7 @@ export const lostAndFoundItems = pgTable('lost_and_found_items', {
   roomId: uuid('room_id').references(() => rooms.id),
   reservationId: uuid('reservation_id').references(() => reservations.id),
   guestId: uuid('guest_id').references(() => guests.id),
+  category: lostAndFoundCategoryEnum('category').notNull().default('general'),
   description: text('description').notNull(),
   tagCode: varchar('tag_code', { length: 50 }).notNull(),
   status: lostAndFoundStatusEnum('status').notNull().default('held'),

@@ -28,3 +28,28 @@ export interface SmsProvider {
 
 /** DI token so the service can resolve all registered SMS providers. */
 export const SMS_PROVIDERS = Symbol('SMS_PROVIDERS');
+
+export interface WhatsAppMessage {
+  to: string;
+  contentSid?: string;
+  body?: string;
+  variables?: Record<string, string>;
+  /** Optional override of the configured sender id/number. */
+  from?: string;
+}
+
+export interface WhatsAppResult {
+  sent: boolean;
+  messageId?: string;
+  provider: string;
+  error?: string;
+}
+
+export interface WhatsAppProvider {
+  readonly name: string;
+  isConfigured(): boolean;
+  send(message: WhatsAppMessage): Promise<WhatsAppResult>;
+}
+
+/** DI token so the service can resolve all registered WhatsApp providers. */
+export const WHATSAPP_PROVIDERS = Symbol('WHATSAPP_PROVIDERS');

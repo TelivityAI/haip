@@ -66,6 +66,7 @@ export class LostAndFoundService {
         roomId: dto.roomId,
         reservationId: dto.reservationId,
         guestId: dto.guestId,
+        category: dto.category ?? 'general',
         description: dto.description,
         tagCode: this.generateTagCode(),
         status: 'held',
@@ -82,6 +83,9 @@ export class LostAndFoundService {
     const conditions = [eq(lostAndFoundItems.propertyId, dto.propertyId)];
     if (dto.status) {
       conditions.push(eq(lostAndFoundItems.status, dto.status as any));
+    }
+    if (dto.category) {
+      conditions.push(eq(lostAndFoundItems.category, dto.category as any));
     }
 
     return this.db

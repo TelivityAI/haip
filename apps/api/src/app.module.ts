@@ -44,6 +44,10 @@ import { LlmModule } from './modules/llm/llm.module';
 import { SearchModule } from './modules/search/search.module';
 import { StaffNotificationsModule } from './modules/staff-notifications/staff-notifications.module';
 import { HelpModule } from './modules/help/help.module';
+import { FolioInboundModule } from './modules/folio-inbound/folio-inbound.module';
+import { TurnawaysModule } from './modules/turnaways/turnaways.module';
+import { WaitlistModule } from './modules/waitlist/waitlist.module';
+import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -85,11 +89,15 @@ const imports: any[] = [
   AccountingExportModule,
   NotificationsModule,
   PosModule,
+  FolioInboundModule,
   DoorLockModule,
   LlmModule,
   SearchModule,
   StaffNotificationsModule,
   HelpModule,
+  TurnawaysModule,
+  WaitlistModule,
+  LoyaltyModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or

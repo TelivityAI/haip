@@ -7,15 +7,15 @@ describe('RoomDiscrepancyService', () => {
   let db: any;
 
   const propertyRooms = [
-    { id: 'room-101', number: '101', status: 'occupied' },
-    { id: 'room-102', number: '102', status: 'vacant_clean' },
-    { id: 'room-103', number: '103', status: 'vacant_dirty' },
-    { id: 'room-104', number: '104', status: 'guest_ready' },
+    { id: 'room-101', number: '101', status: 'occupied', hkOccupancy: 'unknown', hkObservedPersons: null },
+    { id: 'room-102', number: '102', status: 'vacant_clean', hkOccupancy: 'unknown', hkObservedPersons: null },
+    { id: 'room-103', number: '103', status: 'vacant_dirty', hkOccupancy: 'unknown', hkObservedPersons: null },
+    { id: 'room-104', number: '104', status: 'guest_ready', hkOccupancy: 'unknown', hkObservedPersons: null },
   ];
 
   const inHouseReservations = [
-    { id: 'res-102', roomId: 'room-102', status: 'checked_in' },
-    { id: 'res-104', roomId: 'room-104', status: 'stayover' },
+    { id: 'res-102', roomId: 'room-102', status: 'checked_in', adults: 2, children: 0 },
+    { id: 'res-104', roomId: 'room-104', status: 'stayover', adults: 1, children: 0 },
   ];
 
   beforeEach(async () => {
@@ -25,10 +25,26 @@ describe('RoomDiscrepancyService', () => {
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockImplementation(() => {
             selectCall += 1;
-            return Promise.resolve(selectCall === 1 ? propertyRooms : inHouseReservations);
+            // 1=rooms, 2=reservations, 3=open cases
+            if (selectCall === 1) return Promise.resolve(propertyRooms);
+            if (selectCall === 2) return Promise.resolve(inHouseReservations);
+            return Promise.resolve([]);
           }),
+          limit: vi.fn().mockResolvedValue([]),
         }),
       })),
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ id: 'room-101', hkOccupancy: 'vacant' }]),
+          }),
+        }),
+      }),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([{ id: 'case-1', status: 'open' }]),
+        }),
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -62,5 +78,17 @@ describe('RoomDiscrepancyService', () => {
 
     const room104 = result.discrepancies.filter((d) => d.roomNumber === '104');
     expect(room104).toHaveLength(0);
+  });
+
+  it('maps skip alias for occupied_without_reservation', async () => {
+    const result = await service.getDiscrepancies('prop-001', '2026-07-23');
+    const occupied = result.discrepancies.find((d) => d.kind === 'occupied_without_reservation');
+    expect(occupied?.alias).toBe('skip');
+  });
+
+  it('sets HK observation on a room', async () => {
+    const updated = await service.setHkObservation('room-101', 'prop-001', { occupancy: 'vacant' });
+    expect(updated.hkOccupancy).toBe('vacant');
+    expect(db.update).toHaveBeenCalled();
   });
 });

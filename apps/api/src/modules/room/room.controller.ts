@@ -3,12 +3,12 @@ import {
   Get,
   Post,
   Patch,
+  Put,
   Param,
   Body,
   Query,
   ParseUUIDPipe,
-} from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+} from '@nestjs/common';import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { RoomService } from './room.service';
@@ -18,6 +18,12 @@ import { CreateRoomTypeDto } from './dto/create-room-type.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { UpdateRoomStatusDto } from './dto/update-room-status.dto';
+import { HkObservationDto } from './dto/hk-observation.dto';
+import {
+  ResolveDiscrepancyDto,
+  DismissDiscrepancyDto,
+  EnsureDiscrepancyCaseDto,
+} from './dto/resolve-discrepancy.dto';
 
 @ApiTags('rooms', 'room-types')
 @Controller('rooms')
@@ -93,6 +99,53 @@ export class RoomController {
     return this.roomDiscrepancyService.getDiscrepancies(propertyId, date);
   }
 
+  @Get('discrepancies/open-count')
+  @RequirePermissions('ops.read')
+  @ApiOperation({ summary: 'Open discrepancy case count (night-audit acknowledge hint)' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'date', required: true })
+  openDiscrepancyCount(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('date') date: string,
+  ) {
+    return this.roomDiscrepancyService.openCaseCount(propertyId, date);
+  }
+
+  @Post('discrepancies/cases')
+  @RequirePermissions('ops.manage')
+  @ApiOperation({ summary: 'Ensure an open discrepancy case exists for a computed mismatch' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  ensureDiscrepancyCase(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: EnsureDiscrepancyCaseDto,
+  ) {
+    return this.roomDiscrepancyService.ensureCase(propertyId, dto as any);
+  }
+
+  @Post('discrepancies/cases/:caseId/resolve')
+  @RequirePermissions('ops.manage')
+  @ApiOperation({ summary: 'Resolve a discrepancy case with an action + note' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  resolveDiscrepancyCase(
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: ResolveDiscrepancyDto,
+  ) {
+    return this.roomDiscrepancyService.resolveCase(caseId, propertyId, dto);
+  }
+
+  @Post('discrepancies/cases/:caseId/dismiss')
+  @RequirePermissions('ops.manage')
+  @ApiOperation({ summary: 'Dismiss a discrepancy case (note required)' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  dismissDiscrepancyCase(
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: DismissDiscrepancyDto,
+  ) {
+    return this.roomDiscrepancyService.dismissCase(caseId, propertyId, dto);
+  }
+
   // --- Room routes ---
 
   @Get()
@@ -139,6 +192,19 @@ export class RoomController {
     @Body() dto: UpdateRoomStatusDto,
   ) {
     return this.roomStatusService.transitionStatus(id, propertyId, dto.status as any, dto.maintenanceNotes);
+  }
+
+  @Put(':id/hk-observation')
+  @Roles('admin', 'front_desk', 'housekeeping', 'housekeeping_manager')
+  @RequirePermissions('ops.manage')
+  @ApiOperation({ summary: 'Set housekeeping observed occupancy for discrepancy detection' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  setHkObservation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: HkObservationDto,
+  ) {
+    return this.roomDiscrepancyService.setHkObservation(id, propertyId, dto);
   }
 
   @Patch(':id')

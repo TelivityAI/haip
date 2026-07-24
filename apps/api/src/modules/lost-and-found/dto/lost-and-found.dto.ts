@@ -8,6 +8,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 const STATUSES = ['held', 'returned', 'disposed'] as const;
+const CATEGORIES = ['general', 'baggage', 'parcel', 'valet'] as const;
 
 export class CreateLostAndFoundItemDto {
   @ApiProperty()
@@ -28,6 +29,11 @@ export class CreateLostAndFoundItemDto {
   @IsOptional()
   @IsUUID()
   guestId?: string;
+
+  @ApiPropertyOptional({ enum: CATEGORIES, default: 'general' })
+  @IsOptional()
+  @IsEnum(CATEGORIES)
+  category?: (typeof CATEGORIES)[number];
 
   @ApiProperty()
   @IsString()
@@ -70,6 +76,11 @@ export class UpdateLostAndFoundItemDto {
   @IsEnum(STATUSES)
   status?: string;
 
+  @ApiPropertyOptional({ enum: CATEGORIES })
+  @IsOptional()
+  @IsEnum(CATEGORIES)
+  category?: (typeof CATEGORIES)[number];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -85,4 +96,9 @@ export class ListLostAndFoundItemsDto {
   @IsOptional()
   @IsEnum(STATUSES)
   status?: string;
+
+  @ApiPropertyOptional({ enum: CATEGORIES })
+  @IsOptional()
+  @IsEnum(CATEGORIES)
+  category?: (typeof CATEGORIES)[number];
 }
