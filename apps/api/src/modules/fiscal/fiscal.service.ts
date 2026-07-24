@@ -95,14 +95,16 @@ export class FiscalService {
       return { skipped: true, reason: 'no_fiscal_provider' };
     }
 
-    const folioId = typeof eventData.folioId === 'string' ? eventData.folioId : null;
+    const folioId =
+      typeof eventData['folioId'] === 'string' ? eventData['folioId'] : null;
     if (!folioId) {
       return { skipped: true, reason: 'missing_folio_id' };
     }
 
     const documentType =
-      (typeof eventData.documentType === 'string' && eventData.documentType.length > 0
-        ? eventData.documentType
+      (typeof eventData['documentType'] === 'string' &&
+      eventData['documentType'].length > 0
+        ? eventData['documentType']
         : null) ??
       config.documentType ??
       provider.key;
