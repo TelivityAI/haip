@@ -28,6 +28,9 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_status') THEN CREATE TYPE payment_status AS ENUM ('pending','authorized','captured','settled','refunded','partially_refunded','failed','voided'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'housekeeping_task_status') THEN CREATE TYPE housekeeping_task_status AS ENUM ('pending','assigned','in_progress','completed','inspected','skipped'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'housekeeping_task_type') THEN CREATE TYPE housekeeping_task_type AS ENUM ('checkout','stayover','deep_clean','inspection','turndown','maintenance'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'hk_occupancy') THEN CREATE TYPE hk_occupancy AS ENUM ('unknown','vacant','occupied'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'room_discrepancy_kind') THEN CREATE TYPE room_discrepancy_kind AS ENUM ('fo_occupied_hk_vacant','fo_vacant_hk_occupied','person_count_mismatch','occupied_without_reservation','vacant_with_in_house_reservation'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'room_discrepancy_status') THEN CREATE TYPE room_discrepancy_status AS ENUM ('open','resolved','dismissed'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'lost_and_found_category') THEN CREATE TYPE lost_and_found_category AS ENUM ('general','baggage','parcel','valet'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'lost_and_found_status') THEN CREATE TYPE lost_and_found_status AS ENUM ('held','returned','disposed'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'service_request_status') THEN CREATE TYPE service_request_status AS ENUM ('open','in_progress','done','cancelled'); END IF; END $$`,
@@ -460,6 +463,24 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS folio_inbound_posts_property_vendor_unique ON folio_inbound_posts (property_id, vendor_txn_id)`,
+    // room_discrepancy_cases (A1 — Skip/Sleep workflow)
+    `CREATE TABLE IF NOT EXISTS room_discrepancy_cases (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      room_id uuid NOT NULL REFERENCES rooms(id),
+      business_date date NOT NULL,
+      kind room_discrepancy_kind NOT NULL,
+      status room_discrepancy_status NOT NULL DEFAULT 'open',
+      reservation_id uuid REFERENCES reservations(id),
+      resolution_action varchar(80),
+      resolution_note text,
+      resolved_at timestamptz,
+      resolved_by uuid,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS room_discrepancy_cases_property_date_idx
+      ON room_discrepancy_cases (property_id, business_date, status)`,
     // service_requests
     `CREATE TABLE IF NOT EXISTS service_requests (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1231,6 +1252,11 @@ async function main() {
     `ALTER TABLE rate_plans ADD COLUMN IF NOT EXISTS los_adjustments jsonb`,
     `ALTER TABLE rate_plans ADD COLUMN IF NOT EXISTS occupancy_bands jsonb`,
     `ALTER TABLE lost_and_found_items ADD COLUMN IF NOT EXISTS category lost_and_found_category NOT NULL DEFAULT 'general'`,
+    // A1: HK observation columns on rooms (CREATE TABLE IF NOT EXISTS leaves legacy DBs without them)
+    `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_occupancy hk_occupancy NOT NULL DEFAULT 'unknown'`,
+    `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_persons integer`,
+    `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_at timestamptz`,
+    `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_by uuid`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));
