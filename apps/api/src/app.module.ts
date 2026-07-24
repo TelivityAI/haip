@@ -49,6 +49,7 @@ import { FolioInboundModule } from './modules/folio-inbound/folio-inbound.module
 import { TurnawaysModule } from './modules/turnaways/turnaways.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
 import { LoyaltyModule } from './modules/loyalty/loyalty.module';
+import { IcalModule } from './modules/ical/ical.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -100,6 +101,7 @@ const imports: any[] = [
   TurnawaysModule,
   WaitlistModule,
   LoyaltyModule,
+  IcalModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or
