@@ -31,6 +31,8 @@ For event delivery (signatures, payloads, retries, subscriptions), start with **
 | [Payments (Adyen/Mollie/Square/Braintree)](payments-adyen-mollie-square-braintree.md) | Additional payment gateways |
 | [Door locks](door-locks-nuki-ttlock-salto.md) | Nuki, TTLock, Salto KS |
 | [SendGrid email](sendgrid-email.md) | Transactional email provider |
+| [WhatsApp Cloud](whatsapp-cloud.md) | Meta WhatsApp Cloud API provider |
+| [Mailgun & SES](mailgun-ses.md) | Mailgun + Amazon SES gateway email providers |
 | [Bird SMS](bird-sms.md) | Bird messaging provider |
 | [Review sources](review-sources.md) | Google / TripAdvisor review stubs |
 
