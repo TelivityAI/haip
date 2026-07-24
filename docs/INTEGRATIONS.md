@@ -2,7 +2,7 @@
 
 HAIP is API-first: REST OpenAPI is available at `/docs`, HMAC-signed webhooks cover roughly 90 `entity.action` events with retries, WebSocket keeps operational clients current, and the platform connects to tools hotels use and anything that speaks HTTP.
 
-Resources: [integration recipes](integrations/) and [webhooks](webhooks.md).
+Resources: [integration recipes](integrations/), [shipped demos](../integrations/demos/) (`./integrations/demos/run.sh <slug>`), and [webhooks](webhooks.md).
 
 ## How integrations work
 

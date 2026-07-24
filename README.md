@@ -517,6 +517,16 @@ hotel with the AI agents already running**, and serves everything at one URL:
 - **Booking:** `http://localhost:3000/booking/` — live guest booking widget (search → quote → book)
 - **Preview page:** `http://localhost:3000/booking-preview.html` — optional static walkthrough of every booking screen
 
+**Wire a shipped integration in one command** (API must be up):
+
+```bash
+./integrations/demos/run.sh list          # Stripe, Beds24, locks, SMS, …
+./integrations/demos/run.sh stripe        # toggle ON + mock/console path
+./integrations/demos/run.sh all           # every shipped demo
+```
+
+Same as flipping the switch under **Integrations** in the dashboard. Details: [`integrations/demos/`](./integrations/demos/).
+
 Dashboard UI: English and Deutsch (header language switcher).
 
 The first run builds the image and can take a few minutes; subsequent starts are

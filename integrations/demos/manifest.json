@@ -1,0 +1,307 @@
+{
+  "propertyIdDefault": "a0000001-0000-4000-a000-000000000001",
+  "demos": [
+    {
+      "slug": "stripe",
+      "title": "Stripe",
+      "kind": "payment",
+      "env": [
+        "PAYMENT_GATEWAY=stripe",
+        "STRIPE_MODE=mock"
+      ],
+      "liveEnv": [
+        "STRIPE_MODE=test",
+        "STRIPE_SECRET_KEY=sk_test_..."
+      ],
+      "docs": "docs/INTEGRATIONS.md#payments",
+      "smoke": "payment_mock"
+    },
+    {
+      "slug": "adyen",
+      "title": "Adyen",
+      "kind": "payment",
+      "env": [
+        "PAYMENT_GATEWAY=adyen"
+      ],
+      "liveEnv": [
+        "ADYEN_API_KEY=...",
+        "ADYEN_MERCHANT_ACCOUNT=..."
+      ],
+      "docs": "docs/integrations/payments-adyen-mollie-square-braintree.md",
+      "smoke": "payment_console",
+      "note": "Without credentials the gateway uses console mode (logged, no charge)."
+    },
+    {
+      "slug": "mollie",
+      "title": "Mollie",
+      "kind": "payment",
+      "env": [
+        "PAYMENT_GATEWAY=mollie"
+      ],
+      "liveEnv": [
+        "MOLLIE_API_KEY=..."
+      ],
+      "docs": "docs/integrations/payments-adyen-mollie-square-braintree.md",
+      "smoke": "payment_console"
+    },
+    {
+      "slug": "square",
+      "title": "Square",
+      "kind": "payment",
+      "env": [
+        "PAYMENT_GATEWAY=square"
+      ],
+      "liveEnv": [
+        "SQUARE_ACCESS_TOKEN=...",
+        "SQUARE_LOCATION_ID=..."
+      ],
+      "docs": "docs/integrations/payments-adyen-mollie-square-braintree.md",
+      "smoke": "payment_console"
+    },
+    {
+      "slug": "braintree",
+      "title": "Braintree",
+      "kind": "payment",
+      "env": [
+        "PAYMENT_GATEWAY=braintree"
+      ],
+      "liveEnv": [
+        "BRAINTREE_MERCHANT_ID=...",
+        "BRAINTREE_PUBLIC_KEY=...",
+        "BRAINTREE_PRIVATE_KEY=..."
+      ],
+      "docs": "docs/integrations/payments-adyen-mollie-square-braintree.md",
+      "smoke": "payment_console"
+    },
+    {
+      "slug": "beds24",
+      "title": "Beds24",
+      "kind": "channel",
+      "adapterType": "beds24",
+      "channelCode": "beds24",
+      "env": [],
+      "liveEnv": [
+        "BEDS24_API_KEY=...",
+        "BEDS24_PROP_KEY=..."
+      ],
+      "docs": "docs/integrations/channel-beds24-channex.md",
+      "smoke": "channel_connection",
+      "note": "Missing credentials → console channel stub (logged, no HTTP)."
+    },
+    {
+      "slug": "channex",
+      "title": "Channex",
+      "kind": "channel",
+      "adapterType": "channex",
+      "channelCode": "channex",
+      "env": [],
+      "liveEnv": [
+        "CHANNEX_API_KEY=...",
+        "CHANNEX_PROPERTY_ID=..."
+      ],
+      "docs": "docs/integrations/channel-beds24-channex.md",
+      "smoke": "channel_connection"
+    },
+    {
+      "slug": "pmsxchange-siteminder",
+      "title": "pmsXchange (SiteMinder)",
+      "kind": "channel",
+      "adapterType": "siteminder",
+      "channelCode": "siteminder",
+      "env": [
+        "SITEMINDER_BASE_URL=http://localhost:4001/pmsxchange"
+      ],
+      "liveEnv": [
+        "SITEMINDER_HOTEL_CODE=...",
+        "SITEMINDER_USERNAME=...",
+        "SITEMINDER_PASSWORD=..."
+      ],
+      "docs": "docs/INTEGRATIONS.md#channel-managers",
+      "smoke": "channel_connection",
+      "composeHint": "docker compose --profile channels up -d mock-siteminder"
+    },
+    {
+      "slug": "derbysoft-property-connector",
+      "title": "DerbySoft Property Connector",
+      "kind": "channel",
+      "adapterType": "derbysoft",
+      "channelCode": "derbysoft",
+      "env": [],
+      "liveEnv": [
+        "DERBYSOFT_HOTEL_ID=...",
+        "DERBYSOFT_ACCOUNT_ID=...",
+        "DERBYSOFT_CLIENT_SECRET=..."
+      ],
+      "docs": "docs/channels/derbysoft.md",
+      "smoke": "channel_connection",
+      "composeHint": "docker compose --profile channels up -d mock-derbysoft"
+    },
+    {
+      "slug": "nuki",
+      "title": "Nuki",
+      "kind": "lock",
+      "provider": "nuki",
+      "env": [
+        "DOOR_LOCK_PROVIDER=nuki"
+      ],
+      "liveEnv": [
+        "NUKI_API_TOKEN=...",
+        "NUKI_SMARTLOCK_ID=..."
+      ],
+      "docs": "docs/integrations/door-locks-nuki-ttlock-salto.md",
+      "smoke": "lock_enable",
+      "note": "Without credentials the lock factory falls back to console."
+    },
+    {
+      "slug": "ttlock",
+      "title": "TTLock",
+      "kind": "lock",
+      "provider": "ttlock",
+      "env": [
+        "DOOR_LOCK_PROVIDER=ttlock"
+      ],
+      "liveEnv": [
+        "TTLOCK_CLIENT_ID=...",
+        "TTLOCK_CLIENT_SECRET=...",
+        "TTLOCK_USERNAME=...",
+        "TTLOCK_PASSWORD=...",
+        "TTLOCK_LOCK_ID=..."
+      ],
+      "docs": "docs/integrations/door-locks-nuki-ttlock-salto.md",
+      "smoke": "lock_enable"
+    },
+    {
+      "slug": "salto-ks",
+      "title": "Salto KS",
+      "kind": "lock",
+      "provider": "salto_ks",
+      "env": [
+        "DOOR_LOCK_PROVIDER=salto_ks"
+      ],
+      "liveEnv": [
+        "SALTO_KS_CLIENT_ID=...",
+        "SALTO_KS_CLIENT_SECRET=...",
+        "SALTO_KS_SITE_ID=..."
+      ],
+      "docs": "docs/integrations/door-locks-nuki-ttlock-salto.md",
+      "smoke": "lock_enable"
+    },
+    {
+      "slug": "infobip-omnichannel",
+      "title": "Infobip Omnichannel",
+      "kind": "sms",
+      "env": [
+        "SMS_PROVIDER=infobip"
+      ],
+      "liveEnv": [
+        "INFOBIP_API_KEY=...",
+        "INFOBIP_SMS_FROM=...",
+        "INFOBIP_BASE_URL=https://....api.infobip.com"
+      ],
+      "docs": "docs/integrations/messaging-infobip-vonage-telegram.md",
+      "smoke": "messaging_enable",
+      "note": "Without Infobip credentials SMS falls through to console."
+    },
+    {
+      "slug": "vonage-messages",
+      "title": "Vonage Messages",
+      "kind": "sms",
+      "env": [
+        "SMS_PROVIDER=vonage"
+      ],
+      "liveEnv": [
+        "VONAGE_API_KEY=...",
+        "VONAGE_API_SECRET=...",
+        "VONAGE_SMS_FROM=..."
+      ],
+      "docs": "docs/integrations/messaging-infobip-vonage-telegram.md",
+      "smoke": "messaging_enable"
+    },
+    {
+      "slug": "bird",
+      "title": "Bird SMS",
+      "kind": "sms",
+      "env": [
+        "SMS_PROVIDER=bird"
+      ],
+      "liveEnv": [
+        "BIRD_ACCESS_KEY=...",
+        "BIRD_ORIGINATOR=..."
+      ],
+      "docs": "docs/integrations/bird-sms.md",
+      "smoke": "messaging_enable"
+    },
+    {
+      "slug": "telegram-bot",
+      "title": "Telegram Bot",
+      "kind": "telegram",
+      "env": [
+        "TELEGRAM_PROVIDER=telegram"
+      ],
+      "liveEnv": [
+        "TELEGRAM_BOT_TOKEN=123456:ABC..."
+      ],
+      "docs": "docs/integrations/messaging-infobip-vonage-telegram.md",
+      "smoke": "messaging_enable"
+    },
+    {
+      "slug": "sendgrid",
+      "title": "SendGrid",
+      "kind": "email",
+      "env": [],
+      "liveEnv": [
+        "SENDGRID_API_KEY=...",
+        "SENDGRID_FROM=noreply@example.com"
+      ],
+      "docs": "docs/integrations/sendgrid-email.md",
+      "smoke": "email_enable",
+      "note": "Without SendGrid, email falls back to SMTP then console."
+    },
+    {
+      "slug": "google-business-profile-reviews",
+      "title": "Google Business Profile Reviews",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "GOOGLE_PLACES_API_KEY=...",
+        "GOOGLE_PLACES_PLACE_ID=..."
+      ],
+      "docs": "docs/integrations/review-sources.md",
+      "smoke": "reviews_enable"
+    },
+    {
+      "slug": "tripadvisor-content-api",
+      "title": "TripAdvisor Content API",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "TRIPADVISOR_API_KEY=...",
+        "TRIPADVISOR_LOCATION_ID=..."
+      ],
+      "docs": "docs/integrations/review-sources.md",
+      "smoke": "reviews_enable"
+    },
+    {
+      "slug": "serbia-suf-esir",
+      "title": "Serbia SUF/ESIR",
+      "kind": "fiscal",
+      "fiscalProviderKey": "serbia_suf_esir",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/serbia-fiscal.md",
+      "smoke": "fiscal_config",
+      "note": "Console fiscal provider — logs handoff; replace with authority client for production."
+    },
+    {
+      "slug": "serbia-eturista",
+      "title": "Serbia eTurista",
+      "kind": "guest_reg",
+      "guestRegistrationProviderKey": "serbia_eturista",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/serbia-fiscal.md",
+      "smoke": "guest_reg_config",
+      "note": "Console guest-registration provider — logs handoff."
+    }
+  ]
+}
