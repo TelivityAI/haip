@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ForbiddenException, HttpException } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { ConsoleSmsProvider } from './providers/console-sms.provider';
+import { ConsoleTelegramProvider } from './providers/console-telegram.provider';
 import type { SmsProvider, SmsResult, WhatsAppProvider } from './notification-provider.interface';
 
 const PROPERTY_ID = '11111111-1111-1111-1111-111111111111';
@@ -9,12 +10,14 @@ const PROPERTY_ID = '11111111-1111-1111-1111-111111111111';
 describe('NotificationService', () => {
   let webhooks: { emit: ReturnType<typeof vi.fn> };
   let consoleProvider: ConsoleSmsProvider;
+  let consoleTelegram: ConsoleTelegramProvider;
   let consoleWhatsapp: WhatsAppProvider;
   let db: any;
 
   beforeEach(() => {
     webhooks = { emit: vi.fn().mockResolvedValue(undefined) };
     consoleProvider = new ConsoleSmsProvider();
+    consoleTelegram = new ConsoleTelegramProvider();
     consoleWhatsapp = {
       name: 'console-whatsapp',
       isConfigured: () => true,
@@ -32,10 +35,10 @@ describe('NotificationService', () => {
     };
   });
 
-  it('falls back to the console provider when Twilio is not configured', async () => {
-    const twilio = { name: 'twilio', isConfigured: () => false } as SmsProvider;
+  it('uses the injected console SMS provider', async () => {
     const service = new NotificationService(
-      [twilio, consoleProvider],
+      consoleProvider,
+      consoleTelegram,
       [consoleWhatsapp],
       webhooks as any,
       db,
@@ -47,13 +50,14 @@ describe('NotificationService', () => {
     expect(result.sent).toBe(false);
   });
 
-  it('uses Twilio when it is configured', async () => {
+  it('uses the injected SMS provider when configured', async () => {
     const sendSpy = vi.fn(
-      async (): Promise<SmsResult> => ({ sent: true, provider: 'twilio', messageId: 'SM123' }),
+      async (): Promise<SmsResult> => ({ sent: true, provider: 'infobip', messageId: 'ib-1' }),
     );
-    const twilio = { name: 'twilio', isConfigured: () => true, send: sendSpy } as SmsProvider;
+    const infobip = { name: 'infobip', isConfigured: () => true, send: sendSpy } as SmsProvider;
     const service = new NotificationService(
-      [twilio, consoleProvider],
+      infobip,
+      consoleTelegram,
       [consoleWhatsapp],
       webhooks as any,
       db,
@@ -62,13 +66,13 @@ describe('NotificationService', () => {
     const result = await service.sendSms(PROPERTY_ID, '+15551230000', 'hi');
 
     expect(sendSpy).toHaveBeenCalledOnce();
-    expect(result).toMatchObject({ sent: true, provider: 'twilio', messageId: 'SM123' });
+    expect(result).toMatchObject({ sent: true, provider: 'infobip', messageId: 'ib-1' });
   });
 
   it('audits every dispatch scoped to the requesting property', async () => {
-    const twilio = { name: 'twilio', isConfigured: () => false } as SmsProvider;
     const service = new NotificationService(
-      [twilio, consoleProvider],
+      consoleProvider,
+      consoleTelegram,
       [consoleWhatsapp],
       webhooks as any,
       db,
@@ -84,6 +88,34 @@ describe('NotificationService', () => {
     expect(propertyId).toBe(PROPERTY_ID);
   });
 
+  it('sends Telegram through the injected provider and audits', async () => {
+    const send = vi.fn().mockResolvedValue({
+      sent: true,
+      provider: 'telegram',
+      messageId: '99',
+    });
+    const telegram = { name: 'telegram', isConfigured: () => true, send };
+    const service = new NotificationService(
+      consoleProvider,
+      telegram,
+      [consoleWhatsapp],
+      webhooks as any,
+      db,
+    );
+
+    const result = await service.sendTelegram(PROPERTY_ID, '12345', 'hello');
+
+    expect(send).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ sent: true, provider: 'telegram' });
+    expect(webhooks.emit).toHaveBeenCalledWith(
+      'guest.communication_sent',
+      'notification',
+      '12345',
+      expect.objectContaining({ channel: 'telegram', provider: 'telegram', success: true }),
+      PROPERTY_ID,
+    );
+  });
+
   describe('per-property SMS quota (toll-fraud / spam guard)', () => {
     const prev = process.env['SMS_RATE_LIMIT_MAX'];
     beforeEach(() => { process.env['SMS_RATE_LIMIT_MAX'] = '2'; });
@@ -93,9 +125,9 @@ describe('NotificationService', () => {
     });
 
     it('throttles SMS for a property beyond the configured limit', async () => {
-      const twilio = { name: 'twilio', isConfigured: () => false } as SmsProvider;
       const service = new NotificationService(
-        [twilio, consoleProvider],
+        consoleProvider,
+        consoleTelegram,
         [consoleWhatsapp],
         webhooks as any,
         db,
@@ -108,9 +140,9 @@ describe('NotificationService', () => {
     it('still enforces with a default limit when the env value is invalid (no fail-open)', async () => {
       process.env['SMS_RATE_LIMIT_MAX'] = 'not-a-number';
       process.env['SMS_RATE_LIMIT_WINDOW_MS'] = 'garbage';
-      const twilio = { name: 'twilio', isConfigured: () => false } as SmsProvider;
       const service = new NotificationService(
-        [twilio, consoleProvider],
+        consoleProvider,
+        consoleTelegram,
         [consoleWhatsapp],
         webhooks as any,
         db,
@@ -123,9 +155,9 @@ describe('NotificationService', () => {
 
     it('treats an explicit 0 limit as disabled', async () => {
       process.env['SMS_RATE_LIMIT_MAX'] = '0';
-      const twilio = { name: 'twilio', isConfigured: () => false } as SmsProvider;
       const service = new NotificationService(
-        [twilio, consoleProvider],
+        consoleProvider,
+        consoleTelegram,
         [consoleWhatsapp],
         webhooks as any,
         db,
@@ -136,9 +168,9 @@ describe('NotificationService', () => {
     });
 
     it('counts the quota independently per property', async () => {
-      const twilio = { name: 'twilio', isConfigured: () => false } as SmsProvider;
       const service = new NotificationService(
-        [twilio, consoleProvider],
+        consoleProvider,
+        consoleTelegram,
         [consoleWhatsapp],
         webhooks as any,
         db,
@@ -162,7 +194,13 @@ describe('NotificationService', () => {
         isConfigured: () => true,
         send,
       } as WhatsAppProvider;
-      const service = new NotificationService([consoleProvider], [whatsapp], webhooks as any, db);
+      const service = new NotificationService(
+        consoleProvider,
+        consoleTelegram,
+        [whatsapp],
+        webhooks as any,
+        db,
+      );
 
       const result = await service.sendWhatsAppTemplate(PROPERTY_ID, {
         to: '+15551230000',
@@ -192,7 +230,8 @@ describe('NotificationService', () => {
           })),
       };
       const service = new NotificationService(
-        [consoleProvider],
+        consoleProvider,
+        consoleTelegram,
         [consoleWhatsapp],
         webhooks as any,
         consentDb,

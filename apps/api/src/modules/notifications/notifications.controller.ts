@@ -4,6 +4,7 @@ import { Roles } from '../auth/roles.decorator';
 import { NotificationService } from './notification.service';
 import { SendSmsDto } from './dto/send-sms.dto';
 import { SendWhatsAppDto } from './dto/send-whatsapp.dto';
+import { SendTelegramDto } from './dto/send-telegram.dto';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -36,5 +37,15 @@ export class NotificationsController {
         marketing: dto.marketing,
       },
     );
+  }
+
+  @Post('telegram')
+  @Roles('admin', 'front_desk', 'night_auditor')
+  @ApiOperation({ summary: 'Send a Telegram message to a guest via the configured bot' })
+  @ApiResponse({ status: 201, description: 'Dispatch result (sent flag + provider + messageId/error)' })
+  sendTelegram(@Body() dto: SendTelegramDto) {
+    return this.notificationService.sendTelegram(dto.propertyId, dto.to, dto.body, {
+      parseMode: dto.parseMode,
+    });
   }
 }
