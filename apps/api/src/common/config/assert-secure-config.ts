@@ -1,7 +1,9 @@
+import { isPaymentGatewayMockMode } from '../../modules/payment/payment-gateway.factory';
+
 /**
  * Refuse to boot an insecure configuration in production. The #1 real-world
- * breach risk is shipping with AUTH_ENABLED=false (or STRIPE_MODE=mock) to a
- * production host. The intentional public demo opts out with
+ * breach risk is shipping with AUTH_ENABLED=false (or payment gateways in mock
+ * mode) to a production host. The intentional public demo opts out with
  * HAIP_ALLOW_INSECURE=true.
  *
  * Pure function over an env map so it's unit-testable; main.ts calls it with
@@ -17,7 +19,9 @@ export function assertSecureConfig(env: NodeJS.ProcessEnv = process.env): void {
   if (env['HAIP_ALLOW_INSECURE'] === 'true') return;
   const problems: string[] = [];
   if (env['AUTH_ENABLED'] === 'false') problems.push('AUTH_ENABLED=false');
-  if ((env['STRIPE_MODE'] ?? 'mock') === 'mock') problems.push('STRIPE_MODE=mock');
+  if (isPaymentGatewayMockMode(env)) {
+    problems.push('PAYMENT_GATEWAY=mock (or STRIPE_MODE=mock when PAYMENT_GATEWAY unset)');
+  }
   if (problems.length > 0) {
     throw new Error(
       `Refusing to start in production with insecure config: ${problems.join(', ')}. ` +
