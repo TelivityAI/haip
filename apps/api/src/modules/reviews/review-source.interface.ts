@@ -1,7 +1,36 @@
 /**
- * External review source pull abstraction (Google Business Profile / TripAdvisor Content API).
+ * External review source pull abstraction (Google / TripAdvisor / Wave 3 console packs).
  */
-export type ReviewSourceName = 'google' | 'tripadvisor' | 'console';
+export type ReviewSourceName =
+  | 'google'
+  | 'tripadvisor'
+  | 'trustyou'
+  | 'customer-alliance'
+  | 'trustpilot'
+  | 'yotpo'
+  | 'mara-ai'
+  | 'guest-suite'
+  | 'facebook-page-ratings'
+  | 'reviewtrackers'
+  | 'foursquare-places'
+  | 'console';
+
+/** Sources accepted on POST /reviews/pull (excludes internal console fallback). */
+export type ReviewPullSourceName = Exclude<ReviewSourceName, 'console'>;
+
+export const REVIEW_PULL_SOURCE_NAMES: readonly ReviewPullSourceName[] = [
+  'google',
+  'tripadvisor',
+  'trustyou',
+  'customer-alliance',
+  'trustpilot',
+  'yotpo',
+  'mara-ai',
+  'guest-suite',
+  'facebook-page-ratings',
+  'reviewtrackers',
+  'foursquare-places',
+] as const;
 
 export interface ExternalReviewItem {
   externalId: string;
@@ -9,7 +38,7 @@ export interface ExternalReviewItem {
   rating: number;
   reviewText: string;
   stayDate?: string;
-  source: 'google' | 'tripadvisor';
+  source: ReviewPullSourceName;
 }
 
 export interface ReviewPullResult {
@@ -23,7 +52,7 @@ export interface ReviewPullRequest {
   propertyId: string;
   /** Google Places place_id or Business Profile location id */
   placeId?: string;
-  /** TripAdvisor location id for Content API */
+  /** TripAdvisor / partner location id for Content API */
   locationId?: string;
 }
 

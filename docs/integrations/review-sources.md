@@ -65,4 +65,6 @@ Response shape:
 
 Import into `guest_reviews` (dedupe by `externalId`) can be added in a follow-up; this wave exposes pull-only stubs aligned with existing review sources in the database enum (`google`, `tripadvisor`).
 
+Wave 3 reputation consoles (TrustYou, Trustpilot, and related packs) use the same pull endpoint with additional `source` values — see [wave3-reviews.md](./wave3-reviews.md).
+
 See also: [Integration catalog](../INTEGRATIONS.md) — **Reviews & Reputation**.
