@@ -1223,28 +1223,54 @@ async function main() {
     CREATE INDEX IF NOT EXISTS door_lock_credentials_property_status_idx
       ON door_lock_credentials (property_id, status)`));
 
-  // Connect API credentials (hashed bearer keys + optional scopes)
+  // iCal calendar bridge (.ics import/export) — availability subtracts ical_blocks
   await db.execute(sql.raw(`
-    CREATE TABLE IF NOT EXISTS connect_credentials (
+    DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ical_feed_direction') THEN
+      CREATE TYPE ical_feed_direction AS ENUM ('import','export');
+    END IF; END $$`));
+
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS ical_feeds (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id uuid NOT NULL REFERENCES properties(id),
-      label varchar(200) NOT NULL,
-      scopes jsonb NOT NULL DEFAULT '[]'::jsonb,
-      key_hash varchar(64) NOT NULL UNIQUE,
+      room_type_id uuid NOT NULL REFERENCES room_types(id),
+      direction ical_feed_direction NOT NULL,
+      name varchar(120) NOT NULL,
+      source_url text,
+      token_hash varchar(64),
       is_active boolean NOT NULL DEFAULT true,
-      last_used_at timestamptz,
+      last_sync_at timestamptz,
+      last_sync_status varchar(20),
+      last_sync_error text,
       created_at timestamptz NOT NULL DEFAULT now(),
-      revoked_at timestamptz
+      updated_at timestamptz NOT NULL DEFAULT now()
     )`));
 
   await db.execute(sql.raw(`
-    CREATE INDEX IF NOT EXISTS connect_credentials_property_id_idx
-      ON connect_credentials (property_id)`));
+    CREATE INDEX IF NOT EXISTS ical_feeds_property_room_direction_idx
+      ON ical_feeds (property_id, room_type_id, direction)`));
 
-  // Legacy DBs created before scopes existed
   await db.execute(sql.raw(`
-    ALTER TABLE connect_credentials
-      ADD COLUMN IF NOT EXISTS scopes jsonb NOT NULL DEFAULT '[]'::jsonb`));
+    CREATE TABLE IF NOT EXISTS ical_blocks (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      feed_id uuid NOT NULL REFERENCES ical_feeds(id),
+      room_type_id uuid NOT NULL REFERENCES room_types(id),
+      external_uid varchar(255) NOT NULL,
+      start_date date NOT NULL,
+      end_date date NOT NULL,
+      summary varchar(255),
+      source_checksum varchar(64) NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`));
+
+  await db.execute(sql.raw(`
+    CREATE INDEX IF NOT EXISTS ical_blocks_property_room_dates_idx
+      ON ical_blocks (property_id, room_type_id, start_date, end_date)`));
+
+  await db.execute(sql.raw(`
+    CREATE INDEX IF NOT EXISTS ical_blocks_feed_dates_idx
+      ON ical_blocks (feed_id, start_date, end_date)`));
 
   // Idempotent column additions for pre-existing databases
   const alters = [

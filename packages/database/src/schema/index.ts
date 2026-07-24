@@ -245,3 +245,10 @@ export {
   doorLockCredentialStatusEnum,
   doorLockCredentials,
 } from './door-lock.js';
+
+// iCal calendar bridge (.ics import/export)
+export {
+  icalFeedDirectionEnum,
+  icalFeeds,
+  icalBlocks,
+} from './ical.js';

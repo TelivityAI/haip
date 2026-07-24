@@ -38,6 +38,7 @@ import { BookingEngineModule } from './modules/booking-engine/booking-engine.mod
 import { ImportModule } from './modules/import/import.module';
 import { AccountingExportModule } from './modules/accounting-export/accounting-export.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 import { PosModule } from './modules/pos/pos.module';
 import { DoorLockModule } from './modules/door-lock/door-lock.module';
 import { LlmModule } from './modules/llm/llm.module';
@@ -48,6 +49,7 @@ import { FolioInboundModule } from './modules/folio-inbound/folio-inbound.module
 import { TurnawaysModule } from './modules/turnaways/turnaways.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
 import { LoyaltyModule } from './modules/loyalty/loyalty.module';
+import { IcalModule } from './modules/ical/ical.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -88,6 +90,7 @@ const imports: any[] = [
   ImportModule,
   AccountingExportModule,
   NotificationsModule,
+  ReviewsModule,
   PosModule,
   FolioInboundModule,
   DoorLockModule,
@@ -98,6 +101,7 @@ const imports: any[] = [
   TurnawaysModule,
   WaitlistModule,
   LoyaltyModule,
+  IcalModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or
