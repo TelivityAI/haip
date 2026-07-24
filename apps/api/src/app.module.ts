@@ -49,6 +49,7 @@ import { FolioInboundModule } from './modules/folio-inbound/folio-inbound.module
 import { TurnawaysModule } from './modules/turnaways/turnaways.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
 import { LoyaltyModule } from './modules/loyalty/loyalty.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { IcalModule } from './modules/ical/ical.module';
 
 const imports: any[] = [
@@ -101,6 +102,7 @@ const imports: any[] = [
   TurnawaysModule,
   WaitlistModule,
   LoyaltyModule,
+  IntegrationsModule,
   IcalModule,
 ];
 
