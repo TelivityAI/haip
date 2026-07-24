@@ -100,7 +100,7 @@ export class AdyenGateway implements PaymentGateway {
     return this.refundHttp(transactionId, amount, options);
   }
 
-  private headers(): HeadersInit {
+  private headers(): Record<string, string> {
     return {
       'X-API-Key': this.apiKey!,
       Accept: 'application/json',
@@ -162,7 +162,7 @@ export class AdyenGateway implements PaymentGateway {
       merchantAccount: this.merchantAccount,
     };
     if (amount !== undefined) {
-      body.amount = { value: toMinorUnits(amount) };
+      body['amount'] = { value: toMinorUnits(amount) };
     }
 
     const res = await gatewayJsonRequest<{ pspReference?: string; status?: string }>(
@@ -226,7 +226,7 @@ export class AdyenGateway implements PaymentGateway {
       merchantAccount: this.merchantAccount,
     };
     if (amount !== undefined) {
-      body.amount = { value: toMinorUnits(amount) };
+      body['amount'] = { value: toMinorUnits(amount) };
     }
 
     const res = await gatewayJsonRequest<{ pspReference?: string }>(

@@ -108,7 +108,7 @@ export class BraintreeGateway implements PaymentGateway {
     return this.refundHttp(transactionId, amount, options);
   }
 
-  private headers(): HeadersInit {
+  private headers(): Record<string, string> {
     return {
       Authorization: this.authHeader!,
       Accept: 'application/json',
@@ -154,7 +154,7 @@ export class BraintreeGateway implements PaymentGateway {
       return { success: false, transactionId: id ?? '', errorMessage: message };
     }
 
-    this.logger.log(`Braintree authorized: ${id} (${res.data.transaction?.status})`);
+    this.logger.log(`Braintree authorized: ${id} (${res.data?.transaction?.status})`);
     return { success: true, transactionId: id };
   }
 
@@ -222,10 +222,11 @@ export class BraintreeGateway implements PaymentGateway {
     amount?: number,
     _options?: PaymentGatewayCallOptions,
   ): Promise<PaymentGatewayResult> {
-    const body: Record<string, unknown> = { transaction: {} as Record<string, unknown> };
+    const transaction: Record<string, unknown> = {};
     if (amount !== undefined) {
-      (body.transaction as Record<string, unknown>).amount = toMajorAmountString(amount);
+      transaction['amount'] = toMajorAmountString(amount);
     }
+    const body: Record<string, unknown> = { transaction };
 
     const res = await gatewayJsonRequest<BraintreeTransactionResponse>(
       this.txUrl(transactionId, 'refund'),

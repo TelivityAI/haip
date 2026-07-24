@@ -98,7 +98,7 @@ export class MollieGateway implements PaymentGateway {
     return this.refundHttp(transactionId, amount, options);
   }
 
-  private headers(): HeadersInit {
+  private headers(): Record<string, string> {
     return {
       Authorization: `Bearer ${this.apiKey}`,
       Accept: 'application/json',
@@ -154,7 +154,7 @@ export class MollieGateway implements PaymentGateway {
   ): Promise<PaymentGatewayResult> {
     const body: Record<string, unknown> = {};
     if (amount !== undefined) {
-      body.amount = { value: toMajorAmountString(amount) };
+      body['amount'] = { value: toMajorAmountString(amount) };
     }
 
     const res = await gatewayJsonRequest<MolliePaymentResponse>(
@@ -215,7 +215,7 @@ export class MollieGateway implements PaymentGateway {
   ): Promise<PaymentGatewayResult> {
     const body: Record<string, unknown> = {};
     if (amount !== undefined) {
-      body.amount = { value: toMajorAmountString(amount) };
+      body['amount'] = { value: toMajorAmountString(amount) };
     }
 
     const res = await gatewayJsonRequest<MolliePaymentResponse>(

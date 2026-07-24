@@ -107,7 +107,7 @@ export class SquareGateway implements PaymentGateway {
     return this.refundHttp(transactionId, amount, options);
   }
 
-  private headers(): HeadersInit {
+  private headers(): Record<string, string> {
     return {
       Authorization: `Bearer ${this.accessToken}`,
       Accept: 'application/json',
@@ -147,7 +147,7 @@ export class SquareGateway implements PaymentGateway {
       return { success: false, transactionId: paymentId ?? '', errorMessage: detail };
     }
 
-    this.logger.log(`Square authorized: ${paymentId} (${res.data.payment?.status})`);
+    this.logger.log(`Square authorized: ${paymentId} (${res.data?.payment?.status})`);
     return { success: true, transactionId: paymentId };
   }
 
@@ -222,7 +222,7 @@ export class SquareGateway implements PaymentGateway {
       payment_id: transactionId,
     };
     if (amount !== undefined) {
-      body.amount_money = { amount: toMinorUnits(amount) };
+      body['amount_money'] = { amount: toMinorUnits(amount) };
     }
 
     const res = await gatewayJsonRequest<SquareRefundResponse>(
