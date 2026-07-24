@@ -1,11 +1,12 @@
 {
-  "name": "@telivityhaip/database",
+  "name": "@inhotel-io/database",
+  "x-inpms-modification-notice": "Modified by inHotel Sàrl for inPMS; see NOTICE.",
   "version": "0.0.1",
-  "description": "HAIP database schema and migrations (Drizzle ORM + PostgreSQL)",
+  "description": "inPMS database schema and migrations (Drizzle ORM + PostgreSQL)",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/TelivityAI/haip.git",
+    "url": "https://github.com/inhotel-io/inpms.git",
     "directory": "packages/database"
   },
   "publishConfig": {

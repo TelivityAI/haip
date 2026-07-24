@@ -1,27 +1,28 @@
-# Catch HAIP webhooks in n8n
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
+# Catch inPMS webhooks in n8n
 
-Use this when HAIP should push `entity.action` events (for example `reservation.checked_in`, `folio.settled`) into an n8n workflow.
+Use this when inPMS should push `entity.action` events (for example `reservation.checked_in`, `folio.settled`) into an n8n workflow.
 
-## 1. Create a subscription in HAIP
+## 1. Create a subscription in inPMS
 
 Create a webhook subscription via the Connect API (see [Connect API key](connect-api-key.md) for `x-api-key` auth). Request body and endpoints are documented in **[Webhooks & events](../webhooks.md#subscribing)**:
 
 - `POST /api/v1/connect/subscriptions`
 - Set `callbackUrl` to your n8n webhook URL (HTTPS, publicly reachable)
 - Set `events` to the patterns you need (wildcards such as `reservation.*` are supported)
-- Store the `secret` you send — HAIP does not return it again
+- Store the `secret` you send — inPMS does not return it again
 
 Test delivery: `POST /api/v1/connect/subscriptions/:id/test`
 
 ## 2. Add a Webhook node in n8n
 
 1. New workflow → **Webhook** trigger → **POST**.
-2. Copy the **Production URL** into HAIP `callbackUrl`.
-3. Enable **Raw Body** (or equivalent) so you can verify the signature on the exact bytes HAIP signed.
+2. Copy the **Production URL** into inPMS `callbackUrl`.
+3. Enable **Raw Body** (or equivalent) so you can verify the signature on the exact bytes inPMS signed.
 
 ## 3. Verify `X-HAIP-Signature`
 
-HAIP signs the raw JSON body with HMAC-SHA256:
+inPMS signs the raw JSON body with HMAC-SHA256:
 
 ```
 X-HAIP-Signature: sha256=<hex>

@@ -1,4 +1,5 @@
-# HAIP — Claude Code Constitution
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
+# inPMS — Claude Code Constitution
 
 ## The One Rule
 
@@ -6,9 +7,9 @@
 
 All hotel domain knowledge comes from `kb/HAIP_KNOWLEDGE_BASE.md`. If something is ambiguous or missing, STOP and surface the question. Do not guess. Do not hallucinate hotel operations.
 
-## What Is HAIP
+## What Is inPMS
 
-HAIP (Hotel AI Platform) is an open-source, TypeScript/Node.js, API-first hotel PMS. Sister project to OTAIP. HAIP handles lodging. OTAIP handles air.
+inPMS is a free, hosted, TypeScript/Node.js, API-first hotel PMS optimized for direct bookings and agentic workflows in hybrid human–AI teams.
 
 Architecture: Option B — PMS is standalone, OTAIP agents connect via API (not embedded).
 
@@ -67,7 +68,7 @@ property-scoped table, the WHERE clause is the first thing to verify.
 ## Project Structure
 
 ```
-haip-project/
+inpms-project/
 ├── apps/api/              # NestJS API application
 ├── packages/database/     # Drizzle ORM schema and migrations
 ├── packages/shared/       # Shared types and utilities

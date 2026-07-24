@@ -1,0 +1,85 @@
+{
+  "$comment": "Authored by inHotel Sàrl for inPMS; see NOTICE.",
+  "entries": [
+    {
+      "path": "LICENSE",
+      "patterns": ["Telivity"],
+      "reason": "Preserved upstream copyright notice required by Apache-2.0 provenance."
+    },
+    {
+      "path": "NOTICE",
+      "patterns": ["Telivity", "TelivityAI/haip"],
+      "reason": "Required upstream attribution and fork provenance."
+    },
+    {
+      "path": "THIRD_PARTY_LICENSES",
+      "patterns": ["Telivity", "HAIP", "haip"],
+      "reason": "License and model provenance documentation."
+    },
+    {
+      "path": "README.md",
+      "patterns": ["TelivityAI/haip", "telivityai/haip", "HAIP_", "hf.co/telivity/haip-ai", "tools/haip-connect-gpt", "haip/", "haip-connect-gpt"],
+      "reason": "Attribution, historical upstream links, or compatibility-sensitive technical identifiers."
+    },
+    {
+      "path": "AGENTS.md",
+      "patterns": ["HAIP_", "haip"],
+      "reason": "Existing deployment environment and database identifiers."
+    },
+    {
+      "path": "CLAUDE.md",
+      "patterns": ["HAIP_KNOWLEDGE_BASE"],
+      "reason": "Legacy knowledge-base filename retained for tooling compatibility."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "patterns": ["HAIP", "Telivity", "telivityai/haip"],
+      "reason": "Historical upstream release record."
+    },
+    {
+      "path": "HAIP_BUILD_PLAN.md",
+      "patterns": ["HAIP", "Telivity", "telivityai/haip"],
+      "reason": "Legacy planning filename and historical upstream references."
+    },
+    {
+      "path": "apps/booking/README.md",
+      "patterns": ["HAIP_", "HAIPDEMO", "haip-booking"],
+      "reason": "Existing public API/environment and CSS/embed identifiers."
+    },
+    {
+      "path": "tools/haip-connect-gpt/README.md",
+      "patterns": ["HAIP_", "haip_", "haip-", "haip-connect-gpt"],
+      "reason": "Existing gateway environment, database, source path, and deployment identifiers."
+    },
+    {
+      "path": "tools/haip-connect-gpt/CHATGPT-GPT.md",
+      "patterns": ["HAIP_", "haip_", "haip-connect-gpt"],
+      "reason": "Existing gateway environment and deployment identifiers."
+    },
+    {
+      "path": "prompts/FIRST_SESSION_BOOTSTRAP.md",
+      "patterns": ["HAIP_BUILD_PLAN", "HAIP_KNOWLEDGE_BASE", "haip-"],
+      "reason": "Legacy project filenames and skill identifiers referenced by the bootstrap prompt."
+    },
+    {
+      "path": "apps/api/public/index.html",
+      "patterns": ["TelivityAI/haip"],
+      "reason": "Modification provenance comment."
+    },
+    {
+      "path": "apps/booking/index.html",
+      "patterns": ["haip-booking"],
+      "reason": "Legacy CSS/embed selector retained for widget compatibility."
+    },
+    {
+      "path": "apps/dashboard/index.html",
+      "patterns": ["telivity-"],
+      "reason": "Legacy Tailwind design-token selectors retained for dashboard compatibility."
+    },
+    {
+      "path": "apps/dashboard/public/booking-preview.html",
+      "patterns": ["haip-", "haip_", "HAIPDEMO"],
+      "reason": "Legacy CSS/embed selectors and demo key retained in the preview fixture."
+    }
+  ]
+}

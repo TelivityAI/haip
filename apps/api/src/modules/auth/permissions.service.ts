@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { users, userRoles, rolePermissions } from '@telivityhaip/database';
+import { users, userRoles, rolePermissions } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 
 /**

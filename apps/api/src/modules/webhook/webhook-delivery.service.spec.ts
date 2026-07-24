@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createHmac } from 'crypto';
 import { WebhookDeliveryService } from './webhook-delivery.service';
@@ -23,7 +24,7 @@ function createStatefulMockDb(subscription: any) {
   const fallbackTable: 'webhook_deliveries' | 'subscriptions' = 'webhook_deliveries';
 
   const identifyTable = (tbl: any): 'webhook_deliveries' | 'subscriptions' => {
-    // @telivityhaip/database exports identifiable symbols on each pgTable. Fall back
+    // @inhotel-io/database exports identifiable symbols on each pgTable. Fall back
     // to a constructor-name check; the test just needs to distinguish.
     const name = tbl?.[Symbol.for('drizzle:Name')] ?? tbl?._?.name ?? '';
     if (String(name).includes('webhook_deliveries')) return 'webhook_deliveries';

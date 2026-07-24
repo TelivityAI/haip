@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   BadRequestException,
   Inject,
@@ -9,7 +10,7 @@ import {
   auditLogs,
   properties,
   reservations,
-} from '@telivityhaip/database';
+} from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { FiscalDocumentService } from '../folio/fiscal-document.service';
 import { FiscalProviderFactory } from './fiscal-provider.factory';

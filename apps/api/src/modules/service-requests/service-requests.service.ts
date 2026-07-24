@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
@@ -6,7 +7,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
-import { serviceRequests, rooms, reservations } from '@telivityhaip/database';
+import { serviceRequests, rooms, reservations } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
 import {

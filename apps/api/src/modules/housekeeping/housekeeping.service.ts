@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
@@ -7,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and, sql, desc, asc, inArray, gte, lt, lte, gt } from 'drizzle-orm';
-import { housekeepingTasks, rooms, reservations, guests, properties, roomTypes } from '@telivityhaip/database';
+import { housekeepingTasks, rooms, reservations, guests, properties, roomTypes } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService, type WebhookPayload } from '../webhook/webhook.service';
 import { RoomStatusService } from '../room/room-status.service';

@@ -1,9 +1,16 @@
-No third-party model weights are redistributed in this repository. HAIP AI is
-produced by a private build pipeline and distributed separately as a GGUF you
-load into Ollama. The attributions below acknowledge the upstream sources whose
-outputs or vocabulary informed that model.
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
+No third-party model weights are redistributed in this repository. Any model
+produced by a private build pipeline and distributed separately as a GGUF must
+be reviewed independently before release. The attributions below acknowledge
+upstream sources whose outputs or vocabulary informed the model; they do not
+grant permission to redistribute weights, datasets, or derived artifacts.
 
-HAIP AI base model was developed using:
+Before distributing any model or derived artifact, verify the exact license,
+usage restrictions, attribution requirements, and trademark terms for the
+specific version used. Add the complete required notices to the release
+artifact, not only to this summary file.
+
+The upstream AI model pipeline was developed using:
 
 • Gemma 4 E4B — Google DeepMind
   License: Apache License 2.0
@@ -41,3 +48,4 @@ Additional distillation done using:
 
 Trademarks (Gemma, gpt-oss, Qwen, Kimi, GLM, Mistral, and others) are the
 property of their respective owners and are used here for attribution only.
+This file is not an endorsement by any listed model or vendor.

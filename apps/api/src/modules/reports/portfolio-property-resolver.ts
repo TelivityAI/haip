@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject, BadRequestException } from '@nestjs/common';
 import { eq, and, inArray } from 'drizzle-orm';
-import { properties } from '@telivityhaip/database';
+import { properties } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import type { AuthUser } from '../auth/current-user.decorator';
 import { userCanAccessProperty } from '../auth/property-access';

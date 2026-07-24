@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
@@ -5,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and, inArray, lte, gt } from 'drizzle-orm';
-import { rooms, reservations, roomDiscrepancyCases } from '@telivityhaip/database';
+import { rooms, reservations, roomDiscrepancyCases } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 
 const IN_HOUSE_STATUSES = ['checked_in', 'stayover', 'due_out'] as const;

@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
@@ -15,7 +16,7 @@ import {
   ratePlans,
   properties,
   rooms,
-} from '@telivityhaip/database';
+} from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { FolioService } from '../folio/folio.service';
 import { ReservationService } from '../reservation/reservation.service';

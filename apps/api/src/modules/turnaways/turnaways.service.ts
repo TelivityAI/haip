@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   BadRequestException,
   Inject,
@@ -9,7 +10,7 @@ import {
   roomTypes,
   turnawayReasonCodes,
   turnaways,
-} from '@telivityhaip/database';
+} from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import {
   CreateTurnawayDto,

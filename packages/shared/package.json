@@ -1,11 +1,12 @@
 {
-  "name": "@telivityhaip/shared",
+  "name": "@inhotel-io/shared",
+  "x-inpms-modification-notice": "Modified by inHotel Sàrl for inPMS; see NOTICE.",
   "version": "0.0.1",
-  "description": "HAIP shared types, constants, and utilities",
+  "description": "inPMS shared types, constants, and utilities",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/TelivityAI/haip.git",
+    "url": "https://github.com/inhotel-io/inpms.git",
     "directory": "packages/shared"
   },
   "publishConfig": {

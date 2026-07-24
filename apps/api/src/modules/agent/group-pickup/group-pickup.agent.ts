@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
 import { eq, and, inArray } from 'drizzle-orm';
-import { allotmentBlocks, allotmentBlockInventory } from '@telivityhaip/database';
+import { allotmentBlocks, allotmentBlockInventory } from '@inhotel-io/database';
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
 import type {

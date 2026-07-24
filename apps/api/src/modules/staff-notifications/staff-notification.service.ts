@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { eq, and, desc, sql, isNull, or } from 'drizzle-orm';
-import { staffNotifications, staffNotificationReads } from '@telivityhaip/database';
+import { staffNotifications, staffNotificationReads } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { EventsGateway } from '../events/events.gateway';

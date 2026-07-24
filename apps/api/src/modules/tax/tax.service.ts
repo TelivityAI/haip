@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
@@ -6,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { eq, and, lte, sql } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { taxProfiles, taxRules, guests } from '@telivityhaip/database';
+import { taxProfiles, taxRules, guests } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateTaxProfileDto } from './dto/create-tax-profile.dto';
 import { UpdateTaxProfileDto } from './dto/update-tax-profile.dto';

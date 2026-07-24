@@ -1,13 +1,14 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # WhatsApp as a guest messaging channel (research brief)
 
 **Status:** Defaults locked — Twilio Content API + reuse `gdprConsentMarketing`
 for marketing; outbound utility templates MVP. Implemented in
-[#205](https://github.com/TelivityAI/haip/pull/205).  
+[#205](https://github.com/inhotel-io/inpms/pull/205).
 **Audience:** NestJS adapter design + operator onboarding.  
 **Date:** 2026-07-24  
-**Context:** HAIP already has email guest-comms (`guest-comms` agent + `EmailService`) and SMS via `NotificationService` / `SmsProvider`. WhatsApp is a sibling provider under the same module.
+**Context:** inPMS already has email guest-comms (`guest-comms` agent + `EmailService`) and SMS via `NotificationService` / `SmsProvider`. WhatsApp is a sibling provider under the same module.
 
-This brief maps Meta’s WhatsApp Business Platform rules onto HAIP’s existing notification abstraction. It does **not** invent hotel domain concepts beyond the lifecycle types already in guest-comms (`confirmation`, `pre_arrival`, day-of, `post_stay`).
+This brief maps Meta’s WhatsApp Business Platform rules onto inPMS’s existing notification abstraction. It does **not** invent hotel domain concepts beyond the lifecycle types already in guest-comms (`confirmation`, `pre_arrival`, day-of, `post_stay`).
 
 ---
 
@@ -39,25 +40,25 @@ You **can** integrate Cloud API directly as a developer (no BSP required). Some 
 |--|--|
 | **What you get** | `POST https://graph.facebook.com/vXX.X/{phone-number-id}/messages`, webhooks to your URL, WABA + phone number in Meta Business Manager. |
 | **Setup** | Meta app + WhatsApp use case, WABA, business phone number, system-user permanent token, webhook verify + subscribe (`messages`, optionally `user_preferences`). [Get started](https://developers.facebook.com/docs/whatsapp/cloud-api/get-started) |
-| **Pros (hotels / HAIP)** | No BSP per-message markup; full control; multi-tenant can use webhook overrides per WABA/number; aligns with API-first PMS. |
+| **Pros (hotels / inPMS)** | No BSP per-message markup; full control; multi-tenant can use webhook overrides per WABA/number; aligns with API-first PMS. |
 | **Cons** | You own token rotation, template lifecycle in WhatsApp Manager, quality rating, display-name verification, webhook retries/dedup, Meta billing localization (IN/BR), support is docs-only. Multi-property onboarding is manual unless you become a Tech Provider / use Embedded Signup. |
 
 ### Path B — BSP on top of Cloud API
 
-| BSP | Fit for HAIP | Pros | Cons |
+| BSP | Fit for inPMS | Pros | Cons |
 |-----|--------------|------|------|
 | **Twilio** | Strong if SMS already uses Twilio | Same account/SDK pattern as `TwilioSmsProvider`; Content Template Builder; inbound webhooks mirror SMS form posts; [Twilio WhatsApp overview](https://www.twilio.com/docs/whatsapp/api) | Platform fee on messages (commonly cited ~USD 0.005 + Meta); ContentSid model differs from Meta native template name/language |
 | **360dialog** | Strong for EU GDPR-minded operators | Pass-through Meta fees (no message markup); Cloud-API-shaped Messaging API (`waba-v2.360dialog.io`); Partner API for multi-client onboarding; [docs](https://docs.360dialog.com/docs/messaging) | Monthly per-number platform fee; another vendor beside Twilio SMS |
-| **Bird (MessageBird)** | Mid-market + inbox | Productized inbox/automation if hotels want UI outside HAIP | Markup / subscription; less “thin adapter” |
+| **Bird (MessageBird)** | Mid-market + inbox | Productized inbox/automation if hotels want UI outside inPMS | Markup / subscription; less “thin adapter” |
 | **Vonage** | Similar to Twilio (Messages API) | Unified Messages API; PMP aligned with Meta Jul 2025; [Vonage WhatsApp](https://developer.vonage.com/en/messages/concepts/whatsapp) | Limited Availability historically; another credentials model |
-| **Infobip / others** | Enterprise multi-channel | Regional coverage, compliance tooling | Heavier commercial stack than HAIP’s thin SMS pattern |
+| **Infobip / others** | Enterprise multi-channel | Regional coverage, compliance tooling | Heavier commercial stack than inPMS’s thin SMS pattern |
 
 ### Hotel-specific tradeoffs
 
 | Concern | Direct Cloud API | BSP (esp. Twilio / 360dialog) |
 |---------|------------------|-------------------------------|
 | Per-property WABA / number | You provision in Meta BM; store IDs on property config | BSP often provisions; store BSP keys + Meta IDs |
-| Front-desk two-way inbox | Must build in HAIP (or external) | Some BSPs include inbox (pay for product you may not want if HAIP owns desk) |
+| Front-desk two-way inbox | Must build in inPMS (or external) | Some BSPs include inbox (pay for product you may not want if inPMS owns desk) |
 | Cost at low volume (boutique) | Meta rates only | Platform fee may dominate |
 | Cost at high volume (chain) | Best unit economics | Twilio-style markup compounds; 360dialog pass-through better |
 | Ops burden for self-hosters | Higher | Lower |
@@ -84,9 +85,9 @@ Sources: [Service / conversation types](https://developers.facebook.com/docs/wha
 - When closed: **templates only**.
 - Separate concept: **Free Entry Point (FEP)** — 72h free window after certain click-to-WhatsApp ad flows (see Meta pricing docs). Rare for classic hotel booking unless ads.
 
-### Template categories (map to HAIP guest-comms)
+### Template categories (map to inPMS guest-comms)
 
-| Meta category | Typical hotel use (existing HAIP email types) | Notes |
+| Meta category | Typical hotel use (existing inPMS email types) | Notes |
 |---------------|-----------------------------------------------|--------|
 | **Utility** | `confirmation`, `pre_arrival`, check-in instructions, payment/folio alerts, late checkout confirmation | Prefer this for transactional PMS traffic |
 | **Authentication** | OTP / magic link if ever on WhatsApp | Short TTL (default ~10 min) |
@@ -104,7 +105,7 @@ From [Get opt-in for WhatsApp](https://developers.facebook.com/docs/whatsapp/ove
 
 Supported collection methods (examples): website, SMS, IVR, in person / paper.
 
-**HAIP implication:** Today `guests.gdprConsentMarketing` gates marketing email/SMS. WhatsApp needs at least:
+**inPMS implication:** Today `guests.gdprConsentMarketing` gates marketing email/SMS. WhatsApp needs at least:
 
 - Channel/capability consent for **transactional** WhatsApp (or documented mapping from booking T&Cs if counsel agrees), **and**
 - Marketing flag for Marketing templates (reuse or extend `gdprConsentMarketing` / add `whatsappOptIn` — **owner decision**).
@@ -172,7 +173,7 @@ Keep SMS and WhatsApp as **sibling transports** under notifications (same audit/
 export type WhatsAppTemplateCategory = 'utility' | 'authentication' | 'marketing';
 
 export interface WhatsAppTemplateRef {
-  /** Logical HAIP key, e.g. 'pre_arrival' — mapped per property to provider template id/name */
+  /** Logical inPMS key, e.g. 'pre_arrival' — mapped per property to provider template id/name */
   templateKey: string;
   /** BCP-47 / WhatsApp language code, e.g. 'en', 'en_US' */
   language: string;
@@ -294,7 +295,7 @@ sendWhatsAppTemplate(propertyId, to, templateKey, variables, opts?: { isMarketin
 - Endpoint must answer webhook verification challenge; return 200 quickly; Meta retries up to ~7 days on failure ([Webhooks](https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks/)).
 - Resolve tenant by `metadata.phone_number_id` → property WhatsApp config (**required** multi-tenancy pattern — do not derive property from guest phone alone without verifying the destination number belongs to that property).
 
-### HAIP fan-out (phase 2)
+### inPMS fan-out (phase 2)
 
 ```
 Provider webhook
@@ -325,7 +326,7 @@ Provider webhook
 
 1. **Meta per-message fees** (templates delivered) — by category + country; conversation-based pricing **deprecated** Jul 1, 2025 ([Pricing](https://developers.facebook.com/docs/whatsapp/pricing/)).
 2. **BSP platform fee / markup** (if any) — Twilio-style per-message fee, 360dialog-style monthly per number, Bird-style subscription+markup.
-3. **HAIP engineering / ops** — template maintenance, quality monitoring, webhook infra.
+3. **inPMS engineering / ops** — template maintenance, quality monitoring, webhook infra.
 
 **Hotel cost intuition:** Pre-arrival utility templates to guests in DE/UK/US are the recurring bill. Keep post-stay / upsell as Marketing and volume-gate them. Prefer opening CSW via guest reply so follow-ups are free session messages.
 
@@ -333,7 +334,7 @@ Official rate cards: linked from Meta pricing page (USD/EUR/GBP CSVs; updated qu
 
 ### GDPR / EU (high level — not legal advice)
 
-| Topic | HAIP today | WhatsApp add |
+| Topic | inPMS today | WhatsApp add |
 |-------|------------|--------------|
 | Marketing opt-out | `gdprConsentMarketing` on guest; compose/send blocks when false | Map Meta `user_preferences` `stop`/`resume` → same (or WA-specific) flag; [user_preferences ref](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/user_preferences) |
 | Lawful basis | Booking transactional vs marketing | Utility templates ≈ legitimate interest / contract performance **if** counsel agrees; marketing still needs consent under ePrivacy in many EU states |
@@ -405,7 +406,7 @@ export interface WhatsAppPropertyConfig {
   webhookAppSecretRef?: string; // Meta X-Hub-Signature-256
 
   /**
-   * Map HAIP logical template keys → provider template identity.
+   * Map inPMS logical template keys → provider template identity.
    * Cloud API: name + language code.
    * Twilio: ContentSid (HX…).
    */
@@ -434,9 +435,9 @@ export interface WhatsAppPropertyConfig {
    - Default lean: **Twilio WhatsApp** if keeping one vendor with SMS; **360dialog** if EU + pass-through Meta fees; **direct Cloud API** if maximizing control / minimizing markup and accepting Meta ops.
 
 2. **“Self-host Cloud API”?**  
-   - **No viable on-prem API** for new work. Clarify: “self-host” can only mean “HAIP hosts webhook + adapter, Meta hosts messaging” — not running WhatsApp servers.
+   - **No viable on-prem API** for new work. Clarify: “self-host” can only mean “inPMS hosts webhook + adapter, Meta hosts messaging” — not running WhatsApp servers.
 
-3. **Single WABA for the HAIP SaaS tenant vs per-property WABA?**  
+3. **Single WABA for the inPMS SaaS tenant vs per-property WABA?**
    - Brand/compliance usually want **per property (or per brand) number**. Platform Tech Provider + Embedded Signup is a larger project.
 
 4. **Consent model:** Reuse `gdprConsentMarketing` only, or add `whatsappOptIn` / `gdprConsentTransactionalMessaging`?
@@ -445,9 +446,9 @@ export interface WhatsAppPropertyConfig {
 
 6. **Inbound SLA:** Staff notification only vs create service requests automatically (needs product rules — do not invent without KB)?
 
-7. **Template ownership:** Hotels submit templates in Meta/BSP UI, or HAIP ships default English templates they copy?
+7. **Template ownership:** Hotels submit templates in Meta/BSP UI, or inPMS ships default English templates they copy?
 
-8. **Pricing responsibility:** Does the self-hoster bring their own Meta/BSP billing (like Twilio SMS today), or will a hosted HAIP cloud ever resell messaging?
+8. **Pricing responsibility:** Does the self-hoster bring their own Meta/BSP billing (like Twilio SMS today), or will a hosted inPMS cloud ever resell messaging?
 
 9. **Persist message log?** Current reservation compose explicitly has no message-log table — two-way almost certainly needs one for GDPR access/erasure.
 
@@ -474,7 +475,7 @@ export interface WhatsAppPropertyConfig {
 
 ---
 
-## HAIP code touchpoints (when implementing)
+## inPMS code touchpoints (when implementing)
 
 | Area | Path |
 |------|------|

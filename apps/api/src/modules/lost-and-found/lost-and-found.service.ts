@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
-import { lostAndFoundItems, rooms, reservations } from '@telivityhaip/database';
+import { lostAndFoundItems, rooms, reservations } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import {
   type CreateLostAndFoundItemDto,

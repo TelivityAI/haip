@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { WEBHOOK_EVENTS } from '@telivityhaip/shared';
+import { WEBHOOK_EVENTS } from '@inhotel-io/shared';
 import { ReservationService } from './reservation.service';
 import { AvailabilityService } from './availability.service';
 import { FolioService } from '../folio/folio.service';

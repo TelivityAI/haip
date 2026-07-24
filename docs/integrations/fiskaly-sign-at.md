@@ -1,6 +1,7 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # fiskaly SIGN AT (RKSV) — fiscal provider
 
-HAIP wires **property-level fiscal provider keys**. Core does **not** embed fiskaly or Austrian RKSV APIs; it stores configuration, listens for `invoice.requested`, and delegates to a registered provider.
+inPMS wires **property-level fiscal provider keys**. Core does **not** embed fiskaly or Austrian RKSV APIs; it stores configuration, listens for `invoice.requested`, and delegates to a registered provider.
 
 ## Provider key
 

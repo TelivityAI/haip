@@ -1,7 +1,8 @@
 {
-  "name": "@telivityhaip/api",
+  "name": "@inhotel-io/api",
+  "x-inpms-modification-notice": "Modified by inHotel Sàrl for inPMS; see NOTICE.",
   "version": "0.0.1",
-  "description": "HAIP API — NestJS REST API for the Hotel AI Platform",
+  "description": "inPMS API — NestJS REST API for the inHotel hospitality PMS",
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
@@ -29,8 +30,8 @@
     "@nestjs/serve-static": "^5.0.4",
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/websockets": "^10.0.0",
-    "@telivityhaip/database": "workspace:*",
-    "@telivityhaip/shared": "workspace:^",
+    "@inhotel-io/database": "workspace:*",
+    "@inhotel-io/shared": "workspace:^",
     "@types/jsonwebtoken": "^9.0.10",
     "bullmq": "^5.81.1",
     "class-transformer": "^0.5.1",

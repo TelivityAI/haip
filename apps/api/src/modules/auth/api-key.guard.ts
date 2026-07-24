@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
@@ -9,7 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { eq, and } from 'drizzle-orm';
-import { connectCredentials } from '@telivityhaip/database';
+import { connectCredentials } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 
 /** Constant-time string compare (avoids leaking the key via response timing). */

@@ -1,8 +1,9 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { ariSyncLogs, ratePlans, rateRestrictions } from '@telivityhaip/database';
+import { ariSyncLogs, ratePlans, rateRestrictions } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { ChannelAdapterFactory } from './channel-adapter.factory';
 import { ChannelService } from './channel.service';

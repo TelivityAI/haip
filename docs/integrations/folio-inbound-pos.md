@@ -1,3 +1,4 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # Folio inbound charges (any POS)
 
 Post incidental charges from a POS, minibar system, spa terminal, or custom middleware onto the **in-house guest folio** without staff manual entry.
@@ -56,4 +57,4 @@ Example:
 
 ## Alternative: `/api/v1/pos/charges`
 
-HAIP also exposes **`POST /api/v1/pos/charges`** for outlet POS integrations (DTO includes explicit `propertyId` for platform callers). Prefer **folio-inbound** when you only have room number + amount and a property-bound key.
+inPMS also exposes **`POST /api/v1/pos/charges`** for outlet POS integrations (DTO includes explicit `propertyId` for platform callers). Prefer **folio-inbound** when you only have room number + amount and a property-bound key.

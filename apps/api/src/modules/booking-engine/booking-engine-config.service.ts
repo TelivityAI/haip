@@ -1,8 +1,9 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
-import { bookingEngineConfig, bookingEngineCredentials } from '@telivityhaip/database';
-import type { DepositPolicy } from '@telivityhaip/database';
+import { bookingEngineConfig, bookingEngineCredentials } from '@inhotel-io/database';
+import type { DepositPolicy } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { hashBookingKey } from '../auth/booking-key.guard';
 

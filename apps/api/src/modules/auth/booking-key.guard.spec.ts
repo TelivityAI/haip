@@ -1,8 +1,9 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UnauthorizedException } from '@nestjs/common';
 import { BookingKeyGuard, hashBookingKey } from './booking-key.guard';
 
-vi.mock('@telivityhaip/database', () => ({
+vi.mock('@inhotel-io/database', () => ({
   bookingEngineCredentials: { keyHash: 'keyHash' },
 }));
 

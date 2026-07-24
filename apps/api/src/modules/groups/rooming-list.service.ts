@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject, BadRequestException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { roomingListEntries, roomTypes } from '@telivityhaip/database';
+import { roomingListEntries, roomTypes } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { ReservationService } from '../reservation/reservation.service';

@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
-import { agentConfigs, agentDecisions, agentTrainingSnapshots, auditLogs } from '@telivityhaip/database';
+import { agentConfigs, agentDecisions, agentTrainingSnapshots, auditLogs } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { LlmService } from '../llm/llm.service';

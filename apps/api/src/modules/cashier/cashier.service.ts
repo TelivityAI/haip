@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
@@ -11,7 +12,7 @@ import {
   cashDrawerSessions,
   cashMovements,
   reservations,
-} from '@telivityhaip/database';
+} from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { CreateDrawerDto } from './dto/create-drawer.dto';

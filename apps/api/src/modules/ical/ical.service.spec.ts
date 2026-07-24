@@ -1,7 +1,8 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { auditLogs, icalFeeds } from '@telivityhaip/database';
+import { auditLogs, icalFeeds } from '@inhotel-io/database';
 import { IcalService } from './ical.service';
 
 const PROPERTY_ID = 'aaaaaaaa-0000-4000-a000-000000000001';

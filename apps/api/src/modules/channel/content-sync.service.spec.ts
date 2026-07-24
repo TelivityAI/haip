@@ -1,5 +1,6 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { properties, roomTypes, contentSyncLogs } from '@telivityhaip/database';
+import { properties, roomTypes, contentSyncLogs } from '@inhotel-io/database';
 import { ContentSyncService } from './content-sync.service';
 
 /** Mock db keyed by table identity so property and room-type queries differ. */

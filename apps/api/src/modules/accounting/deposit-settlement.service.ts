@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { depositLedgerEntries, folios } from '@telivityhaip/database';
+import { depositLedgerEntries, folios } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { DepositService } from './deposit.service';
 import { FolioService } from '../folio/folio.service';
@@ -165,7 +166,7 @@ export class DepositSettlementService {
     if (existing) return existing;
 
     // createAutoFolio needs a reservation-like object; load minimal fields via deposit reservation join path
-    const { reservations } = await import('@telivityhaip/database');
+    const { reservations } = await import('@inhotel-io/database');
     const [reservation] = await this.db
       .select()
       .from(reservations)

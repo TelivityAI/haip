@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Controller,
   Post,
@@ -9,7 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { and, eq } from 'drizzle-orm';
-import { channelConnections } from '@telivityhaip/database';
+import { channelConnections } from '@inhotel-io/database';
 import { Public } from '../../../auth/public.decorator';
 import { DRIZZLE } from '../../../../database/database.module';
 import { InboundReservationService } from '../../inbound-reservation.service';

@@ -1,10 +1,11 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, eq } from 'drizzle-orm';
 import {
   auditLogs,
   integrationCatalogEntries,
   propertyIntegrations,
-} from '@telivityhaip/database';
+} from '@inhotel-io/database';
 import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { DRIZZLE } from '../../database/database.module';
 import { ListIntegrationsDto, UpsertPropertyIntegrationDto } from './dto/integration-registry.dto';

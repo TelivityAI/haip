@@ -1,6 +1,7 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # Adyen, Mollie, Square, and Braintree payment adapters
 
-HAIP card flows (`POST /api/v1/payments/authorize`, capture, void, refund) use a pluggable **PaymentGateway** adapter. Stripe remains the default when `PAYMENT_GATEWAY` is unset and `STRIPE_MODE` is `test` or `live`. This recipe covers the Wave 2 PSP adapters: **Adyen**, **Mollie**, **Square**, and **Braintree**.
+inPMS card flows (`POST /api/v1/payments/authorize`, capture, void, refund) use a pluggable **PaymentGateway** adapter. Stripe remains the default when `PAYMENT_GATEWAY` is unset and `STRIPE_MODE` is `test` or `live`. This recipe covers the Wave 2 PSP adapters: **Adyen**, **Mollie**, **Square**, and **Braintree**.
 
 See also the [Payments section](../INTEGRATIONS.md#payments) in the integration catalog.
 
@@ -32,7 +33,7 @@ Production boot checks treat `PAYMENT_GATEWAY=mock` (or unset + `STRIPE_MODE=moc
 
 ## Record the provider on each payment
 
-On authorize, set `gatewayProvider` in the request body to match the adapter (`adyen`, `mollie`, `square`, `braintree`, or `stripe`). HAIP stores this on the payment row for reconciliation and webhooks.
+On authorize, set `gatewayProvider` in the request body to match the adapter (`adyen`, `mollie`, `square`, `braintree`, or `stripe`). inPMS stores this on the payment row for reconciliation and webhooks.
 
 ## Adyen
 

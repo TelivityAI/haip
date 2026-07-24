@@ -1,3 +1,4 @@
+# Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 FROM node:20-alpine AS base
 
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
@@ -22,8 +23,8 @@ COPY apps/dashboard/ ./apps/dashboard/
 COPY apps/booking/ ./apps/booking/
 
 # Build workspace packages
-RUN pnpm --filter @telivityhaip/shared run build
-RUN pnpm --filter @telivityhaip/database run build
+RUN pnpm --filter @inhotel-io/shared run build
+RUN pnpm --filter @inhotel-io/database run build
 
 # Dashboard SPA — auth/Keycloak settings are baked at build time (Vite env).
 ARG VITE_AUTH_ENABLED=false
@@ -39,10 +40,10 @@ ENV VITE_AUTH_ENABLED=$VITE_AUTH_ENABLED \
 RUN pnpm --filter dashboard run build
 
 # Build booking engine SPA
-RUN pnpm --filter @telivityhaip/booking run build
+RUN pnpm --filter @inhotel-io/booking run build
 
 # Build API (NestJS)
-RUN pnpm --filter @telivityhaip/api run build
+RUN pnpm --filter @inhotel-io/api run build
 
 # Production stage
 FROM node:20-alpine AS production

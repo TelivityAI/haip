@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, notInArray, sql, lt, gt } from 'drizzle-orm';
-import { reservations, roomTypes, properties, rooms, icalBlocks, icalFeeds } from '@telivityhaip/database';
+import { reservations, roomTypes, properties, rooms, icalBlocks, icalFeeds } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 
 export interface AvailabilityResult {

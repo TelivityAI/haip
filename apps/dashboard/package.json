@@ -1,5 +1,6 @@
 {
-  "name": "@telivityhaip/dashboard",
+  "name": "@inhotel-io/dashboard",
+  "x-inpms-modification-notice": "Modified by inHotel Sàrl for inPMS; see NOTICE.",
   "version": "0.0.1",
   "private": true,
   "license": "Apache-2.0",

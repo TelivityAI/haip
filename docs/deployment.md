@@ -1,6 +1,7 @@
-# HAIP Production Deployment
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
+# inPMS Production Deployment
 
-This guide covers self-hosting HAIP with authentication enabled and secure defaults.
+This guide covers self-hosting inPMS with authentication enabled and secure defaults.
 For the zero-config local demo, see [Quick Start](../README.md#quick-start) in the README.
 
 ## Compose files
@@ -148,15 +149,15 @@ The `init` service is idempotent — safe to re-run on every deploy.
 On each release, GitHub Actions publishes a **multi-platform** image (`linux/amd64` and `linux/arm64`):
 
 ```
-ghcr.io/telivityai/haip-api:<tag>
-ghcr.io/telivityai/haip-api:latest
+ghcr.io/inhotel-io/inpms-api:<tag>
+ghcr.io/inhotel-io/inpms-api:latest
 ```
 
 Pull and run (supply your own `.env.production` and Postgres/Redis/Keycloak):
 
 ```bash
-docker pull ghcr.io/telivityai/haip-api:latest
-docker run --env-file .env.production -p 3000:3000 ghcr.io/telivityai/haip-api:latest
+docker pull ghcr.io/inhotel-io/inpms-api:latest
+docker run --env-file .env.production -p 3000:3000 ghcr.io/inhotel-io/inpms-api:latest
 ```
 
 For the full stack (Postgres, Redis, Keycloak, migrate/seed), use the compose files above rather than a bare `docker run`.
@@ -169,7 +170,7 @@ Minimal path for a single VM (Hetzner, DigitalOcean, Linode, AWS EC2, etc.).
 2. **Install Docker** (official docs): Engine + Compose plugin. Confirm with `docker compose version`.
 3. **Clone and configure:**
    ```bash
-   git clone https://github.com/TelivityAI/haip.git
+   git clone https://github.com/inhotel-io/inpms.git
    cd haip
    cp .env.production.example .env.production
    # Fill DATABASE_URL / REDIS_URL if overriding compose defaults,
@@ -184,30 +185,30 @@ Minimal path for a single VM (Hetzner, DigitalOcean, Linode, AWS EC2, etc.).
 7. **Cron:** schedule night audit / group cutoffs from the host using [`scripts/cron/`](../scripts/cron/) and [`docs/operations/cron.md`](./operations/cron.md).
 8. **Backups:** nightly `pg_dump` of `DATABASE_URL` off-box (see [Database backup and restore](#database-backup-and-restore)).
 
-Alternatively, skip building on the VPS and pull the GHCR image, then run compose with an override that sets `image: ghcr.io/telivityai/haip-api:latest` for the `api` service (still need Postgres, Redis, Keycloak, and the `init` migrate step).
+Alternatively, skip building on the VPS and pull the GHCR image, then run compose with an override that sets `image: ghcr.io/inhotel-io/inpms-api:latest` for the `api` service (still need Postgres, Redis, Keycloak, and the `init` migrate step).
 
 ## Cloud deployment options
 
-These are sketches for running the **published GHCR image** (or the production compose overlay) on common platforms. HAIP expects Postgres, Redis, and (for auth-on) Keycloak — use managed addons where the platform provides them.
+These are sketches for running the **published GHCR image** (or the production compose overlay) on common platforms. inPMS expects Postgres, Redis, and (for auth-on) Keycloak — use managed addons where the platform provides them.
 
 ### Render
 
 | Mode | What to use |
 |------|-------------|
 | **Demo** (auth off) | One-click [`render.yaml`](../render.yaml) blueprint from the README — intentionally insecure for try-out only (`HAIP_ALLOW_INSECURE=true`). |
-| **Production** | Do **not** use the demo blueprint as-is. Create a **Web Service** from `ghcr.io/telivityai/haip-api:<tag>` (or Dockerfile), attach **managed Postgres** + **Redis**, set `AUTH_ENABLED=true`, `NODE_ENV=production`, real Stripe keys, `CONNECT_API_KEY`, and `CORS_ORIGINS`. Run Keycloak as a separate private service (or external IdP) and never set `HAIP_ALLOW_INSECURE`. Run migrate via a one-off job (`node packages/database/dist/push-schema.js`) before switching traffic. |
+| **Production** | Do **not** use the demo blueprint as-is. Create a **Web Service** from `ghcr.io/inhotel-io/inpms-api:<tag>` (or Dockerfile), attach **managed Postgres** + **Redis**, set `AUTH_ENABLED=true`, `NODE_ENV=production`, real Stripe keys, `CONNECT_API_KEY`, and `CORS_ORIGINS`. Run Keycloak as a separate private service (or external IdP) and never set `HAIP_ALLOW_INSECURE`. Run migrate via a one-off job (`node packages/database/dist/push-schema.js`) before switching traffic. |
 
 ### Railway
 
 1. Create a project with **Postgres** and **Redis** plugins; copy their connection URLs into service variables.
-2. Deploy the API from the GitHub repo (Railway builds [`apps/api/Dockerfile`](../apps/api/Dockerfile)) **or** deploy from `ghcr.io/telivityai/haip-api:<tag>`.
+2. Deploy the API from the GitHub repo (Railway builds [`apps/api/Dockerfile`](../apps/api/Dockerfile)) **or** deploy from `ghcr.io/inhotel-io/inpms-api:<tag>`.
 3. Set production env vars from [`.env.production.example`](../.env.production.example): `AUTH_ENABLED=true`, `NODE_ENV=production`, Stripe, `CONNECT_API_KEY`, Keycloak URL/realm/client, `SERVE_DASHBOARD=true`, `SERVE_BOOKING=true`.
 4. Add Keycloak as another Railway service (or point at an external realm). Restrict public networking to the API only.
 5. Run schema migration once (Railway one-off / release command) before serving traffic.
 
 ### AWS
 
-Typical pattern: **ECS Fargate** (or EC2 + Docker) for `ghcr.io/telivityai/haip-api`, **RDS Postgres**, **ElastiCache Redis**, and Keycloak on ECS or a managed OIDC provider.
+Typical pattern: **ECS Fargate** (or EC2 + Docker) for `ghcr.io/inhotel-io/inpms-api`, **RDS Postgres**, **ElastiCache Redis**, and Keycloak on ECS or a managed OIDC provider.
 
 1. Push/pull the multi-arch GHCR image into the account (or mirror to ECR).
 2. Task definition: port `3000`, secrets from SSM/Secrets Manager for `DATABASE_URL`, `REDIS_URL`, Stripe, Connect keys.
@@ -219,7 +220,7 @@ Typical pattern: **ECS Fargate** (or EC2 + Docker) for `ghcr.io/telivityai/haip-
 
 Typical pattern: **Cloud Run** for the API image, **Cloud SQL (Postgres)**, **Memorystore (Redis)**, Keycloak on Cloud Run/GKE or external OIDC.
 
-1. Deploy `ghcr.io/telivityai/haip-api:<tag>` to Cloud Run (allow unauthenticated only if a proxy/IAP sits in front; otherwise keep the service private and expose via HTTPS load balancer).
+1. Deploy `ghcr.io/inhotel-io/inpms-api:<tag>` to Cloud Run (allow unauthenticated only if a proxy/IAP sits in front; otherwise keep the service private and expose via HTTPS load balancer).
 2. Wire `DATABASE_URL` / `REDIS_URL` via Secret Manager; set `AUTH_ENABLED=true` and the rest of the production env table above.
 3. Cloud Run min instances ≥ 1 if you need warm WebSocket / cron targets.
 4. Run migrate from Cloud Run Jobs (same `push-schema` entrypoint) on deploy.

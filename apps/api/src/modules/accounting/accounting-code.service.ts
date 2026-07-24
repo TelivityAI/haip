@@ -1,10 +1,11 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
   NotFoundException,
 } from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
-import { accountingCodes } from '@telivityhaip/database';
+import { accountingCodes } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateAccountingCodeDto } from './dto/create-accounting-code.dto';
 import { UpdateAccountingCodeDto } from './dto/update-accounting-code.dto';

@@ -1,12 +1,13 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # Beds24 & Channex channel managers
 
-Connect HAIP to **Beds24** or **Channex** as the channel manager that pushes OTAs while HAIP remains the PMS of record.
+Connect inPMS to **Beds24** or **Channex** as the channel manager that pushes OTAs while inPMS remains the PMS of record.
 
 See the **[integration catalog](../INTEGRATIONS.md)** (Channel Managers) for where these fit in the roadmap.
 
 ## Prerequisites
 
-- A HAIP property with room types and rate plans mapped to channel codes (`channelRoomCode`, `channelRateCode`).
+- A inPMS property with room types and rate plans mapped to channel codes (`channelRoomCode`, `channelRateCode`).
 - A channel connection using adapter type `beds24` or `channex`.
 - Vendor credentials (API key / property keys) stored on the connection `config` JSON or in server env vars.
 
@@ -38,7 +39,7 @@ Content-Type: application/json
 
 ### ARI push
 
-HAIP pushes availability and rates via Beds24 **setRoomDates** when you call:
+inPMS pushes availability and rates via Beds24 **setRoomDates** when you call:
 
 - `POST /api/v1/channels/connections/{id}/push-availability?propertyId={uuid}`
 - `POST /api/v1/channels/connections/{id}/push-rates?propertyId={uuid}`
@@ -48,7 +49,7 @@ Room type mappings must use the Beds24 **roomId** as `channelRoomCode`.
 
 ### Booking import
 
-Poll Beds24 bookings into HAIP:
+Poll Beds24 bookings into inPMS:
 
 ```http
 POST /api/v1/channels/connections/{id}/pull-reservations?propertyId={uuid}
@@ -82,14 +83,14 @@ Content-Type: application/json
 }
 ```
 
-Map HAIP room types to Channex **room_type_id** and rate plans to **rate_plan_id**.
+Map inPMS room types to Channex **room_type_id** and rate plans to **rate_plan_id**.
 
 ### ARI push
 
 - Availability → `POST …/availability`
 - Rates & restrictions → `POST …/restrictions`
 
-Same HAIP push endpoints as other channel adapters (`push-availability`, `push-rates`, `push-restrictions`).
+Same inPMS push endpoints as other channel adapters (`push-availability`, `push-rates`, `push-restrictions`).
 
 ### Booking feed
 
@@ -97,7 +98,7 @@ Same HAIP push endpoints as other channel adapters (`push-availability`, `push-r
 POST /api/v1/channels/connections/{id}/pull-reservations?propertyId={uuid}
 ```
 
-Pulls unacknowledged revisions from **booking_revisions/feed**. After HAIP creates the reservation, confirm back to Channex:
+Pulls unacknowledged revisions from **booking_revisions/feed**. After inPMS creates the reservation, confirm back to Channex:
 
 ```http
 POST /api/v1/channels/connections/{id}/confirm-reservation?propertyId={uuid}

@@ -1,0 +1,33 @@
+# Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
+name: Licensing and provenance audit
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compliance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test scripts/audit-inpms-compliance.test.mjs
+      - run: node scripts/ensure-modification-notices.mjs --check --base "origin/${{ github.base_ref || 'main' }}"
+      - run: pnpm audit:compliance:json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: inpms-compliance-report
+          path: reports/inpms-compliance.json

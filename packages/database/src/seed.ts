@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 /**
  * HAIP Demo Seed — "Telivity Grand Hotel"
  *
@@ -5,7 +6,7 @@
  * dashboard screen.  Idempotent: uses property code 'TGH' as the anchor and
  * skips if it already exists.
  *
- * Run:  pnpm --filter @telivityhaip/database seed
+ * Run:  pnpm --filter @inhotel-io/database seed
  */
 
 import postgres from 'postgres';

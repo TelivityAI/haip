@@ -1,3 +1,4 @@
+# Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 name: CI
 
 on:
@@ -26,7 +27,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build packages
-        run: pnpm -r --filter @telivityhaip/shared --filter @telivityhaip/database run build
+        run: pnpm -r --filter @inhotel-io/shared --filter @inhotel-io/database run build
 
       - name: Lint
         run: pnpm lint
@@ -127,7 +128,7 @@ jobs:
         run: pnpm build
 
       - name: Run release smoke test
-        run: pnpm --filter @telivityhaip/api run test:release-smoke
+        run: pnpm --filter @inhotel-io/api run test:release-smoke
         env:
           DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_smoke
           REDIS_URL: redis://localhost:6379

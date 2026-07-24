@@ -1,7 +1,8 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { ratePlans, channelConnections } from '@telivityhaip/database';
+import { ratePlans, channelConnections } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 
 export interface RateParityResult {

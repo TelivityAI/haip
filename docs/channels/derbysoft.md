@@ -1,12 +1,13 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # DerbySoft Property Connector adapter
 
-HAIP integrates DerbySoft via the **Property Connector (PC) Integration API** — REST/JSON, OAuth Bearer tokens, PUSH/PUSH for ARI and reservations.
+inPMS integrates DerbySoft via the **Property Connector (PC) Integration API** — REST/JSON, OAuth Bearer tokens, PUSH/PUSH for ARI and reservations.
 
 Partner onboarding: contact **pms.service@derbysoft.net** for `client_id` / `client_secret` (account credentials).
 
-## What HAIP implements
+## What inPMS implements
 
-| Capability | Direction | HAIP surface |
+| Capability | Direction | inPMS surface |
 |------------|-----------|--------------|
 | Token obtain/refresh | PMS → DerbySoft | `POST …/account/token` (Basic → Bearer) |
 | Update Inventory | PMS → DerbySoft | `ChannelAdapter.pushAvailability` |
@@ -73,14 +74,14 @@ Inbound reservations set `channelCode` to `derbysoft:<distributorId>` (e.g. `der
 
 ## PCI
 
-Book/Modify payloads may include card data. HAIP **strips** `payment` and `threeDomainSecurity` before any persistence (`rawPayload`). Never store PAN/CVV.
+Book/Modify payloads may include card data. inPMS **strips** `payment` and `threeDomainSecurity` before any persistence (`rawPayload`). Never store PAN/CVV.
 
 ## Partner checklist
 
 1. Email `pms.service@derbysoft.net` for TEST account (`client_id` / `client_secret`).
 2. Register PMS webhook base URL: `https://<your-host>/api/v1/channels/inbound/derbysoft` (paths `/availability`, `/book`, `/modify`, `/cancel`, `/ping`).
 3. Share inbound Bearer token; store as `config.inboundAuth.bearerToken`.
-4. Create HAIP channel connection (`adapterType=derbysoft`) with hotel/room/rate mappings.
+4. Create inPMS channel connection (`adapterType=derbysoft`) with hotel/room/rate mappings.
 5. Run property sync + Overlay ARI flush for the sellable window.
 6. Certify Live Check → Book → Modify → Cancel against TEST endpoint.
 7. Switch tunnel/profile/token URLs to PROD (`pcendpoint.derbysoftsec.com`) when certified.

@@ -1,7 +1,8 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { and, desc, eq } from 'drizzle-orm';
-import { auditLogs, connectCredentials } from '@telivityhaip/database';
+import { auditLogs, connectCredentials } from '@inhotel-io/database';
 import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { DRIZZLE } from '../../database/database.module';
 import { hashConnectKey } from '../auth/api-key.guard';

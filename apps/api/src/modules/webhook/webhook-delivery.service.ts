@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
@@ -10,7 +11,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createHmac } from 'crypto';
 import { Queue, Worker, type JobsOptions } from 'bullmq';
 import { eq, and } from 'drizzle-orm';
-import { webhookDeliveries, agentWebhookSubscriptions } from '@telivityhaip/database';
+import { webhookDeliveries, agentWebhookSubscriptions } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { assertSafeOutboundUrl } from '../../common/security/url-guard';
 

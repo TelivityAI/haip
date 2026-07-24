@@ -1,5 +1,7 @@
 {
-  "name": "@telivityhaip/mock-siteminder",
+  "name": "@inhotel-io/mock-siteminder",
+  "x-inpms-modification-notice": "Modified by inHotel Sàrl for inPMS; see NOTICE.",
+  "license": "Apache-2.0",
   "version": "0.0.1",
   "private": true,
   "description": "Mock SiteMinder pmsXchange API for development and testing",

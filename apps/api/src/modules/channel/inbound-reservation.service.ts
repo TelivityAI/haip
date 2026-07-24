@@ -1,6 +1,7 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { bookings, reservations, guests, channelConnections, roomTypes, ratePlans } from '@telivityhaip/database';
+import { bookings, reservations, guests, channelConnections, roomTypes, ratePlans } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { ChannelService } from './channel.service';
 import { ChannelAdapterFactory } from './channel-adapter.factory';

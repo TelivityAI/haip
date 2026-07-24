@@ -1,8 +1,9 @@
-# Catch HAIP webhooks in Make.com
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
+# Catch inPMS webhooks in Make.com
 
-Make (formerly Integromat) can receive HAIP `entity.action` webhooks and route them to hundreds of apps.
+Make (formerly Integromat) can receive inPMS `entity.action` webhooks and route them to hundreds of apps.
 
-## 1. Subscribe in HAIP
+## 1. Subscribe in inPMS
 
 Follow **[Webhooks & events](../webhooks.md#subscribing)**:
 
@@ -16,10 +17,10 @@ Include `propertyId`, `callbackUrl`, `events`, and a strong `secret`. Use `POST 
 ## 2. Custom webhook module
 
 1. Create a new scenario → **Webhooks** → **Custom webhook**.
-2. Copy the generated URL into HAIP `callbackUrl`.
+2. Copy the generated URL into inPMS `callbackUrl`.
 3. Configure the webhook to accept **POST** with **JSON** body.
 
-Run the scenario once so Make registers the webhook, then trigger HAIP’s test delivery.
+Run the scenario once so Make registers the webhook, then trigger inPMS’s test delivery.
 
 ## 3. Verify the signature
 
@@ -33,13 +34,13 @@ Read headers from the incoming request:
 
 Implement verification in a **Make Code** module (JavaScript) using your subscription `secret`. Algorithm and sample code: **[Webhooks & events](../webhooks.md#delivery-format)**.
 
-If verification fails, stop the scenario and return a non-2xx response so HAIP can retry per **[retries](../webhooks.md#retries)**.
+If verification fails, stop the scenario and return a non-2xx response so inPMS can retry per **[retries](../webhooks.md#retries)**.
 
 ## 4. Map fields
 
 Parse JSON fields: `eventType`, `propertyId`, `entityId`, `data`, `timestamp`. Branch routers on `eventType` or `entityType`.
 
-For PII-heavy workflows, call HAIP REST endpoints with your integration credentials after the webhook (webhook alone does not grant API access).
+For PII-heavy workflows, call inPMS REST endpoints with your integration credentials after the webhook (webhook alone does not grant API access).
 
 ## 5. Production notes
 

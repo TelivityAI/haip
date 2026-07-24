@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
@@ -9,7 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import { bookingEngineCredentials } from '@telivityhaip/database';
+import { bookingEngineCredentials } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 
 /** sha256(rawKey) → 64-char hex digest (matches `booking_engine_credentials.key_hash`). */

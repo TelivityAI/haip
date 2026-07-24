@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   BadRequestException,
   ConflictException,
@@ -11,7 +12,7 @@ import {
   folios,
   reservations,
   rooms,
-} from '@telivityhaip/database';
+} from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { FolioService } from '../folio/folio.service';
 import { PostFolioInboundChargeDto } from './dto/post-folio-inbound-charge.dto';

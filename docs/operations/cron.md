@@ -1,6 +1,7 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # Scheduled operations (external cron)
 
-HAIP does not run in-process cron jobs. Use an external scheduler (system cron, Kubernetes CronJob, GitHub Actions, etc.) to call these authenticated API endpoints on a schedule.
+inPMS does not run in-process cron jobs. Use an external scheduler (system cron, Kubernetes CronJob, GitHub Actions, etc.) to call these authenticated API endpoints on a schedule.
 
 All requests require a valid Keycloak JWT with the appropriate role unless noted.
 

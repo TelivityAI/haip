@@ -1,6 +1,7 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # SendGrid transactional email
 
-Use [SendGrid](https://sendgrid.com/) as HAIP’s email transport for guest confirmations, pre-arrival messages, and operational mail. HAIP picks **SendGrid before SMTP** when both are configured.
+Use [SendGrid](https://sendgrid.com/) as inPMS’s email transport for guest confirmations, pre-arrival messages, and operational mail. inPMS picks **SendGrid before SMTP** when both are configured.
 
 ## Environment
 
@@ -24,6 +25,6 @@ SMTP variables (`SMTP_*`) remain supported as a fallback when SendGrid is not se
 
 ## Webhooks (optional)
 
-SendGrid delivery events can be wired to HAIP webhooks in a later wave; this adapter covers outbound send only.
+SendGrid delivery events can be wired to inPMS webhooks in a later wave; this adapter covers outbound send only.
 
 See also: [Integration catalog](../INTEGRATIONS.md) — **SendGrid**.

@@ -1,7 +1,8 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { auditLogs } from '@telivityhaip/database';
-import { type WebhookEvent } from '@telivityhaip/shared';
+import { auditLogs } from '@inhotel-io/database';
+import { type WebhookEvent } from '@inhotel-io/shared';
 import { DRIZZLE } from '../../database/database.module';
 
 export interface WebhookPayload {

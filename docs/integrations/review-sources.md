@@ -1,6 +1,7 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # Google & TripAdvisor review pull
 
-Light adapters to **pull** public reviews into HAIP for the review-response agent. Manual review entry via `POST /api/v1/agents/:propertyId/reviews` remains unchanged.
+Light adapters to **pull** public reviews into inPMS for the review-response agent. Manual review entry via `POST /api/v1/agents/:propertyId/reviews` remains unchanged.
 
 Catalog names: **Google Business Profile Reviews**, **TripAdvisor Content API**.
 

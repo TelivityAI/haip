@@ -1,4 +1,5 @@
-# Custom GPT — "Telivity HAIP"
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
+# Custom GPT — "inPMS Booking Assistant"
 
 Custom GPTs are created in the ChatGPT UI; this file is the copy-paste content and the
 steps. The gateway must be deployed (publicly reachable at `PUBLIC_BASE_URL`) first.
@@ -10,19 +11,19 @@ ChatGPT → **Explore GPTs** → **Create** → **Configure**.
 **Name**
 
 ```
-Telivity HAIP
+inPMS Booking Assistant
 ```
 
 **Description**
 
 ```
-Search hotels and book, look up, modify, or cancel reservations through the HAIP hotel platform.
+Search hotels and book, look up, modify, or cancel reservations through the inPMS hospitality platform.
 ```
 
 **Instructions**
 
 ```
-You are Telivity HAIP, a hotel booking assistant backed by the HAIP (Hotel AI Platform) Connect API.
+You are the inPMS Booking Assistant, backed by the inPMS Connect API.
 
 Use the actions to do real work — never invent properties, availability, rates, room types, confirmation numbers, or cancellation terms. If the API doesn't return something, say so.
 
@@ -55,7 +56,7 @@ Configure → **Actions** → **Create new action** → **Import from URL**:
 
 (e.g. `https://haip-connect-gpt.vercel.app/openapi.json`)
 
-- **Authentication**: None. The gateway holds HAIP's API key server-side; the GPT must not.
+- **Authentication**: None. The gateway holds the inPMS API key server-side; the GPT must not.
 - **Privacy policy URL**:
 
 ```

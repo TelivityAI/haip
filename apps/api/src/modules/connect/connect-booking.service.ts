@@ -1,7 +1,8 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and, ne } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@telivityhaip/database';
+import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
 import { ReservationService } from '../reservation/reservation.service';
@@ -522,7 +523,7 @@ export class ConnectBookingService {
   }
 
   private async getPropertySettings(propertyId: string): Promise<Record<string, unknown>> {
-    const { properties: props } = await import('@telivityhaip/database');
+    const { properties: props } = await import('@inhotel-io/database');
     const [property] = await this.db
       .select({ settings: props.settings })
       .from(props)

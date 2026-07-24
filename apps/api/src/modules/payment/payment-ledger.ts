@@ -1,5 +1,6 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { and, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
-import { payments } from '@telivityhaip/database';
+import { payments } from '@inhotel-io/database';
 import Decimal from 'decimal.js';
 
 /**

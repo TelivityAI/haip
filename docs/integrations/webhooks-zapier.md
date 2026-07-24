@@ -1,6 +1,7 @@
-# Catch HAIP webhooks in Zapier
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
+# Catch inPMS webhooks in Zapier
 
-Zapier’s **Webhooks by Zapier** trigger can receive HAIP event POSTs when you do not need a custom server.
+Zapier’s **Webhooks by Zapier** trigger can receive inPMS event POSTs when you do not need a custom server.
 
 ## Zapier plan note
 
@@ -10,15 +11,15 @@ Zapier’s free tier limits how many tasks run per month and which premium apps 
 
 1. Trigger: **Webhooks by Zapier** → **Catch Hook**.
 2. Copy the **Custom Webhook URL** Zapier provides.
-3. In HAIP, create a subscription (**[Webhooks & events](../webhooks.md#subscribing)**):
+3. In inPMS, create a subscription (**[Webhooks & events](../webhooks.md#subscribing)**):
 
    `POST /api/v1/connect/subscriptions` with that URL as `callbackUrl`, your `propertyId`, `events`, and `secret`.
 
-4. Run `POST /api/v1/connect/subscriptions/:id/test` or perform an action in HAIP that emits a subscribed event so Zapier receives a sample payload.
+4. Run `POST /api/v1/connect/subscriptions/:id/test` or perform an action in inPMS that emits a subscribed event so Zapier receives a sample payload.
 
 ## 2. Signature verification
 
-HAIP sends:
+inPMS sends:
 
 ```
 X-HAIP-Signature: sha256=<hex HMAC-SHA256 of raw body>
@@ -34,8 +35,8 @@ Zapier’s catch hook does not always expose raw body bytes for HMAC. Options:
 
 ## 3. Action steps
 
-Map `eventType`, `entityId`, and `propertyId` into Slack, email, Google Sheets, etc. Fetch full guest or folio data via HAIP REST API when needed (**[lean payloads](../webhooks.md#payloads-are-intentionally-lean--fetch-the-entity-by-id)**).
+Map `eventType`, `entityId`, and `propertyId` into Slack, email, Google Sheets, etc. Fetch full guest or folio data via inPMS REST API when needed (**[lean payloads](../webhooks.md#payloads-are-intentionally-lean--fetch-the-entity-by-id)**).
 
 ## 4. Reliability
 
-Return success quickly from Zapier’s path (Zapier handles the HTTP response to HAIP). Use Zapier’s task history plus HAIP `GET /api/v1/connect/subscriptions/:id/deliveries` to debug failures. Deduplicate on `X-HAIP-Event-Id` using Zapier Storage or a spreadsheet column.
+Return success quickly from Zapier’s path (Zapier handles the HTTP response to inPMS). Use Zapier’s task history plus inPMS `GET /api/v1/connect/subscriptions/:id/deliveries` to debug failures. Deduplicate on `X-HAIP-Event-Id` using Zapier Storage or a spreadsheet column.

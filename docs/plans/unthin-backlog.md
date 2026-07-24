@@ -1,12 +1,13 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # Un-thin backlog — research-backed plan
 
 **Status:** Defaults locked (2026-07-24). Implementation in
-[#205](https://github.com/TelivityAI/haip/pull/205)
+[#205](https://github.com/inhotel-io/inpms/pull/205)
 (`cursor/unthin-wave-a-ci1-aeea`). Do not invent further hotel operations beyond
 confirmed KB + these locked MVP defaults.
 
 **Trigger:** These areas were previously marked “thin / partner-gated.” Six
-parallel research passes + a HAIP code-anchor map produced the cut below.
+parallel research passes + a inPMS code-anchor map produced the cut below.
 
 **Related ship vehicle:** merge stack [#202](https://github.com/telivityai/haip/pull/202)
 carried discrepancy *compute*, lost & found, service requests, SMS,
@@ -18,7 +19,7 @@ that stack.
 ## Grounding rules
 
 1. Neutral API codes first; legacy labels (`Skip` / `Sleep`) as optional UI aliases.
-2. Every table/route stays `propertyId`-scoped (HAIP multi-tenancy).
+2. Every table/route stays `propertyId`-scoped (inPMS multi-tenancy).
 3. Partner-gated work (GDS host, Booking.com new-provider cert, Airbnb Preferred)
    is a **commercial** gate, not a “we don’t know the domain” gate.
 4. Thick research notes live in gitignored `briefs/` on contributor machines —
@@ -35,7 +36,7 @@ that stack.
 | **A3 folio inbound** | Amount-only; reject if room not in-house; `vendorTxnId` idempotency |
 | **B1 turnaway** | Separate append-only entity; anonymous by default; manual desk |
 | **B2 waitlist** | Separate **non-deduct** entity (not a reservation status); offer → convert |
-| **C1 loyalty** | HAIP points bank; **org-scoped** program; txs attribute `propertyId`; award-points only (keep `vipLevel` manual); earn = nights × `pointsPerNight` on checkout (`delayDays` default **3**); burn = folio rebate |
+| **C1 loyalty** | inPMS points bank; **org-scoped** program; txs attribute `propertyId`; award-points only (keep `vipLevel` manual); earn = nights × `pointsPerNight` on checkout (`delayDays` default **3**); burn = folio rebate |
 | **C2 WhatsApp** | **Twilio** Content API (same vendor as SMS); reuse `gdprConsentMarketing` for marketing templates; transactional utility templates when guest has phone (no marketing needed); outbound only |
 | **D1–D3** | Deep-link contract on booking engine; meta/GDS via existing CM adapters first; no SynXis SDK unless mandated |
 
@@ -45,7 +46,7 @@ that stack.
 
 ### Wave A — Ops truth (code anchors already hot)
 
-| ID | Topic | HAIP today (pre-#205) | Research-backed MVP | Locked |
+| ID | Topic | inPMS today (pre-#205) | Research-backed MVP | Locked |
 |----|-------|----------------------|---------------------|--------|
 | **A1** | Room discrepancy workflow | Compute-only `GET /rooms/discrepancies` | HK observation write + persisted cases + resolve/dismiss; Skip/Sleep aliases; night-audit acknowledge | Done in #205 |
 | **A2** | Guest item tickets | Lost & found CRUD (90-day hold) | Extend L&F → baggage/parcel/valet | Done in #205 |
@@ -53,21 +54,21 @@ that stack.
 
 ### Wave B — Demand capture
 
-| ID | Topic | HAIP today (pre-#205) | Research-backed MVP | Locked |
+| ID | Topic | inPMS today (pre-#205) | Research-backed MVP | Locked |
 |----|-------|----------------------|---------------------|--------|
 | **B1** | Turnaway (denied / regret) | Absent | Append-only `turnaways` + reason codes; summary; anonymous default | Done in #205 |
 | **B2** | Waitlist | Absent | Non-deduct `waitlist_entries` → offer → convert | Done in #205 |
 
 ### Wave C — Guest value & messaging
 
-| ID | Topic | HAIP today (pre-#205) | Research-backed MVP | Locked |
+| ID | Topic | inPMS today (pre-#205) | Research-backed MVP | Locked |
 |----|-------|----------------------|---------------------|--------|
 | **C1** | Loyalty points ledger | `loyaltyNumber` + `vipLevel` display | Org program + award ledger; delayDays=3; folio rebate burn | Done in #205 |
 | **C2** | WhatsApp channel | Email + SMS | Twilio `WhatsAppProvider`; outbound utility templates | Done in #205 |
 
 ### Wave D — Distribution depth
 
-| ID | Topic | HAIP today (pre-#205) | Research-backed MVP | Locked |
+| ID | Topic | inPMS today (pre-#205) | Research-backed MVP | Locked |
 |----|-------|----------------------|---------------------|--------|
 | **D1** | Metasearch | Push `ChannelAdapter` only | Deep-link + CM meta products first | Docs + `buildBookingDeepLink` in #205 |
 | **D2** | New OTAs | Booking.com, Expedia, SiteMinder, DerbySoft | Certify/activate existing first | Runbook in #205 |
@@ -113,7 +114,7 @@ C1 loyalty ledger (after locked defaults above)
 D1 deep links + CM meta  →  D2 certify existing OTAs  →  D3 GDS via CM
 ```
 
-Implementation PR: [#205](https://github.com/TelivityAI/haip/pull/205).
+Implementation PR: [#205](https://github.com/inhotel-io/inpms/pull/205).
 
 ---
 
@@ -123,7 +124,7 @@ Implementation PR: [#205](https://github.com/TelivityAI/haip/pull/205).
 - [x] Skip/Sleep labels as UI aliases (neutral codes in API)
 - [x] No sell-block on open sleep
 - [x] Night audit: acknowledge (not hard stop)
-- [x] Item tickets in HAIP core (L&F categories)
+- [x] Item tickets in inPMS core (L&F categories)
 
 ### Demand capture
 - [x] Waitlist as separate entity
@@ -131,7 +132,7 @@ Implementation PR: [#205](https://github.com/TelivityAI/haip/pull/205).
 - [x] Turnaway PII: anonymous by default
 
 ### Loyalty
-- [x] Points bank in HAIP
+- [x] Points bank in inPMS
 - [x] Org-scoped program
 - [x] Earn: nights × pointsPerNight; delayDays=3
 - [x] Burn MVP: folio rebate

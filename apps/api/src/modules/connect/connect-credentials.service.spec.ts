@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashConnectKey } from '../auth/api-key.guard';
@@ -9,7 +10,7 @@ vi.mock('drizzle-orm', () => ({
   eq: vi.fn((column: unknown, value: unknown) => ({ op: 'eq', column, value })),
 }));
 
-vi.mock('@telivityhaip/database', () => ({
+vi.mock('@inhotel-io/database', () => ({
   auditLogs: {
     __table: 'auditLogs',
     propertyId: 'audit.propertyId',

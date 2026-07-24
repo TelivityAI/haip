@@ -1,8 +1,10 @@
 {
-  "name": "@telivityhaip/haip-connect-gpt",
+  "name": "@inhotel-io/connect-gpt",
+  "x-inpms-modification-notice": "Modified by inHotel Sàrl for inPMS; see NOTICE.",
+  "license": "Apache-2.0",
   "version": "0.0.1",
   "private": true,
-  "description": "ChatGPT Custom GPT gateway for HAIP — proxies the HAIP Connect API, serves a ChatGPT-importable OpenAPI 3.1 spec, and logs every tool call (PII-scrubbed) to Supabase.",
+  "description": "ChatGPT gateway for inPMS — proxies the inPMS Connect API, serves a ChatGPT-importable OpenAPI 3.1 spec, and logs every tool call (PII-scrubbed) to Supabase.",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"

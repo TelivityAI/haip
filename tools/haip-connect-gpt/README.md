@@ -1,23 +1,24 @@
-# HAIP Connect GPT gateway
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
+# inPMS Connect GPT gateway
 
-A thin, standalone gateway that exposes HAIP hotel search and booking as a **ChatGPT
+A thin, standalone gateway that exposes inPMS hotel search and booking as a **ChatGPT
 Custom GPT Action**. It mirrors the OTAIP/Ligare pattern: wrap a domain engine, expose
 it to ChatGPT as tools via an OpenAPI spec, host a tiny backend, and log every tool call
 for training.
 
-HAIP's "domain engine" is its already-built **Connect API** (`/api/v1/connect/*`). This
+inPMS's "domain engine" is its already-built **Connect API** (`/api/v1/connect/*`). This
 gateway is a typed HTTP client over it — it does **not** reimplement hotel logic.
 
 ```
-ChatGPT  ──HTTPS──▶  this gateway  ──x-api-key──▶  HAIP Connect API (/api/v1/connect/*)
+ChatGPT  ──HTTPS──▶  this gateway  ──x-api-key──▶  inPMS Connect API (/api/v1/connect/*)
                          │
                          └──▶ Supabase (haip_tool_calls)   # PII-scrubbed tool-call log
 ```
 
 ## Why a separate service
 
-- The gateway holds HAIP's `x-api-key` and injects it server-side — **the GPT never sees it**.
-- The public AI surface (6 hotel operations) stays decoupled from HAIP's internal API.
+- The gateway holds inPMS's `x-api-key` and injects it server-side — **the GPT never sees it**.
+- The public AI surface (6 hotel operations) stays decoupled from inPMS's internal API.
 - Responses are guarded so **only selling prices** ever reach the GPT (no net/wholesale/cost).
 
 ## Pieces
@@ -54,8 +55,8 @@ npm install
 npm run dev                 # tsx watch
 ```
 
-Point `HAIP_API_BASE_URL` at a running HAIP API (e.g. `http://localhost:3000` after
-`pnpm --filter @telivityhaip/api dev` and seeding). Then:
+Point `HAIP_API_BASE_URL` at a running inPMS API (e.g. `http://localhost:3000` after
+`pnpm --filter @inhotel-io/api dev` and seeding). Then:
 
 ```bash
 curl localhost:8080/health
@@ -78,8 +79,8 @@ This package deploys to Vercel as a single serverless function. `vercel.json` ru
 build and rewrites all routes to `api/index.ts`, which forwards into the same Fastify app.
 Set these environment variables on the Vercel project:
 
-- `HAIP_API_BASE_URL` — your public HAIP API URL
-- `HAIP_CONNECT_API_KEY` — matches HAIP's `CONNECT_API_KEY`
+- `HAIP_API_BASE_URL` — your public inPMS API URL (legacy variable name)
+- `HAIP_CONNECT_API_KEY` — matches inPMS's `CONNECT_API_KEY` (legacy variable name)
 - `PUBLIC_BASE_URL` — optional; the production domain for the OpenAPI server URL
   (auto-derived from the Vercel deployment domain if unset)
 - `TOOL_LOG_DATABASE_URL` — haip-demo Postgres connection string (logging; optional)

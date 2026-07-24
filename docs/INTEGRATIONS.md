@@ -1,6 +1,7 @@
-# HAIP Integrations
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
+# inPMS Integrations
 
-HAIP is API-first: REST OpenAPI is available at `/docs`, HMAC-signed webhooks cover roughly 90 `entity.action` events with retries, WebSocket keeps operational clients current, and the platform connects to tools hotels use and anything that speaks HTTP.
+inPMS is API-first: REST OpenAPI is available at `/docs`, HMAC-signed webhooks cover roughly 90 `entity.action` events with retries, WebSocket keeps operational clients current, and the platform connects to tools hotels use and anything that speaks HTTP.
 
 Resources: [integration recipes](integrations/), [shipped demos](../integrations/demos/) (`./integrations/demos/run.sh <slug>`), and [webhooks](webhooks.md).
 
@@ -13,7 +14,7 @@ Resources: [integration recipes](integrations/), [shipped demos](../integrations
 
 ## Built for compliance, worldwide
 
-Selling rooms is global; receipts and guest registration are local law. HAIP treats government compliance as a first-class integration category across Europe and Latin America: fiscalization and e-invoicing (Italy SDI, Greece myDATA, Poland KSeF, Hungary NAV, Spain VeriFactu/SII, Portugal, Germany TSE, Austria RKSV, the Balkans, Mexico CFDI, Colombia DIAN, Chile, Argentina and more) and mandatory guest registration (Serbia eTurista, Croatia eVisitor, Italy Alloggiati Web, Czechia Ubyport, Spain SES Hospedajes, Hungary VIZA, Finland traveller notification, Colombia SIRE). Where a country has no mandate, or a mandate with no digital channel, that's documented too - no compliance theater.
+Selling rooms is global; receipts and guest registration are local law. inPMS treats government compliance as a first-class integration category across Europe and Latin America: fiscalization and e-invoicing (Italy SDI, Greece myDATA, Poland KSeF, Hungary NAV, Spain VeriFactu/SII, Portugal, Germany TSE, Austria RKSV, the Balkans, Mexico CFDI, Colombia DIAN, Chile, Argentina and more) and mandatory guest registration (Serbia eTurista, Croatia eVisitor, Italy Alloggiati Web, Czechia Ubyport, Spain SES Hospedajes, Hungary VIZA, Finland traveller notification, Colombia SIRE). Where a country has no mandate, or a mandate with no digital channel, that's documented too - no compliance theater.
 
 ## Integration catalog
 
@@ -186,7 +187,7 @@ The flat list below is the full public surface. Registry seed status is the matu
 - **Nuki** - Smart lock support for access grants, time windows, revocation, and operational status.
 - **TTLock** - Smart lock API support for PINs, eKeys, access windows, and lock status workflows.
 - **SwitchBot** - Device and lock connectivity for access automation, remote actions, and operational events.
-- **HAIP LOCK_PROVIDER interface** - Provider interface for adding lock vendors behind a consistent access-control contract.
+- **inPMS LOCK_PROVIDER interface** - Provider interface for adding lock vendors behind a consistent access-control contract.
 
 ### ID Verification & Online Check-in
 
@@ -321,4 +322,4 @@ The flat list below is the full public surface. Registry seed status is the matu
 
 Paid hardware-cert routes and feature-only guest registers are **not** free marketplace connectors. See [Compliance market entry](integrations/compliance-market-entry.md). Schedule by market entry; never marketed as free automated filing.
 
-Want an integration that isn't listed? HAIP is open source - open an issue, or build against the API at `/docs`.
+Want an integration that isn't listed? inPMS is open source - open an issue, or build against the API at `/docs`.

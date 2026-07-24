@@ -1,6 +1,7 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # BI tools on read-only Postgres (Metabase, Grafana, Superset, Redash)
 
-Self-hosted HAIP stores operational data in **PostgreSQL**. Many teams attach a BI tool for dashboards without going through the REST API.
+Self-hosted inPMS stores operational data in **PostgreSQL**. Many teams attach a BI tool for dashboards without going through the REST API.
 
 This recipe describes a **standard DBA pattern**. It does not embed connection strings or production secrets — configure those in your deployment secrets store.
 
@@ -9,11 +10,11 @@ This recipe describes a **standard DBA pattern**. It does not embed connection s
 1. **Read-only** — BI queries must not write to the PMS database.
 2. **Separate login** — dedicated database role for analytics, not the application `DATABASE_URL` user.
 3. **Least privilege** — grant `SELECT` only on schemas/tables the tool needs.
-4. **Multi-tenancy** — HAIP rows are scoped by `property_id` on tenant tables; filter or expose views per property in BI row-level security where supported.
+4. **Multi-tenancy** — inPMS rows are scoped by `property_id` on tenant tables; filter or expose views per property in BI row-level security where supported.
 
 ## Example role (adjust names)
 
-Run as a superuser or migration admin on your HAIP Postgres instance:
+Run as a superuser or migration admin on your inPMS Postgres instance:
 
 ```sql
 CREATE ROLE haip_bi LOGIN PASSWORD 'choose-a-strong-password';
@@ -49,7 +50,7 @@ Point all tools at a **replica** when available so heavy reporting does not cont
 ## Query hygiene
 
 - Prefer aggregated queries (occupancy, revenue by date) over wide joins on guest PII unless your privacy policy allows it.
-- Align business dates with HAIP night audit / property timezone settings used in reports.
+- Align business dates with inPMS night audit / property timezone settings used in reports.
 - Do not use BI write-back against production — operational changes go through the API.
 
 ## When to use the API instead

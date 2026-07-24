@@ -1,6 +1,7 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # Accounting CSV export (QuickBooks, Xero, Sage)
 
-HAIP exports daily accounting summaries as **plain CSV** for import into your general ledger or spreadsheet workflow. There is no hosted OAuth connector to accounting SaaS — you control the file hand-off.
+inPMS exports daily accounting summaries as **plain CSV** for import into your general ledger or spreadsheet workflow. There is no hosted OAuth connector to accounting SaaS — you control the file hand-off.
 
 ## Endpoints
 
@@ -39,11 +40,11 @@ One row per ledger for the business date.
    - **QuickBooks** — Banking / import spreadsheet, or third-party CSV import tools
    - **Xero** — Manual journal or bank import templates (map `account` / amounts)
    - **Sage** — CSV import per your localization module
-3. **Custom GL codes** — maintain mapping codes in HAIP via `/api/v1/accounting/codes` if you align export accounts with an external COA (see OpenAPI **accounting** tag).
+3. **Custom GL codes** — maintain mapping codes in inPMS via `/api/v1/accounting/codes` if you align export accounts with an external COA (see OpenAPI **accounting** tag).
 
 ## Custom transaction codes
 
-Use HAIP accounting code APIs to label transaction types before export if your bookkeeper expects stable external account numbers. Export files themselves are aggregate daily views — pair them with detailed folio or payment reports from `/api/v1/reports/*` when auditors need line-level support.
+Use inPMS accounting code APIs to label transaction types before export if your bookkeeper expects stable external account numbers. Export files themselves are aggregate daily views — pair them with detailed folio or payment reports from `/api/v1/reports/*` when auditors need line-level support.
 
 ## Related events
 

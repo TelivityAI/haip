@@ -1,6 +1,7 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # OTA adapter certification / activation
 
-HAIP ships adapters for:
+inPMS ships adapters for:
 
 | Adapter | Module path |
 |---------|-------------|

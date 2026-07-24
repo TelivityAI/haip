@@ -1,8 +1,9 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # AGENTS.md
 
 Project domain rules and code standards live in `CLAUDE.md`. Standard dev/build/test
 commands live in `README.md` (see "Local development" and "Run tests"). This file
-captures only the non-obvious operating notes for running HAIP inside the Cursor
+captures only the non-obvious operating notes for running inPMS inside the Cursor
 Cloud VM.
 
 ## Cursor Cloud specific instructions
@@ -10,6 +11,10 @@ Cloud VM.
 This VM has **no Docker**. The `docker compose` quick-start in the README does not
 apply here. Postgres 16 and Redis are installed on the host (via apt) instead of
 in containers, and are captured in the VM snapshot. Node 22 + pnpm 9 are preinstalled.
+
+The `HAIP_*` environment variables and local `haip` PostgreSQL role/database names
+are legacy compatibility identifiers. Keep them unchanged when configuring existing
+deployments; they are not the product name.
 
 The update script only runs `pnpm install`. Everything below (starting services,
 env files, building packages, migrate/seed) is a per-session startup step, not part
@@ -42,7 +47,7 @@ missing, recreate with `cp .env.example .env` and `cp .env.example apps/api/.env
 ### Build before running or testing
 
 Workspace packages must be built at least once so the API and tests can resolve
-`@telivityhaip/shared` and `@telivityhaip/database` (they import from `dist/`):
+`@inhotel-io/shared` and `@inhotel-io/database` (they import from `dist/`):
 
 ```bash
 pnpm build
@@ -60,8 +65,8 @@ pnpm seed
 | Service | Command | URL |
 |---------|---------|-----|
 | API (NestJS, hot reload) | `pnpm dev` | http://localhost:3000 (Swagger at `/docs`, health at `/api/v1/health`) |
-| Dashboard (Vite) | `pnpm --filter @telivityhaip/dashboard dev` | http://localhost:5173 |
-| Booking widget (Vite) | `pnpm --filter @telivityhaip/booking dev` | http://localhost:5174 |
+| Dashboard (Vite) | `pnpm --filter @inhotel-io/dashboard dev` | http://localhost:5173 |
+| Booking widget (Vite) | `pnpm --filter @inhotel-io/booking dev` | http://localhost:5174 |
 
 The dashboard dev server proxies `/api` → `http://localhost:3000`, so the API must
 be running for the dashboard to load data. The demo property id is

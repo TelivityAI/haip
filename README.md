@@ -1,15 +1,17 @@
+<!-- Modified by inHotel Sàrl from the TelivityAI/haip upstream project; see NOTICE. -->
+
 <p align="center">
-  <img src="https://img.shields.io/badge/HAIP-Hotel%20AI%20Platform-0066FF?style=for-the-badge&labelColor=000000" alt="HAIP" />
+  <img src="https://img.shields.io/badge/inPMS-Hospitality%20PMS-0066FF?style=for-the-badge&labelColor=000000" alt="inPMS" />
 </p>
 
-<h1 align="center">HAIP — Hotel AI Platform</h1>
+<h1 align="center">inPMS — Hospitality PMS</h1>
 
 <p align="center">
-  <strong>The open-source, API-first hotel PMS where AI agents are first-class citizens.</strong>
+  <strong>A free, hosted PMS for hospitality operators, optimized for direct bookings and agentic workflows in hybrid human–AI teams.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/TelivityAI/haip/actions"><img src="https://github.com/TelivityAI/haip/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/inhotel-io/inpms/actions"><img src="https://github.com/inhotel-io/inpms/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript&logoColor=white" alt="TypeScript Strict" />
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
@@ -18,11 +20,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/demo-dashboard.webp" alt="HAIP dashboard — reservations and AI agents" width="900" />
+  <img src="docs/images/demo-dashboard.webp" alt="inPMS dashboard — reservations and AI agents" width="900" />
 </p>
 
 <p align="center">
-  <a href="#what-is-haip">What is HAIP</a> &middot;
+  <a href="#what-is-inpms">What is inPMS</a> &middot;
   <a href="#architecture">Architecture</a> &middot;
   <a href="#ai-agents">AI Agents</a> &middot;
   <a href="#features">Features</a> &middot;
@@ -37,17 +39,21 @@
 
 ---
 
-## What is HAIP
+## What is inPMS
 
 The hotel industry runs on closed-source, legacy PMS platforms that charge per-room fees, lock data behind proprietary APIs, and treat integrations as an afterthought. Hotels pay $5–15/room/month just for the privilege of managing their own operations.
 
-HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, a **full commission-free direct booking engine** (guest-facing widget + public booking API) so hotels take reservations straight from their own website, Stripe payment processing, Keycloak authentication, local user & role administration, media management for property and room photos, tax calculation engine, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. It even ships a **ChatGPT gateway** so guests can search and book a room by chatting. All open source under Apache 2.0.
+inPMS is inHotel's **free, hosted property management system** for hospitality operators. It is optimized for direct bookings and agentic workflows where human and AI team members collaborate across hotel operations. The platform covers reservation lifecycle, folio and billing, rate plans, housekeeping, night audit, channel distribution, direct booking, payments, authentication, local user and role administration, media management, tax calculation, revenue management, and operational intelligence. It is distributed under Apache 2.0 with upstream provenance documented in [NOTICE](NOTICE).
 
-What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and per-property calibration (deterministic engines that learn each hotel's own rates from its history — not LLMs pretending to be agents). HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
+What makes inPMS different is that **agentic workflows are part of the operating model** — human operators stay in control while specialized agents help analyze, recommend, and execute work with auditable decisions. inPMS is a modified fork of [TelivityAI/haip](https://github.com/TelivityAI/haip); upstream attribution and licensing details are in [NOTICE](NOTICE) and [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
 
-### What HAIP is NOT
+### What inPMS is NOT
 
-HAIP is not a wrapper around another PMS. It's not a SaaS dashboard with "AI" slapped on the marketing page. It's a real PMS with real hotel operations logic — night audits at 3am, folio routing rules, rate parity enforcement, guest registration compliance across jurisdictions. And it ships a **commission-free direct booking engine** so a hotel can take bookings straight from its own website — keeping the 15–25% an OTA would take.
+inPMS is not a thin dashboard or an AI label layered over another PMS. It is intended to be a practical operating platform for hotel teams, with direct-booking workflows and agent collaboration designed around the operator's control of guest and commercial data.
+
+### Upstream, attribution, and licensing
+
+inPMS is maintained by inHotel Sàrl as a modified fork of [TelivityAI/haip](https://github.com/TelivityAI/haip). It is not presented as Telivity-maintained, endorsed, or identical to the upstream project. The complete upstream Apache License 2.0 text remains in [LICENSE](LICENSE); fork attribution and modification ownership are recorded in [NOTICE](NOTICE), and third-party/model notes are maintained in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
 
 ---
 
@@ -61,7 +67,7 @@ graph TB
         ThirdParty["Third-Party Integrations"]
     end
 
-    subgraph HAIP["HAIP PMS (NestJS)"]
+    subgraph inPMS["inPMS PMS (NestJS)"]
         direction TB
         REST["REST API<br/>OpenAPI 3.0"]
         WS["WebSocket Gateway<br/>Real-time Events"]
@@ -135,7 +141,7 @@ graph TB
 - **Event-driven** — Webhook events on every state change (`reservation.created`, `folio.charge_posted`, `room.status_changed`). Build anything on top.
 - **AI agents as first-class citizens** — 12 built-in agents with a common interface: `analyze() → recommend() → execute()`, coordinated by a Revenue Manager orchestrator. Three operating modes: manual, suggest, autopilot. Decision logging for continuous learning.
 - **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. Booking.com + Expedia (EQC) direct adapters plus SiteMinder and DerbySoft aggregators for 450+ OTA reach — distributing **both** ARI and descriptive content (photos/descriptions/amenities).
-- **Layered RBAC** — Keycloak JWT authentication **plus HAIP's own local users, roles & permissions**: a code-defined permission catalog, operator-defined custom roles, and guards (`@Roles` + `@RequirePermissions`) on every endpoint.
+- **Layered RBAC** — Keycloak JWT authentication **plus inPMS's own local users, roles & permissions**: a code-defined permission catalog, operator-defined custom roles, and guards (`@Roles` + `@RequirePermissions`) on every endpoint.
 - **Polymorphic media** — One image model for properties, room types & rooms; add by URL (zero infra) or upload to S3/MinIO, with one enforced primary per owner.
 - **Compliance as infrastructure** — PCI tokenization (Stripe), GDPR audit trails, jurisdiction-based tax calculation, guest registration per jurisdiction. Not bolted on — built in.
 - **Real-time dashboard** — WebSocket broadcasting per property. Room status changes, new reservations, AI agent decisions — all pushed instantly.
@@ -144,7 +150,7 @@ graph TB
 
 ## AI Agents
 
-HAIP includes **12 built-in AI agents** — 5 for revenue management (including the Revenue Manager orchestrator), 5 for operations intelligence, and 2 for guest engagement. Every agent follows the `HaipAgent` interface:
+inPMS includes **12 built-in AI agents** — 5 for revenue management (including the Revenue Manager orchestrator), 5 for operations intelligence, and 2 for guest engagement. Every agent follows the inPMS agent interface:
 
 ```
 analyze() → recommend() → execute() → recordOutcome() → train()
@@ -210,7 +216,7 @@ cold-start defaults.
 | Pricing · Revenue Manager · Group Pickup · AR · Housekeeping · Night Audit | Deterministic math/rules |
 | Guest Comms · Review Response | Deterministic templates (no LLM) |
 
-**HAIP AI (optional):** a small, purpose-built **local** model (served via Ollama) that
+**inPMS AI (optional):** a small, purpose-built **local** model (served via Ollama) that
 adds a plain-language *explanation + suggestions* layer over any agent decision — strictly
 grounded in that agent's own numbers, with the deterministic agent vetoing any figure it
 didn't compute (so it can't invent a rate, a policy, or a number). It **explains and
@@ -424,13 +430,13 @@ Operator notes for activating existing adapters, metasearch landings on the dire
 ### Authentication & Authorization (Keycloak)
 - OAuth 2.0 / OpenID Connect via Keycloak identity provider
 - JWT validation with RS256 public key verification
-- Keycloak roles (`admin`, `front_desk`, `housekeeping`, `revenue_manager`) **plus HAIP's own local roles & permissions** (see *Users, Roles & Permissions* below)
+- Keycloak roles (`admin`, `front_desk`, `housekeeping`, `revenue_manager`) **plus inPMS's own local roles & permissions** (see *Users, Roles & Permissions* below)
 - `@Roles()` and `@RequirePermissions()` decorators guard every controller
 - `@Public()` decorator for unauthenticated endpoints (health checks)
 - `@CurrentUser()` decorator for extracting authenticated user context
 
 ### Users, Roles & Permissions (Admin Console)
-- **Local identity & authorization** layered on top of Keycloak login — HAIP owns its own `users`, `roles`, `role_permissions`, and `user_roles` tables (property-scoped, multi-tenant)
+- **Local identity & authorization** layered on top of Keycloak login — inPMS owns its own `users`, `roles`, `role_permissions`, and `user_roles` tables (property-scoped, multi-tenant)
 - **Code-defined permission catalog** (e.g. `reservations.write`, `rooms.read`, `housekeeping.manage`, `channels.manage`, `media.manage`, `admin.users.manage`) mapped 1:1 to API capabilities and dashboard nav items
 - **Custom roles** — operators create roles and grant granular permissions via a permission matrix; built-in system roles are protected from edits/deletion
 - `PermissionsGuard` + `@RequirePermissions()` augment the Keycloak JWT guard; permissions drive both API authorization **and** which nav items/pages each user sees
@@ -446,9 +452,9 @@ Operator notes for activating existing adapters, metasearch landings on the dire
 - See **[`docs/webhooks.md`](./docs/webhooks.md)** for the integration guide (signature verification, payload conventions, fiscal documents, regional compliance examples)
 
 ### ChatGPT Gateway (Connect GPT)
-- A standalone, deployable **gateway that exposes HAIP hotel search & booking as a ChatGPT Custom GPT Action** (`tools/haip-connect-gpt`) — guests search availability and create/modify/cancel reservations by chatting
-- A thin, typed client over HAIP's existing **Connect API** (`/api/v1/connect/*`) — no hotel logic is reimplemented; it builds a ChatGPT-importable **OpenAPI 3.1** spec for 6 operations (`searchHotels`, `getProperty`, `create`/`get`/`modify`/`cancelReservation`)
-- **Secure by design** — the gateway injects HAIP's API key server-side (the GPT never sees it), and response guards ensure **only selling prices** reach the model (net/wholesale/cost stripped)
+- A standalone, deployable **gateway that exposes inPMS hotel search & booking as a ChatGPT Custom GPT Action** (`tools/haip-connect-gpt`) — guests search availability and create/modify/cancel reservations by chatting
+- A thin, typed client over inPMS's existing **Connect API** (`/api/v1/connect/*`) — no hotel logic is reimplemented; it builds a ChatGPT-importable **OpenAPI 3.1** spec for 6 operations (`searchHotels`, `getProperty`, `create`/`get`/`modify`/`cancelReservation`)
+- **Secure by design** — the gateway injects inPMS's API key server-side (the GPT never sees it), and response guards ensure **only selling prices** reach the model (net/wholesale/cost stripped)
 - **PII-scrubbed tool-call logging** for training, with an optional Supabase/Postgres sink
 - Host-agnostic — ships as a **Vercel** serverless function, a plain Node server, or a Docker container
 
@@ -504,8 +510,8 @@ Operator notes for activating existing adapters, metasearch landings on the dire
 The only prerequisite is **Docker**. No Node, no pnpm, no API keys, no config.
 
 ```bash
-git clone https://github.com/TelivityAI/haip.git
-cd haip
+git clone https://github.com/inhotel-io/inpms.git
+cd inpms
 docker compose up
 ```
 
@@ -564,8 +570,8 @@ Auth is on (`AUTH_ENABLED=true`); do not set `HAIP_ALLOW_INSECURE`.
 For hot-reload development against the source (requires **Node ≥ 20** and **pnpm ≥ 9**):
 
 ```bash
-git clone https://github.com/TelivityAI/haip.git
-cd haip
+git clone https://github.com/inhotel-io/inpms.git
+cd inpms
 
 # Start only the infra (Postgres + Redis); add `keycloak` if testing auth
 docker compose up -d postgres redis
@@ -574,12 +580,12 @@ pnpm install
 cp .env.example .env          # defaults work as-is — no keys needed for a demo
 
 pnpm build                    # build workspace packages
-pnpm db:migrate               # push schema (same as --filter @telivityhaip/database run migrate)
+pnpm db:migrate               # push schema (same as --filter @inhotel-io/database run migrate)
 pnpm seed                     # seed demo data
 
 pnpm dev                                            # API with hot reload (:3000)
-pnpm --filter @telivityhaip/dashboard dev           # dashboard dev server (:5173)
-pnpm --filter @telivityhaip/booking dev             # booking widget dev server (:5174)
+pnpm --filter @inhotel-io/dashboard dev           # dashboard dev server (:5173)
+pnpm --filter @inhotel-io/booking dev             # booking widget dev server (:5174)
 ```
 
 | Service | URL |
@@ -616,7 +622,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 |---------|-----|
 | API won't start locally | Is Postgres/Redis up? `docker compose up -d postgres redis` |
 | Dashboard empty in local dev | You opened `:3000` instead of `:5173` |
-| `migrate` script missing on api package | Use `@telivityhaip/database`, not api: `pnpm db:migrate` |
+| `migrate` script missing on api package | Use `@inhotel-io/database`, not api: `pnpm db:migrate` |
 | Docker API unhealthy | Check init logs: `docker compose logs init` (migrate/seed may have failed) |
 | Booking returns 401 with auth on | Copy the booking key from **Settings → Booking Engine** (or pass `?key=` in the URL) |
 
@@ -626,10 +632,10 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 # All tests (1353 tests across 188 test files)
 
 # API tests only
-pnpm --filter @telivityhaip/api test
+pnpm --filter @inhotel-io/api test
 
 # Dashboard component tests
-pnpm --filter @telivityhaip/dashboard test
+pnpm --filter @inhotel-io/dashboard test
 
 # Type checking
 pnpm typecheck
@@ -640,13 +646,13 @@ pnpm lint
 
 ---
 
-## Demo Hotel — Telivity Grand Hotel
+## Demo Hotel — inHotel Grand Hotel
 
 The seed script creates a fully configured demo property with realistic data:
 
 | Entity | Count | Details |
 |--------|-------|---------|
-| Property | 1 | Telivity Grand Hotel — 5-star, 40 rooms, Miami Beach, USD, America/New_York |
+| Property | 1 | inHotel Grand Hotel — 5-star, 40 rooms, Miami Beach, USD, America/New_York |
 | Room Types | 4 | Standard King, Deluxe Ocean View, Junior Suite, Penthouse Suite |
 | Rooms | 40 | Across 4 floors with real room numbers, mixed statuses, 2 ADA-accessible |
 | Rate Plans | 5 | BAR per room type + a seasonal promotional rate, with LOS/weekend restrictions |
@@ -668,7 +674,7 @@ not empty. Use it to explore the API and dashboard right after `docker compose u
 ## Project Structure
 
 ```
-haip/
+inpms/
 ├── apps/
 │   ├── api/                        # NestJS API application
 │   │   ├── src/
@@ -685,7 +691,7 @@ haip/
 │   │   │       │   ├── guest-comms/ # Guest communication agent + email service
 │   │   │       │   ├── review-response/ # Review response agent
 │   │   │       │   ├── training/   # Agent training/learning utilities
-│   │   │       │   ├── interfaces/ # HaipAgent interface definition
+│   │   │       │   ├── interfaces/ # inPMS agent interface definition
 │   │   │       │   └── dto/        # Agent config + decision DTOs
 │   │   │       ├── admin/          # Local users, roles & permissions (admin console)
 │   │   │       ├── auth/           # Keycloak JWT + RBAC + permission guards
@@ -727,7 +733,7 @@ haip/
 │   │   └── src/schema/             # Table files (property, room, guest, agent, etc.)
 │   └── shared/                     # Shared types, enums, webhook events
 ├── tools/
-│   └── haip-connect-gpt/           # ChatGPT Custom GPT gateway over the Connect API (Vercel)
+│   └── haip-connect-gpt/           # ChatGPT Custom GPT gateway over the Connect API (Vercel; legacy path)
 ├── docker-compose.yml              # PostgreSQL + Redis + Keycloak + API
 ├── CLAUDE.md                       # AI agent constitution
 └── .env.example                    # Environment template
@@ -1026,7 +1032,7 @@ PATCH  /api/v1/properties/:id                      # Update property
 
 ## OTAIP Integration — Connect API
 
-The Connect API (`/api/v1/connect/`) is purpose-built for [OTAIP](https://github.com/telivity-otaip/otaip) AI agents. It provides higher-level abstractions over the core PMS endpoints, designed for agent workflows.
+The Connect API (`/api/v1/connect/`) is purpose-built for agentic workflows. It provides higher-level abstractions over the core PMS endpoints, designed for human–AI hotel operations.
 
 ### Agent Endpoints
 
@@ -1057,10 +1063,10 @@ GET    /api/v1/connect/insights/housekeeping       # Housekeeping optimization
 
 ### How OTAIP Connects
 
-OTAIP's `packages/connect` will have a HAIP adapter (like `AmadeusAdapter`, `DuffelAdapter`). Lodging agents (Domain 4) connect to HAIP via this adapter. Both projects share TypeScript, pnpm, Vitest, and strict TS config.
+OTAIP's `packages/connect` will have a inPMS adapter (like `AmadeusAdapter`, `DuffelAdapter`). Lodging agents (Domain 4) connect to inPMS via this adapter. Both projects share TypeScript, pnpm, Vitest, and strict TS config.
 
 ```
-OTAIP Agent → ConnectAdapter (HAIP) → Connect API → HAIP PMS → PostgreSQL
+OTAIP Agent → ConnectAdapter (inPMS) → Connect API → inPMS PMS → PostgreSQL
 ```
 
 The PMS is the product. OTAIP agents are the intelligence on top.
@@ -1071,7 +1077,7 @@ The PMS is the product. OTAIP agents are the intelligence on top.
 
 ## WebSocket — Real-time Events
 
-HAIP uses Socket.IO for real-time event broadcasting to the dashboard and other connected clients.
+inPMS uses Socket.IO for real-time event broadcasting to the dashboard and other connected clients.
 
 ### Connection
 
@@ -1106,12 +1112,12 @@ All webhook events are simultaneously broadcast via WebSocket to clients subscri
 
 ## Security & Compliance (Built In, Not Bolted On)
 
-HAIP is multi-tenant by construction, and isolation is enforced **in depth** — at the request boundary *and* the data layer — so a bug in one place isn't a breach.
+inPMS is multi-tenant by construction, and isolation is enforced **in depth** — at the request boundary *and* the data layer — so a bug in one place isn't a breach.
 
-| Area | How HAIP Handles It |
+| Area | How inPMS Handles It |
 |------|-------------------|
 | **Tenant isolation** | `property_id` on every table. A global guard binds each authenticated request to the `propertyId` it targets (fail-closed), and every property-scoped query independently filters by `propertyId`. Caller-supplied foreign keys are verified to belong to the tenant before any write. |
-| **Authentication & authorization** | Keycloak OIDC (RS256 JWT) **plus** HAIP's own local users/roles/permissions; `@Roles` + `@RequirePermissions` guards on every endpoint. The Connect (agent) API uses per-property API credentials stored as hashes; inbound OTA webhooks are authenticated per connection (Basic-Auth / HMAC). |
+| **Authentication & authorization** | Keycloak OIDC (RS256 JWT) **plus** inPMS's own local users/roles/permissions; `@Roles` + `@RequirePermissions` guards on every endpoint. The Connect (agent) API uses per-property API credentials stored as hashes; inbound OTA webhooks are authenticated per connection (Basic-Auth / HMAC). |
 | **Input & transport hardening** | Strict DTO validation (incl. positive-amount checks on monetary fields and UUID-validated ids), an origin **CORS allowlist**, security response headers, **SSRF protection** on outbound webhooks, and rate limiting. The API **refuses to boot with insecure defaults in production** (auth off / mock payments) unless explicitly opted in for the demo. |
 | **PCI DSS** | Never stores raw card data. Stripe tokenization via PaymentIntents. Payments table stores token + last four + brand. |
 | **GDPR** | Audit trail (with actor) on every data modification, consent tracking fields, data retention and right-to-erasure APIs. |
@@ -1124,7 +1130,7 @@ HAIP is multi-tenant by construction, and isolation is enforced **in depth** —
 
 ## Integrations
 
-HAIP is **API-first**: the same REST surface that powers the dashboard is documented via auto-generated **OpenAPI 3.0** at `/docs`, state changes fan out through **HMAC-signed webhooks**, and external systems connect through **pluggable adapters** (channels, payments, messaging, accounting, and more).
+inPMS is **API-first**: the same REST surface that powers the dashboard is documented via auto-generated **OpenAPI 3.0** at `/docs`, state changes fan out through **HMAC-signed webhooks**, and external systems connect through **pluggable adapters** (channels, payments, messaging, accounting, and more).
 
 See **[`docs/INTEGRATIONS.md`](./docs/INTEGRATIONS.md)** for the full integration catalog (~230 integrations across 19 categories). To wire your stack, start with **[`docs/webhooks.md`](./docs/webhooks.md)** (signature verification, payloads, retries) and the recipes under **[`docs/integrations/`](./docs/integrations/)**. **Fiscalization and guest registration** are first-class categories — so properties can plug in invoice issuance and authority reporting without custom one-offs.
 
@@ -1144,7 +1150,7 @@ can track it. For everything else, Discord is the fastest way to reach us.
 
 ## Contributing
 
-HAIP is built in public and contributions are welcome.
+inPMS is built in public and contributions are welcome.
 
 ### The One Rule
 
@@ -1152,7 +1158,7 @@ HAIP is built in public and contributions are welcome.
 
 ### How to contribute
 
-1. Check the [open issues](https://github.com/TelivityAI/haip/issues)
+1. Check the [open issues](https://github.com/inhotel-io/inpms/issues)
 2. Read `CLAUDE.md` for code standards and conventions
 3. Read the relevant KB section before writing business logic
 4. Fork, branch, PR — tests required for all business logic
@@ -1174,10 +1180,10 @@ pnpm lint             # ESLint
 
 Licensed under the [Apache License, Version 2.0](LICENSE).
 
-Copyright 2026 Telivity. You may use, modify, and distribute this software under the terms of the Apache 2.0 license. See the [LICENSE](LICENSE) file for the full text.
+Copyright 2026 inHotel Sàrl for inHotel modifications. The upstream copyright and Apache 2.0 license are preserved; see [NOTICE](NOTICE), [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES), and [LICENSE](LICENSE).
 
 ---
 
 <p align="center">
-  <sub>Built by <a href="https://github.com/TelivityAI">Telivity</a> — open-source travel infrastructure for the AI era.</sub>
+  <sub>Maintained by <a href="https://github.com/inhotel-io">inHotel Sàrl</a> — open infrastructure for hospitality operators and hybrid human–AI teams.</sub>
 </p>

@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import {
   Injectable,
   Inject,
@@ -5,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { doorLockCredentials, reservations } from '@telivityhaip/database';
+import { doorLockCredentials, reservations } from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 import type { AccessCredential } from './lock-provider.interface';
 import type { ListDoorLockCredentialsDto } from './dto/list-credentials.dto';

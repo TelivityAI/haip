@@ -1,3 +1,4 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # Wave 3 partner surface (registry)
 
 Wave 3 items are **new surface / partner processes**: start partner applications and certification where required; implement adapters when credentials and domain docs exist. They appear in the integration registry as `planned` (or `adapter` when a console handoff key is wired).
@@ -31,7 +32,7 @@ After `pnpm migrate` / push-schema, browse `GET /api/v1/admin/integrations` (and
 
 ## How to enable a planned row
 
-1. Complete vendor partner apply / sandbox signup outside HAIP.
+1. Complete vendor partner apply / sandbox signup outside inPMS.
 2. Implement the matching provider interface (channel, payment, lock, fiscal, messaging, or a new module when required).
 3. Flip registry seed `status` / `adapterKey` and ship a public recipe under `docs/integrations/`.
 

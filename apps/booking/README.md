@@ -1,6 +1,7 @@
-# @telivityhaip/booking
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
+# @inhotel-io/booking
 
-Guest-facing, commission-free **Book Now** widget for HAIP. A hotel embeds this on
+Guest-facing, commission-free **Book Now** widget for inPMS. A hotel embeds this on
 its own website to take direct bookings. Public — authenticates only with a
 **publishable booking key** (`x-booking-key`); there is no login.
 
@@ -31,12 +32,12 @@ Endpoints used: `GET /config`, `POST /search`, `POST /quote`, `POST /book`,
 ## Scripts
 
 ```bash
-pnpm --filter @telivityhaip/booking dev        # standalone SPA on :5174
-pnpm --filter @telivityhaip/booking build      # tsc -b && vite build
-pnpm --filter @telivityhaip/booking preview
-pnpm --filter @telivityhaip/booking typecheck
-pnpm --filter @telivityhaip/booking lint
-pnpm --filter @telivityhaip/booking test
+pnpm --filter @inhotel-io/booking dev        # standalone SPA on :5174
+pnpm --filter @inhotel-io/booking build      # tsc -b && vite build
+pnpm --filter @inhotel-io/booking preview
+pnpm --filter @inhotel-io/booking typecheck
+pnpm --filter @inhotel-io/booking lint
+pnpm --filter @inhotel-io/booking test
 ```
 
 ## Flow
@@ -59,11 +60,11 @@ variables on the widget container (never on the host page). Tokens: `primary`,
 
 ```html
 <!-- JSON blob (what Remy injects) -->
-<div id="haip-booking" data-booking-key="pk_live_XXX"
+<div id="inpms-booking" data-booking-key="pk_live_XXX"
      data-theme='{"primary":"#0a7d6b","font":"Inter, sans-serif","radius":"14px"}'></div>
 
 <!-- or individual attributes -->
-<div id="haip-booking" data-booking-key="pk_live_XXX"
+<div id="inpms-booking" data-booking-key="pk_live_XXX"
      data-theme-primary="#0a7d6b" data-theme-font="Inter, sans-serif" data-theme-radius="14px"></div>
 ```
 
@@ -81,11 +82,12 @@ submits the placeholder token `tok_demo` (matches the API's MockGateway).
 Build, serve `dist/` under `/booking/`, then on the hotel's site:
 
 ```html
-<div id="haip-booking" data-booking-key="pk_live_XXXXXXXXXXXXXXXXXXXX"></div>
+<div id="inpms-booking" data-booking-key="pk_live_XXXXXXXXXXXXXXXXXXXX"></div>
 <script src="/booking/embed.js"></script>
 ```
 
 `embed.js` finds the container and mounts the React widget into it (using an
 in-memory router, so it never touches the host page's URL). All Tailwind
-utilities are scoped under `.haip-booking` (Tailwind `important: '.haip-booking'`)
+utilities are scoped under `.haip-booking` (the legacy CSS selector; Tailwind
+`important: '.haip-booking'`)
 so the widget's styles don't clobber the host page.

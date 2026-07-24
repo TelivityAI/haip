@@ -1,11 +1,12 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # GDS / CRS via channel manager
 
-HAIP stores `booking_source = gds` and optional GDS chain/property codes on properties, but does **not** implement Amadeus/Sabre/Travelport hotel host adapters.
+inPMS stores `booking_source = gds` and optional GDS chain/property codes on properties, but does **not** implement Amadeus/Sabre/Travelport hotel host adapters.
 
 ## Recommended path
 
 1. Enable a **GDS channel** on SiteMinder or DerbySoft for the property.
-2. Keep HAIP as the PMS of record; ARI + reservations flow through the existing CM adapter.
+2. Keep inPMS as the PMS of record; ARI + reservations flow through the existing CM adapter.
 3. Map GDS rate/room codes in the Channels mappings UI.
 
 ## When to consider a CRS adapter later

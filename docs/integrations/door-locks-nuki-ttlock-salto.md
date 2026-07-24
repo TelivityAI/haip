@@ -1,6 +1,7 @@
+<!-- Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance. -->
 # Nuki, TTLock, and Salto KS door locks
 
-HAIP provisions and revokes room access on check-in / check-out through the `LockProvider` interface. Core ships reference adapters for **Nuki**, **TTLock**, and **Salto KS**, plus the default **webhook** adapter and a **console** fallback when vendor credentials are missing.
+inPMS provisions and revokes room access on check-in / check-out through the `LockProvider` interface. Core ships reference adapters for **Nuki**, **TTLock**, and **Salto KS**, plus the default **webhook** adapter and a **console** fallback when vendor credentials are missing.
 
 See the catalog entries in **[Integration catalog](../INTEGRATIONS.md)** (Door Locks & Access).
 
@@ -16,7 +17,7 @@ DOOR_LOCK_PROVIDER=salto_ks
 DOOR_LOCK_PROVIDER=console   # log-only PIN (dev / demo)
 ```
 
-If `DOOR_LOCK_PROVIDER` names a vendor that is not fully configured, HAIP falls back to **console** (PIN is generated and stored locally; nothing is sent to the vendor).
+If `DOOR_LOCK_PROVIDER` names a vendor that is not fully configured, inPMS falls back to **console** (PIN is generated and stored locally; nothing is sent to the vendor).
 
 ## Nuki
 

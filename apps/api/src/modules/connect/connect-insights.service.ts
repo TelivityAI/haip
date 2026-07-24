@@ -1,3 +1,4 @@
+// Modified by inHotel Sàrl for inPMS; see NOTICE for upstream provenance.
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
@@ -7,7 +8,7 @@ import {
   rooms,
   ratePlans,
   housekeepingTasks,
-} from '@telivityhaip/database';
+} from '@inhotel-io/database';
 import { DRIZZLE } from '../../database/database.module';
 
 @Injectable()
@@ -403,7 +404,7 @@ export class ConnectInsightsService {
   }
 
   private async getGuestInfo(guestId: string) {
-    const { guests } = await import('@telivityhaip/database');
+    const { guests } = await import('@inhotel-io/database');
     const [guest] = await this.db
       .select()
       .from(guests)
