@@ -25,21 +25,29 @@ import {
 import { SerbiaEturistaConsoleProvider } from './providers/serbia-eturista-console.provider';
 import { SerbiaSufEsirConsoleProvider } from './providers/serbia-suf-esir-console.provider';
 
-const WAVE_FISCAL_PROVIDER_TOKENS = WAVE_FISCAL_CONSOLE_PACKS.map(
-  (pack) => `FISCAL_CONSOLE_${pack.key.toUpperCase()}`,
+function fiscalConsoleToken(key: string): string {
+  return `FISCAL_CONSOLE_${key.toUpperCase()}`;
+}
+
+function guestRegConsoleToken(key: string): string {
+  return `GUEST_REG_CONSOLE_${key.toUpperCase()}`;
+}
+
+const WAVE_FISCAL_PROVIDER_TOKENS = WAVE_FISCAL_CONSOLE_PACKS.map((pack) =>
+  fiscalConsoleToken(pack.key),
 );
 
-const WAVE_GUEST_REG_PROVIDER_TOKENS = WAVE_GUEST_REG_CONSOLE_PACKS.map(
-  (pack) => `GUEST_REG_CONSOLE_${pack.key.toUpperCase()}`,
+const WAVE_GUEST_REG_PROVIDER_TOKENS = WAVE_GUEST_REG_CONSOLE_PACKS.map((pack) =>
+  guestRegConsoleToken(pack.key),
 );
 
-const waveFiscalProviders = WAVE_FISCAL_CONSOLE_PACKS.map((pack, index) => ({
-  provide: WAVE_FISCAL_PROVIDER_TOKENS[index],
+const waveFiscalProviders = WAVE_FISCAL_CONSOLE_PACKS.map((pack) => ({
+  provide: fiscalConsoleToken(pack.key),
   useFactory: () => new NamedConsoleFiscalProvider(pack.key, pack.label),
 }));
 
-const waveGuestRegProviders = WAVE_GUEST_REG_CONSOLE_PACKS.map((pack, index) => ({
-  provide: WAVE_GUEST_REG_PROVIDER_TOKENS[index],
+const waveGuestRegProviders = WAVE_GUEST_REG_CONSOLE_PACKS.map((pack) => ({
+  provide: guestRegConsoleToken(pack.key),
   useFactory: () => new NamedConsoleGuestRegistrationProvider(pack.key, pack.label),
 }));
 
