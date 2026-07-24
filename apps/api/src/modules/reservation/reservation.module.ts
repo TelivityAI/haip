@@ -5,7 +5,7 @@ import { AvailabilityService } from './availability.service';
 import { ReservationNotesService } from './reservation-notes.service';
 import { ReservationMessagingService } from './reservation-messaging.service';
 import { ReservationImportService } from './reservation-import.service';
-import { EmailService } from '../agent/guest-comms/email.service';
+import { EmailModule } from '../agent/guest-comms/email.module';
 import { FolioModule } from '../folio/folio.module';
 import { RoomModule } from '../room/room.module';
 import { PaymentModule } from '../payment/payment.module';
@@ -27,6 +27,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     PolicyModule,
     RatePlanModule,
     NotificationsModule,
+    EmailModule,
   ],
   controllers: [ReservationController],
   providers: [
@@ -35,9 +36,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ReservationNotesService,
     ReservationMessagingService,
     ReservationImportService,
-    // EmailService has no constructor deps requiring AgentModule (env + logger
-    // only), so we register it directly here to avoid cross-module export churn.
-    EmailService,
   ],
   exports: [ReservationService, AvailabilityService],
 })
