@@ -28,9 +28,9 @@ Categories include revenue breakdown (room, tax, F&B, other, total), adjustments
 
 ## Trial balance CSV
 
-Columns: `date`, `account`, `opening`, `debit`, `credit`, `closing`
+Columns: `date`, `ledger`, `opening`, `netActivity`, `transfersIn`, `transfersOut`, `closing`
 
-One row per ledger account for the business date.
+One row per ledger for the business date.
 
 ## Hand-off workflow
 
