@@ -1223,6 +1223,29 @@ async function main() {
     CREATE INDEX IF NOT EXISTS door_lock_credentials_property_status_idx
       ON door_lock_credentials (property_id, status)`));
 
+  // Connect API credentials (hashed bearer keys + optional scopes)
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS connect_credentials (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      label varchar(200) NOT NULL,
+      scopes jsonb NOT NULL DEFAULT '[]'::jsonb,
+      key_hash varchar(64) NOT NULL UNIQUE,
+      is_active boolean NOT NULL DEFAULT true,
+      last_used_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      revoked_at timestamptz
+    )`));
+
+  await db.execute(sql.raw(`
+    CREATE INDEX IF NOT EXISTS connect_credentials_property_id_idx
+      ON connect_credentials (property_id)`));
+
+  // Legacy DBs created before scopes existed
+  await db.execute(sql.raw(`
+    ALTER TABLE connect_credentials
+      ADD COLUMN IF NOT EXISTS scopes jsonb NOT NULL DEFAULT '[]'::jsonb`));
+
   // Idempotent column additions for pre-existing databases
   const alters = [
     `ALTER TABLE properties ADD COLUMN IF NOT EXISTS organization_id uuid REFERENCES organizations(id)`,
