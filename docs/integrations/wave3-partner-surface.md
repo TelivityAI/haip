@@ -2,6 +2,8 @@
 
 Wave 3 items are **new surface / partner processes**: start partner applications and certification where required; implement adapters when credentials and domain docs exist. They appear in the integration registry as `planned` (or `adapter` when a console handoff key is wired).
 
+Status meanings: see [INTEGRATIONS.md — Catalog status](../INTEGRATIONS.md#catalog-status-registry). `shipped` = in-product path; `adapter` often means console until partner/authority clients; `recipe` = docs on existing APIs; `planned` = not started.
+
 After `pnpm migrate` / push-schema, browse `GET /api/v1/admin/integrations` (and the property Integrations dashboard).
 
 ## Category buckets (146)
