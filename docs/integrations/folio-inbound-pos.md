@@ -57,3 +57,10 @@ Example:
 ## Alternative: `/api/v1/pos/charges`
 
 HAIP also exposes **`POST /api/v1/pos/charges`** for outlet POS integrations (DTO includes explicit `propertyId` for platform callers). Prefer **folio-inbound** when you only have room number + amount and a property-bound key.
+
+## Catalog rows (Wave 3 recipes)
+
+POS vendors that post via this inbound pattern (middleware maps vendor tickets → folio charges):
+
+`square-pos`, `toast`, `clover`, `epos-now`, `shopify-pos`, `loyverse`, `erply`, `marketman`.
+
