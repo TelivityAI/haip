@@ -74,6 +74,7 @@ export const connectCredentials = pgTable('connect_credentials', {
   id: uuid('id').primaryKey().defaultRandom(),
   propertyId: uuid('property_id').notNull().references(() => properties.id),
   label: varchar('label', { length: 200 }).notNull(),
+  scopes: jsonb('scopes').$type<string[]>().notNull().default([]),
   // sha256(raw key), hex-encoded. Raw key shown to the operator ONCE on creation.
   keyHash: varchar('key_hash', { length: 64 }).notNull().unique(),
   isActive: boolean('is_active').notNull().default(true),
