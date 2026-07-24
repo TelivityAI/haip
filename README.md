@@ -30,6 +30,7 @@
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#api-reference">API Reference</a> &middot;
   <a href="#otaip-integration">OTAIP Integration</a> &middot;
+  <a href="#community--support">Community &amp; Support</a> &middot;
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -1106,6 +1107,18 @@ HAIP is multi-tenant by construction, and isolation is enforced **in depth** —
 | **Tax Calculation** | Jurisdiction-based tax engine. Inclusive/exclusive handling. Sales, occupancy, tourism, and VAT tax types. Per-property rules with exemption support. |
 
 > Security is treated as ongoing work: the codebase is reviewed continuously and hardened as it matures. Before production use, pair it with your own deployment review and a Keycloak configured to issue the `property_ids` claim.
+
+---
+
+## Community & Support
+
+Discord is our main support channel. Questions, bugs, feature ideas, or just
+want to talk to the team? Join us:
+
+👉 https://discord.gg/rJQJ5Rh5kH
+
+For confirmed bugs and feature requests, please still open a GitHub issue so we
+can track it. For everything else, Discord is the fastest way to reach us.
 
 ---
 
