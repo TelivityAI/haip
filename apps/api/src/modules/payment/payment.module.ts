@@ -5,19 +5,19 @@ import { WebhookModule } from '../webhook/webhook.module';
 import { PaymentController } from './payment.controller';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { PaymentService } from './payment.service';
-import { MockGateway } from './mock-gateway';
-import { StripeGateway } from './stripe-gateway';
 import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
+import { createPaymentGateway } from './payment-gateway.factory';
 
 /**
  * Payment module with configurable gateway.
  *
- * STRIPE_MODE environment variable controls which gateway is used:
- * - 'mock' (default) → MockGateway — no HTTP calls, returns fake success. Use for tests and CI.
- * - 'test' → StripeGateway with test API keys — real Stripe calls in test mode.
- * - 'live' → StripeGateway with live API keys — real charges.
+ * PAYMENT_GATEWAY selects the PSP adapter (mock, stripe, adyen, mollie, square, braintree).
+ * When unset, STRIPE_MODE controls legacy behavior:
+ * - 'mock' (default) → MockGateway — no HTTP calls. Use for tests and CI.
+ * - 'test' | 'live' → StripeGateway — requires STRIPE_SECRET_KEY.
  *
- * When STRIPE_MODE is 'mock', no STRIPE_SECRET_KEY is required.
+ * Alternative PSPs run in console mode (logged mock success) when their env credentials
+ * are missing; set the provider's API keys to enable real HTTP calls.
  */
 @Module({
   imports: [ConfigModule, FolioModule, WebhookModule],
@@ -26,16 +26,7 @@ import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
     PaymentService,
     {
       provide: PAYMENT_GATEWAY,
-      useFactory: (configService: ConfigService) => {
-        const mode = configService.get<string>('STRIPE_MODE', 'mock');
-
-        if (mode === 'mock') {
-          return new MockGateway();
-        }
-
-        // 'test' or 'live' — use real Stripe
-        return new StripeGateway(configService);
-      },
+      useFactory: (configService: ConfigService) => createPaymentGateway(configService),
       inject: [ConfigService],
     },
   ],

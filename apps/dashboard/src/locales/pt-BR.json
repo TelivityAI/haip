@@ -726,6 +726,25 @@
     "opsForecast": "Previsão operacional",
     "opsForecastHint": "Derivado de reservas em casa (atribuída, check-in, permanência, saída prevista) para a data de serviço selecionada."
   },
+  "integrations": {
+    "actions": "Ações",
+    "allCategories": "Todas as categorias",
+    "catalogStatus": "Catálogo",
+    "category": "Categoria",
+    "disable": "Desativar",
+    "disabled": "Desativado",
+    "empty": "Nenhuma integração corresponde a este filtro.",
+    "enable": "Ativar",
+    "enabled": "Ativo",
+    "loading": "Carregando integrações…",
+    "name": "Integração",
+    "propertyStatus": "Propriedade",
+    "refresh": "Atualizar",
+    "saved": "Configurações de integração salvas",
+    "selectProperty": "Selecione uma propriedade para gerenciar integrações.",
+    "subtitle": "Explore o catálogo público e ative conexões para esta propriedade.",
+    "title": "Integrações"
+  },
   "import": {
     "choose": "1. Escolha o que importar",
     "createdId": "ID criado",
@@ -777,6 +796,7 @@
     "houseAccounts": "Contas Internas",
     "housekeeping": "Governança",
     "import": "Importação de Dados",
+    "integrations": "Integrações",
     "mainNavigation": "Navegação principal",
     "nightAudit": "Fechamento Noturno",
     "ratePlans": "Planos de Tarifas",

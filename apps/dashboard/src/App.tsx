@@ -21,6 +21,7 @@ const Communications = lazy(() => import('./pages/Communications'));
 const Reviews = lazy(() => import('./pages/Reviews'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Import = lazy(() => import('./pages/Import'));
+const Integrations = lazy(() => import('./pages/Integrations'));
 const Groups = lazy(() => import('./pages/Groups'));
 const Commercial = lazy(() => import('./pages/Commercial'));
 const Cashier = lazy(() => import('./pages/Cashier'));
@@ -54,6 +55,7 @@ export default function App() {
             <Route path="/night-audit" element={<NightAudit />} />
             <Route path="/reports/*" element={<Reports />} />
             <Route path="/channels/*" element={<Channels />} />
+            <Route path="/integrations" element={<Integrations />} />
             <Route path="/communications" element={<Communications />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/settings/*" element={<Settings />} />

@@ -26,6 +26,10 @@ export class WebhookLockProvider implements LockProvider {
     private readonly credentials: DoorLockCredentialService,
   ) {}
 
+  isConfigured(): boolean {
+    return true;
+  }
+
   async issueCredential(req: AccessCredentialRequest): Promise<AccessCredential> {
     // 6-digit PIN, zero-padded. CSPRNG so codes aren't predictable.
     const accessCode = String(randomInt(0, 1_000_000)).padStart(6, '0');
