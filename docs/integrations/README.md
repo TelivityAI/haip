@@ -20,6 +20,17 @@ For event delivery (signatures, payloads, retries, subscriptions), start with **
 | [BI on Postgres](bi-postgres.md) | Read-only DB access for Metabase, Grafana, etc. |
 | [iCal calendar bridge](ical-calendar-bridge.md) | Planned calendar sync (Airbnb, Vrbo, Google Calendar) |
 | [Infobip, Vonage, Telegram](messaging-infobip-vonage-telegram.md) | Guest SMS (Infobip / Vonage) and Telegram bot notifications |
+| [Serbia fiscal](serbia-fiscal.md) | SUF/ESIR + eTurista console providers and fiscal config |
+| [fiskaly SIGN AT](fiskaly-sign-at.md) | Austrian RKSV console fiscal provider key |
+| [Wave 3 fiscal & guest-reg](wave3-fiscal-guest-reg.md) | Country-pack console provider keys (Brazil excluded) |
+| [Wave 3 partner surface](wave3-partner-surface.md) | Registry status for partner/cert Wave 3 buckets |
+| [Compliance market entry](compliance-market-entry.md) | Paid/gated and feature-only packs — never claimed free |
+| [Beds24 & Channex](channel-beds24-channex.md) | Channel manager adapters |
+| [Payments (Adyen/Mollie/Square/Braintree)](payments-adyen-mollie-square-braintree.md) | Additional payment gateways |
+| [Door locks](door-locks-nuki-ttlock-salto.md) | Nuki, TTLock, Salto KS |
+| [SendGrid email](sendgrid-email.md) | Transactional email provider |
+| [Bird SMS](bird-sms.md) | Bird messaging provider |
+| [Review sources](review-sources.md) | Google / TripAdvisor review stubs |
 
 ## Base URL
 

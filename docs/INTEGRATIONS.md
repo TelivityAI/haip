@@ -304,4 +304,8 @@ Selling rooms is global; receipts and guest registration are local law. HAIP tre
 - **UniFi Guest Hotspot** - Guest Wi-Fi access support for UniFi hotspot authorization and operational workflows.
 - **OpenTravel/HTNG XML** - Hospitality XML standard support for distribution, reservations, profiles, and operational interoperability.
 
+### Compliance market entry (paid/gated)
+
+Paid hardware-cert routes and feature-only guest registers are **not** free marketplace connectors. See [Compliance market entry](integrations/compliance-market-entry.md). Schedule by market entry; never marketed as free automated filing.
+
 Want an integration that isn't listed? HAIP is open source - open an issue, or build against the API at `/docs`.

@@ -37,13 +37,20 @@ import {
     ConsoleTelegramProvider,
     {
       provide: SMS_PROVIDERS,
-      inject: [TwilioSmsProvider, InfobipSmsProvider, VonageSmsProvider, ConsoleSmsProvider],
+      inject: [
+        TwilioSmsProvider,
+        InfobipSmsProvider,
+        VonageSmsProvider,
+        BirdSmsProvider,
+        ConsoleSmsProvider,
+      ],
       useFactory: (
         twilio: TwilioSmsProvider,
         infobip: InfobipSmsProvider,
         vonage: VonageSmsProvider,
+        bird: BirdSmsProvider,
         consoleProvider: ConsoleSmsProvider,
-      ) => [twilio, infobip, vonage, consoleProvider],
+      ) => [twilio, infobip, vonage, bird, consoleProvider],
     },
     {
       provide: SMS_PROVIDER,
