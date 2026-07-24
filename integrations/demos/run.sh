@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run one or all integration demos (shipped + adapter).
+# Run one or all integration demos (shipped + adapter + recipe).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=./lib.sh
@@ -9,10 +9,10 @@ cd "$ROOT"
 usage() {
   cat <<'EOF'
 Usage:
-  ./integrations/demos/run.sh list [shipped|adapters|all]
+  ./integrations/demos/run.sh list [shipped|adapters|recipes|all]
   ./integrations/demos/run.sh <slug>
-  ./integrations/demos/run.sh all [shipped|adapters]
-  ./integrations/demos/run.sh enable-all [shipped|adapters]
+  ./integrations/demos/run.sh all [shipped|adapters|recipes]
+  ./integrations/demos/run.sh enable-all [shipped|adapters|recipes]
 
 Env:
   HAIP_URL      default http://localhost:3000
@@ -20,19 +20,26 @@ Env:
 EOF
 }
 
-# Prints slugs. $1 = all|shipped|adapters
+# Prints slugs. $1 = all|shipped|adapters|recipes
 slugs_for() {
   local filter="${1:-all}"
   FILTER="$filter" node <<'NODE'
 const filter = process.env.FILTER || 'all';
 const m = require('./manifest.json');
-const isSerbia = (d) => d.slug === 'serbia-suf-esir' || d.slug === 'serbia-eturista';
-const isAdapter = (d) =>
-  (d.kind === 'fiscal' || d.kind === 'guest_reg') && !isSerbia(d);
-const isShipped = (d) => !isAdapter(d);
+const maturityOf = (d) => {
+  if (d.maturity === 'shipped' || d.maturity === 'adapter' || d.maturity === 'recipe') {
+    return d.maturity;
+  }
+  // Legacy fallback before maturity was set on every row
+  const isSerbia = d.slug === 'serbia-suf-esir' || d.slug === 'serbia-eturista';
+  if ((d.kind === 'fiscal' || d.kind === 'guest_reg') && !isSerbia) return 'adapter';
+  return 'shipped';
+};
 for (const d of m.demos) {
-  if (filter === 'adapters' && !isAdapter(d)) continue;
-  if (filter === 'shipped' && !isShipped(d)) continue;
+  const mat = maturityOf(d);
+  if (filter === 'adapters' && mat !== 'adapter') continue;
+  if (filter === 'shipped' && mat !== 'shipped') continue;
+  if (filter === 'recipes' && mat !== 'recipe') continue;
   console.log(d.slug);
 }
 NODE
@@ -43,15 +50,20 @@ list_slugs() {
   FILTER="$filter" node <<'NODE'
 const filter = process.env.FILTER || 'all';
 const m = require('./manifest.json');
-const isSerbia = (d) => d.slug === 'serbia-suf-esir' || d.slug === 'serbia-eturista';
-const isAdapter = (d) =>
-  (d.kind === 'fiscal' || d.kind === 'guest_reg') && !isSerbia(d);
-const isShipped = (d) => !isAdapter(d);
+const maturityOf = (d) => {
+  if (d.maturity === 'shipped' || d.maturity === 'adapter' || d.maturity === 'recipe') {
+    return d.maturity;
+  }
+  const isSerbia = d.slug === 'serbia-suf-esir' || d.slug === 'serbia-eturista';
+  if ((d.kind === 'fiscal' || d.kind === 'guest_reg') && !isSerbia) return 'adapter';
+  return 'shipped';
+};
 for (const d of m.demos) {
-  if (filter === 'adapters' && !isAdapter(d)) continue;
-  if (filter === 'shipped' && !isShipped(d)) continue;
-  const tag = isAdapter(d) ? 'adapter' : 'shipped';
-  console.log(d.slug.padEnd(36), tag.padEnd(8), d.title);
+  const mat = maturityOf(d);
+  if (filter === 'adapters' && mat !== 'adapter') continue;
+  if (filter === 'shipped' && mat !== 'shipped') continue;
+  if (filter === 'recipes' && mat !== 'recipe') continue;
+  console.log(d.slug.padEnd(40), mat.padEnd(8), d.title);
 }
 NODE
 }
