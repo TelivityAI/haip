@@ -4,7 +4,7 @@ Short, practical how-tos for wiring HAIP to common automation and back-office to
 
 For the full integration catalog, see **[Integration catalog](../INTEGRATIONS.md)**.
 
-**Shipped demos (one command):** [`integrations/demos/`](../../integrations/demos/) — `./integrations/demos/run.sh stripe` (or `all`). Turns the Integrations toggle on and wires mock/console paths without vendor keys.
+**One-command demos:** [`integrations/demos/`](../../integrations/demos/) — `./integrations/demos/run.sh stripe` (or `list` / `all`). Covers **shipped**, **adapter**, and **recipe** rows: toggles the Integrations catalog on and exercises mock/console/docs paths without inventing vendor APIs.
 
 For event delivery (signatures, payloads, retries, subscriptions), start with **[Webhooks & events](../webhooks.md)**.
 
@@ -20,12 +20,16 @@ For event delivery (signatures, payloads, retries, subscriptions), start with **
 | [Folio inbound (POS)](folio-inbound-pos.md) | Post incidental charges from any POS |
 | [Accounting CSV](accounting-csv.md) | Revenue journal / trial balance export |
 | [BI on Postgres](bi-postgres.md) | Read-only DB access for Metabase, Grafana, etc. |
+| [CRM webhooks](crm-webhooks.md) | Mailchimp/HubSpot/… via Connect events |
+| [Frankfurter/ECB FX](frankfurter-ecb-fx.md) | External ECB FX rates recipe |
 | [iCal calendar bridge](ical-calendar-bridge.md) | Planned calendar sync (Airbnb, Vrbo, Google Calendar) |
 | [Infobip, Vonage, Telegram](messaging-infobip-vonage-telegram.md) | Guest SMS (Infobip / Vonage) and Telegram bot notifications |
 | [Serbia fiscal](serbia-fiscal.md) | SUF/ESIR + eTurista console providers and fiscal config |
 | [fiskaly SIGN AT](fiskaly-sign-at.md) | Austrian RKSV console fiscal provider key |
 | [Wave 3 fiscal & guest-reg](wave3-fiscal-guest-reg.md) | Country-pack console provider keys (Brazil excluded) |
-| [Wave 3 partner surface](wave3-partner-surface.md) | Registry status for partner/cert Wave 3 buckets |
+| [Wave 3 partner surface](wave3-partner-surface.md) | Tier A/B (50) + remaining planned partner/cert rows |
+| [Wave 3 channels + Wise](wave3-channels-wise.md) | Console CM adapters + Wise Platform |
+| [Wave 3 reviews](wave3-reviews.md) | Named console review sources |
 | [Compliance market entry](compliance-market-entry.md) | Paid/gated and feature-only packs — never claimed free |
 | [Beds24 & Channex](channel-beds24-channex.md) | Channel manager adapters |
 | [Payments (Adyen/Mollie/Square/Braintree)](payments-adyen-mollie-square-braintree.md) | Additional payment gateways |
@@ -35,11 +39,6 @@ For event delivery (signatures, payloads, retries, subscriptions), start with **
 | [Mailgun & SES](mailgun-ses.md) | Mailgun + Amazon SES gateway email providers |
 | [Bird SMS](bird-sms.md) | Bird messaging provider |
 | [Review sources](review-sources.md) | Google / TripAdvisor review stubs |
-
-| [Wave 3 channels + Wise](wave3-channels-wise.md) | Console CM adapters + Wise Platform |
-| [Wave 3 reviews](wave3-reviews.md) | Named console review sources |
-| [CRM webhooks](crm-webhooks.md) | Mailchimp/HubSpot/… via Connect events |
-| [Frankfurter/ECB FX](frankfurter-ecb-fx.md) | External ECB FX rates recipe |
 
 ## Base URL
 
