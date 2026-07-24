@@ -23,10 +23,16 @@ export interface AccessCredential {
 
 export interface LockProvider {
   readonly name: string;
+  /** True when the adapter has credentials to call the vendor (console/webhook always true). */
+  isConfigured(): boolean;
   /** Provision room access for a checked-in reservation. */
   issueCredential(req: AccessCredentialRequest): Promise<AccessCredential>;
   /** Revoke access at check-out. */
   revokeCredential(req: { propertyId: string; reservationId: string; roomId?: string | null }): Promise<void>;
 }
 
+/** Resolved active adapter injected into listeners and services. */
 export const LOCK_PROVIDER = Symbol('LOCK_PROVIDER');
+
+/** All registered lock adapters (vendor + webhook + console fallback). */
+export const LOCK_PROVIDERS = Symbol('LOCK_PROVIDERS');

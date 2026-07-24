@@ -11,7 +11,18 @@ describe('assertSecureConfig', () => {
   });
 
   it('refuses to boot in production with mock payments', () => {
-    expect(() => assertSecureConfig({ NODE_ENV: 'production', AUTH_ENABLED: 'true', STRIPE_MODE: 'mock' } as any)).toThrow(/STRIPE_MODE=mock/);
+    expect(() => assertSecureConfig({ NODE_ENV: 'production', AUTH_ENABLED: 'true', STRIPE_MODE: 'mock' } as any)).toThrow(/mock/);
+  });
+
+  it('allows production when PAYMENT_GATEWAY is a real PSP even if STRIPE_MODE=mock', () => {
+    expect(() =>
+      assertSecureConfig({
+        NODE_ENV: 'production',
+        AUTH_ENABLED: 'true',
+        STRIPE_MODE: 'mock',
+        PAYMENT_GATEWAY: 'adyen',
+      } as any),
+    ).not.toThrow();
   });
 
   it('also refuses to boot in staging with AUTH disabled (not just production)', () => {
