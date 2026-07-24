@@ -146,6 +146,13 @@ export {
   connectCredentials,
 } from './connect.js';
 
+// Integration catalog (global) + per-property enablement
+export {
+  integrationCatalogStatusEnum,
+  integrationCatalogEntries,
+  propertyIntegrations,
+} from './integration-registry.js';
+
 // Tax
 export {
   taxProfiles,
