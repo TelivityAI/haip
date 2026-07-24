@@ -181,6 +181,25 @@
     "sellProduct": "Produkt verkaufen",
     "title": "Hauskonten"
   },
+  "integrations": {
+    "title": "Integrationen",
+    "subtitle": "Öffentlichen Katalog durchsuchen und Verbindungen für diese Unterkunft aktivieren.",
+    "selectProperty": "Unterkunft auswählen, um Integrationen zu verwalten.",
+    "refresh": "Aktualisieren",
+    "category": "Kategorie",
+    "allCategories": "Alle Kategorien",
+    "loading": "Integrationen werden geladen…",
+    "name": "Integration",
+    "catalogStatus": "Katalog",
+    "propertyStatus": "Unterkunft",
+    "actions": "Aktionen",
+    "enable": "Aktivieren",
+    "disable": "Deaktivieren",
+    "enabled": "Aktiv",
+    "disabled": "Inaktiv",
+    "empty": "Keine Integrationen für diesen Filter.",
+    "saved": "Integrationseinstellungen gespeichert"
+  },
   "import": {
     "description": "Migrieren Sie Datensätze aus einem anderen PMS. Wählen Sie eine Entität aus, laden Sie eine CSV-Datei hoch oder fügen Sie sie ein, ordnen Sie die Spalten zu, prüfen Sie sie mit einem Testlauf und importieren Sie sie anschließend."
   },
@@ -214,6 +233,7 @@
     "houseAccounts": "Hauskonten",
     "housekeeping": "Housekeeping",
     "import": "Datenimport",
+    "integrations": "Integrationen",
     "mainNavigation": "Hauptmenü",
     "nightAudit": "Tagesabschluss",
     "ratePlans": "Ratenpläne",
