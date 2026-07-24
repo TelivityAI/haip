@@ -66,6 +66,15 @@ export const properties = pgTable('properties', {
     noShowFeeAmount?: number;
     noShowCutoffHour?: number;
     auditAutoLock?: boolean;
+    fiscal?: {
+      providerKey?: string | null;
+      config?: Record<string, unknown>;
+      documentType?: string | null;
+    };
+    guestRegistration?: {
+      providerKey?: string | null;
+      config?: Record<string, unknown>;
+    };
     kpiThresholds?: {
       occupancyRate?: { warnBelow?: number; goodAbove?: number };
       adr?: { warnBelow?: number };

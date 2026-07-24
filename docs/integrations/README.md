@@ -19,6 +19,7 @@ For event delivery (signatures, payloads, retries, subscriptions), start with **
 | [Accounting CSV](accounting-csv.md) | Revenue journal / trial balance export |
 | [BI on Postgres](bi-postgres.md) | Read-only DB access for Metabase, Grafana, etc. |
 | [iCal calendar bridge](ical-calendar-bridge.md) | Planned calendar sync (Airbnb, Vrbo, Google Calendar) |
+| [Serbia fiscal & guest registration](serbia-fiscal.md) | Property fiscal config, `invoice.requested`, eTurista check-in hooks |
 
 ## Base URL
 
