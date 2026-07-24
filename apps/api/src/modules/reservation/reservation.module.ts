@@ -14,6 +14,7 @@ import { AncillaryModule } from '../ancillary/ancillary.module';
 import { AccountingModule } from '../accounting/accounting.module';
 import { PolicyModule } from '../policy/policy.module';
 import { RatePlanModule } from '../rate-plan/rate-plan.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { RatePlanModule } from '../rate-plan/rate-plan.module';
     AccountingModule,
     PolicyModule,
     RatePlanModule,
+    NotificationsModule,
   ],
   controllers: [ReservationController],
   providers: [

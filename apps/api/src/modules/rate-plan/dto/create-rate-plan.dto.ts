@@ -12,8 +12,11 @@ import {
   MaxLength,
   Length,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { LosAdjustmentDto, OccupancyBandDto } from './rate-adjustment.dto';
 
 export class CreateRatePlanDto {
   @ApiProperty()
@@ -116,4 +119,24 @@ export class CreateRatePlanDto {
   @IsOptional()
   @IsInt()
   sortOrder?: number;
+
+  @ApiPropertyOptional({
+    type: [LosAdjustmentDto],
+    description: 'LOS pricing tiers (e.g. 7+/14+/21+ night discounts)',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LosAdjustmentDto)
+  losAdjustments?: LosAdjustmentDto[];
+
+  @ApiPropertyOptional({
+    type: [OccupancyBandDto],
+    description: 'Occupancy-based pricing bands',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OccupancyBandDto)
+  occupancyBands?: OccupancyBandDto[];
 }

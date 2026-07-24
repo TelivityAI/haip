@@ -134,3 +134,45 @@ describe('RoomingListService.importRoomingList', () => {
     expect(result.errors).toBe(1);
   });
 });
+
+describe('RoomingListService.listEntries', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('scopes by blockId + propertyId after verifying the block exists', async () => {
+    const entries = [
+      { id: 'entry-1', guestName: 'Jane', propertyId: 'prop-001', allotmentBlockId: 'block-001' },
+    ];
+    const db = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockResolvedValue(entries),
+          }),
+        }),
+      }),
+      insert: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    };
+    const mockAllotmentService = {
+      findBlockById: vi.fn().mockResolvedValue(mockBlock),
+      incrementPickup: vi.fn(),
+    } as unknown as AllotmentService;
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RoomingListService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: WebhookService, useValue: mockWebhookService },
+        { provide: ReservationService, useValue: { create: vi.fn() } },
+        { provide: AllotmentService, useValue: mockAllotmentService },
+        { provide: GroupProfileService, useValue: { linkReservation: vi.fn() } },
+      ],
+    }).compile();
+
+    const svc = module.get<RoomingListService>(RoomingListService);
+    const result = await svc.listEntries('block-001', 'prop-001');
+    expect(mockAllotmentService.findBlockById).toHaveBeenCalledWith('block-001', 'prop-001');
+    expect(result).toEqual(entries);
+  });
+});

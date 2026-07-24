@@ -22,7 +22,7 @@ interface Reservation {
   roomTypeId?: string;
   roomTypeName?: string;
   guestName?: string;
-  guest?: { firstName: string; lastName: string };
+  guest?: { firstName: string; lastName: string; vipLevel?: string; loyaltyNumber?: string | null };
   balance?: number;
   doNotMove?: boolean;
   totalAmount?: string;
@@ -43,6 +43,12 @@ interface NoteRow {
   body: string;
   isActive: boolean;
   createdAt: string;
+}
+
+interface DoorLockCredential {
+  reservationId: string;
+  accessCode?: string | null;
+  status: 'active' | 'revoked';
 }
 
 export default function FrontDesk() {
@@ -124,6 +130,17 @@ export default function FrontDesk() {
         })
         .then((r) => r.data),
     enabled: !!propertyId,
+  });
+
+  const { data: doorCredentials } = useQuery({
+    queryKey: ['door-lock', 'credentials', propertyId, 'active'],
+    queryFn: () =>
+      api
+        .get('/v1/door-lock/credentials', {
+          params: { propertyId, status: 'active', limit: 200 },
+        })
+        .then((r) => r.data),
+    enabled: !!propertyId && tab === 'in-house',
   });
 
   const { data: departureData } = useQuery({
@@ -376,9 +393,27 @@ export default function FrontDesk() {
     r.guestName ??
     (r.guest ? `${r.guest.firstName} ${r.guest.lastName}` : t('frontDesk.unknownGuest'));
 
+  const guestRecognition = (r: Reservation) => {
+    const vipLevel = r.guest?.vipLevel;
+    const loyaltyNumber = r.guest?.loyaltyNumber;
+    if ((!vipLevel || vipLevel === 'none') && !loyaltyNumber) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+        {vipLevel && vipLevel !== 'none' && <StatusBadge status={vipLevel} />}
+        {loyaltyNumber && (
+          <span className="text-[11px] text-telivity-mid-grey">{t('frontDesk.loyaltyNumber', { number: loyaltyNumber })}</span>
+        )}
+      </div>
+    );
+  };
+
   const arrList: Reservation[] = arrivals?.data ?? arrivals ?? [];
   const ihList: Reservation[] = inHouse?.data ?? inHouse ?? [];
   const depList: Reservation[] = departureData?.data ?? departureData ?? [];
+  const doorPinByReservation = useMemo(() => {
+    const rows: DoorLockCredential[] = doorCredentials?.data ?? [];
+    return new Map(rows.map((c) => [c.reservationId, c]));
+  }, [doorCredentials]);
   const roomList: Room[] = useMemo(() => {
     const raw = availableRooms?.data ?? availableRooms ?? [];
     return Array.isArray(raw) ? raw : [];
@@ -511,6 +546,11 @@ export default function FrontDesk() {
                   {t('frontDesk.departure')}
                 </th>
               )}
+              {tab === 'in-house' && (
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">
+                  {t('frontDesk.doorPin')}
+                </th>
+              )}
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">
                 {t('common.status')}
               </th>
@@ -546,7 +586,10 @@ export default function FrontDesk() {
                     />
                   </td>
                 )}
-                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{guestName(r)}</td>
+                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">
+                  <div>{guestName(r)}</div>
+                  {(tab === 'arrivals' || tab === 'in-house') && guestRecognition(r)}
+                </td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{r.confirmationNumber}</td>
                 {tab === 'arrivals' && (
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.roomTypeName ?? '—'}</td>
@@ -566,6 +609,13 @@ export default function FrontDesk() {
                 </td>
                 {tab === 'in-house' && (
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.departureDate}</td>
+                )}
+                {tab === 'in-house' && (
+                  <td className="px-4 py-3 text-sm font-mono text-telivity-navy">
+                    {doorPinByReservation.get(r.id)?.accessCode ?? (
+                      <span className="text-telivity-mid-grey font-sans">{t('frontDesk.doorPinNone')}</span>
+                    )}
+                  </td>
                 )}
                 <td className="px-4 py-3">
                   <StatusBadge status={r.status} />

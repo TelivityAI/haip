@@ -213,6 +213,18 @@ export class GroupsController {
     return this.allotmentService.releaseBlock(id, propertyId);
   }
 
+  @Get('blocks/:id/rooming-list')
+  @ApiOperation({ summary: 'List rooming-list entries for a block (KB 14.6)' })
+  @ApiResponse({ status: 200, description: 'Rooming list entries' })
+  @ApiResponse({ status: 404, description: 'Block not found' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  listRoomingList(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.roomingListService.listEntries(id, propertyId);
+  }
+
   @Post('blocks/:id/rooming-list')
   @Roles('admin', 'front_desk', 'revenue_manager')
   @ApiOperation({ summary: 'Import a rooming list to create member reservations (KB 14.6)' })

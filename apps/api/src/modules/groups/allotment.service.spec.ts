@@ -211,6 +211,142 @@ describe('AllotmentService', () => {
         }),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('allows inventory on shoulder start before core block start', async () => {
+      const blockWithShoulder = {
+        ...mockBlock,
+        startDate: '2026-06-01',
+        endDate: '2026-06-05',
+        shoulderStart: '2026-05-29',
+        shoulderEnd: '2026-06-07',
+      };
+      const db = createMockDb([blockWithShoulder]);
+      let call = 0;
+      db.select = vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockReturnValue({
+              offset: vi.fn().mockReturnValue({ orderBy: vi.fn().mockResolvedValue([]) }),
+            }),
+            orderBy: vi.fn().mockResolvedValue([]),
+            then: (resolve: any) => {
+              call++;
+              if (call === 1) return resolve([blockWithShoulder]);
+              if (call === 2) return resolve([{ id: 'rt-001' }]);
+              return resolve([]);
+            },
+          }),
+        }),
+      }));
+      db.insert = vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([
+            { id: 'inv-shoulder', roomsAllotted: 3, roomsPickedUp: 0 },
+          ]),
+        }),
+      });
+      const availability = {
+        searchAvailability: vi.fn().mockResolvedValue([
+          { roomTypeId: 'rt-001', date: '2026-05-30', available: 10 },
+        ]),
+      } as unknown as AvailabilityService;
+      const svc = await buildService(db, availability);
+      const result = await svc.setInventory('block-001', 'prop-001', {
+        propertyId: 'prop-001',
+        stayDate: '2026-05-30',
+        roomTypeId: 'rt-001',
+        roomsAllotted: 3,
+      });
+      expect(result.id).toBe('inv-shoulder');
+    });
+
+    it('rejects inventory before shoulder-inclusive span', async () => {
+      const blockWithShoulder = {
+        ...mockBlock,
+        startDate: '2026-06-01',
+        endDate: '2026-06-05',
+        shoulderStart: '2026-05-29',
+        shoulderEnd: '2026-06-07',
+      };
+      const db = createMockDb([blockWithShoulder]);
+      let call = 0;
+      db.select = vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            then: (resolve: any) => {
+              call++;
+              if (call === 1) return resolve([blockWithShoulder]);
+              return resolve([]);
+            },
+          }),
+        }),
+      }));
+      const svc = await buildService(db, mockAvailability(10));
+      await expect(
+        svc.setInventory('block-001', 'prop-001', {
+          propertyId: 'prop-001',
+          stayDate: '2026-05-28',
+          roomTypeId: 'rt-001',
+          roomsAllotted: 1,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects inventory on or after shoulder span end (exclusive)', async () => {
+      const blockWithShoulder = {
+        ...mockBlock,
+        startDate: '2026-06-01',
+        endDate: '2026-06-05',
+        shoulderStart: '2026-05-29',
+        shoulderEnd: '2026-06-07',
+      };
+      const db = createMockDb([blockWithShoulder]);
+      let call = 0;
+      db.select = vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            then: (resolve: any) => {
+              call++;
+              if (call === 1) return resolve([blockWithShoulder]);
+              return resolve([]);
+            },
+          }),
+        }),
+      }));
+      const svc = await buildService(db, mockAvailability(10));
+      await expect(
+        svc.setInventory('block-001', 'prop-001', {
+          propertyId: 'prop-001',
+          stayDate: '2026-06-07',
+          roomTypeId: 'rt-001',
+          roomsAllotted: 1,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getInventorySpan', () => {
+    it('uses shoulder dates when present', async () => {
+      const svc = await buildService(createMockDb(), mockAvailability(10));
+      expect(
+        svc.getInventorySpan({
+          startDate: '2026-06-01',
+          endDate: '2026-06-05',
+          shoulderStart: '2026-05-29',
+          shoulderEnd: '2026-06-07',
+        }),
+      ).toEqual({ spanStart: '2026-05-29', spanEndExclusive: '2026-06-07' });
+    });
+
+    it('falls back to core block dates when shoulders unset', async () => {
+      const svc = await buildService(createMockDb(), mockAvailability(10));
+      expect(
+        svc.getInventorySpan({
+          startDate: '2026-06-01',
+          endDate: '2026-06-05',
+        }),
+      ).toEqual({ spanStart: '2026-06-01', spanEndExclusive: '2026-06-05' });
+    });
   });
 
   describe('getPickup', () => {

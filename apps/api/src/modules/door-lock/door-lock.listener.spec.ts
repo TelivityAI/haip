@@ -54,9 +54,13 @@ describe('DoorLockListener', () => {
 });
 
 describe('WebhookLockProvider', () => {
-  it('emits door.access_granted with a CSPRNG 6-digit PIN', async () => {
+  it('emits door.access_granted with a CSPRNG 6-digit PIN and persists credential', async () => {
     const webhooks = { emit: vi.fn().mockResolvedValue(undefined) };
-    const provider = new WebhookLockProvider(webhooks as any);
+    const credentials = {
+      recordIssued: vi.fn().mockResolvedValue({ id: 'cred-1', accessCode: '000000' }),
+      recordRevoked: vi.fn(),
+    };
+    const provider = new WebhookLockProvider(webhooks as any, credentials as any);
 
     const cred = await provider.issueCredential({ propertyId: PROPERTY_ID, reservationId: RESERVATION_ID, roomId: 'r1' });
 
@@ -65,5 +69,30 @@ describe('WebhookLockProvider', () => {
     expect(event).toBe('door.access_granted');
     expect(propertyId).toBe(PROPERTY_ID);
     expect(data).toMatchObject({ roomId: 'r1', provider: 'webhook' });
+    expect(credentials.recordIssued).toHaveBeenCalledWith(
+      expect.objectContaining({
+        propertyId: PROPERTY_ID,
+        reservationId: RESERVATION_ID,
+        roomId: 'r1',
+      }),
+    );
+  });
+
+  it('emits door.access_revoked and marks credential revoked', async () => {
+    const webhooks = { emit: vi.fn().mockResolvedValue(undefined) };
+    const credentials = {
+      recordIssued: vi.fn(),
+      recordRevoked: vi.fn().mockResolvedValue({ status: 'revoked' }),
+    };
+    const provider = new WebhookLockProvider(webhooks as any, credentials as any);
+
+    await provider.revokeCredential({
+      propertyId: PROPERTY_ID,
+      reservationId: RESERVATION_ID,
+      roomId: 'r1',
+    });
+
+    expect(webhooks.emit.mock.calls[0][0]).toBe('door.access_revoked');
+    expect(credentials.recordRevoked).toHaveBeenCalledWith(PROPERTY_ID, RESERVATION_ID);
   });
 });

@@ -84,6 +84,15 @@ export {
   housekeepingTasks,
 } from './housekeeping.js';
 
+// Property ops — lost & found, service requests
+export {
+  lostAndFoundStatusEnum,
+  lostAndFoundItems,
+  serviceRequestStatusEnum,
+  serviceRequestTypeEnum,
+  serviceRequests,
+} from './ops.js';
+
 // Audit
 export {
   auditRunStatusEnum,
@@ -201,3 +210,9 @@ export {
   ratePlanComponents,
   reservationServices,
 } from './ancillary.js';
+
+// Door-lock credentials (devices / access control)
+export {
+  doorLockCredentialStatusEnum,
+  doorLockCredentials,
+} from './door-lock.js';

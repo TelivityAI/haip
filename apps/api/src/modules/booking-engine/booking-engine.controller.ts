@@ -19,6 +19,7 @@ import { BeSearchDto } from './dto/be-search.dto';
 import { BeQuoteDto } from './dto/be-quote.dto';
 import { BeCreateBookingDto } from './dto/be-create-booking.dto';
 import { BeCancelDto } from './dto/be-cancel.dto';
+import { PreRegisterDto } from '../reservation/dto/pre-register.dto';
 
 /**
  * Public, guest-facing direct booking API — `/api/v1/booking-engine/*`.
@@ -93,5 +94,19 @@ export class BookingEngineController {
     @Req() req: any,
   ) {
     return this.service.cancel(this.propertyId(req), confirmationNumber, dto.reason);
+  }
+
+  @Post('bookings/:confirmationNumber/pre-register')
+  @ApiOperation({
+    summary:
+      'Advance check-in / pre-register — capture registration card and ID without checking in',
+  })
+  @ApiResponse({ status: 200, description: 'Registration fields saved; status unchanged' })
+  async preRegister(
+    @Param('confirmationNumber') confirmationNumber: string,
+    @Body() dto: PreRegisterDto,
+    @Req() req: any,
+  ) {
+    return this.service.preRegister(this.propertyId(req), confirmationNumber, dto);
   }
 }
