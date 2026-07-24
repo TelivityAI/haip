@@ -14,7 +14,7 @@ import { webhookDeliveries, agentWebhookSubscriptions } from '@telivityhaip/data
 import { DRIZZLE } from '../../database/database.module';
 import { assertSafeOutboundUrl } from '../../common/security/url-guard';
 
-const WEBHOOK_DELIVERY_QUEUE_NAME = 'haip:webhook-deliveries';
+const WEBHOOK_DELIVERY_QUEUE_NAME = 'haip-webhook-deliveries';
 const WEBHOOK_DELIVERY_JOB_NAME = 'deliver-webhook';
 const MAX_ATTEMPTS = 5;
 const INITIAL_RETRY_DELAY_MS = 30 * 1000;
