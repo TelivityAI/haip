@@ -1118,6 +1118,366 @@
       "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "reviewSource": "foursquare-places"
+    },
+    {
+      "slug": "apache-superset",
+      "title": "Apache Superset",
+      "kind": "bi",
+      "env": [],
+      "liveEnv": [
+        "Read-only Postgres role for BI tool"
+      ],
+      "docs": "docs/integrations/bi-postgres.md",
+      "smoke": "registry_enable",
+      "note": "Read-only Postgres / export recipe \u2014 no embedded BI vendor client.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "looker-studio",
+      "title": "Looker Studio",
+      "kind": "bi",
+      "env": [],
+      "liveEnv": [
+        "Read-only Postgres role for BI tool"
+      ],
+      "docs": "docs/integrations/bi-postgres.md",
+      "smoke": "registry_enable",
+      "note": "Read-only Postgres / export recipe \u2014 no embedded BI vendor client.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "grafana",
+      "title": "Grafana",
+      "kind": "bi",
+      "env": [],
+      "liveEnv": [
+        "Read-only Postgres role for BI tool"
+      ],
+      "docs": "docs/integrations/bi-postgres.md",
+      "smoke": "registry_enable",
+      "note": "Read-only Postgres / export recipe \u2014 no embedded BI vendor client.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "quickbooks-online",
+      "title": "QuickBooks Online",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "xero",
+      "title": "Xero",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "sage-business-cloud",
+      "title": "Sage Business Cloud",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "zoho-books",
+      "title": "Zoho Books",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "datev",
+      "title": "DATEV",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "bexio",
+      "title": "Bexio",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "exact-online",
+      "title": "Exact Online",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "square-pos",
+      "title": "Square POS",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "toast",
+      "title": "Toast",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "clover",
+      "title": "Clover",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "epos-now",
+      "title": "Epos Now",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "shopify-pos",
+      "title": "Shopify POS",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "loyverse",
+      "title": "Loyverse",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "erply",
+      "title": "Erply",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "marketman",
+      "title": "MarketMan",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "mailchimp",
+      "title": "Mailchimp",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "hubspot-free-crm",
+      "title": "HubSpot Free CRM",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "brevo",
+      "title": "Brevo",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "activecampaign",
+      "title": "ActiveCampaign",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "zendesk",
+      "title": "Zendesk",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "cendyn",
+      "title": "Cendyn",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "keap",
+      "title": "Keap",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "frankfurter-ecb-fx",
+      "title": "Frankfurter/ECB FX",
+      "kind": "fx",
+      "env": [],
+      "liveEnv": [
+        "Scheduler calling Frankfurter HTTP API"
+      ],
+      "docs": "docs/integrations/frankfurter-ecb-fx.md",
+      "smoke": "registry_enable",
+      "note": "External Frankfurter/ECB rates recipe \u2014 convert outside HAIP.",
+      "maturity": "recipe"
     }
   ]
 }
