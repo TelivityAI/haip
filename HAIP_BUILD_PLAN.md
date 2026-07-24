@@ -21,9 +21,14 @@ Open-source, API-first hotel PMS (Apache 2.0).
 ## Planned
 - New-property onboarding wizard
 - Complete guest registration (ID, minors/guardian, per-jurisdiction compliance — deeper than desk card)
-- Loyalty (guest recognition, tiers, rewards)
+- **Un-thin backlog** (research-backed, pending KB owner confirmation) — see
+  [`docs/plans/unthin-backlog.md`](docs/plans/unthin-backlog.md):
+  discrepancy workflow + item tickets, turnaway/waitlist, loyalty points ledger,
+  WhatsApp templates, folio inbound poster (PBX/minibar), metasearch deep links,
+  OTA cert path, GDS via CM/CRS
+- Loyalty (guest recognition → points ledger / tiers — after owner answers in un-thin plan)
 - Expanded AI assistance (grounded explanations, suggestions, per-property calibration)
-- Expanded channel/OTA connectivity
+- Expanded channel/OTA connectivity (certify existing adapters; meta/GDS via plan)
 - Revenue management (pricing, demand, booking pace, forecasting)
 - Business intelligence & analytics (own-property demand, pickup, pace, RevPAR)
 - Deeper reporting and exports
