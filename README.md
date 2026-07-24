@@ -30,6 +30,7 @@
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#api-reference">API Reference</a> &middot;
   <a href="#otaip-integration">OTAIP Integration</a> &middot;
+  <a href="#integrations">Integrations</a> &middot;
   <a href="#community--support">Community &amp; Support</a> &middot;
   <a href="#contributing">Contributing</a>
 </p>
@@ -1107,6 +1108,14 @@ HAIP is multi-tenant by construction, and isolation is enforced **in depth** —
 | **Tax Calculation** | Jurisdiction-based tax engine. Inclusive/exclusive handling. Sales, occupancy, tourism, and VAT tax types. Per-property rules with exemption support. |
 
 > Security is treated as ongoing work: the codebase is reviewed continuously and hardened as it matures. Before production use, pair it with your own deployment review and a Keycloak configured to issue the `property_ids` claim.
+
+---
+
+## Integrations
+
+HAIP is **API-first**: the same REST surface that powers the dashboard is documented via auto-generated **OpenAPI 3.0** at `/docs`, state changes fan out through **HMAC-signed webhooks**, and external systems connect through **pluggable adapters** (channels, payments, messaging, accounting, and more).
+
+See **[`docs/INTEGRATIONS.md`](./docs/INTEGRATIONS.md)** for the full integration catalog (~230 integrations across 19 categories). To wire your stack, start with **[`docs/webhooks.md`](./docs/webhooks.md)** (signature verification, payloads, retries) and the recipes under **[`docs/integrations/`](./docs/integrations/)**. **Fiscalization and guest registration** are first-class categories — so properties can plug in invoice issuance and authority reporting without custom one-offs.
 
 ---
 
