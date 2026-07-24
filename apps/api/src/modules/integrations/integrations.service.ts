@@ -52,7 +52,7 @@ export class IntegrationsService {
       .from(propertyIntegrations)
       .where(eq(propertyIntegrations.propertyId, propertyId));
 
-    const bySlug = new Map(connections.map((row: any) => [row.catalogSlug, row]));
+    const bySlug = new Map<string, any>(connections.map((row: any) => [row.catalogSlug, row]));
 
     return catalog.map((entry: any) => {
       const connection = bySlug.get(entry.slug);
