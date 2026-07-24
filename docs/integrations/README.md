@@ -37,6 +37,9 @@ For event delivery (signatures, payloads, retries, subscriptions), start with **
 | [Review sources](review-sources.md) | Google / TripAdvisor review stubs |
 
 | [Wave 3 channels + Wise](wave3-channels-wise.md) | Console CM adapters + Wise Platform |
+| [Wave 3 reviews](wave3-reviews.md) | Named console review sources |
+| [CRM webhooks](crm-webhooks.md) | Mailchimp/HubSpot/… via Connect events |
+| [Frankfurter/ECB FX](frankfurter-ecb-fx.md) | External ECB FX rates recipe |
 
 ## Base URL
 

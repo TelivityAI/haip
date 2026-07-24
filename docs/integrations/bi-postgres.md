@@ -42,6 +42,7 @@ Revoke access to tables that hold secrets (API key hashes, channel credentials) 
 | **Metabase** | Admin → Databases → PostgreSQL, read-only user, SSL if remote |
 | **Grafana** | PostgreSQL data source, macro-friendly time columns on `created_at` / business dates |
 | **Apache Superset** | Database connection + dataset per view; use SQL Lab for guarded queries |
+| **Looker Studio** | Community Postgres connector or scheduled CSV from accounting/reports exports |
 | **Redash** | Data source → PostgreSQL, query snippets saved per dashboard |
 
 Point all tools at a **replica** when available so heavy reporting does not contend with the API primary.
