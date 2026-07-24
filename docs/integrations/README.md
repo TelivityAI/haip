@@ -36,6 +36,8 @@ For event delivery (signatures, payloads, retries, subscriptions), start with **
 | [Bird SMS](bird-sms.md) | Bird messaging provider |
 | [Review sources](review-sources.md) | Google / TripAdvisor review stubs |
 
+| [Wave 3 channels + Wise](wave3-channels-wise.md) | Console CM adapters + Wise Platform |
+
 ## Base URL
 
 Replace `https://your-haip.example.com` with your deployment. Interactive API reference: `https://your-haip.example.com/docs` (when enabled).

@@ -810,6 +810,188 @@
       "smoke": "email_enable",
       "note": "Requires SES_ENDPOINT gateway (honest path; no in-process SigV4).",
       "maturity": "shipped"
+    },
+    {
+      "slug": "expedia-eqc",
+      "title": "Expedia EQC",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "expedia_eqc",
+      "channelCode": "expedia_eqc"
+    },
+    {
+      "slug": "myallocator-cloudbeds",
+      "title": "Myallocator/Cloudbeds",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "myallocator_cloudbeds",
+      "channelCode": "myallocator_cloudbeds"
+    },
+    {
+      "slug": "atomize",
+      "title": "Atomize",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "atomize",
+      "channelCode": "atomize"
+    },
+    {
+      "slug": "yieldplanet",
+      "title": "YieldPlanet",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "yieldplanet",
+      "channelCode": "yieldplanet"
+    },
+    {
+      "slug": "d-edge",
+      "title": "D-EDGE",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "d_edge",
+      "channelCode": "d_edge"
+    },
+    {
+      "slug": "cubilis-lighthouse",
+      "title": "Cubilis/Lighthouse",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "cubilis_lighthouse",
+      "channelCode": "cubilis_lighthouse"
+    },
+    {
+      "slug": "rategain",
+      "title": "RateGain",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "rategain",
+      "channelCode": "rategain"
+    },
+    {
+      "slug": "hotelrunner",
+      "title": "HotelRunner",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "hotelrunner",
+      "channelCode": "hotelrunner"
+    },
+    {
+      "slug": "nextpax",
+      "title": "NextPax",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "nextpax",
+      "channelCode": "nextpax"
+    },
+    {
+      "slug": "hotelbeds-api-suite",
+      "title": "Hotelbeds API Suite",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "hotelbeds",
+      "channelCode": "hotelbeds"
+    },
+    {
+      "slug": "amadeus-self-service-hotel-apis",
+      "title": "Amadeus Self-Service Hotel APIs",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "amadeus_hotel",
+      "channelCode": "amadeus_hotel"
+    },
+    {
+      "slug": "wise-platform",
+      "title": "Wise Platform",
+      "kind": "payment",
+      "env": [
+        "PAYMENT_GATEWAY=wise"
+      ],
+      "liveEnv": [
+        "PAYMENT_GATEWAY=wise",
+        "WISE_API_TOKEN=...",
+        "WISE_PROFILE_ID=..."
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "payment_console",
+      "note": "Console payment gateway (PAYMENT_GATEWAY=wise) until Wise Platform partner client lands.",
+      "maturity": "adapter"
     }
   ]
 }
