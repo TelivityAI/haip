@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp, jsonb, integer, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, boolean, timestamp, jsonb, integer, date, pgEnum } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 
 /**
@@ -6,6 +6,23 @@ import { properties } from './property.js';
  * Vacant Clean → Vacant Dirty → Clean → Inspected → Guest Ready
  * Also: Occupied, Out of Order (OOO), Out of Service (OOS)
  */
+
+export const hkOccupancyEnum = pgEnum('hk_occupancy', ['unknown', 'vacant', 'occupied']);
+
+export const roomDiscrepancyKindEnum = pgEnum('room_discrepancy_kind', [
+  'fo_occupied_hk_vacant',
+  'fo_vacant_hk_occupied',
+  'person_count_mismatch',
+  'occupied_without_reservation',
+  'vacant_with_in_house_reservation',
+]);
+
+export const roomDiscrepancyStatusEnum = pgEnum('room_discrepancy_status', [
+  'open',
+  'resolved',
+  'dismissed',
+]);
+
 export const roomStatusEnum = pgEnum('room_status', [
   'vacant_clean',
   'vacant_dirty',
@@ -69,6 +86,12 @@ export const rooms = pgTable('rooms', {
   // Status (state machine)
   status: roomStatusEnum('status').notNull().default('vacant_clean'),
 
+  // HK observed occupancy (orthogonal to FO / cleanliness status)
+  hkOccupancy: hkOccupancyEnum('hk_occupancy').notNull().default('unknown'),
+  hkObservedPersons: integer('hk_observed_persons'),
+  hkObservedAt: timestamp('hk_observed_at', { withTimezone: true }),
+  hkObservedBy: uuid('hk_observed_by'),
+
   // Features (override room type defaults)
   isAccessible: boolean('is_accessible').notNull().default(false),
   isConnecting: boolean('is_connecting').notNull().default(false),
@@ -82,6 +105,23 @@ export const rooms = pgTable('rooms', {
   // Status
   isActive: boolean('is_active').notNull().default(true),
 
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+
+export const roomDiscrepancyCases = pgTable('room_discrepancy_cases', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  roomId: uuid('room_id').notNull().references(() => rooms.id),
+  businessDate: date('business_date').notNull(),
+  kind: roomDiscrepancyKindEnum('kind').notNull(),
+  status: roomDiscrepancyStatusEnum('status').notNull().default('open'),
+  reservationId: uuid('reservation_id'),
+  resolutionAction: varchar('resolution_action', { length: 80 }),
+  resolutionNote: text('resolution_note'),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  resolvedBy: uuid('resolved_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
