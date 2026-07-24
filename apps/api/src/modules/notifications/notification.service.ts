@@ -24,7 +24,7 @@ import { SMS_PROVIDERS, WHATSAPP_PROVIDERS } from './notification-provider.inter
 /**
  * Outbound guest-notification dispatcher (SMS).
  *
- * Picks the first configured real provider (Twilio), otherwise the console
+ * Picks the first configured real provider (Twilio, Bird), otherwise the console
  * fallback. Every dispatch is audited via the webhook/audit trail, scoped to
  * `propertyId` — multi-tenancy applies to side-effects too, not just rows.
  *
