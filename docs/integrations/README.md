@@ -28,6 +28,7 @@ For event delivery (signatures, payloads, retries, subscriptions), start with **
 | [fiskaly SIGN AT](fiskaly-sign-at.md) | Austrian RKSV console fiscal provider key |
 | [Wave 3 fiscal & guest-reg](wave3-fiscal-guest-reg.md) | Country-pack console provider keys (Brazil excluded) |
 | [Wave 3 partner surface](wave3-partner-surface.md) | Tier A/B (50) + remaining planned partner/cert rows |
+| [Planned integrations backlog](../plans/integrations-planned-backlog.md) | Collaborator build plan for remaining `planned` catalog rows |
 | [Wave 3 channels + Wise](wave3-channels-wise.md) | Console CM adapters + Wise Platform |
 | [Wave 3 reviews](wave3-reviews.md) | Named console review sources |
 | [Compliance market entry](compliance-market-entry.md) | Paid/gated and feature-only packs — never claimed free |

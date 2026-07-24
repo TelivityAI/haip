@@ -22,6 +22,9 @@ Skip meta rows (still planned / not Tier A/B demos): `channel-manager-cert-queue
 
 ## Still planned (partner/cert / out of Tier A/B)
 
+**Collaborator build plan (full slug inventory + suggested order):**
+[docs/plans/integrations-planned-backlog.md](../plans/integrations-planned-backlog.md) — **86** `planned` rows.
+
 | Category | Notes |
 |----------|-------|
 | Upsells & ancillaries | Partner APIs (Duve, …) |
