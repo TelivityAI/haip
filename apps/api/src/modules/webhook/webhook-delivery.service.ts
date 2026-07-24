@@ -8,23 +8,16 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createHmac } from 'crypto';
-import { eq, and, lte, or, isNull } from 'drizzle-orm';
+import { Queue, Worker, type JobsOptions } from 'bullmq';
+import { eq, and } from 'drizzle-orm';
 import { webhookDeliveries, agentWebhookSubscriptions } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { assertSafeOutboundUrl } from '../../common/security/url-guard';
 
-// Exponential backoff schedule in milliseconds: 30s, 2m, 10m, 1h, 6h.
-const RETRY_SCHEDULE_MS = [
-  30 * 1000,
-  2 * 60 * 1000,
-  10 * 60 * 1000,
-  60 * 60 * 1000,
-  6 * 60 * 60 * 1000,
-];
-const MAX_ATTEMPTS = RETRY_SCHEDULE_MS.length;
-
-// Interval for scanning pending retries. Disabled in tests (NODE_ENV=test).
-const RETRY_SCAN_INTERVAL_MS = 30 * 1000;
+const WEBHOOK_DELIVERY_QUEUE_NAME = 'haip-webhook-deliveries';
+const WEBHOOK_DELIVERY_JOB_NAME = 'deliver-webhook';
+const MAX_ATTEMPTS = 5;
+const INITIAL_RETRY_DELAY_MS = 30 * 1000;
 
 // HTTP timeout per delivery.
 const REQUEST_TIMEOUT_MS = 5000;
@@ -57,42 +50,69 @@ export interface WebhookDeliveryFailedEvent {
   lastError: string | null;
 }
 
+interface WebhookDeliveryJob {
+  deliveryId: string;
+  propertyId: string;
+}
+
+type DeliveryAttemptOutcome = 'delivered' | 'retry' | 'failed' | 'skipped';
+
+interface WebhookDeliveryQueue {
+  add(name: string, data: WebhookDeliveryJob, options?: JobsOptions): Promise<unknown>;
+  close?(): Promise<void>;
+}
+
+interface WebhookDeliveryWorker {
+  close(): Promise<void>;
+}
+
 /**
  * WebhookDeliveryService — delivers events to subscribers with HMAC signing and retry.
  *
- * Not using BullMQ because Redis isn't wired up. Pragmatic replacement:
- *   - insert one webhook_deliveries row per (event, matching-subscription)
- *   - fire the HTTP POST immediately (fire-and-forget, caught)
- *   - a periodic scan re-tries any still-pending row whose nextRetryAt <= now
- *   - after MAX_ATTEMPTS, mark as 'failed'
+ * BullMQ stores retry jobs in Redis so pending deliveries survive API process
+ * restarts. The webhook_deliveries table remains the observability source.
  */
 @Injectable()
 export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WebhookDeliveryService.name);
-  private scanTimer: NodeJS.Timeout | null = null;
+  private readonly defaultJobOptions: JobsOptions = {
+    attempts: MAX_ATTEMPTS,
+    backoff: {
+      type: 'exponential',
+      delay: INITIAL_RETRY_DELAY_MS,
+    },
+    removeOnComplete: true,
+    removeOnFail: false,
+  };
+  private ownsQueue = false;
+  private ownsWorker = false;
 
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     @Optional() private readonly eventEmitter?: EventEmitter2,
+    @Optional() private queue?: WebhookDeliveryQueue,
+    @Optional() private worker?: WebhookDeliveryWorker,
   ) {}
 
   onModuleInit() {
-    // Skip the background scanner in tests to keep Vitest fast and deterministic.
+    // Unit tests inject a fake queue or call processDeliveryJob directly.
     if (process.env['NODE_ENV'] === 'test') return;
-    this.scanTimer = setInterval(() => {
-      this.processPending().catch((err) =>
-        this.logger.error(`Retry scan failed: ${err?.message ?? err}`),
-      );
-    }, RETRY_SCAN_INTERVAL_MS);
+    this.getQueue();
+    this.getWorker();
   }
 
-  onModuleDestroy() {
-    if (this.scanTimer) clearInterval(this.scanTimer);
+  async onModuleDestroy() {
+    if (this.ownsWorker && this.worker) {
+      await this.worker.close();
+    }
+    if (this.ownsQueue && this.queue?.close) {
+      await this.queue.close();
+    }
   }
 
   /**
    * Enqueue deliveries for an event — one row per matching subscription,
-   * then fire the first attempt asynchronously.
+   * then add a durable BullMQ job for the worker.
    */
   async enqueue(payload: DeliveryPayload, subscriptionId: string) {
     const [delivery] = await this.db
@@ -107,30 +127,47 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
       })
       .returning();
 
-    // Fire the first attempt without awaiting (tests can await via attemptDelivery).
-    this.attemptDelivery(delivery.id).catch((err) =>
-      this.logger.error(`Delivery ${delivery.id} failed unexpectedly: ${err?.message ?? err}`),
-    );
+    await this.enqueueDeliveryJob(delivery.id, payload.propertyId);
 
     return delivery;
+  }
+
+  async processDeliveryJob(job: WebhookDeliveryJob): Promise<void> {
+    const outcome = await this.attemptDelivery(job.deliveryId, job.propertyId);
+    if (outcome === 'retry') {
+      throw new Error(`Webhook delivery ${job.deliveryId} scheduled for retry`);
+    }
   }
 
   /**
    * Attempt a single delivery. Loads the row, signs the payload, POSTs,
    * and records success or schedules the next retry.
    */
-  async attemptDelivery(deliveryId: string): Promise<void> {
+  async attemptDelivery(
+    deliveryId: string,
+    propertyId: string,
+  ): Promise<DeliveryAttemptOutcome> {
     const [delivery] = await this.db
       .select()
       .from(webhookDeliveries)
-      .where(eq(webhookDeliveries.id, deliveryId));
+      .where(
+        and(
+          eq(webhookDeliveries.id, deliveryId),
+          eq(webhookDeliveries.propertyId, propertyId),
+        ),
+      );
 
-    if (!delivery || delivery.status !== 'pending') return;
+    if (!delivery || delivery.status !== 'pending') return 'skipped';
 
     const [subscription] = await this.db
       .select()
       .from(agentWebhookSubscriptions)
-      .where(eq(agentWebhookSubscriptions.id, delivery.subscriptionId));
+      .where(
+        and(
+          eq(agentWebhookSubscriptions.id, delivery.subscriptionId),
+          eq(agentWebhookSubscriptions.propertyId, propertyId),
+        ),
+      );
 
     if (!subscription || !subscription.isActive) {
       await this.db
@@ -140,8 +177,13 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
           lastError: 'Subscription inactive or missing',
           lastAttemptAt: new Date(),
         })
-        .where(eq(webhookDeliveries.id, deliveryId));
-      return;
+        .where(
+          and(
+            eq(webhookDeliveries.id, deliveryId),
+            eq(webhookDeliveries.propertyId, propertyId),
+          ),
+        );
+      return 'failed';
     }
 
     const attemptNumber = delivery.attempts + 1;
@@ -200,7 +242,12 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
           lastError: null,
           nextRetryAt: null,
         })
-        .where(eq(webhookDeliveries.id, deliveryId));
+        .where(
+          and(
+            eq(webhookDeliveries.id, deliveryId),
+            eq(webhookDeliveries.propertyId, propertyId),
+          ),
+        );
 
       await this.db
         .update(agentWebhookSubscriptions)
@@ -209,8 +256,13 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
           lastDeliveryStatus: 'delivered',
           updatedAt: now,
         })
-        .where(eq(agentWebhookSubscriptions.id, subscription.id));
-      return;
+        .where(
+          and(
+            eq(agentWebhookSubscriptions.id, subscription.id),
+            eq(agentWebhookSubscriptions.propertyId, propertyId),
+          ),
+        );
+      return 'delivered';
     }
 
     // Failure — schedule retry or mark failed.
@@ -225,7 +277,12 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
           lastError: errorMessage,
           nextRetryAt: null,
         })
-        .where(eq(webhookDeliveries.id, deliveryId));
+        .where(
+          and(
+            eq(webhookDeliveries.id, deliveryId),
+            eq(webhookDeliveries.propertyId, propertyId),
+          ),
+        );
 
       await this.db
         .update(agentWebhookSubscriptions)
@@ -235,7 +292,12 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
           failureCount: (subscription.failureCount ?? 0) + 1,
           updatedAt: now,
         })
-        .where(eq(agentWebhookSubscriptions.id, subscription.id));
+        .where(
+          and(
+            eq(agentWebhookSubscriptions.id, subscription.id),
+            eq(agentWebhookSubscriptions.propertyId, propertyId),
+          ),
+        );
 
       this.logger.warn(
         `Webhook delivery ${deliveryId} FAILED after ${attemptNumber} attempts: ${errorMessage}`,
@@ -252,10 +314,10 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
         attempts: attemptNumber,
         lastError: errorMessage,
       } satisfies WebhookDeliveryFailedEvent);
-      return;
+      return 'failed';
     }
 
-    const delayMs = RETRY_SCHEDULE_MS[attemptNumber] ?? RETRY_SCHEDULE_MS[RETRY_SCHEDULE_MS.length - 1]!;
+    const delayMs = this.getRetryDelayMs(attemptNumber);
     await this.db
       .update(webhookDeliveries)
       .set({
@@ -266,32 +328,13 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
         lastError: errorMessage,
         nextRetryAt: new Date(now.getTime() + delayMs),
       })
-      .where(eq(webhookDeliveries.id, deliveryId));
-  }
-
-  /**
-   * Scan for pending deliveries whose nextRetryAt <= now and re-attempt them.
-   * Runs on an interval. Also handles never-attempted rows (nextRetryAt IS NULL).
-   */
-  async processPending(): Promise<number> {
-    const now = new Date();
-    const rows = await this.db
-      .select()
-      .from(webhookDeliveries)
       .where(
         and(
-          eq(webhookDeliveries.status, 'pending'),
-          or(
-            isNull(webhookDeliveries.nextRetryAt),
-            lte(webhookDeliveries.nextRetryAt, now),
-          ),
+          eq(webhookDeliveries.id, deliveryId),
+          eq(webhookDeliveries.propertyId, propertyId),
         ),
       );
-
-    for (const row of rows) {
-      await this.attemptDelivery(row.id);
-    }
-    return rows.length;
+    return 'retry';
   }
 
   /**
@@ -308,5 +351,66 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
         ),
       )
       .limit(limit);
+  }
+
+  private async enqueueDeliveryJob(deliveryId: string, propertyId: string) {
+    await this.getQueue().add(
+      WEBHOOK_DELIVERY_JOB_NAME,
+      { deliveryId, propertyId },
+      {
+        ...this.defaultJobOptions,
+        jobId: deliveryId,
+      },
+    );
+  }
+
+  private getQueue(): WebhookDeliveryQueue {
+    if (!this.queue) {
+      this.queue = new Queue<WebhookDeliveryJob>(WEBHOOK_DELIVERY_QUEUE_NAME, {
+        connection: this.createRedisConnectionOptions(),
+      });
+      this.ownsQueue = true;
+    }
+    return this.queue;
+  }
+
+  private getWorker(): WebhookDeliveryWorker {
+    if (!this.worker) {
+      const worker = new Worker<WebhookDeliveryJob>(
+        WEBHOOK_DELIVERY_QUEUE_NAME,
+        async (job) => this.processDeliveryJob(job.data),
+        { connection: this.createRedisConnectionOptions() },
+      );
+      worker.on('error', (err) => {
+        this.logger.error(`Webhook delivery worker error: ${err?.message ?? err}`);
+      });
+      this.worker = worker;
+      this.ownsWorker = true;
+    }
+    return this.worker;
+  }
+
+  private createRedisConnectionOptions() {
+    const redisUrl = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+    const parsed = new URL(redisUrl);
+    const dbPath = parsed.pathname.replace(/^\//, '');
+    const db = dbPath ? Number(dbPath) : undefined;
+    if (db !== undefined && Number.isNaN(db)) {
+      throw new Error(`Invalid REDIS_URL database index: ${dbPath}`);
+    }
+
+    return {
+      host: parsed.hostname,
+      port: parsed.port ? Number(parsed.port) : 6379,
+      username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
+      password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
+      db,
+      tls: parsed.protocol === 'rediss:' ? {} : undefined,
+      maxRetriesPerRequest: null,
+    };
+  }
+
+  private getRetryDelayMs(failedAttemptNumber: number): number {
+    return INITIAL_RETRY_DELAY_MS * 2 ** (failedAttemptNumber - 1);
   }
 }
