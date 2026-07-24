@@ -8,10 +8,12 @@ import { BookingComAdapter } from './adapters/booking-com/booking-com.adapter';
 import { SiteMinderAdapter } from './adapters/siteminder/siteminder.adapter';
 import { ExpediaAdapter } from './adapters/expedia/expedia.adapter';
 import { DerbySoftAdapter } from './adapters/derbysoft/derbysoft.adapter';
+import { Beds24Adapter } from './adapters/beds24/beds24.adapter';
+import { ChannexAdapter } from './adapters/channex/channex.adapter';
 
 /**
  * Factory that maps adapterType strings to ChannelAdapter instances.
- * Adding a real adapter (SiteMinder, Expedia, DerbySoft) = register here.
+ * Adding a real adapter (SiteMinder, Expedia, DerbySoft, Beds24, Channex) = register here.
  */
 @Injectable()
 export class ChannelAdapterFactory {
@@ -23,12 +25,16 @@ export class ChannelAdapterFactory {
     private readonly siteMinderAdapter: SiteMinderAdapter,
     private readonly expediaAdapter: ExpediaAdapter,
     private readonly derbySoftAdapter: DerbySoftAdapter,
+    private readonly beds24Adapter: Beds24Adapter,
+    private readonly channexAdapter: ChannexAdapter,
   ) {
     this.adapters.set('mock', this.mockAdapter);
     this.adapters.set('booking_com', this.bookingComAdapter);
     this.adapters.set('siteminder', this.siteMinderAdapter);
     this.adapters.set('expedia', this.expediaAdapter);
     this.adapters.set('derbysoft', this.derbySoftAdapter);
+    this.adapters.set('beds24', this.beds24Adapter);
+    this.adapters.set('channex', this.channexAdapter);
   }
 
   getAdapter(adapterType: string): ChannelAdapter {
