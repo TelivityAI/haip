@@ -1,8 +1,25 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
+import { guests, reservations } from '@telivityhaip/database';
+import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
-import { TwilioSmsProvider } from './providers/twilio-sms.provider';
-import { ConsoleSmsProvider } from './providers/console-sms.provider';
-import type { SmsProvider, SmsResult } from './notification-provider.interface';
+import type {
+  SmsProvider,
+  SmsResult,
+  WhatsAppMessage,
+  WhatsAppProvider,
+  WhatsAppResult,
+} from './notification-provider.interface';
+import { SMS_PROVIDERS, WHATSAPP_PROVIDERS } from './notification-provider.interface';
 
 /**
  * Outbound guest-notification dispatcher (SMS).
@@ -19,14 +36,20 @@ export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
 
   constructor(
-    private readonly twilio: TwilioSmsProvider,
-    private readonly console: ConsoleSmsProvider,
+    @Inject(SMS_PROVIDERS) private readonly smsProviders: SmsProvider[],
+    @Inject(WHATSAPP_PROVIDERS) private readonly whatsappProviders: WhatsAppProvider[],
     private readonly webhooks: WebhookService,
+    @Inject(DRIZZLE) private readonly db: any,
   ) {}
 
   /** The active SMS provider: Twilio when configured, else the console fallback. */
   private smsProvider(): SmsProvider {
-    return this.twilio.isConfigured() ? this.twilio : this.console;
+    return this.pickProvider(this.smsProviders);
+  }
+
+  /** The active WhatsApp provider: Twilio when configured, else console. */
+  private whatsappProvider(): WhatsAppProvider {
+    return this.pickProvider(this.whatsappProviders);
   }
 
   // In-memory per-property SMS quota (interim, single-instance). SMS is a billable
@@ -84,5 +107,79 @@ export class NotificationService {
       this.logger.warn(`SMS to ${to} not delivered via ${result.provider}: ${result.error}`);
     }
     return result;
+  }
+
+  async sendWhatsAppTemplate(
+    propertyId: string,
+    message: WhatsAppMessage,
+    opts?: { guestId?: string; marketing?: boolean },
+  ): Promise<WhatsAppResult> {
+    if (opts?.marketing) {
+      if (!opts.guestId) {
+        throw new BadRequestException('guestId is required for marketing WhatsApp messages');
+      }
+      const guest = await this.findGuestAtProperty(opts.guestId, propertyId);
+      if (!guest.gdprConsentMarketing) {
+        throw new ForbiddenException('Guest has not consented to marketing messages');
+      }
+    }
+
+    const provider = this.whatsappProvider();
+    const result = await provider.send(message);
+
+    await this.webhooks.emit(
+      'guest.communication_sent',
+      'notification',
+      opts?.guestId ?? message.to,
+      {
+        channel: 'whatsapp',
+        provider: result.provider,
+        success: result.sent,
+        marketing: opts?.marketing === true,
+        ...(result.error ? { error: result.error } : {}),
+      },
+      propertyId,
+    );
+
+    if (!result.sent) {
+      this.logger.warn(
+        `WhatsApp to ${message.to} not delivered via ${result.provider}: ${result.error}`,
+      );
+    }
+
+    return result;
+  }
+
+  private pickProvider<T extends { name: string; isConfigured(): boolean }>(providers: T[]): T {
+    const realProvider = providers.find((provider) => provider.name !== 'console' && provider.isConfigured());
+    if (realProvider) return realProvider;
+
+    const fallback = providers.find((provider) => provider.isConfigured());
+    if (!fallback) {
+      throw new HttpException('No notification provider is configured', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+    return fallback;
+  }
+
+  private async findGuestAtProperty(guestId: string, propertyId: string) {
+    // Guests are cross-property; API access must prove the guest is linked to the
+    // requesting property via at least one reservation before reading the row.
+    const [reservation] = await this.db
+      .select({ id: reservations.id })
+      .from(reservations)
+      .where(and(eq(reservations.guestId, guestId), eq(reservations.propertyId, propertyId)))
+      .limit(1);
+    if (!reservation) {
+      throw new ForbiddenException('guestId is not linked to this property');
+    }
+
+    const [guest] = await this.db
+      .select({ id: guests.id, gdprConsentMarketing: guests.gdprConsentMarketing })
+      .from(guests)
+      .where(eq(guests.id, guestId));
+    if (!guest) {
+      throw new NotFoundException(`Guest ${guestId} not found`);
+    }
+    return guest;
   }
 }

@@ -31,7 +31,15 @@ export {
 } from './rbac.js';
 
 // Rooms & Room Types
-export { roomStatusEnum, roomTypes, rooms } from './room.js';
+export {
+  roomStatusEnum,
+  hkOccupancyEnum,
+  roomDiscrepancyKindEnum,
+  roomDiscrepancyStatusEnum,
+  roomTypes,
+  rooms,
+  roomDiscrepancyCases,
+} from './room.js';
 
 // Guests
 export { vipLevelEnum, guests } from './guest.js';
@@ -86,12 +94,33 @@ export {
 
 // Property ops — lost & found, service requests
 export {
+  lostAndFoundCategoryEnum,
   lostAndFoundStatusEnum,
   lostAndFoundItems,
   serviceRequestStatusEnum,
   serviceRequestTypeEnum,
   serviceRequests,
 } from './ops.js';
+
+// Demand capture — turnaway + waitlist
+export {
+  turnawayTypeEnum,
+  turnawayReasonCodes,
+  turnaways,
+  waitlistEntryStatusEnum,
+  waitlistEntries,
+} from './demand-capture.js';
+
+// Loyalty ledger
+export {
+  loyaltyPrograms,
+  loyaltyAccounts,
+  loyaltyTxTypeEnum,
+  loyaltyTransactions,
+} from './loyalty.js';
+
+// Folio inbound idempotency (PBX/minibar webhooks)
+export { folioInboundPosts } from './folio-inbound.js';
 
 // Audit
 export {
