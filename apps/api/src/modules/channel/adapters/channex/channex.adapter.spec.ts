@@ -15,23 +15,21 @@ function mockConfig(overrides: Record<string, string> = {}) {
   } as ConfigService;
 }
 
-describe('ChannexAdapter', () => {
-  const fetchMock = vi.fn();
+const fetchMock = vi.fn();
+vi.stubGlobal('fetch', fetchMock);
 
+describe('ChannexAdapter', () => {
   beforeEach(() => {
     fetchMock.mockReset();
   });
 
   it('has adapterType channex', () => {
-    const adapter = new ChannexAdapter(mockConfig(), { fetchFn: fetchMock });
+    const adapter = new ChannexAdapter(mockConfig());
     expect(adapter.adapterType).toBe('channex');
   });
 
   it('uses console mode when credentials are missing', async () => {
-    const adapter = new ChannexAdapter(
-      mockConfig({ CHANNEX_API_KEY: '', CHANNEX_PROPERTY_ID: '' }),
-      { fetchFn: fetchMock },
-    );
+    const adapter = new ChannexAdapter(mockConfig({ CHANNEX_API_KEY: '', CHANNEX_PROPERTY_ID: '' }));
     const result = await adapter.pushAvailability({
       propertyId: 'p1',
       channelConnectionId: 'c1',
@@ -45,7 +43,7 @@ describe('ChannexAdapter', () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ data: [] }), { status: 200 }),
     );
-    const adapter = new ChannexAdapter(mockConfig(), { fetchFn: fetchMock });
+    const adapter = new ChannexAdapter(mockConfig());
 
     const result = await adapter.pushAvailability({
       propertyId: 'p1',
@@ -72,7 +70,7 @@ describe('ChannexAdapter', () => {
 
   it('pushRates posts to restrictions endpoint', async () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
-    const adapter = new ChannexAdapter(mockConfig(), { fetchFn: fetchMock });
+    const adapter = new ChannexAdapter(mockConfig());
 
     await adapter.pushRates({
       propertyId: 'p1',
@@ -125,7 +123,7 @@ describe('ChannexAdapter', () => {
       ),
     );
 
-    const adapter = new ChannexAdapter(mockConfig(), { fetchFn: fetchMock });
+    const adapter = new ChannexAdapter(mockConfig());
     const result = await adapter.pullReservations({
       propertyId: 'p1',
       channelConnectionId: 'c1',
@@ -139,7 +137,7 @@ describe('ChannexAdapter', () => {
 
   it('confirmReservation acks revision', async () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data: {} }), { status: 200 }));
-    const adapter = new ChannexAdapter(mockConfig(), { fetchFn: fetchMock });
+    const adapter = new ChannexAdapter(mockConfig());
 
     const result = await adapter.confirmReservation({
       channelConnectionId: 'c1',

@@ -36,13 +36,9 @@ export class ChannexAdapter implements ChannelAdapter {
   readonly adapterType = 'channex';
   private readonly logger = new Logger(ChannexAdapter.name);
   private readonly consoleStub: ConsoleStub;
-  private readonly fetchFn: ChannelFetchFn;
+  private readonly fetchFn: ChannelFetchFn = fetch;
 
-  constructor(
-    private readonly configService: ConfigService,
-    deps?: { fetchFn?: ChannelFetchFn },
-  ) {
-    this.fetchFn = deps?.fetchFn ?? fetch;
+  constructor(private readonly configService: ConfigService) {
     this.consoleStub = createConsoleChannelStub('Channex');
   }
 
@@ -69,7 +65,7 @@ export class ChannexAdapter implements ChannelAdapter {
     };
   }
 
-  private headers(apiKey: string): HeadersInit {
+  private headers(apiKey: string): Record<string, string> {
     return {
       Accept: 'application/json',
       'Content-Type': 'application/json',

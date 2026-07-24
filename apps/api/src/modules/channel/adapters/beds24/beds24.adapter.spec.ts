@@ -15,23 +15,21 @@ function mockConfig(overrides: Record<string, string> = {}) {
   } as ConfigService;
 }
 
-describe('Beds24Adapter', () => {
-  const fetchMock = vi.fn();
+const fetchMock = vi.fn();
+vi.stubGlobal('fetch', fetchMock);
 
+describe('Beds24Adapter', () => {
   beforeEach(() => {
     fetchMock.mockReset();
   });
 
   it('has adapterType beds24', () => {
-    const adapter = new Beds24Adapter(mockConfig(), { fetchFn: fetchMock });
+    const adapter = new Beds24Adapter(mockConfig());
     expect(adapter.adapterType).toBe('beds24');
   });
 
   it('uses console mode when credentials are missing', async () => {
-    const adapter = new Beds24Adapter(
-      mockConfig({ BEDS24_API_KEY: '', BEDS24_PROP_KEY: '' }),
-      { fetchFn: fetchMock },
-    );
+    const adapter = new Beds24Adapter(mockConfig({ BEDS24_API_KEY: '', BEDS24_PROP_KEY: '' }));
     const result = await adapter.pullReservations({
       propertyId: 'p1',
       channelConnectionId: 'c1',
@@ -42,7 +40,7 @@ describe('Beds24Adapter', () => {
 
   it('pushAvailability posts setRoomDates', async () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
-    const adapter = new Beds24Adapter(mockConfig(), { fetchFn: fetchMock });
+    const adapter = new Beds24Adapter(mockConfig());
 
     const result = await adapter.pushAvailability({
       propertyId: 'p1',
@@ -60,7 +58,7 @@ describe('Beds24Adapter', () => {
 
   it('pushRates includes p1 price row', async () => {
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
-    const adapter = new Beds24Adapter(mockConfig(), { fetchFn: fetchMock });
+    const adapter = new Beds24Adapter(mockConfig());
 
     await adapter.pushRates({
       propertyId: 'p1',
@@ -100,7 +98,7 @@ describe('Beds24Adapter', () => {
       ),
     );
 
-    const adapter = new Beds24Adapter(mockConfig(), { fetchFn: fetchMock });
+    const adapter = new Beds24Adapter(mockConfig());
     const result = await adapter.pullReservations({
       propertyId: 'p1',
       channelConnectionId: 'c1',

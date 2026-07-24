@@ -35,13 +35,9 @@ export class Beds24Adapter implements ChannelAdapter {
   readonly adapterType = 'beds24';
   private readonly logger = new Logger(Beds24Adapter.name);
   private readonly consoleStub: ConsoleStub;
-  private readonly fetchFn: ChannelFetchFn;
+  private readonly fetchFn: ChannelFetchFn = fetch;
 
-  constructor(
-    private readonly configService: ConfigService,
-    deps?: { fetchFn?: ChannelFetchFn },
-  ) {
-    this.fetchFn = deps?.fetchFn ?? fetch;
+  constructor(private readonly configService: ConfigService) {
     this.consoleStub = createConsoleChannelStub('Beds24');
   }
 
