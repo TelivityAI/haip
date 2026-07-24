@@ -4,6 +4,7 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationService } from './notification.service';
 import { NotificationProviderFactory } from './notification-provider.factory';
 import { TwilioSmsProvider } from './providers/twilio-sms.provider';
+import { BirdSmsProvider } from './providers/bird-sms.provider';
 import { ConsoleSmsProvider } from './providers/console-sms.provider';
 import { InfobipSmsProvider } from './providers/infobip-sms.provider';
 import { VonageSmsProvider } from './providers/vonage-sms.provider';
@@ -26,6 +27,7 @@ import {
     NotificationService,
     NotificationProviderFactory,
     TwilioSmsProvider,
+    BirdSmsProvider,
     ConsoleSmsProvider,
     InfobipSmsProvider,
     VonageSmsProvider,
