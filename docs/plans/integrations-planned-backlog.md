@@ -34,7 +34,7 @@ Usable rows already on `main` are documented in [wave3-partner-surface.md](../in
 | P8 | Metasearch & Direct Booking | 10 | Partner feeds + deep-link recipes |
 | P9 | Revenue Management & Pricing | 9 | Partner RMS |
 | P10 | BI & Analytics | 2 | Partner BI — Demand360/Top-Report |
-| P11 | Automation Platforms | 3 | Partner **app listing** (Zapier/Make/IFTTT). Webhook recipes already exist — do  |
+| P11 | Automation Platforms | 3 | Partner app listings (Zapier/Make/IFTTT); webhook recipes already exist |
 | P12 | Compliance Market Entry (paid/gated) | 22 | See compliance-market-entry.md — paid/gated or feature-only registers |
 
 Adjust order if a commercial partner unlocks credentials earlier.
