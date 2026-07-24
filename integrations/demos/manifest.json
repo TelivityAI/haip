@@ -14,7 +14,8 @@
         "STRIPE_SECRET_KEY=sk_test_..."
       ],
       "docs": "docs/INTEGRATIONS.md#payments",
-      "smoke": "payment_mock"
+      "smoke": "payment_mock",
+      "maturity": "shipped"
     },
     {
       "slug": "adyen",
@@ -29,7 +30,8 @@
       ],
       "docs": "docs/integrations/payments-adyen-mollie-square-braintree.md",
       "smoke": "payment_console",
-      "note": "Without credentials the gateway uses console mode (logged, no charge)."
+      "note": "Without credentials the gateway uses console mode (logged, no charge).",
+      "maturity": "shipped"
     },
     {
       "slug": "mollie",
@@ -42,7 +44,8 @@
         "MOLLIE_API_KEY=..."
       ],
       "docs": "docs/integrations/payments-adyen-mollie-square-braintree.md",
-      "smoke": "payment_console"
+      "smoke": "payment_console",
+      "maturity": "shipped"
     },
     {
       "slug": "square",
@@ -56,7 +59,8 @@
         "SQUARE_LOCATION_ID=..."
       ],
       "docs": "docs/integrations/payments-adyen-mollie-square-braintree.md",
-      "smoke": "payment_console"
+      "smoke": "payment_console",
+      "maturity": "shipped"
     },
     {
       "slug": "braintree",
@@ -71,7 +75,8 @@
         "BRAINTREE_PRIVATE_KEY=..."
       ],
       "docs": "docs/integrations/payments-adyen-mollie-square-braintree.md",
-      "smoke": "payment_console"
+      "smoke": "payment_console",
+      "maturity": "shipped"
     },
     {
       "slug": "beds24",
@@ -86,7 +91,8 @@
       ],
       "docs": "docs/integrations/channel-beds24-channex.md",
       "smoke": "channel_connection",
-      "note": "Missing credentials → console channel stub (logged, no HTTP)."
+      "note": "Missing credentials → console channel stub (logged, no HTTP).",
+      "maturity": "shipped"
     },
     {
       "slug": "channex",
@@ -100,7 +106,8 @@
         "CHANNEX_PROPERTY_ID=..."
       ],
       "docs": "docs/integrations/channel-beds24-channex.md",
-      "smoke": "channel_connection"
+      "smoke": "channel_connection",
+      "maturity": "shipped"
     },
     {
       "slug": "pmsxchange-siteminder",
@@ -118,7 +125,8 @@
       ],
       "docs": "docs/INTEGRATIONS.md#channel-managers",
       "smoke": "channel_connection",
-      "composeHint": "docker compose --profile channels up -d mock-siteminder"
+      "composeHint": "docker compose --profile channels up -d mock-siteminder",
+      "maturity": "shipped"
     },
     {
       "slug": "derbysoft-property-connector",
@@ -134,7 +142,8 @@
       ],
       "docs": "docs/channels/derbysoft.md",
       "smoke": "channel_connection",
-      "composeHint": "docker compose --profile channels up -d mock-derbysoft"
+      "composeHint": "docker compose --profile channels up -d mock-derbysoft",
+      "maturity": "shipped"
     },
     {
       "slug": "nuki",
@@ -150,7 +159,8 @@
       ],
       "docs": "docs/integrations/door-locks-nuki-ttlock-salto.md",
       "smoke": "lock_enable",
-      "note": "Without credentials the lock factory falls back to console."
+      "note": "Without credentials the lock factory falls back to console.",
+      "maturity": "shipped"
     },
     {
       "slug": "ttlock",
@@ -168,7 +178,8 @@
         "TTLOCK_LOCK_ID=..."
       ],
       "docs": "docs/integrations/door-locks-nuki-ttlock-salto.md",
-      "smoke": "lock_enable"
+      "smoke": "lock_enable",
+      "maturity": "shipped"
     },
     {
       "slug": "salto-ks",
@@ -184,7 +195,8 @@
         "SALTO_KS_SITE_ID=..."
       ],
       "docs": "docs/integrations/door-locks-nuki-ttlock-salto.md",
-      "smoke": "lock_enable"
+      "smoke": "lock_enable",
+      "maturity": "shipped"
     },
     {
       "slug": "infobip-omnichannel",
@@ -200,7 +212,8 @@
       ],
       "docs": "docs/integrations/messaging-infobip-vonage-telegram.md",
       "smoke": "messaging_enable",
-      "note": "Without Infobip credentials SMS falls through to console."
+      "note": "Without Infobip credentials SMS falls through to console.",
+      "maturity": "shipped"
     },
     {
       "slug": "vonage-messages",
@@ -215,7 +228,8 @@
         "VONAGE_SMS_FROM=..."
       ],
       "docs": "docs/integrations/messaging-infobip-vonage-telegram.md",
-      "smoke": "messaging_enable"
+      "smoke": "messaging_enable",
+      "maturity": "shipped"
     },
     {
       "slug": "bird",
@@ -229,7 +243,8 @@
         "BIRD_ORIGINATOR=..."
       ],
       "docs": "docs/integrations/bird-sms.md",
-      "smoke": "messaging_enable"
+      "smoke": "messaging_enable",
+      "maturity": "shipped"
     },
     {
       "slug": "telegram-bot",
@@ -242,7 +257,8 @@
         "TELEGRAM_BOT_TOKEN=123456:ABC..."
       ],
       "docs": "docs/integrations/messaging-infobip-vonage-telegram.md",
-      "smoke": "messaging_enable"
+      "smoke": "messaging_enable",
+      "maturity": "shipped"
     },
     {
       "slug": "sendgrid",
@@ -255,7 +271,8 @@
       ],
       "docs": "docs/integrations/sendgrid-email.md",
       "smoke": "email_enable",
-      "note": "Without SendGrid, email falls back to SMTP then console."
+      "note": "Without SendGrid, email falls back to SMTP then console.",
+      "maturity": "shipped"
     },
     {
       "slug": "google-business-profile-reviews",
@@ -267,7 +284,8 @@
         "GOOGLE_PLACES_PLACE_ID=..."
       ],
       "docs": "docs/integrations/review-sources.md",
-      "smoke": "reviews_enable"
+      "smoke": "reviews_enable",
+      "maturity": "shipped"
     },
     {
       "slug": "tripadvisor-content-api",
@@ -279,7 +297,8 @@
         "TRIPADVISOR_LOCATION_ID=..."
       ],
       "docs": "docs/integrations/review-sources.md",
-      "smoke": "reviews_enable"
+      "smoke": "reviews_enable",
+      "maturity": "shipped"
     },
     {
       "slug": "serbia-suf-esir",
@@ -290,7 +309,8 @@
       "liveEnv": [],
       "docs": "docs/integrations/serbia-fiscal.md",
       "smoke": "fiscal_config",
-      "note": "Console fiscal provider — logs handoff; replace with authority client for production."
+      "note": "Console fiscal provider — logs handoff; replace with authority client for production.",
+      "maturity": "shipped"
     },
     {
       "slug": "serbia-eturista",
@@ -301,7 +321,452 @@
       "liveEnv": [],
       "docs": "docs/integrations/serbia-fiscal.md",
       "smoke": "guest_reg_config",
-      "note": "Console guest-registration provider — logs handoff."
+      "note": "Console guest-registration provider — logs handoff.",
+      "maturity": "shipped"
+    },
+    {
+      "slug": "croatia-evisitor",
+      "title": "Croatia eVisitor",
+      "kind": "guest_reg",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "guest_reg_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "guestRegistrationProviderKey": "croatia_evisitor",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "italy-alloggiati-web",
+      "title": "Italy Alloggiati Web",
+      "kind": "guest_reg",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "guest_reg_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "guestRegistrationProviderKey": "italy_alloggiati",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "fiskaly-sign-at",
+      "title": "fiskaly SIGN AT",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/fiskaly-sign-at.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "fiskaly_sign_at",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "fiskaly-sign-de",
+      "title": "fiskaly SIGN DE",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "fiskaly_sign_de",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "croatia-fiskalizacija-2",
+      "title": "Croatia Fiskalizacija 2.0",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "croatia_fiskalizacija_2",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "slovenia-furs",
+      "title": "Slovenia FURS",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "slovenia_furs",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "vies",
+      "title": "VIES",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "vies",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "nbs-exchange-rates",
+      "title": "NBS exchange rates",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "nbs_exchange_rates",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "north-macedonia-efaktura",
+      "title": "North Macedonia e-Faktura",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "north_macedonia_efaktura",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "bih-fiscalization",
+      "title": "BiH fiscalization",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "bih_fiscalization",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "montenegro-fiskalizacija",
+      "title": "Montenegro Fiskalizacija",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "montenegro_fiskalizacija",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "belgium-peppol-b2b",
+      "title": "Belgium Peppol B2B",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "belgium_peppol_b2b",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "luxembourg-peppol",
+      "title": "Luxembourg Peppol upcoming",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "luxembourg_peppol",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "ireland-vat-modernisation",
+      "title": "Ireland VAT Modernisation",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "ireland_vat_modernisation",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "uk-mtd-vat",
+      "title": "UK MTD VAT",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "uk_mtd_vat",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "swiss-qr-bill",
+      "title": "Swiss QR-bill",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "swiss_qr_bill",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "italy-sdi",
+      "title": "Italy SDI",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "italy_sdi",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "spain-verifactu",
+      "title": "Spain VeriFactu",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "spain_verifactu",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "ticketbai",
+      "title": "TicketBAI",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "spain_ticketbai",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "sii",
+      "title": "SII",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "spain_sii",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "greece-mydata",
+      "title": "Greece myDATA",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "greece_mydata",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "estonia-e-invoicing",
+      "title": "Estonia e-invoicing",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "estonia_einvoicing",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "latvia-vid",
+      "title": "Latvia VID",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "latvia_vid",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "poland-ksef",
+      "title": "Poland KSeF",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "poland_ksef",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "hungary-nav-3",
+      "title": "Hungary NAV 3.0",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "hungary_nav_3",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "hungary-ntak",
+      "title": "Hungary NTAK",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "hungary_ntak",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "romania-ro-efactura",
+      "title": "Romania RO e-Factura",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "romania_ro_efactura",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "mexico-cfdi",
+      "title": "Mexico CFDI",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "mexico_cfdi",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "el-salvador-dte",
+      "title": "El Salvador DTE",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "el_salvador_dte",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "colombia-dian",
+      "title": "Colombia DIAN",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "colombia_dian",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "ecuador-sri",
+      "title": "Ecuador SRI",
+      "kind": "fiscal",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "fiscal_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "fiscalProviderKey": "ecuador_sri",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "luxembourg-fiches",
+      "title": "Luxembourg fiches d\\",
+      "kind": "guest_reg",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "guest_reg_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "guestRegistrationProviderKey": "luxembourg_fiches",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "portugal-siba",
+      "title": "Portugal SIBA",
+      "kind": "guest_reg",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "guest_reg_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "guestRegistrationProviderKey": "portugal_siba",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "andorra-roat",
+      "title": "Andorra ROAT",
+      "kind": "guest_reg",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "guest_reg_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "guestRegistrationProviderKey": "andorra_roat",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "czechia-ubyport",
+      "title": "Czechia Ubyport",
+      "kind": "guest_reg",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "guest_reg_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "guestRegistrationProviderKey": "czechia_ubyport",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "finland-matkustajailmoitus",
+      "title": "Finland Matkustajailmoitus",
+      "kind": "guest_reg",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "guest_reg_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "guestRegistrationProviderKey": "finland_matkustajailmoitus",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "uruguay-rihp",
+      "title": "Uruguay RIHP",
+      "kind": "guest_reg",
+      "env": [],
+      "liveEnv": [],
+      "docs": "docs/integrations/wave3-fiscal-guest-reg.md",
+      "smoke": "guest_reg_config",
+      "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
+      "guestRegistrationProviderKey": "uruguay_rihp",
+      "maturity": "adapter"
     }
   ]
 }

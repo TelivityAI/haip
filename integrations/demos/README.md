@@ -1,6 +1,14 @@
 # HAIP integration demos
 
-One folder per **shipped** integration. Each demo turns the Integrations toggle **ON** (same as the dashboard button) and wires the demo path — **mock/console when you have no vendor keys**.
+One folder per **shipped** integration and every **adapter** (console) pack. Each demo turns the Integrations toggle **ON** (same as the dashboard button) and wires the demo path.
+
+| Kind | Count | What “demo” means |
+|------|------:|-------------------|
+| **shipped** | 21 | In-product path. Demo enables it and uses **mock/console** until you add live keys. |
+| **adapter** | 37 | Console fiscal/guest-reg provider key. Demo sets the key and logs handoffs — **not** live authority filing. |
+| **Total** | **58** | `./integrations/demos/run.sh list` |
+
+Recipes (Zapier webhooks, CSV, BI Postgres, …) stay under [`docs/integrations/`](../../docs/integrations/) — copy-paste, no demo folder.
 
 ## Prerequisites
 
@@ -12,55 +20,49 @@ docker compose up
 ## One command
 
 ```bash
-# List shipped demos
-./integrations/demos/run.sh list
+./integrations/demos/run.sh list           # all 58
+./integrations/demos/run.sh list shipped   # 21 product paths
+./integrations/demos/run.sh list adapters  # 37 console country packs
 
-# Enable + demo one integration
-./integrations/demos/run.sh stripe
-./integrations/demos/run.sh beds24
-./integrations/demos/run.sh serbia-suf-esir
-
-# Enable every shipped catalog toggle
-./integrations/demos/run.sh enable-all
-
-# Run every demo pack
-./integrations/demos/run.sh all
+./integrations/demos/run.sh stripe         # one slug
+./integrations/demos/run.sh fiskaly-sign-at
+./integrations/demos/run.sh all            # every demo
+./integrations/demos/run.sh all shipped
+./integrations/demos/run.sh enable-all     # catalog toggles only
 ```
-
-Or via pnpm:
 
 ```bash
-pnpm integrations:demo -- list
-pnpm integrations:demo -- stripe
-pnpm integrations:demo -- all
+pnpm integrations:demo -- list shipped
+pnpm integrations:demo -- beds24
 ```
 
-## What “easy” means here
+## What you get vs “working perfectly”
 
-| Step | What happens |
-|------|----------------|
-| 1 | `PUT /api/v1/admin/integrations/:slug` — property toggle ON |
-| 2 | Provider-specific wiring (channel connection, fiscal config, or env hints) |
-| 3 | Without paid credentials → **console/mock** (logged stub, no vendor HTTP) |
-| 4 | With credentials in env / connection config → same commands go live after API restart when the provider is process-selected |
+### Shipped (payments, channels, locks, SMS, …)
 
-Dashboard equivalent: open **Integrations**, flip the switch for that row.
+| Step | Demo does this | You do this for live |
+|------|----------------|----------------------|
+| 1 | `PUT …/admin/integrations/:slug` → toggle ON | (already done by demo / dashboard) |
+| 2 | Creates channel connection or prints env | Paste real keys into `.env` or connection `config` |
+| 3 | Works in **mock/console** with no keys | Restart API if the provider is process-selected (`PAYMENT_GATEWAY`, `SMS_PROVIDER`, `DOOR_LOCK_PROVIDER`) |
+| 4 | Prints live env var names | Run a real charge / SMS / lock / ARI push once |
 
-## Shipped demos
+Each shipped folder has:
+- `demo.sh` — one command
+- `demo.env.example` — copy into `.env`
+- `README.md` — short path
+- **`GO_LIVE.md`** — checklist to go from mock → production in minutes
 
-| Slug | Kind |
-|------|------|
-| `stripe` | Payment (mock by default) |
-| `adyen` / `mollie` / `square` / `braintree` | Payment (console without keys) |
-| `beds24` / `channex` | Channel connection |
-| `pmsxchange-siteminder` / `derbysoft-property-connector` | Channel (+ optional `docker compose --profile channels`) |
-| `nuki` / `ttlock` / `salto-ks` | Door locks |
-| `infobip-omnichannel` / `vonage-messages` / `bird` / `telegram-bot` | Messaging |
-| `sendgrid` | Email |
-| `google-business-profile-reviews` / `tripadvisor-content-api` | Reviews |
-| `serbia-suf-esir` / `serbia-eturista` | Fiscal / guest registration |
+### Adapter (fiscal / guest-reg console packs)
 
-Each slug folder has `demo.sh`, `demo.env.example`, and a short `README.md`.
+| Step | Demo does this | You do this for live filing |
+|------|----------------|-----------------------------|
+| 1 | Toggle ON | — |
+| 2 | `PUT /fiscal/config` with the provider key | Keep the same key |
+| 3 | Core **logs** a fake acknowledgement | Replace console provider with a real authority/partner client |
+| 4 | — | Check-in / invoice and confirm a real external id |
+
+**Adapter demos are wiring demos**, not “tax authority connected.” Marking them live without credentials would be a lie.
 
 ## Env overrides
 
@@ -69,10 +71,6 @@ export HAIP_URL=http://localhost:3000
 export PROPERTY_ID=a0000001-0000-4000-a000-000000000001
 ```
 
-## Planned integrations (the other ~136)
+## Planned (~136)
 
-Those need partner apps / certs / authority clients — they are **not** in this folder until they are `shipped` or have a console `adapter` demo. See [Wave 3 partner surface](../../docs/integrations/wave3-partner-surface.md) and [catalog status](../../docs/INTEGRATIONS.md#catalog-status-registry).
-
-## Recipes (no vendor SDK)
-
-Webhook / CSV / SQL recipes stay under [`docs/integrations/`](../../docs/integrations/) (`webhooks-zapier`, `accounting-csv`, `bi-postgres`, …) — already one-copy paste, no demo folder required.
+No demos until `shipped` or `adapter`. See [Wave 3 partner surface](../../docs/integrations/wave3-partner-surface.md).
