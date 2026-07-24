@@ -802,6 +802,25 @@
     "opsForecast": "Ops Forecast",
     "opsForecastHint": "Derived from in-house reservations (assigned, checked in, stayover, due out) for the selected service date."
   },
+  "integrations": {
+    "actions": "Actions",
+    "allCategories": "All categories",
+    "catalogStatus": "Catalog",
+    "category": "Category",
+    "disable": "Disable",
+    "disabled": "Disabled",
+    "empty": "No integrations match this filter.",
+    "enable": "Enable",
+    "enabled": "Enabled",
+    "loading": "Loading integrations…",
+    "name": "Integration",
+    "propertyStatus": "Property",
+    "refresh": "Refresh",
+    "saved": "Integration settings saved",
+    "selectProperty": "Select a property to manage integrations.",
+    "subtitle": "Browse the public catalog and enable connections for this property.",
+    "title": "Integrations"
+  },
   "import": {
     "choose": "1. Choose what to import",
     "createdId": "Created ID",
@@ -854,6 +873,7 @@
     "houseAccounts": "House Accounts",
     "housekeeping": "Housekeeping",
     "import": "Data Import",
+    "integrations": "Integrations",
     "mainNavigation": "Main navigation",
     "nightAudit": "Night Audit",
     "ratePlans": "Rate Plans",

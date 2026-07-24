@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createHmac } from 'crypto';
 import { WebhookDeliveryService } from './webhook-delivery.service';
+import { assertSafeOutboundUrl } from '../../common/security/url-guard';
 
 // The SSRF URL guard does real DNS resolution (covered by its own spec); stub it
 // here so these tests exercise delivery logic without network.
@@ -18,8 +19,8 @@ function createStatefulMockDb(subscription: any) {
   let idCounter = 1;
 
   // Single-table lookup by probing call args — Drizzle operators return opaque
-  // objects, so we use a simple heuristic: track the last table referenced.
-  let currentTable: 'webhook_deliveries' | 'subscriptions' = 'webhook_deliveries';
+  // objects, so fall back to deliveries when table metadata is unavailable.
+  const fallbackTable: 'webhook_deliveries' | 'subscriptions' = 'webhook_deliveries';
 
   const identifyTable = (tbl: any): 'webhook_deliveries' | 'subscriptions' => {
     // @telivityhaip/database exports identifiable symbols on each pgTable. Fall back
@@ -27,31 +28,12 @@ function createStatefulMockDb(subscription: any) {
     const name = tbl?.[Symbol.for('drizzle:Name')] ?? tbl?._?.name ?? '';
     if (String(name).includes('webhook_deliveries')) return 'webhook_deliveries';
     if (String(name).includes('agent_webhook_subscriptions')) return 'subscriptions';
-    // Last-resort: alternate between calls based on recent context.
-    return currentTable;
+    return fallbackTable;
   };
-
-  const makeSelectChain = (tableId: 'webhook_deliveries' | 'subscriptions') => ({
-    from: vi.fn(() => {
-      currentTable = tableId;
-      return {
-        where: vi.fn(() => {
-          // Resolve with all rows for simplicity; callers use .id match.
-          if (tableId === 'subscriptions') {
-            return Promise.resolve([subscription]);
-          }
-          // For webhook_deliveries the service expects either a single-row
-          // lookup (by id) or a list of pending rows. We return ALL rows; the
-          // service filters by id after.
-          return Promise.resolve(Array.from(deliveries.values()));
-        }),
-      };
-    }),
-  });
 
   return {
     _deliveries: deliveries,
-    select: vi.fn((arg?: any) => {
+    select: vi.fn((_arg?: any) => {
       // select() with no arg = full row; from() dispatches by table.
       return {
         from: vi.fn((tbl: any) => {
@@ -68,7 +50,7 @@ function createStatefulMockDb(subscription: any) {
         }),
       };
     }),
-    insert: vi.fn((tbl: any) => ({
+    insert: vi.fn((_tbl: any) => ({
       values: vi.fn((vals: any) => ({
         returning: vi.fn(() => {
           const id = `del-${idCounter++}`;
@@ -78,7 +60,7 @@ function createStatefulMockDb(subscription: any) {
         }),
       })),
     })),
-    update: vi.fn((tbl: any) => ({
+    update: vi.fn((_tbl: any) => ({
       set: vi.fn((vals: any) => ({
         where: vi.fn(() => {
           // Without parsing the eq() operator, we apply the update to the
@@ -114,26 +96,58 @@ describe('WebhookDeliveryService', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   const originalEnv = process.env['NODE_ENV'];
 
+  const createMockQueue = () => ({
+    add: vi.fn().mockResolvedValue({ id: 'job-1' }),
+    close: vi.fn().mockResolvedValue(undefined),
+  });
+
   beforeEach(() => {
     process.env['NODE_ENV'] = 'test';
     fetchMock = vi.fn();
     globalThis.fetch = fetchMock as any;
+    vi.mocked(assertSafeOutboundUrl).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     process.env['NODE_ENV'] = originalEnv;
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
-  it('enqueues a delivery and POSTs with HMAC signature + event headers', async () => {
-    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+  it('enqueues a delivery row and durable BullMQ job without in-process POST', async () => {
     const db = createStatefulMockDb(subscription);
-    const service = new WebhookDeliveryService(db as any);
+    const queue = createMockQueue();
+    const service = new WebhookDeliveryService(db as any, undefined, queue as any);
 
     const delivery = await service.enqueue(payload, subscription.id);
-    // Await the async attempt fired by enqueue.
-    await new Promise((r) => setImmediate(r));
 
+    expect(queue.add).toHaveBeenCalledWith(
+      'deliver-webhook',
+      { deliveryId: delivery.id, propertyId: 'prop-1' },
+      expect.objectContaining({
+        jobId: delivery.id,
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 30_000 },
+      }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const stored = db._deliveries.get(delivery.id);
+    expect(stored.status).toBe('pending');
+    expect(stored.attempts).toBe(0);
+  });
+
+  it('worker POSTs with HMAC signature + event headers', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+    const db = createStatefulMockDb(subscription);
+    const queue = createMockQueue();
+    const service = new WebhookDeliveryService(db as any, undefined, queue as any);
+
+    const delivery = await service.enqueue(payload, subscription.id);
+    await service.processDeliveryJob({ deliveryId: delivery.id, propertyId: 'prop-1' });
+
+    expect(assertSafeOutboundUrl).toHaveBeenCalledWith('https://hooks.test/endpoint', {
+      requireHttps: true,
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('https://hooks.test/endpoint');
@@ -152,13 +166,16 @@ describe('WebhookDeliveryService', () => {
     expect(stored.attempts).toBe(1);
   });
 
-  it('schedules a retry on non-2xx response', async () => {
+  it('updates the row and throws so BullMQ retries on non-2xx response', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
     const db = createStatefulMockDb(subscription);
-    const service = new WebhookDeliveryService(db as any);
+    const queue = createMockQueue();
+    const service = new WebhookDeliveryService(db as any, undefined, queue as any);
 
     const delivery = await service.enqueue(payload, subscription.id);
-    await new Promise((r) => setImmediate(r));
+    await expect(
+      service.processDeliveryJob({ deliveryId: delivery.id, propertyId: 'prop-1' }),
+    ).rejects.toThrow('scheduled for retry');
 
     const stored = db._deliveries.get(delivery.id);
     expect(stored.status).toBe('pending');
@@ -171,15 +188,17 @@ describe('WebhookDeliveryService', () => {
   it('marks failed after max attempts', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
     const db = createStatefulMockDb(subscription);
-    const service = new WebhookDeliveryService(db as any);
+    const queue = createMockQueue();
+    const service = new WebhookDeliveryService(db as any, undefined, queue as any);
 
     const delivery = await service.enqueue(payload, subscription.id);
-    await new Promise((r) => setImmediate(r));
 
-    // Simulate 4 more retry attempts (total 5 = MAX).
     for (let i = 0; i < 4; i++) {
-      await service.attemptDelivery(delivery.id);
+      await expect(
+        service.processDeliveryJob({ deliveryId: delivery.id, propertyId: 'prop-1' }),
+      ).rejects.toThrow('scheduled for retry');
     }
+    await service.processDeliveryJob({ deliveryId: delivery.id, propertyId: 'prop-1' });
 
     const stored = db._deliveries.get(delivery.id);
     expect(stored.status).toBe('failed');
@@ -189,18 +208,20 @@ describe('WebhookDeliveryService', () => {
   it('emits webhook.delivery_failed internally on permanent failure', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
     const db = createStatefulMockDb({ ...subscription, subscriberName: 'BR Compliance' });
+    const queue = createMockQueue();
     const emitter = { emit: vi.fn() };
-    const service = new WebhookDeliveryService(db as any, emitter as any);
+    const service = new WebhookDeliveryService(db as any, emitter as any, queue as any);
 
     const delivery = await service.enqueue(payload, subscription.id);
-    await new Promise((r) => setImmediate(r));
-
-    // Not yet permanent — no alert.
-    expect(emitter.emit).not.toHaveBeenCalled();
 
     for (let i = 0; i < 4; i++) {
-      await service.attemptDelivery(delivery.id);
+      await expect(
+        service.processDeliveryJob({ deliveryId: delivery.id, propertyId: 'prop-1' }),
+      ).rejects.toThrow('scheduled for retry');
     }
+    expect(emitter.emit).not.toHaveBeenCalled();
+
+    await service.processDeliveryJob({ deliveryId: delivery.id, propertyId: 'prop-1' });
 
     expect(emitter.emit).toHaveBeenCalledTimes(1);
     expect(emitter.emit).toHaveBeenCalledWith('webhook.delivery_failed', {
@@ -218,10 +239,11 @@ describe('WebhookDeliveryService', () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200 });
     const sub = { ...subscription, secret: null };
     const db = createStatefulMockDb(sub);
-    const service = new WebhookDeliveryService(db as any);
+    const queue = createMockQueue();
+    const service = new WebhookDeliveryService(db as any, undefined, queue as any);
 
-    await service.enqueue(payload, sub.id);
-    await new Promise((r) => setImmediate(r));
+    const delivery = await service.enqueue(payload, sub.id);
+    await service.processDeliveryJob({ deliveryId: delivery.id, propertyId: 'prop-1' });
 
     const [, init] = fetchMock.mock.calls[0]!;
     expect(init.headers['X-HAIP-Signature']).toBe('unsigned');

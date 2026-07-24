@@ -27,8 +27,8 @@ Create a subscription with the events you want (wildcards supported):
 POST /api/v1/connect/subscriptions
 {
   "propertyId": "0d0af5aa-…",
-  "subscriberId": "br-compliance-service",
-  "subscriberName": "Brazil Compliance Service",
+  "subscriberId": "fiscal-compliance-service",
+  "subscriberName": "Fiscal Compliance Service",
   "callbackUrl": "https://compliance.example.com/haip-events",
   "events": ["reservation.checked_in", "reservation.checked_out", "invoice.*"],
   "secret": "a-long-random-hmac-secret-you-keep"
@@ -128,14 +128,15 @@ recommended safety net for compliance-critical integrations.
 
 ## Fiscal documents (`invoice.*`)
 
-For jurisdictions that require official tax documents (e.g. NFS-e tax notes in
-Brazil), HAIP stores a **fiscal document reference** on the folio and emits
-`invoice.*` events. Core contains no regional tax logic — issuance is
-performed by an external integration:
+For jurisdictions that require official tax documents (fiscal receipts,
+e-invoices, tax notes, and similar), HAIP stores a **fiscal document reference**
+on the folio and emits `invoice.*` events. Core contains no regional tax logic —
+issuance is performed by an external integration (see the
+[integrations catalog](./INTEGRATIONS.md) for country packs):
 
 1. Staff (or an automation) requests a document:
    `POST /api/v1/folios/:folioId/fiscal-documents`
-   `{ "propertyId": "…", "documentType": "nfse", "metadata": { … } }`
+   `{ "propertyId": "…", "documentType": "fiscal_receipt", "metadata": { … } }`
    → HAIP emits **`invoice.requested`** (entity: `fiscal_document`).
 2. Your integration receives the event, fetches the folio and charges, and
    issues the document against the government/tax-authority API.
