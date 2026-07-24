@@ -5,6 +5,10 @@
 (`cursor/unthin-wave-a-ci1-aeea`). Do not invent further hotel operations beyond
 confirmed KB + these locked MVP defaults.
 
+**Separate track — remaining catalog integrations:** see
+[integrations-planned-backlog.md](./integrations-planned-backlog.md) (**86**
+registry `planned` rows for partner/cert / new-module work).
+
 **Trigger:** These areas were previously marked “thin / partner-gated.” Six
 parallel research passes + a HAIP code-anchor map produced the cut below.
 
