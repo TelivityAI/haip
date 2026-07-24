@@ -13,7 +13,7 @@ Resources: [integration recipes](integrations/) and [webhooks](webhooks.md).
 
 ## Built for compliance, worldwide
 
-Selling rooms is global; receipts and guest registration are local law. HAIP treats government compliance as a first-class integration category across Europe and Latin America: fiscalization and e-invoicing (Italy SDI, Greece myDATA, Poland KSeF, Hungary NAV, Spain VeriFactu/SII, Portugal, Germany TSE, Austria RKSV, the Balkans, Mexico CFDI, Colombia DIAN, Brazil, Chile, Argentina and more) and mandatory guest registration (Serbia eTurista, Croatia eVisitor, Italy Alloggiati Web, Czechia Ubyport, Spain SES Hospedajes, Hungary VIZA, Finland traveller notification, Colombia SIRE, Brazil FNRH). Where a country has no mandate, or a mandate with no digital channel, that's documented too - no compliance theater.
+Selling rooms is global; receipts and guest registration are local law. HAIP treats government compliance as a first-class integration category across Europe and Latin America: fiscalization and e-invoicing (Italy SDI, Greece myDATA, Poland KSeF, Hungary NAV, Spain VeriFactu/SII, Portugal, Germany TSE, Austria RKSV, the Balkans, Mexico CFDI, Colombia DIAN, Chile, Argentina and more) and mandatory guest registration (Serbia eTurista, Croatia eVisitor, Italy Alloggiati Web, Czechia Ubyport, Spain SES Hospedajes, Hungary VIZA, Finland traveller notification, Colombia SIRE). Where a country has no mandate, or a mandate with no digital channel, that's documented too - no compliance theater.
 
 ## Integration catalog
 

@@ -127,7 +127,7 @@ export class ConnectEventsService {
       testSent: true,
       subscriptionId: id,
       callbackUrl: subscription.callbackUrl,
-      note: 'Test event logged. Actual HTTP delivery requires BullMQ (not yet configured).',
+      note: 'Test event logged. Webhook delivery jobs are processed by BullMQ.',
     };
   }
 
