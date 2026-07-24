@@ -767,6 +767,49 @@
       "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
       "guestRegistrationProviderKey": "uruguay_rihp",
       "maturity": "adapter"
+    },
+    {
+      "slug": "whatsapp-cloud-api",
+      "title": "WhatsApp Cloud API",
+      "kind": "whatsapp",
+      "env": [],
+      "liveEnv": [
+        "WHATSAPP_CLOUD_TOKEN=EAAB...",
+        "WHATSAPP_CLOUD_PHONE_NUMBER_ID=..."
+      ],
+      "docs": "docs/integrations/whatsapp-cloud.md",
+      "smoke": "messaging_enable",
+      "note": "Without Cloud credentials, WhatsApp falls through to Twilio or console.",
+      "maturity": "shipped"
+    },
+    {
+      "slug": "mailgun",
+      "title": "Mailgun",
+      "kind": "email",
+      "env": [],
+      "liveEnv": [
+        "MAILGUN_API_KEY=...",
+        "MAILGUN_DOMAIN=mg.example.com"
+      ],
+      "docs": "docs/integrations/mailgun-ses.md",
+      "smoke": "email_enable",
+      "note": "Without Mailgun keys, email falls through to SendGrid/SMTP/console.",
+      "maturity": "shipped"
+    },
+    {
+      "slug": "amazon-ses",
+      "title": "Amazon SES",
+      "kind": "email",
+      "env": [],
+      "liveEnv": [
+        "SES_ENDPOINT=http://localhost:4566",
+        "SES_API_KEY=local",
+        "SES_FROM=noreply@example.com"
+      ],
+      "docs": "docs/integrations/mailgun-ses.md",
+      "smoke": "email_enable",
+      "note": "Requires SES_ENDPOINT gateway (honest path; no in-process SigV4).",
+      "maturity": "shipped"
     }
   ]
 }
