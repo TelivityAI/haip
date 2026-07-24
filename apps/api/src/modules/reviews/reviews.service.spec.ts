@@ -57,4 +57,38 @@ describe('ReviewsService', () => {
     expect(consoleProvider.pullReviews).toHaveBeenCalled();
     expect(google.pullReviews).not.toHaveBeenCalled();
   });
+
+  it('uses named Wave 3 console review pack when requested', async () => {
+    const trustyou: ReviewSourceProvider = {
+      name: 'trustyou',
+      isConfigured: () => true,
+      pullReviews: vi.fn().mockResolvedValue({
+        pulled: false,
+        provider: 'trustyou',
+        reviews: [],
+      }),
+    };
+    const consoleProvider: ReviewSourceProvider = {
+      name: 'console',
+      isConfigured: () => true,
+      pullReviews: vi.fn(),
+    };
+    const google: ReviewSourceProvider = {
+      name: 'google',
+      isConfigured: () => false,
+      pullReviews: vi.fn(),
+    };
+    const tripadvisor: ReviewSourceProvider = {
+      name: 'tripadvisor',
+      isConfigured: () => false,
+      pullReviews: vi.fn(),
+    };
+
+    const service = new ReviewsService([google, tripadvisor, trustyou, consoleProvider]);
+    await service.pullReviews('prop-1', 'trustyou');
+    expect(trustyou.pullReviews).toHaveBeenCalledWith(
+      expect.objectContaining({ propertyId: 'prop-1' }),
+    );
+    expect(consoleProvider.pullReviews).not.toHaveBeenCalled();
+  });
 });

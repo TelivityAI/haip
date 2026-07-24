@@ -91,7 +91,7 @@
       ],
       "docs": "docs/integrations/channel-beds24-channex.md",
       "smoke": "channel_connection",
-      "note": "Missing credentials → console channel stub (logged, no HTTP).",
+      "note": "Missing credentials \u2192 console channel stub (logged, no HTTP).",
       "maturity": "shipped"
     },
     {
@@ -309,7 +309,7 @@
       "liveEnv": [],
       "docs": "docs/integrations/serbia-fiscal.md",
       "smoke": "fiscal_config",
-      "note": "Console fiscal provider — logs handoff; replace with authority client for production.",
+      "note": "Console fiscal provider \u2014 logs handoff; replace with authority client for production.",
       "maturity": "shipped"
     },
     {
@@ -321,7 +321,7 @@
       "liveEnv": [],
       "docs": "docs/integrations/serbia-fiscal.md",
       "smoke": "guest_reg_config",
-      "note": "Console guest-registration provider — logs handoff.",
+      "note": "Console guest-registration provider \u2014 logs handoff.",
       "maturity": "shipped"
     },
     {
@@ -821,7 +821,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "expedia_eqc",
       "channelCode": "expedia_eqc"
@@ -836,7 +836,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "myallocator_cloudbeds",
       "channelCode": "myallocator_cloudbeds"
@@ -851,7 +851,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "atomize",
       "channelCode": "atomize"
@@ -866,7 +866,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "yieldplanet",
       "channelCode": "yieldplanet"
@@ -881,7 +881,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "d_edge",
       "channelCode": "d_edge"
@@ -896,7 +896,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "cubilis_lighthouse",
       "channelCode": "cubilis_lighthouse"
@@ -911,7 +911,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "rategain",
       "channelCode": "rategain"
@@ -926,7 +926,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "hotelrunner",
       "channelCode": "hotelrunner"
@@ -941,7 +941,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "nextpax",
       "channelCode": "nextpax"
@@ -956,7 +956,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "hotelbeds",
       "channelCode": "hotelbeds"
@@ -971,7 +971,7 @@
       ],
       "docs": "docs/integrations/wave3-channels-wise.md",
       "smoke": "channel_connection",
-      "note": "Console channel adapter — no vendor HTTP until partner credentials.",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
       "maturity": "adapter",
       "adapterType": "amadeus_hotel",
       "channelCode": "amadeus_hotel"
@@ -992,6 +992,132 @@
       "smoke": "payment_console",
       "note": "Console payment gateway (PAYMENT_GATEWAY=wise) until Wise Platform partner client lands.",
       "maturity": "adapter"
+    },
+    {
+      "slug": "trustyou",
+      "title": "TrustYou",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for TrustYou"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "trustyou"
+    },
+    {
+      "slug": "customer-alliance",
+      "title": "Customer Alliance",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Customer Alliance"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "customer-alliance"
+    },
+    {
+      "slug": "trustpilot",
+      "title": "Trustpilot",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Trustpilot"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "trustpilot"
+    },
+    {
+      "slug": "yotpo",
+      "title": "Yotpo",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Yotpo"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "yotpo"
+    },
+    {
+      "slug": "mara-ai",
+      "title": "MARA AI",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for MARA AI"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "mara-ai"
+    },
+    {
+      "slug": "guest-suite",
+      "title": "Guest Suite",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Guest Suite"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "guest-suite"
+    },
+    {
+      "slug": "facebook-page-ratings",
+      "title": "Facebook Page Ratings",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Facebook Page Ratings"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "facebook-page-ratings"
+    },
+    {
+      "slug": "reviewtrackers",
+      "title": "ReviewTrackers",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for ReviewTrackers"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "reviewtrackers"
+    },
+    {
+      "slug": "foursquare-places",
+      "title": "Foursquare Places",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Foursquare Places"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "foursquare-places"
     }
   ]
 }

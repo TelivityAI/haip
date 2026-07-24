@@ -12,7 +12,8 @@ export class ReviewsController {
   @Post('pull')
   @Roles('admin', 'front_desk')
   @ApiOperation({
-    summary: 'Pull guest reviews from an external source (Google or TripAdvisor)',
+    summary:
+      'Pull guest reviews from an external source (Google, TripAdvisor, or Wave 3 reputation packs)',
   })
   pull(@Body() dto: PullReviewsDto) {
     return this.reviewsService.pullReviews(dto.propertyId, dto.source, {
