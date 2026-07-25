@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calculator, Plus, Download } from 'lucide-react';
+import { Calculator, Plus, Download, BarChart3, Pencil, Archive } from 'lucide-react';
 import { format } from 'date-fns';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
@@ -21,6 +21,15 @@ interface ArLedger {
   balance?: string;
   status?: string;
   currencyCode?: string;
+}
+
+interface AccountingCode {
+  id: string;
+  kind: string;
+  code: string;
+  label: string;
+  appliesTo?: string | null;
+  isArchived?: boolean;
 }
 
 interface ArTransaction {
@@ -63,6 +72,13 @@ function AccountingHome() {
   const [codeOpen, setCodeOpen] = useState(false);
   const [codeName, setCodeName] = useState('');
   const [codeValue, setCodeValue] = useState('');
+  const [codeKind, setCodeKind] = useState('gl');
+  const [codeAppliesTo, setCodeAppliesTo] = useState('');
+  const [showArchivedCodes, setShowArchivedCodes] = useState(false);
+  const [editingCode, setEditingCode] = useState<AccountingCode | null>(null);
+  const [editCodeValue, setEditCodeValue] = useState('');
+  const [editCodeLabel, setEditCodeLabel] = useState('');
+  const [editCodeAppliesTo, setEditCodeAppliesTo] = useState('');
   const [selectedDeposit, setSelectedDeposit] = useState<Deposit | null>(null);
   const [depositActionOpen, setDepositActionOpen] = useState(false);
   const [applyFolioId, setApplyFolioId] = useState('');
@@ -83,8 +99,13 @@ function AccountingHome() {
   });
 
   const { data: codesData } = useQuery({
-    queryKey: ['accounting-codes', propertyId],
-    queryFn: () => api.get('/v1/accounting/codes', { params: { propertyId } }).then((r) => r.data),
+    queryKey: ['accounting-codes', propertyId, showArchivedCodes],
+    queryFn: () =>
+      api
+        .get('/v1/accounting/codes', {
+          params: { propertyId, includeArchived: showArchivedCodes || undefined },
+        })
+        .then((r) => r.data),
     enabled: !!propertyId,
   });
 
@@ -117,7 +138,7 @@ function AccountingHome() {
   });
 
   const deposits: Deposit[] = depositsData?.data ?? depositsData ?? [];
-  const codes = codesData?.data ?? codesData ?? [];
+  const codes: AccountingCode[] = codesData?.data ?? codesData ?? [];
   const ledgers: ArLedger[] = arData?.data ?? arData ?? [];
   const transactions: ArTransaction[] = txnsData?.data ?? txnsData ?? [];
   const reversible = transactions.filter((tx) => tx.type === 'transfer_in' && !tx.reversedById);
@@ -145,7 +166,8 @@ function AccountingHome() {
         propertyId,
         code: codeValue,
         label: codeName,
-        kind: 'gl',
+        kind: codeKind,
+        appliesTo: codeAppliesTo || undefined,
       });
     },
     onSuccess: () => {
@@ -153,7 +175,37 @@ function AccountingHome() {
       setCodeOpen(false);
       setCodeName('');
       setCodeValue('');
+      setCodeKind('gl');
+      setCodeAppliesTo('');
     },
+  });
+
+  const updateCode = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.patch(
+        `/v1/accounting/codes/${editingCode!.id}`,
+        {
+          code: editCodeValue,
+          label: editCodeLabel,
+          appliesTo: editCodeAppliesTo || undefined,
+        },
+        { params: { propertyId } },
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounting-codes'] });
+      setEditingCode(null);
+    },
+  });
+
+  /** Archive is a soft delete — archived codes stay queryable via includeArchived. */
+  const archiveCode = useMutation({
+    mutationFn: (code: AccountingCode) => {
+      requirePropertyId(propertyId);
+      return api.post(`/v1/accounting/codes/${code.id}/archive`, null, { params: { propertyId } });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['accounting-codes'] }),
   });
 
   const createLedger = useMutation({
@@ -326,6 +378,12 @@ function AccountingHome() {
           >
             {t('accounting.propertyAging')}
           </button>
+          <Link
+            to={`/reports?propertyId=${propertyId}&report=trial-balance&date=${today}`}
+            className="inline-flex items-center gap-2 border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium hover:bg-telivity-light-grey"
+          >
+            <BarChart3 size={14} /> {t('accounting.liveTrialBalance')}
+          </Link>
         </div>
       </div>
 
@@ -355,15 +413,63 @@ function AccountingHome() {
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
             <h2 className="text-sm font-semibold text-telivity-navy">{t('accounting.glCodes')}</h2>
-            <button onClick={() => setCodeOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-telivity-teal"><Plus size={14} /> {t('accounting.add')}</button>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-telivity-mid-grey cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showArchivedCodes}
+                  onChange={(e) => setShowArchivedCodes(e.target.checked)}
+                  className="rounded border-gray-300 text-telivity-teal"
+                />
+                {t('accounting.showArchived')}
+              </label>
+              <button onClick={() => setCodeOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-telivity-teal"><Plus size={14} /> {t('accounting.add')}</button>
+            </div>
           </div>
           <ul className="space-y-2 text-sm">
-            {(codes as { id: string; code: string; label: string }[]).slice(0, 8).map((c) => (
-              <li key={c.id} className="flex justify-between border-b border-gray-50 py-1">
-                <span className="font-mono text-xs">{c.code}</span>
-                <span>{c.label}</span>
+            {codes.slice(0, 12).map((c) => (
+              <li
+                key={c.id}
+                className={`flex justify-between items-center gap-2 border-b border-gray-50 py-1 ${c.isArchived ? 'opacity-50' : ''}`}
+              >
+                <span className="font-mono text-xs shrink-0">{c.code}</span>
+                <span className="min-w-0 truncate">
+                  {c.label}
+                  <span className="ml-2 text-xs text-telivity-mid-grey">
+                    {t(`accounting.codeKinds.${c.kind}`, { defaultValue: c.kind })}
+                    {c.appliesTo ? ` · ${c.appliesTo}` : ''}
+                  </span>
+                </span>
+                <div className="flex gap-2 shrink-0">
+                  {c.isArchived ? (
+                    <span className="text-xs text-telivity-mid-grey">{t('accounting.archived')}</span>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => {
+                          setEditingCode(c);
+                          setEditCodeValue(c.code);
+                          setEditCodeLabel(c.label);
+                          setEditCodeAppliesTo(c.appliesTo ?? '');
+                        }}
+                        className="text-xs text-telivity-teal hover:underline inline-flex items-center gap-1"
+                      >
+                        <Pencil size={12} /> {t('common.edit')}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(t('accounting.confirmArchiveCode'))) archiveCode.mutate(c);
+                        }}
+                        disabled={archiveCode.isPending}
+                        className="text-xs text-telivity-mid-grey hover:underline inline-flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <Archive size={12} /> {t('accounting.archive')}
+                      </button>
+                    </>
+                  )}
+                </div>
               </li>
             ))}
             {codes.length === 0 && <li className="text-telivity-mid-grey">{t('accounting.noCodes')}</li>}
@@ -419,9 +525,32 @@ function AccountingHome() {
 
       <Modal open={codeOpen} onClose={() => setCodeOpen(false)} title={t('accounting.addGlCode')}>
         <div className="space-y-4">
+          <select value={codeKind} onChange={(e) => setCodeKind(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            <option value="gl">{t('accounting.codeKinds.gl')}</option>
+            <option value="transaction">{t('accounting.codeKinds.transaction')}</option>
+          </select>
           <input type="text" value={codeValue} onChange={(e) => setCodeValue(e.target.value)} placeholder={t('accounting.code')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
           <input type="text" value={codeName} onChange={(e) => setCodeName(e.target.value)} placeholder={t('accounting.name')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input type="text" value={codeAppliesTo} onChange={(e) => setCodeAppliesTo(e.target.value)} placeholder={t('accounting.appliesTo')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
           <button onClick={() => createCode.mutate()} disabled={!codeName || !codeValue || createCode.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.create')}</button>
+        </div>
+      </Modal>
+
+      <Modal open={!!editingCode} onClose={() => setEditingCode(null)} title={t('accounting.editGlCode')}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('accounting.code')}</label>
+            <input type="text" value={editCodeValue} onChange={(e) => setEditCodeValue(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('accounting.name')}</label>
+            <input type="text" value={editCodeLabel} onChange={(e) => setEditCodeLabel(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('accounting.appliesTo')}</label>
+            <input type="text" value={editCodeAppliesTo} onChange={(e) => setEditCodeAppliesTo(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <button onClick={() => updateCode.mutate()} disabled={!editCodeValue || !editCodeLabel || updateCode.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('common.save')}</button>
         </div>
       </Modal>
 

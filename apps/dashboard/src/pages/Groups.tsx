@@ -16,7 +16,57 @@ interface GroupProfile {
   type: string;
   contactName?: string;
   contactEmail?: string;
+  contactPhone?: string;
+  billingAddress?: string;
+  paymentTermsDays?: string;
+  notes?: string;
   status?: string;
+}
+
+const GROUP_TYPES = ['corporate', 'travel_agent', 'wholesale', 'event', 'other'] as const;
+
+interface ProfileFormState {
+  name: string;
+  type: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  billingAddress: string;
+  paymentTermsDays: string;
+  notes: string;
+}
+
+function profileToForm(p: GroupProfile): ProfileFormState {
+  return {
+    name: p.name ?? '',
+    type: p.type ?? 'corporate',
+    contactName: p.contactName ?? '',
+    contactEmail: p.contactEmail ?? '',
+    contactPhone: p.contactPhone ?? '',
+    billingAddress: p.billingAddress ?? '',
+    paymentTermsDays: p.paymentTermsDays ?? '',
+    notes: p.notes ?? '',
+  };
+}
+
+/**
+ * Only send fields the operator filled in — the API rejects an empty string for
+ * @IsEmail contactEmail, so blanks are omitted rather than sent as ''.
+ */
+function profilePayload(form: ProfileFormState) {
+  const payload: Record<string, unknown> = { name: form.name, type: form.type };
+  const optional: (keyof ProfileFormState)[] = [
+    'contactName',
+    'contactEmail',
+    'contactPhone',
+    'billingAddress',
+    'paymentTermsDays',
+    'notes',
+  ];
+  for (const key of optional) {
+    if (form[key].trim()) payload[key] = form[key].trim();
+  }
+  return payload;
 }
 
 interface AllotmentBlock {
@@ -349,6 +399,8 @@ function GroupDetail() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkReservationId, setLinkReservationId] = useState('');
   const [blockForm, setBlockForm] = useState<BlockFormState>(emptyBlockForm());
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState<ProfileFormState | null>(null);
 
   const { data } = useQuery({
     queryKey: ['groups', id, propertyId],
@@ -414,6 +466,19 @@ function GroupDetail() {
     },
   });
 
+  const updateProfile = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.patch(`/v1/groups/profiles/${id}`, profilePayload(profileForm!), {
+        params: { propertyId },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      setProfileOpen(false);
+    },
+  });
+
   if (!profile) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.loading')}</div>;
 
   const folio = folioData?.data ?? folioData;
@@ -425,7 +490,13 @@ function GroupDetail() {
         <UsersRound size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">{profile.name}</h1>
         <StatusBadge status="info" label={t(`groups.types.${profile.type}`, { defaultValue: profile.type })} />
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex gap-2 flex-wrap">
+          <button
+            onClick={() => { setProfileForm(profileToForm(profile)); setProfileOpen(true); }}
+            className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey"
+          >
+            <Pencil size={14} /> {t('groups.editProfile')}
+          </button>
           <button
             onClick={() => setLinkOpen(true)}
             className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey"
@@ -450,8 +521,25 @@ function GroupDetail() {
 
       <div className="bg-white rounded-xl shadow-sm p-5 mb-4">
         <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('groups.contact')}</h2>
-        <p className="text-sm text-telivity-slate">{profile.contactName ?? '—'}</p>
-        <p className="text-sm text-telivity-mid-grey">{profile.contactEmail ?? ''}</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-telivity-mid-grey">{t('groups.contactName')}</p>
+            <p className="text-telivity-navy">{profile.contactName || '—'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-telivity-mid-grey">{t('groups.contactEmail')}</p>
+            <p className="text-telivity-navy break-all">{profile.contactEmail || '—'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-telivity-mid-grey">{t('groups.contactPhone')}</p>
+            <p className="text-telivity-navy">{profile.contactPhone || '—'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-telivity-mid-grey">{t('groups.paymentTerms')}</p>
+            <p className="text-telivity-navy">{profile.paymentTermsDays || '—'}</p>
+          </div>
+        </div>
+        {profile.notes && <p className="mt-3 text-sm text-telivity-slate whitespace-pre-wrap">{profile.notes}</p>}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -504,6 +592,61 @@ function GroupDetail() {
             {t('groups.createBlock')}
           </button>
         </div>
+      </Modal>
+
+      <Modal open={profileOpen && !!profileForm} onClose={() => setProfileOpen(false)} title={t('groups.editProfile')}>
+        {profileForm && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.nameRequired')}</label>
+              <input type="text" value={profileForm.name} onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.type')}</label>
+              <select value={profileForm.type} onChange={(e) => setProfileForm({ ...profileForm, type: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                {GROUP_TYPES.map((gt) => (
+                  <option key={gt} value={gt}>{t(`groups.types.${gt}`)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.contactName')}</label>
+                <input type="text" value={profileForm.contactName} onChange={(e) => setProfileForm({ ...profileForm, contactName: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.contactPhone')}</label>
+                <input type="tel" value={profileForm.contactPhone} onChange={(e) => setProfileForm({ ...profileForm, contactPhone: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.contactEmail')}</label>
+              <input type="email" value={profileForm.contactEmail} onChange={(e) => setProfileForm({ ...profileForm, contactEmail: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.paymentTerms')}</label>
+              <input type="text" value={profileForm.paymentTermsDays} onChange={(e) => setProfileForm({ ...profileForm, paymentTermsDays: e.target.value })} placeholder="NET30" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.billingAddress')}</label>
+              <textarea rows={2} value={profileForm.billingAddress} onChange={(e) => setProfileForm({ ...profileForm, billingAddress: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.notes')}</label>
+              <textarea rows={2} value={profileForm.notes} onChange={(e) => setProfileForm({ ...profileForm, notes: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            {updateProfile.isError && (
+              <p className="text-xs text-red-600">{t('groups.profileUpdateFailed')}</p>
+            )}
+            <button
+              onClick={() => updateProfile.mutate()}
+              disabled={!profileForm.name.trim() || updateProfile.isPending}
+              className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+            >
+              {t('common.save')}
+            </button>
+          </div>
+        )}
       </Modal>
 
       <Modal open={linkOpen} onClose={() => setLinkOpen(false)} title={t('groups.linkReservation')}>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Building2, Plus, ChevronLeft, Package } from 'lucide-react';
+import { Building2, Plus, ChevronLeft, Package, Pencil } from 'lucide-react';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
@@ -40,6 +40,11 @@ function HouseAccountList() {
   const [productName, setProductName] = useState('');
   const [productPrice, setProductPrice] = useState('');
   const [productCategory, setProductCategory] = useState('');
+  const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editActive, setEditActive] = useState(true);
 
   const { data } = useQuery({
     queryKey: ['house-accounts', propertyId],
@@ -86,6 +91,43 @@ function HouseAccountList() {
       setProductPrice('');
       setProductCategory('');
     },
+  });
+
+  function openEditProduct(p: Product) {
+    setEditProduct(p);
+    setEditName(p.name);
+    setEditPrice(String(p.price ?? ''));
+    setEditCategory(p.category ?? '');
+    setEditActive(p.isActive !== false);
+  }
+
+  const updateProduct = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.patch(
+        `/v1/products/${editProduct!.id}`,
+        {
+          name: editName,
+          price: moneyString(editPrice),
+          category: editCategory || undefined,
+          isActive: editActive,
+        },
+        { params: { propertyId } },
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      setEditProduct(null);
+    },
+  });
+
+  /** Deactivate is an isActive=false PATCH — products are never hard-deleted. */
+  const setProductActive = useMutation({
+    mutationFn: ({ product, isActive }: { product: Product; isActive: boolean }) => {
+      requirePropertyId(propertyId);
+      return api.patch(`/v1/products/${product.id}`, { isActive }, { params: { propertyId } });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
   });
 
   if (!propertyId) {
@@ -150,6 +192,7 @@ function HouseAccountList() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('houseAccounts.category')}</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('houseAccounts.price')}</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -159,10 +202,25 @@ function HouseAccountList() {
                   <td className="px-4 py-3 text-sm text-telivity-slate">{p.category ?? '—'}</td>
                   <td className="px-4 py-3 text-sm text-right">${Number(p.price).toFixed(2)} {p.currencyCode}</td>
                   <td className="px-4 py-3"><StatusBadge status={p.isActive !== false ? 'success' : 'completed'} label={p.isActive !== false ? t('common.active') : t('common.inactive')} /></td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => openEditProduct(p)}
+                      className="text-xs font-semibold text-telivity-teal hover:underline inline-flex items-center gap-1"
+                    >
+                      <Pencil size={12} /> {t('common.edit')}
+                    </button>
+                    <button
+                      onClick={() => setProductActive.mutate({ product: p, isActive: p.isActive === false })}
+                      disabled={setProductActive.isPending}
+                      className="ml-3 text-xs font-semibold text-telivity-mid-grey hover:underline disabled:opacity-50"
+                    >
+                      {p.isActive === false ? t('houseAccounts.reactivate') : t('houseAccounts.deactivate')}
+                    </button>
+                  </td>
                 </tr>
               ))}
               {products.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('houseAccounts.noProducts')}</td></tr>
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('houseAccounts.noProducts')}</td></tr>
               )}
             </tbody>
           </table>
@@ -194,6 +252,37 @@ function HouseAccountList() {
           <input type="text" value={productCategory} onChange={(e) => setProductCategory(e.target.value)} placeholder={t('houseAccounts.category')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
           <input type="number" step="0.01" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} placeholder={t('houseAccounts.priceRequired')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
           <button onClick={() => createProduct.mutate()} disabled={!productName || !productPrice || createProduct.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('common.create')}</button>
+        </div>
+      </Modal>
+
+      <Modal open={!!editProduct} onClose={() => setEditProduct(null)} title={t('houseAccounts.editProduct')}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('houseAccounts.productName')}</label>
+            <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('houseAccounts.category')}</label>
+            <input type="text" value={editCategory} onChange={(e) => setEditCategory(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('houseAccounts.price')}</label>
+            <input type="number" step="0.01" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-telivity-navy">
+            <input type="checkbox" checked={editActive} onChange={(e) => setEditActive(e.target.checked)} className="rounded border-gray-300 text-telivity-teal" />
+            {t('common.active')}
+          </label>
+          {updateProduct.isError && (
+            <p className="text-xs text-red-600">{t('houseAccounts.productUpdateFailed')}</p>
+          )}
+          <button
+            onClick={() => updateProduct.mutate()}
+            disabled={!editName || !editPrice || updateProduct.isPending}
+            className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {t('common.save')}
+          </button>
         </div>
       </Modal>
     </div>
