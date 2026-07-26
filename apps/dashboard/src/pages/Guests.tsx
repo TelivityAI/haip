@@ -244,13 +244,15 @@ function GuestList() {
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.labels.taxId')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">VIP</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.loyaltyNumber')}</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.registrationStatus')}</th>
+              {isBR && (
+                <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.registrationStatus')}</th>
+              )}
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.flags')}</th>
             </tr>
           </thead>
           <tbody>
             {guests.map((g, i) => {
-              const isFnrhOk = checkFnrhComplete(g, minorGuardianRequired);
+              const isFnrhOk = isBR ? checkFnrhComplete(g, minorGuardianRequired) : null;
               const guestAge = calculateAge(g.dateOfBirth);
               const gIsMinor = (guestAge !== null && guestAge < 18) || (g.registrationData as any)?.isMinor;
 
@@ -275,17 +277,19 @@ function GuestList() {
                     {g.vipLevel && g.vipLevel !== 'none' ? <StatusBadge status={g.vipLevel} /> : <span className="text-sm text-telivity-mid-grey">—</span>}
                   </td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{g.loyaltyNumber ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm">
-                    {isFnrhOk ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                        {t('guests.registrationComplete')}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
-                        {t('guests.registrationIncomplete')}
-                      </span>
-                    )}
-                  </td>
+                  {isBR && (
+                    <td className="px-4 py-3 text-sm">
+                      {isFnrhOk ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                          {t('guests.registrationComplete')}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                          {t('guests.registrationIncomplete')}
+                        </span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     {g.isDnr && <StatusBadge status="error" label="DNR" />}
                   </td>
@@ -293,7 +297,7 @@ function GuestList() {
               );
             })}
             {guests.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('guests.noGuestsFound')}</td></tr>
+              <tr><td colSpan={isBR ? 8 : 7} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('guests.noGuestsFound')}</td></tr>
             )}
           </tbody>
         </table>
@@ -976,7 +980,7 @@ function GuestDetail() {
   }
 
   const regData = (guest.registrationData as Record<string, any>) || {};
-  const isFnrhOk = checkFnrhComplete(guest, minorGuardianRequired);
+  const isFnrhOk = isBR ? checkFnrhComplete(guest, minorGuardianRequired) : null;
   const detailAge = calculateAge(guest.dateOfBirth);
   const detailIsMinor = (detailAge !== null && detailAge < 18) || regData.isMinor;
 
@@ -1193,7 +1197,12 @@ function GuestDetail() {
                   )}
                   <DetailRow label={t('guests.labels.idCountry')} value={guest.idCountry ?? defaultCountry} />
                   <DetailRow label={t('guests.labels.idExpiry')} value={guest.idExpiry ? new Date(guest.idExpiry).toLocaleDateString(i18n.language || 'pt-BR') : '—'} />
-                  <DetailRow label={t('guests.registrationStatus')} value={isFnrhOk ? t('guests.registrationComplete') : t('guests.registrationIncomplete')} />
+                  {isBR && (
+                    <DetailRow
+                      label={t('guests.registrationStatus')}
+                      value={isFnrhOk ? t('guests.registrationComplete') : t('guests.registrationIncomplete')}
+                    />
+                  )}
                 </div>
               </div>
 
