@@ -114,8 +114,10 @@ export default function FrontDesk() {
     queryKey: ['reservations', 'unassigned', propertyId, today],
     queryFn: () =>
       api
+        // ListUnassignedDto uses from/to (not the list endpoint's arrivalDateFrom/To);
+        // the API rejects unknown query params.
         .get('/v1/reservations/unassigned', {
-          params: { propertyId, arrivalDateFrom: today, arrivalDateTo: today },
+          params: { propertyId, from: today, to: today },
         })
         .then((r) => r.data),
     enabled: !!propertyId,
