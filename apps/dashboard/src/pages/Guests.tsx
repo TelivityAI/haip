@@ -21,6 +21,7 @@ import {
   Award,
   Briefcase,
   User,
+  ShieldAlert,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
@@ -48,6 +49,19 @@ function formatCpf(cpfRaw: string): string {
   const clean = cpfRaw.replace(/\D/g, '');
   if (clean.length !== 11) return cpfRaw;
   return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9, 11)}`;
+}
+
+function calculateAge(dobStr?: string): number | null {
+  if (!dobStr) return null;
+  const dob = new Date(dobStr);
+  if (isNaN(dob.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
 }
 
 interface Guest {
@@ -88,13 +102,18 @@ interface Guest {
   countryCode?: string;
 }
 
-function checkFnrhComplete(g: Guest): boolean {
+function checkFnrhComplete(g: Guest, minorGuardianRequired = true): boolean {
   const reg = (g.registrationData as Record<string, any>) || {};
+  const age = calculateAge(g.dateOfBirth);
+  const isMinor = (age !== null && age < 18) || reg.isMinor;
+  const guardianOk = !isMinor || !minorGuardianRequired || Boolean(reg.guardianName && reg.guardianTaxId);
+
   return Boolean(
     g.firstName &&
     g.lastName &&
     (g.taxId || g.idNumber) &&
-    (g.gender || reg.gender)
+    (g.gender || reg.gender) &&
+    guardianOk
   );
 }
 
@@ -126,6 +145,13 @@ function GuestList() {
   const [profession, setProfession] = useState('');
   const [nationality, setNationality] = useState('BR');
 
+  // Minor & Guardian State
+  const [guardianName, setGuardianName] = useState('');
+  const [guardianTaxId, setGuardianTaxId] = useState('');
+  const [guardianPhone, setGuardianPhone] = useState('');
+  const [guardianRelationship, setGuardianRelationship] = useState('parent');
+  const [hasMinorAuthorization, setHasMinorAuthorization] = useState(false);
+
   const [taxId, setTaxId] = useState('');
   const [idType, setIdType] = useState('cpf');
   const [idNumber, setIdNumber] = useState('');
@@ -147,6 +173,18 @@ function GuestList() {
   const [companyName, setCompanyName] = useState('');
   const [notes, setNotes] = useState('');
   const [gdprConsentMarketing, setGdprConsentMarketing] = useState(false);
+
+  const age = calculateAge(dateOfBirth);
+  const isMinor = age !== null && age < 18;
+
+  const { data: propertyData } = useQuery({
+    queryKey: ['properties', propertyId],
+    queryFn: () => api.get(`/v1/properties/${propertyId}`).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+  const property = propertyData?.data ?? propertyData;
+  const registrationRequired = property?.guestRegistrationRequired !== false;
+  const minorGuardianRequired = property?.settings?.minorGuardianIdentificationRequired !== false;
 
   const { data } = useQuery({
     queryKey: ['guests', propertyId, searchTerm],
@@ -186,13 +224,24 @@ function GuestList() {
         loyaltyNumber: loyaltyNumber || undefined,
         notes: notes || undefined,
         gdprConsentMarketing,
-        registrationData: (idIssuer || idIssuerState || neighborhood) ? { idIssuer, idIssuerState, neighborhood } : undefined,
+        registrationData: {
+          ...(idIssuer || idIssuerState || neighborhood ? { idIssuer, idIssuerState, neighborhood } : {}),
+          ...(isMinor ? {
+            isMinor: true,
+            guardianName: guardianName || undefined,
+            guardianTaxId: guardianTaxId || undefined,
+            guardianPhone: guardianPhone || undefined,
+            guardianRelationship: guardianRelationship || 'parent',
+            hasMinorAuthorization,
+          } : {}),
+        },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guests'] });
       setCreateOpen(false);
       // Reset form
       setFirstName(''); setLastName(''); setEmail(''); setPhone(''); setDateOfBirth(''); setGender(''); setProfession(''); setNationality('BR');
+      setGuardianName(''); setGuardianTaxId(''); setGuardianPhone(''); setGuardianRelationship('parent'); setHasMinorAuthorization(false);
       setTaxId(''); setIdType('cpf'); setIdNumber(''); setIdIssuer(''); setIdIssuerState(''); setIdCountry('BR'); setIdExpiry('');
       setAddressLine1(''); setAddressLine2(''); setNeighborhood(''); setCity(''); setStateProvince(''); setPostalCode(''); setCountryCode('BR');
       setVipLevel('none'); setLoyaltyNumber(''); setCompanyName(''); setNotes(''); setGdprConsentMarketing(false);
@@ -200,6 +249,7 @@ function GuestList() {
   });
 
   const isCpfValid = taxId ? validateCpf(taxId) : true;
+  const isGuardianCpfValid = guardianTaxId ? validateCpf(guardianTaxId) : true;
 
   if (!propertyId) {
     return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('guests.selectProperty')}</div>;
@@ -249,13 +299,23 @@ function GuestList() {
           <tbody>
             {guests.map((g, i) => {
               const isFnrhOk = checkFnrhComplete(g);
+              const guestAge = calculateAge(g.dateOfBirth);
+              const gIsMinor = (guestAge !== null && guestAge < 18) || (g.registrationData as any)?.isMinor;
+
               return (
                 <tr
                   key={g.id}
                   className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''} hover:bg-telivity-light-grey/50 transition-colors cursor-pointer`}
                   onClick={() => navigate(`/guests/${g.id}`)}
                 >
-                  <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{g.firstName} {g.lastName}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-telivity-navy flex items-center gap-2">
+                    {g.firstName} {g.lastName}
+                    {gIsMinor && (
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                        Menor {guestAge !== null ? `(${guestAge}a)` : ''}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{g.email ?? '—'}</td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{g.phone ?? '—'}</td>
                   <td className="px-4 py-3 text-sm text-telivity-slate font-mono">{g.taxId ? formatCpf(g.taxId) : (g.idNumber ?? '—')}</td>
@@ -287,7 +347,7 @@ function GuestList() {
         </table>
       </div>
 
-      {/* COMPLETE NEW GUEST MODAL — SINGLE SCROLLBAR */}
+      {/* COMPLETE NEW GUEST MODAL */}
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('guests.newGuest')} wide>
         <div className="space-y-6">
           {/* Section 1: Personal Details */}
@@ -343,12 +403,21 @@ function GuestList() {
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Data de Nascimento</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1 flex items-center justify-between">
+                  <span>Data de Nascimento</span>
+                  {age !== null && (
+                    <span className={`text-[11px] font-bold ${isMinor ? 'text-purple-700' : 'text-slate-500'}`}>
+                      {age} anos {isMinor ? '(Menor)' : ''}
+                    </span>
+                  )}
+                </label>
                 <input
                   type="date"
                   value={dateOfBirth}
                   onChange={(e) => setDateOfBirth(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none bg-white ${
+                    isMinor ? 'border-purple-300 focus:border-purple-600' : 'border-gray-200 focus:border-telivity-teal'
+                  }`}
                 />
               </div>
               <div>
@@ -377,13 +446,92 @@ function GuestList() {
               </div>
             </div>
 
+            {/* GUARDIAN BLOCK WHEN MINOR DETECTED */}
+            {isMinor && (
+              <div className="p-4 bg-purple-50 rounded-xl border border-purple-200 space-y-3.5 mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                    <ShieldAlert size={16} className="text-purple-600" /> Responsável Legal do Menor ({age} ano{age === 1 ? '' : 's'}) {registrationRequired ? '*' : ''}
+                  </span>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${registrationRequired ? 'text-purple-800 bg-purple-100 border border-purple-200' : 'text-slate-700 bg-slate-100'}`}>
+                    {registrationRequired ? 'Obrigatório (ECA Art. 82 / FNRH)' : 'Opcional (Configuração de Propriedade)'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-purple-900 mb-1">Nome Completo do Responsável {registrationRequired ? '*' : ''}</label>
+                    <input
+                      type="text"
+                      value={guardianName}
+                      onChange={(e) => setGuardianName(e.target.value)}
+                      placeholder="Ex: Maria Silva"
+                      className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-600 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-purple-900 mb-1 flex items-center justify-between">
+                      <span>CPF / Documento do Responsável {registrationRequired ? '*' : ''}</span>
+                      {guardianTaxId && (
+                        <span className={`text-[10px] font-semibold ${isGuardianCpfValid ? 'text-green-700' : 'text-amber-700'}`}>
+                          {isGuardianCpfValid ? '✓ Válido' : '⚠️ CPF Inválido'}
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      value={guardianTaxId}
+                      onChange={(e) => setGuardianTaxId(e.target.value)}
+                      placeholder="000.000.000-00"
+                      className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-600 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-purple-900 mb-1">Telefone de Contato do Responsável</label>
+                    <input
+                      type="tel"
+                      value={guardianPhone}
+                      onChange={(e) => setGuardianPhone(e.target.value)}
+                      placeholder="+55 (11) 98888-7777"
+                      className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-600 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-purple-900 mb-1">Grau de Parentesco / Vínculo</label>
+                    <select
+                      value={guardianRelationship}
+                      onChange={(e) => setGuardianRelationship(e.target.value)}
+                      className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-600 bg-white font-medium"
+                    >
+                      <option value="parent">Pai / Mãe</option>
+                      <option value="legal_guardian">Tutor Legal / Guardião</option>
+                      <option value="authorized_adult">Acompanhante Autorizado com Procuração</option>
+                    </select>
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-xs font-semibold text-purple-950 pt-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={hasMinorAuthorization}
+                    onChange={(e) => setHasMinorAuthorization(e.target.checked)}
+                    className="rounded border-purple-300 text-purple-600 focus:ring-purple-600"
+                  />
+                  Possui autorização judicial/registral de hospedagem de menor arquivada
+                </label>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.profession')} (Profissão FNRH)</label>
               <input
                 type="text"
                 value={profession}
                 onChange={(e) => setProfession(e.target.value)}
-                placeholder="Ex: Engenheiro, Médico..."
+                placeholder="Ex: Estudante, Engenheiro, Médico..."
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
               />
             </div>
@@ -669,9 +817,15 @@ function GuestList() {
             </label>
           </div>
 
+          {isMinor && registrationRequired && (!guardianName || !guardianTaxId) && (
+            <p className="text-xs text-purple-700 font-semibold bg-purple-100 p-2.5 rounded-lg border border-purple-200">
+              ⚠️ Preencha o Nome e CPF/Documento do Responsável Legal para concluir o cadastro do menor (Obrigatoriedade da propriedade).
+            </p>
+          )}
+
           <button
             onClick={() => createMutation.mutate()}
-            disabled={!firstName || !lastName || createMutation.isPending}
+            disabled={!firstName || !lastName || (isMinor && registrationRequired && (!guardianName || !guardianTaxId)) || createMutation.isPending}
             className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-telivity-light-teal disabled:opacity-50 transition-colors"
           >
             {createMutation.isPending ? t('common.creating') : t('guests.createGuest')}
@@ -700,6 +854,13 @@ function GuestDetail() {
   const [profession, setProfession] = useState('');
   const [nationality, setNationality] = useState('BR');
 
+  // Guardian State
+  const [guardianName, setGuardianName] = useState('');
+  const [guardianTaxId, setGuardianTaxId] = useState('');
+  const [guardianPhone, setGuardianPhone] = useState('');
+  const [guardianRelationship, setGuardianRelationship] = useState('parent');
+  const [hasMinorAuthorization, setHasMinorAuthorization] = useState(false);
+
   const [taxId, setTaxId] = useState('');
   const [idType, setIdType] = useState('cpf');
   const [idNumber, setIdNumber] = useState('');
@@ -722,6 +883,17 @@ function GuestDetail() {
   const [notes, setNotes] = useState('');
   const [gdprConsentMarketing, setGdprConsentMarketing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  const age = calculateAge(dateOfBirth);
+  const isMinor = age !== null && age < 18;
+
+  const { data: propertyData } = useQuery({
+    queryKey: ['properties', propertyId],
+    queryFn: () => api.get(`/v1/properties/${propertyId}`).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+  const property = propertyData?.data ?? propertyData;
+  const registrationRequired = property?.guestRegistrationRequired !== false;
 
   const { data: guest } = useQuery<Guest>({
     queryKey: ['guest', id, propertyId],
@@ -763,7 +935,17 @@ function GuestDetail() {
         companyName: companyName || undefined,
         notes: notes || undefined,
         gdprConsentMarketing,
-        registrationData: (idIssuer || idIssuerState || neighborhood) ? { idIssuer, idIssuerState, neighborhood } : undefined,
+        registrationData: {
+          ...(idIssuer || idIssuerState || neighborhood ? { idIssuer, idIssuerState, neighborhood } : {}),
+          ...(isMinor ? {
+            isMinor: true,
+            guardianName: guardianName || undefined,
+            guardianTaxId: guardianTaxId || undefined,
+            guardianPhone: guardianPhone || undefined,
+            guardianRelationship: guardianRelationship || 'parent',
+            hasMinorAuthorization,
+          } : {}),
+        },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guest', id] });
@@ -801,6 +983,12 @@ function GuestDetail() {
     setProfession(guest.profession ?? '');
     setNationality(guest.nationality ?? 'BR');
 
+    setGuardianName(reg.guardianName ?? '');
+    setGuardianTaxId(reg.guardianTaxId ?? '');
+    setGuardianPhone(reg.guardianPhone ?? '');
+    setGuardianRelationship(reg.guardianRelationship ?? 'parent');
+    setHasMinorAuthorization(!!reg.hasMinorAuthorization);
+
     setTaxId(guest.taxId ?? '');
     setIdType(guest.idType ?? 'cpf');
     setIdNumber(guest.idNumber ?? '');
@@ -831,6 +1019,8 @@ function GuestDetail() {
 
   const regData = (guest.registrationData as Record<string, any>) || {};
   const isFnrhOk = checkFnrhComplete(guest);
+  const detailAge = calculateAge(guest.dateOfBirth);
+  const detailIsMinor = (detailAge !== null && detailAge < 18) || regData.isMinor;
 
   return (
     <div>
@@ -839,7 +1029,14 @@ function GuestDetail() {
           <ChevronLeft size={20} />
         </button>
         <Users size={24} className="text-telivity-teal" />
-        <h1 className="text-2xl font-semibold text-telivity-navy">{guest.firstName} {guest.lastName}</h1>
+        <h1 className="text-2xl font-semibold text-telivity-navy flex items-center gap-2">
+          {guest.firstName} {guest.lastName}
+          {detailIsMinor && (
+            <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
+              Menor de Idade {detailAge !== null ? `(${detailAge} anos)` : ''}
+            </span>
+          )}
+        </h1>
         {guest.vipLevel && guest.vipLevel !== 'none' && <StatusBadge status={guest.vipLevel} />}
         {guest.isDnr && <StatusBadge status="error" label="DNR" />}
       </div>
@@ -861,7 +1058,7 @@ function GuestDetail() {
                 <button onClick={() => setEditing(false)} className="px-3 py-1.5 border border-gray-200 text-telivity-slate text-xs font-semibold rounded-lg hover:bg-gray-100">
                   {t('common.cancel')}
                 </button>
-                <button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} className="px-4 py-1.5 bg-telivity-teal text-white text-xs font-semibold rounded-lg hover:bg-telivity-light-teal disabled:opacity-50">
+                <button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending || (isMinor && registrationRequired && (!guardianName || !guardianTaxId))} className="px-4 py-1.5 bg-telivity-teal text-white text-xs font-semibold rounded-lg hover:bg-telivity-light-teal disabled:opacity-50">
                   {updateMutation.isPending ? t('common.saving') : t('common.save')}
                 </button>
               </div>
@@ -891,6 +1088,27 @@ function GuestDetail() {
                   </select>
                   <input type="text" maxLength={2} value={nationality} onChange={(e) => setNationality(e.target.value.toUpperCase())} placeholder="Nacionalidade (ISO)" className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
                 </div>
+
+                {isMinor && (
+                  <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 space-y-3">
+                    <p className="text-xs font-bold text-purple-900">
+                      Responsável Legal do Menor {registrationRequired ? '*' : '(Opcional)'}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="text" value={guardianName} onChange={(e) => setGuardianName(e.target.value)} placeholder={`Nome Responsável ${registrationRequired ? '*' : ''}`} className="border border-purple-200 rounded-lg px-3 py-2 text-sm bg-white" />
+                      <input type="text" value={guardianTaxId} onChange={(e) => setGuardianTaxId(e.target.value)} placeholder={`CPF/Doc Responsável ${registrationRequired ? '*' : ''}`} className="border border-purple-200 rounded-lg px-3 py-2 text-sm bg-white" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="tel" value={guardianPhone} onChange={(e) => setGuardianPhone(e.target.value)} placeholder="Tel Responsável" className="border border-purple-200 rounded-lg px-3 py-2 text-sm bg-white" />
+                      <select value={guardianRelationship} onChange={(e) => setGuardianRelationship(e.target.value)} className="border border-purple-200 rounded-lg px-3 py-2 text-sm bg-white">
+                        <option value="parent">Pai / Mãe</option>
+                        <option value="legal_guardian">Tutor Legal</option>
+                        <option value="authorized_adult">Acompanhante Autorizado</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
                 <input type="text" value={profession} onChange={(e) => setProfession(e.target.value)} placeholder="Profissão FNRH" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
               </div>
 
@@ -967,12 +1185,38 @@ function GuestDetail() {
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                   <DetailRow label={t('common.email')} value={guest.email ?? '—'} />
                   <DetailRow label={t('common.phone')} value={guest.phone ?? '—'} />
-                  <DetailRow label="Data de Nascimento" value={guest.dateOfBirth ? new Date(guest.dateOfBirth).toLocaleDateString('pt-BR') : '—'} />
+                  <DetailRow label="Data de Nascimento" value={guest.dateOfBirth ? `${new Date(guest.dateOfBirth).toLocaleDateString('pt-BR')}${detailAge !== null ? ` (${detailAge} anos)` : ''}` : '—'} />
                   <DetailRow label={t('guests.gender')} value={guest.gender ? (t(`guests.genderOptions.${guest.gender}`, { defaultValue: guest.gender })) : '—'} />
                   <DetailRow label="Nacionalidade" value={guest.nationality ?? 'BR'} />
                   <DetailRow label={t('guests.profession')} value={guest.profession ?? '—'} />
                 </div>
               </div>
+
+              {/* GUARDIAN CARD IF MINOR */}
+              {detailIsMinor && (
+                <div className="bg-purple-50/70 p-4 rounded-xl border border-purple-200 space-y-2">
+                  <h3 className="text-xs font-bold text-purple-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <ShieldAlert size={14} className="text-purple-600" /> Responsável Legal do Menor (ECA / FNRH)
+                  </h3>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                    <DetailRow label="Nome do Responsável" value={regData.guardianName ?? '—'} />
+                    <DetailRow label="CPF / Documento" value={regData.guardianTaxId ? formatCpf(regData.guardianTaxId) : '—'} />
+                    <DetailRow label="Telefone do Responsável" value={regData.guardianPhone ?? '—'} />
+                    <DetailRow
+                      label="Grau de Parentesco"
+                      value={
+                        regData.guardianRelationship === 'parent' ? 'Pai / Mãe' :
+                        regData.guardianRelationship === 'legal_guardian' ? 'Tutor Legal' :
+                        regData.guardianRelationship === 'authorized_adult' ? 'Acompanhante Autorizado' : '—'
+                      }
+                    />
+                    <DetailRow
+                      label="Autorização de Hospedagem"
+                      value={regData.hasMinorAuthorization ? 'Apresentada / Arquivada ✅' : 'Pendente de Documentação ⚠️'}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Group 2: Document & FNRH */}
               <div className="bg-telivity-teal/5 p-4 rounded-xl border border-telivity-teal/10 space-y-2">

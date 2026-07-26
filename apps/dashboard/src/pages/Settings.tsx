@@ -84,6 +84,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
   const [adrWarnBelow, setAdrWarnBelow] = useState('');
   const [revparWarnBelow, setRevparWarnBelow] = useState('');
   const [guestRegistrationRequired, setGuestRegistrationRequired] = useState(true);
+  const [minorGuardianIdentificationRequired, setMinorGuardianIdentificationRequired] = useState(true);
 
   const { data } = useQuery({
     queryKey: ['properties', propertyId],
@@ -109,6 +110,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
       setStaffPrimaryColor(property.staffPrimaryColor ?? '');
       setStaffAccentColor(property.staffAccentColor ?? '');
       setGuestRegistrationRequired(property.guestRegistrationRequired !== false);
+      setMinorGuardianIdentificationRequired(property.settings?.minorGuardianIdentificationRequired !== false);
       const thr = property.settings?.kpiThresholds ?? {};
       setOccWarnBelow(thr.occupancyRate?.warnBelow != null ? String(thr.occupancyRate.warnBelow) : '');
       setAdrWarnBelow(thr.adr?.warnBelow != null ? String(thr.adr.warnBelow) : '');
@@ -145,6 +147,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
         guestRegistrationRequired,
         settings: {
           ...(property?.settings ?? {}),
+          minorGuardianIdentificationRequired,
           kpiThresholds,
         },
       });
@@ -178,15 +181,26 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
         <div className="border-t border-gray-100 pt-4 mt-2">
           <h3 className="text-sm font-semibold text-telivity-navy mb-3">{t('settings.guestRegistration')}</h3>
           <p className="text-xs text-telivity-mid-grey mb-3">{t('settings.guestRegistrationDescription')}</p>
-          <label className="flex items-center gap-2 text-sm text-telivity-navy">
-            <input
-              type="checkbox"
-              checked={guestRegistrationRequired}
-              onChange={(e) => setGuestRegistrationRequired(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            {t('settings.requireRegistrationCard')}
-          </label>
+          <div className="space-y-2.5">
+            <label className="flex items-center gap-2 text-sm text-telivity-navy cursor-pointer">
+              <input
+                type="checkbox"
+                checked={guestRegistrationRequired}
+                onChange={(e) => setGuestRegistrationRequired(e.target.checked)}
+                className="rounded border-gray-300 text-telivity-teal focus:ring-telivity-teal"
+              />
+              {t('settings.requireRegistrationCard')}
+            </label>
+            <label className="flex items-center gap-2 text-sm text-telivity-navy cursor-pointer">
+              <input
+                type="checkbox"
+                checked={minorGuardianIdentificationRequired}
+                onChange={(e) => setMinorGuardianIdentificationRequired(e.target.checked)}
+                className="rounded border-gray-300 text-telivity-teal focus:ring-telivity-teal"
+              />
+              Exigir identificação e documento do responsável legal para menores de idade
+            </label>
+          </div>
         </div>
 
         <div className="border-t border-gray-100 pt-4 mt-2">
