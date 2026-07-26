@@ -18,8 +18,7 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@telivityhaip/shared": ["../../packages/shared/src/index.ts"]
+      "@/*": ["src/*"]
     }
   },
   "include": ["src"]
