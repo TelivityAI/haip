@@ -35,7 +35,11 @@ export const properties = pgTable('properties', {
   // Compliance & tax
   taxJurisdiction: varchar('tax_jurisdiction', { length: 100 }), // For tourist/occupancy tax calculation
   guestRegistrationRequired: boolean('guest_registration_required').notNull().default(true),
-  guestRegistrationConfig: jsonb('guest_registration_config'), // Per-jurisdiction form config
+  guestRegistrationConfig: jsonb('guest_registration_config').$type<{
+    minorGuardianIdentificationRequired?: boolean;
+    providerKey?: string | null;
+    config?: Record<string, unknown>;
+  }>(), // Per-jurisdiction form config
 
   // GDS distribution (designed in Phase 0 per research findings)
   gdsChainCode: varchar('gds_chain_code', { length: 4 }), // GDS chain code
@@ -66,16 +70,10 @@ export const properties = pgTable('properties', {
     noShowFeeAmount?: number;
     noShowCutoffHour?: number;
     auditAutoLock?: boolean;
-    registrationJurisdiction?: string;
-    minorGuardianIdentificationRequired?: boolean;
     fiscal?: {
       providerKey?: string | null;
       config?: Record<string, unknown>;
       documentType?: string | null;
-    };
-    guestRegistration?: {
-      providerKey?: string | null;
-      config?: Record<string, unknown>;
     };
     kpiThresholds?: {
       occupancyRate?: { warnBelow?: number; goodAbove?: number };

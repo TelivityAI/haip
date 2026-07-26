@@ -9,17 +9,10 @@ import {
   ChevronLeft,
   AlertTriangle,
   Trash2,
-  Calendar,
   MapPin,
   CreditCard,
-  Building2,
-  Globe,
-  FileText,
-  CheckCircle2,
   Clock,
   ShieldCheck,
-  Award,
-  Briefcase,
   User,
   ShieldAlert,
 } from 'lucide-react';
@@ -97,11 +90,11 @@ function GuestList() {
   });
   const property = propertyData?.data ?? propertyData;
 
-  const defaultCountry = property?.countryCode ?? 'BR';
-  const registrationJurisdiction = property?.settings?.registrationJurisdiction ?? defaultCountry;
-  const isBR = registrationJurisdiction === 'BR';
-  const registrationRequired = property?.guestRegistrationRequired !== false;
-  const minorGuardianRequired = property?.settings?.minorGuardianIdentificationRequired !== false;
+  const defaultCountry = property?.countryCode ?? 'US';
+  const isBR = defaultCountry.toUpperCase() === 'BR';
+  const minorGuardianRequired =
+    property?.guestRegistrationConfig?.minorGuardianIdentificationRequired ??
+    property?.settings?.minorGuardianIdentificationRequired !== false;
 
   // Complete Form State
   const [firstName, setFirstName] = useState('');
@@ -184,7 +177,7 @@ function GuestList() {
         notes: notes || undefined,
         gdprConsentMarketing,
         registrationData: {
-          ...(idIssuer || idIssuerState || neighborhood ? { idIssuer, idIssuerState, neighborhood } : {}),
+          ...((idIssuer || idIssuerState || neighborhood) ? { idIssuer, idIssuerState, neighborhood } : {}),
           ...(isMinor ? {
             isMinor: true,
             guardianName: guardianName || undefined,
@@ -248,7 +241,7 @@ function GuestList() {
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('common.name')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('common.email')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('common.phone')}</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.taxId')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.labels.taxId')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">VIP</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.loyaltyNumber')}</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider">{t('guests.registrationStatus')}</th>
@@ -321,7 +314,7 @@ function GuestList() {
                   type="text"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="Ex: Carlos"
+                  placeholder={`Ex: ${t('guests.placeholders.firstName')}`}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
                 />
               </div>
@@ -331,7 +324,7 @@ function GuestList() {
                   type="text"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Ex: Silva"
+                  placeholder={`Ex: ${t('guests.placeholders.lastName')}`}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
                 />
               </div>
@@ -344,7 +337,7 @@ function GuestList() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="hospede@email.com"
+                  placeholder={t('guests.placeholders.email')}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
                 />
               </div>
@@ -354,7 +347,7 @@ function GuestList() {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+55 (11) 99999-9999"
+                  placeholder={t('guests.placeholders.phone')}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
                 />
               </div>
@@ -363,10 +356,10 @@ function GuestList() {
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-telivity-mid-grey mb-1 flex items-center justify-between">
-                  <span>Data de Nascimento</span>
+                  <span>{t('guests.labels.dateOfBirth')}</span>
                   {age !== null && (
                     <span className={`text-[11px] font-bold ${isMinor ? 'text-purple-700' : 'text-slate-500'}`}>
-                      {age} anos {isMinor ? '(Menor)' : ''}
+                      {t('guests.ageYears', { age })} {isMinor ? `(${t('guests.minorBadgeShort')})` : ''}
                     </span>
                   )}
                 </label>
@@ -374,8 +367,7 @@ function GuestList() {
                   type="date"
                   value={dateOfBirth}
                   onChange={(e) => setDateOfBirth(e.target.value)}
-                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none bg-white ${isMinor ? 'border-purple-300 focus:border-purple-600' : 'border-gray-200 focus:border-telivity-teal'
-                    }`}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none bg-white ${isMinor ? 'border-purple-300 focus:border-purple-600' : 'border-gray-200 focus:border-telivity-teal'}`}
                 />
               </div>
               <div>
@@ -392,7 +384,7 @@ function GuestList() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Nacionalidade (ISO)</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.nationality')}</label>
                 <input
                   type="text"
                   maxLength={2}
@@ -440,7 +432,7 @@ function GuestList() {
                       type="text"
                       value={guardianTaxId}
                       onChange={(e) => setGuardianTaxId(e.target.value)}
-                      placeholder={isBR ? '000.000.000-00' : 'ID / Passport'}
+                      placeholder={t('guests.placeholders.taxId')}
                       className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-600 bg-white"
                     />
                   </div>
@@ -453,7 +445,7 @@ function GuestList() {
                       type="tel"
                       value={guardianPhone}
                       onChange={(e) => setGuardianPhone(e.target.value)}
-                      placeholder="+55 (11) 98888-7777"
+                      placeholder={t('guests.placeholders.phone')}
                       className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-600 bg-white"
                     />
                   </div>
@@ -489,7 +481,7 @@ function GuestList() {
                 type="text"
                 value={profession}
                 onChange={(e) => setProfession(e.target.value)}
-                placeholder="Ex: Engenheiro, Médico..."
+                placeholder={t('guests.placeholders.profession')}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
               />
             </div>
@@ -510,7 +502,7 @@ function GuestList() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Tipo de Documento *</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.idType')} *</label>
                 <select
                   value={idType}
                   onChange={(e) => {
@@ -522,11 +514,12 @@ function GuestList() {
                   }}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
                 >
-                  <option value="cpf">CPF (Cadastro de Pessoas Físicas)</option>
-                  <option value="rg">RG (Carteira de Identidade)</option>
+                  {isBR && <option value="cpf">{t('guests.idTypeOptions.cpf')}</option>}
+                  {isBR && <option value="rg">{t('guests.idTypeOptions.rg')}</option>}
                   <option value="passport">{t('frontDesk.passport')}</option>
                   <option value="drivers_license">{t('frontDesk.driversLicense')}</option>
                   <option value="national_id">{t('frontDesk.nationalId')}</option>
+                  {!isBR && <option value="tax_id">{t('guests.labels.taxId')}</option>}
                 </select>
               </div>
 
@@ -534,9 +527,9 @@ function GuestList() {
                 <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
                   {idType === 'cpf' ? 'CPF' :
                     idType === 'rg' ? 'RG' :
-                      idType === 'passport' ? 'Passaporte' :
-                        idType === 'drivers_license' ? 'CNH' :
-                          'Número do Documento'} *
+                      idType === 'passport' ? t('frontDesk.passport') :
+                        idType === 'drivers_license' ? t('frontDesk.driversLicense') :
+                          t('guests.labels.taxId')} *
                 </label>
                 <input
                   type="text"
@@ -553,18 +546,17 @@ function GuestList() {
                   placeholder={
                     idType === 'cpf' ? '000.000.000-00' :
                       idType === 'rg' ? '00.000.000-0' :
-                        idType === 'passport' ? 'EX123456' :
-                          'Número do documento'
+                        idType === 'passport' ? 'A12345678' :
+                          t('guests.placeholders.taxId')
                   }
-                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white ${idType === 'cpf' && taxId && !isCpfValid ? 'border-amber-300' : 'border-gray-200'
-                    }`}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white ${idType === 'cpf' && taxId && !isCpfValid ? 'border-amber-300' : 'border-gray-200'}`}
                 />
               </div>
             </div>
 
-            {idType !== 'cpf' && (
+            {idType !== 'cpf' && isBR && (
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">CPF / Tax ID (Opcional)</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.cpfOptional')}</label>
                 <input
                   type="text"
                   value={taxId}
@@ -575,33 +567,36 @@ function GuestList() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.idIssuer')}</label>
-                <input
-                  type="text"
-                  value={idIssuer}
-                  onChange={(e) => setIdIssuer(e.target.value)}
-                  placeholder="SSP, DETRAN..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
-                />
+            {/* SHOW RG ISSUER ONLY FOR BRAZIL */}
+            {isBR && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.idIssuer')}</label>
+                  <input
+                    type="text"
+                    value={idIssuer}
+                    onChange={(e) => setIdIssuer(e.target.value)}
+                    placeholder={t('guests.placeholders.idIssuer')}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.idIssuerState')}</label>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    value={idIssuerState}
+                    onChange={(e) => setIdIssuerState(e.target.value.toUpperCase())}
+                    placeholder={t('guests.placeholders.idIssuerState')}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.idIssuerState')}</label>
-                <input
-                  type="text"
-                  maxLength={2}
-                  value={idIssuerState}
-                  onChange={(e) => setIdIssuerState(e.target.value.toUpperCase())}
-                  placeholder="SP"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white"
-                />
-              </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">País Emissor (ISO)</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.idCountry')}</label>
                 <input
                   type="text"
                   maxLength={2}
@@ -612,7 +607,7 @@ function GuestList() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Validade do Documento</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.idExpiry')}</label>
                 <input
                   type="date"
                   value={idExpiry}
@@ -629,75 +624,77 @@ function GuestList() {
               {t('guests.sections.address')}
             </h3>
             <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Logradouro / Endereço (Linha 1)</label>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.addressLine1')}</label>
               <input
                 type="text"
                 value={addressLine1}
                 onChange={(e) => setAddressLine1(e.target.value)}
-                placeholder="Ex: Av. Paulista, 1000"
+                placeholder={`Ex: ${t('guests.placeholders.address')}`}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid ${isBR ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Complemento (Linha 2)</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.addressLine2')}</label>
                 <input
                   type="text"
                   value={addressLine2}
                   onChange={(e) => setAddressLine2(e.target.value)}
-                  placeholder="Apto 42, Bloco B"
+                  placeholder={t('guests.placeholders.addressLine2')}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.neighborhood')}</label>
-                <input
-                  type="text"
-                  value={neighborhood}
-                  onChange={(e) => setNeighborhood(e.target.value)}
-                  placeholder="Bela Vista"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
-                />
-              </div>
+              {isBR && (
+                <div>
+                  <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.neighborhood')}</label>
+                  <input
+                    type="text"
+                    value={neighborhood}
+                    onChange={(e) => setNeighborhood(e.target.value)}
+                    placeholder={t('guests.placeholders.neighborhood')}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Cidade</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.city')}</label>
                 <input
                   type="text"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  placeholder="São Paulo"
+                  placeholder={t('guests.placeholders.city')}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Estado / UF</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.state')}</label>
                 <input
                   type="text"
-                  maxLength={2}
+                  maxLength={isBR ? 2 : 50}
                   value={stateProvince}
-                  onChange={(e) => setStateProvince(e.target.value.toUpperCase())}
-                  placeholder="SP"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white"
+                  onChange={(e) => setStateProvince(isBR ? e.target.value.toUpperCase() : e.target.value)}
+                  placeholder={t('guests.placeholders.state')}
+                  className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white ${isBR ? 'uppercase' : ''}`}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">CEP</label>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.postalCode')}</label>
                 <input
                   type="text"
                   value={postalCode}
                   onChange={(e) => setPostalCode(e.target.value)}
-                  placeholder="01310-100"
+                  placeholder={t('guests.placeholders.postalCode')}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">País de Residência (ISO)</label>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.countryCode')}</label>
               <input
                 type="text"
                 maxLength={2}
@@ -746,18 +743,18 @@ function GuestList() {
                 type="text"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Empresa Ltda"
+                placeholder={t('guests.company')}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">Observações Internas</label>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('guests.labels.notes')}</label>
               <textarea
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Preferências de quarto, restrições..."
+                placeholder={t('guests.placeholders.notes')}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
               />
             </div>
@@ -794,7 +791,7 @@ function GuestList() {
 
 // ---- Guest Detail ----
 function GuestDetail() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
@@ -807,11 +804,11 @@ function GuestDetail() {
   });
   const property = propertyData?.data ?? propertyData;
 
-  const defaultCountry = property?.countryCode ?? 'BR';
-  const registrationJurisdiction = property?.settings?.registrationJurisdiction ?? defaultCountry;
-  const isBR = registrationJurisdiction === 'BR';
-  const registrationRequired = property?.guestRegistrationRequired !== false;
-  const minorGuardianRequired = property?.settings?.minorGuardianIdentificationRequired !== false;
+  const defaultCountry = property?.countryCode ?? 'US';
+  const isBR = defaultCountry.toUpperCase() === 'BR';
+  const minorGuardianRequired =
+    property?.guestRegistrationConfig?.minorGuardianIdentificationRequired ??
+    property?.settings?.minorGuardianIdentificationRequired !== false;
 
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -897,7 +894,7 @@ function GuestDetail() {
         notes: notes || undefined,
         gdprConsentMarketing,
         registrationData: {
-          ...(idIssuer || idIssuerState || neighborhood ? { idIssuer, idIssuerState, neighborhood } : {}),
+          ...((idIssuer || idIssuerState || neighborhood) ? { idIssuer, idIssuerState, neighborhood } : {}),
           ...(isMinor ? {
             isMinor: true,
             guardianName: guardianName || undefined,
@@ -1008,7 +1005,7 @@ function GuestDetail() {
           <div className="flex items-center justify-between border-b border-gray-100 pb-4">
             <div>
               <h2 className="text-base font-bold text-telivity-navy">{t('guests.profile')}</h2>
-              <p className="text-xs text-telivity-mid-grey">Ficha completa e dados cadastrais no banco de dados</p>
+              <p className="text-xs text-telivity-mid-grey">Guest details & registration profile</p>
             </div>
             {!editing ? (
               <button onClick={startEdit} className="px-4 py-1.5 bg-telivity-teal text-white text-xs font-semibold rounded-lg hover:bg-telivity-light-teal transition-all">
@@ -1032,12 +1029,12 @@ function GuestDetail() {
               <div className="p-4 bg-gray-50/60 rounded-xl border border-gray-100 space-y-3">
                 <h3 className="text-xs font-semibold text-telivity-navy uppercase tracking-wider">{t('guests.sections.personal')}</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Nome" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
-                  <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Sobrenome" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                  <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={`${t('guests.firstName')} (Ex: ${t('guests.placeholders.firstName')})`} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                  <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={`${t('guests.lastName')} (Ex: ${t('guests.placeholders.lastName')})`} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefone" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('guests.placeholders.email')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t('guests.placeholders.phone')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
@@ -1047,7 +1044,7 @@ function GuestDetail() {
                     <option value="female">{t('guests.genderOptions.female')}</option>
                     <option value="other">{t('guests.genderOptions.other')}</option>
                   </select>
-                  <input type="text" maxLength={2} value={nationality} onChange={(e) => setNationality(e.target.value.toUpperCase())} placeholder="Nacionalidade (ISO)" className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
+                  <input type="text" maxLength={2} value={nationality} onChange={(e) => setNationality(e.target.value.toUpperCase())} placeholder={t('guests.labels.nationality')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
                 </div>
 
                 {isMinor && (
@@ -1070,7 +1067,7 @@ function GuestDetail() {
                   </div>
                 )}
 
-                <input type="text" value={profession} onChange={(e) => setProfession(e.target.value)} placeholder={t('guests.profession')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                <input type="text" value={profession} onChange={(e) => setProfession(e.target.value)} placeholder={t('guests.placeholders.profession')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
               </div>
 
               {/* Edit Section 2 */}
@@ -1078,23 +1075,26 @@ function GuestDetail() {
                 <h3 className="text-xs font-semibold text-telivity-teal uppercase tracking-wider">{isBR ? t('guests.sections.identificationFnrh') : t('guests.sections.identification')}</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <select value={idType} onChange={(e) => setIdType(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white">
-                    <option value="cpf">CPF (Cadastro de Pessoas Físicas)</option>
-                    <option value="rg">RG (Carteira de Identidade)</option>
-                    <option value="passport">Passaporte</option>
-                    <option value="drivers_license">CNH</option>
-                    <option value="national_id">Documento Nacional</option>
+                    {isBR && <option value="cpf">{t('guests.idTypeOptions.cpf')}</option>}
+                    {isBR && <option value="rg">{t('guests.idTypeOptions.rg')}</option>}
+                    <option value="passport">{t('frontDesk.passport')}</option>
+                    <option value="drivers_license">{t('frontDesk.driversLicense')}</option>
+                    <option value="national_id">{t('frontDesk.nationalId')}</option>
+                    {!isBR && <option value="tax_id">{t('guests.labels.taxId')}</option>}
                   </select>
-                  <input type="text" value={idType === 'cpf' ? taxId : idNumber} onChange={(e) => idType === 'cpf' ? setTaxId(e.target.value) : setIdNumber(e.target.value)} placeholder="Número do Documento" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                  <input type="text" value={idType === 'cpf' ? taxId : idNumber} onChange={(e) => idType === 'cpf' ? setTaxId(e.target.value) : setIdNumber(e.target.value)} placeholder={t('guests.labels.idNumber')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
                 </div>
-                {idType !== 'cpf' && (
-                  <input type="text" value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder="CPF (Opcional)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                {idType !== 'cpf' && isBR && (
+                  <input type="text" value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder={t('guests.labels.cpfOptional')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                )}
+                {isBR && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="text" value={idIssuer} onChange={(e) => setIdIssuer(e.target.value)} placeholder={t('guests.placeholders.idIssuer')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                    <input type="text" maxLength={2} value={idIssuerState} onChange={(e) => setIdIssuerState(e.target.value.toUpperCase())} placeholder={t('guests.placeholders.idIssuerState')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
+                  </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
-                  <input type="text" value={idIssuer} onChange={(e) => setIdIssuer(e.target.value)} placeholder="Órgão Expedidor" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
-                  <input type="text" maxLength={2} value={idIssuerState} onChange={(e) => setIdIssuerState(e.target.value.toUpperCase())} placeholder="UF Expedidora" className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <input type="text" maxLength={2} value={idCountry} onChange={(e) => setIdCountry(e.target.value.toUpperCase())} placeholder="País Emissor (ISO)" className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
+                  <input type="text" maxLength={2} value={idCountry} onChange={(e) => setIdCountry(e.target.value.toUpperCase())} placeholder={t('guests.labels.idCountry')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
                   <input type="date" value={idExpiry} onChange={(e) => setIdExpiry(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
                 </div>
               </div>
@@ -1102,17 +1102,19 @@ function GuestDetail() {
               {/* Edit Section 3 */}
               <div className="p-4 bg-gray-50/60 rounded-xl border border-gray-100 space-y-3">
                 <h3 className="text-xs font-semibold text-telivity-navy uppercase tracking-wider">{t('guests.sections.address')}</h3>
-                <input type="text" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} placeholder="Logradouro / Endereço" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
-                <div className="grid grid-cols-2 gap-3">
-                  <input type="text" value={addressLine2} onChange={(e) => setAddressLine2(e.target.value)} placeholder="Complemento" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
-                  <input type="text" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} placeholder={t('guests.neighborhood')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                <input type="text" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} placeholder={`${t('guests.labels.addressLine1')} (Ex: ${t('guests.placeholders.address')})`} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                <div className={`grid ${isBR ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+                  <input type="text" value={addressLine2} onChange={(e) => setAddressLine2(e.target.value)} placeholder={t('guests.placeholders.addressLine2')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                  {isBR && (
+                    <input type="text" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} placeholder={t('guests.placeholders.neighborhood')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-3">
-                  <input type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Cidade" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
-                  <input type="text" maxLength={2} value={stateProvince} onChange={(e) => setStateProvince(e.target.value.toUpperCase())} placeholder="UF" className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
-                  <input type="text" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder="CEP" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                  <input type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder={`${t('guests.labels.city')} (${t('guests.placeholders.city')})`} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                  <input type="text" maxLength={isBR ? 2 : 50} value={stateProvince} onChange={(e) => setStateProvince(isBR ? e.target.value.toUpperCase() : e.target.value)} placeholder={t('guests.placeholders.state')} className={`border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white ${isBR ? 'uppercase' : ''}`} />
+                  <input type="text" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder={t('guests.placeholders.postalCode')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
                 </div>
-                <input type="text" maxLength={2} value={countryCode} onChange={(e) => setCountryCode(e.target.value.toUpperCase())} placeholder="País de Residência (ISO)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
+                <input type="text" maxLength={2} value={countryCode} onChange={(e) => setCountryCode(e.target.value.toUpperCase())} placeholder={t('guests.labels.countryCode')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
               </div>
 
               {/* Edit Section 4 */}
@@ -1128,7 +1130,7 @@ function GuestDetail() {
                   <input type="text" value={loyaltyNumber} onChange={(e) => setLoyaltyNumber(e.target.value)} placeholder={t('guests.loyaltyNumber')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
                 </div>
                 <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder={t('guests.company')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
-                <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações Internas" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('guests.placeholders.notes')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
                 <label className="flex items-center gap-2 text-xs text-telivity-navy">
                   <input type="checkbox" checked={gdprConsentMarketing} onChange={(e) => setGdprConsentMarketing(e.target.checked)} className="rounded border-gray-300" />
                   {t('guests.marketingConsent')} (LGPD/GDPR)
@@ -1146,9 +1148,9 @@ function GuestDetail() {
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                   <DetailRow label={t('common.email')} value={guest.email ?? '—'} />
                   <DetailRow label={t('common.phone')} value={guest.phone ?? '—'} />
-                  <DetailRow label="Data de Nascimento" value={guest.dateOfBirth ? `${new Date(guest.dateOfBirth).toLocaleDateString('pt-BR')}${detailAge !== null ? ` (${detailAge} anos)` : ''}` : '—'} />
+                  <DetailRow label={t('guests.labels.dateOfBirth')} value={guest.dateOfBirth ? `${new Date(guest.dateOfBirth).toLocaleDateString(i18n.language || 'pt-BR')}${detailAge !== null ? ` (${t('guests.ageYears', { age: detailAge })})` : ''}` : '—'} />
                   <DetailRow label={t('guests.gender')} value={guest.gender ? (t(`guests.genderOptions.${guest.gender}`, { defaultValue: guest.gender })) : '—'} />
-                  <DetailRow label="Nacionalidade" value={guest.nationality ?? defaultCountry} />
+                  <DetailRow label={t('guests.labels.nationality')} value={guest.nationality ?? defaultCountry} />
                   <DetailRow label={t('guests.profession')} value={guest.profession ?? '—'} />
                 </div>
               </div>
@@ -1170,8 +1172,8 @@ function GuestDetail() {
                       }
                     />
                     <DetailRow
-                      label="Autorização de Hospedagem"
-                      value={regData.hasMinorAuthorization ? 'Apresentada / Arquivada ✅' : 'Pendente de Documentação ⚠️'}
+                      label={t('guests.guardian.authLabel')}
+                      value={regData.hasMinorAuthorization ? t('guests.guardian.authPresented') : t('guests.guardian.authPending')}
                     />
                   </div>
                 </div>
@@ -1183,12 +1185,14 @@ function GuestDetail() {
                   <CreditCard size={14} /> {isBR ? t('guests.sections.identificationFnrh') : t('guests.sections.identification')}
                 </h3>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                  <DetailRow label={t('guests.taxId')} value={guest.taxId ? (isBR ? formatCpf(guest.taxId) : guest.taxId) : '—'} />
-                  <DetailRow label="Tipo de Documento" value={guest.idType ? guest.idType.toUpperCase() : '—'} />
-                  <DetailRow label="Número do Documento" value={guest.idNumber ?? '—'} />
-                  <DetailRow label="Órgão Expedidor / UF" value={`${regData.idIssuer ?? '—'} / ${regData.idIssuerState ?? '—'}`} />
-                  <DetailRow label="País Emissor" value={guest.idCountry ?? defaultCountry} />
-                  <DetailRow label="Validade do Documento" value={guest.idExpiry ? new Date(guest.idExpiry).toLocaleDateString('pt-BR') : '—'} />
+                  <DetailRow label={t('guests.labels.taxId')} value={guest.taxId ? (isBR ? formatCpf(guest.taxId) : guest.taxId) : '—'} />
+                  <DetailRow label={t('guests.labels.idType')} value={guest.idType ? (t(`guests.idTypeOptions.${guest.idType}`, { defaultValue: guest.idType.toUpperCase() })) : '—'} />
+                  <DetailRow label={t('guests.labels.idNumber')} value={guest.idNumber ?? '—'} />
+                  {(regData.idIssuer || regData.idIssuerState) && (
+                    <DetailRow label={t('guests.labels.idIssuerAndState')} value={`${regData.idIssuer ?? '—'} / ${regData.idIssuerState ?? '—'}`} />
+                  )}
+                  <DetailRow label={t('guests.labels.idCountry')} value={guest.idCountry ?? defaultCountry} />
+                  <DetailRow label={t('guests.labels.idExpiry')} value={guest.idExpiry ? new Date(guest.idExpiry).toLocaleDateString(i18n.language || 'pt-BR') : '—'} />
                   <DetailRow label={t('guests.registrationStatus')} value={isFnrhOk ? t('guests.registrationComplete') : t('guests.registrationIncomplete')} />
                 </div>
               </div>
@@ -1199,12 +1203,12 @@ function GuestDetail() {
                   <MapPin size={14} className="text-telivity-teal" /> {t('guests.sections.address')}
                 </h3>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                  <DetailRow label="Logradouro" value={guest.addressLine1 ?? '—'} />
-                  <DetailRow label="Complemento" value={guest.addressLine2 ?? '—'} />
-                  <DetailRow label={t('guests.neighborhood')} value={regData.neighborhood ?? '—'} />
-                  <DetailRow label="Cidade / UF" value={`${guest.city ?? '—'} - ${guest.stateProvince ?? '—'}`} />
-                  <DetailRow label="CEP" value={guest.postalCode ?? '—'} />
-                  <DetailRow label="País de Residência" value={guest.countryCode ?? defaultCountry} />
+                  <DetailRow label={t('guests.labels.addressLine1')} value={guest.addressLine1 ?? '—'} />
+                  <DetailRow label={t('guests.labels.addressLine2')} value={guest.addressLine2 ?? '—'} />
+                  {regData.neighborhood && <DetailRow label={t('guests.neighborhood')} value={regData.neighborhood} />}
+                  <DetailRow label={t('guests.labels.cityAndState')} value={`${guest.city ?? '—'} - ${guest.stateProvince ?? '—'}`} />
+                  <DetailRow label={t('guests.labels.postalCode')} value={guest.postalCode ?? '—'} />
+                  <DetailRow label={t('guests.labels.countryCode')} value={guest.countryCode ?? defaultCountry} />
                 </div>
               </div>
 
@@ -1217,14 +1221,14 @@ function GuestDetail() {
                   <DetailRow label={t('guests.vipLevel')} value={guest.vipLevel ?? t('guests.none')} />
                   <DetailRow label={t('guests.loyaltyNumber')} value={guest.loyaltyNumber ?? '—'} />
                   <DetailRow label={t('guests.company')} value={guest.companyName ?? '—'} />
-                  <DetailRow label="Consentimento LGPD / GDPR" value={guest.gdprConsentMarketing ? 'Autorizado' : 'Não autorizado'} />
-                  {guest.gdprConsentDate && <DetailRow label="Data Consentimento" value={new Date(guest.gdprConsentDate).toLocaleDateString('pt-BR')} />}
-                  <DetailRow label="Data de Cadastro" value={guest.createdAt ? new Date(guest.createdAt).toLocaleDateString('pt-BR') : '—'} />
-                  <DetailRow label="Última Atualização" value={guest.updatedAt ? new Date(guest.updatedAt).toLocaleDateString('pt-BR') : '—'} />
+                  <DetailRow label={t('guests.consentLabel')} value={guest.gdprConsentMarketing ? t('guests.consentAuthorized') : t('guests.consentUnauthorized')} />
+                  {guest.gdprConsentDate && <DetailRow label={t('guests.consentDateLabel')} value={new Date(guest.gdprConsentDate).toLocaleDateString(i18n.language || 'pt-BR')} />}
+                  <DetailRow label={t('guests.createdAtLabel')} value={guest.createdAt ? new Date(guest.createdAt).toLocaleDateString(i18n.language || 'pt-BR') : '—'} />
+                  <DetailRow label={t('guests.updatedAtLabel')} value={guest.updatedAt ? new Date(guest.updatedAt).toLocaleDateString(i18n.language || 'pt-BR') : '—'} />
                 </div>
                 {guest.notes && (
                   <div className="mt-3 border-t border-gray-200/60 pt-2">
-                    <span className="text-xs text-telivity-mid-grey block font-medium">Observações Internas:</span>
+                    <span className="text-xs text-telivity-mid-grey block font-medium">{t('guests.labels.notes')}:</span>
                     <p className="text-xs text-telivity-navy mt-1 bg-white p-2.5 rounded-lg border border-gray-100">{guest.notes}</p>
                   </div>
                 )}
@@ -1246,7 +1250,7 @@ function GuestDetail() {
                   <div key={s.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-between">
                     <div>
                       <p className="text-xs font-bold text-telivity-navy">{s.confirmationNumber}</p>
-                      <p className="text-[11px] text-telivity-mid-grey">{s.arrivalDate} → {s.departureDate} {s.roomNumber ? `• Quarto ${s.roomNumber}` : ''}</p>
+                      <p className="text-[11px] text-telivity-mid-grey">{s.arrivalDate} → {s.departureDate} {s.roomNumber ? `• ${t('guests.roomNumber', { number: s.roomNumber })}` : ''}</p>
                     </div>
                     <StatusBadge status={s.status} />
                   </div>
@@ -1263,15 +1267,15 @@ function GuestDetail() {
 
             {guest.isDnr && (
               <div className="p-3 bg-red-50 rounded-lg border border-red-100 text-xs text-red-800 space-y-1">
-                <p className="font-bold flex items-center gap-1"><AlertTriangle size={14} /> Hóspede Marcado como DNR</p>
-                {guest.dnrReason && <p>Motivo: {guest.dnrReason}</p>}
-                {guest.dnrDate && <p>Data: {new Date(guest.dnrDate).toLocaleDateString('pt-BR')}</p>}
+                <p className="font-bold flex items-center gap-1"><AlertTriangle size={14} /> {t('guests.dnrFlagged')}</p>
+                {guest.dnrReason && <p>{t('guests.dnrReasonLabel')}: {guest.dnrReason}</p>}
+                {guest.dnrDate && <p>{t('guests.dnrDateLabel')}: {new Date(guest.dnrDate).toLocaleDateString(i18n.language || 'pt-BR')}</p>}
               </div>
             )}
 
             <div className="flex flex-col gap-2">
               <button
-                onClick={() => { if (confirm(`${guest.isDnr ? 'Remover' : 'Adicionar'} flag DNR para ${guest.firstName} ${guest.lastName}?`)) dnrMutation.mutate(); }}
+                onClick={() => { if (confirm(t(guest.isDnr ? 'guests.dnrConfirmRemove' : 'guests.dnrConfirmAdd', { name: `${guest.firstName} ${guest.lastName}` }))) dnrMutation.mutate(); }}
                 className={`w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${guest.isDnr ? 'bg-telivity-dark-teal text-white' : 'bg-telivity-orange text-white'}`}
               >
                 <AlertTriangle size={14} />
