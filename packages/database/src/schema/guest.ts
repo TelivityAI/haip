@@ -26,6 +26,12 @@ export const guests = pgTable('guests', {
   idExpiry: timestamp('id_expiry', { withTimezone: true }),
   nationality: varchar('nationality', { length: 2 }), // ISO 3166-1 alpha-2
   dateOfBirth: timestamp('date_of_birth', { mode: 'date' }),
+  gender: varchar('gender', { length: 20 }), // "male", "female", "other"
+  profession: varchar('profession', { length: 100 }), // Occupation
+  taxId: varchar('tax_id', { length: 50 }), // Generic national tax/identity ID (CPF, SSN, NIF, etc.)
+
+  // Regional/jurisdiction registration extensions (FNRH, etc.)
+  registrationData: jsonb('registration_data').$type<Record<string, unknown>>(),
 
   // Address
   addressLine1: varchar('address_line_1', { length: 255 }),

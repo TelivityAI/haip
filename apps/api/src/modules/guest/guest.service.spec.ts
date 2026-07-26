@@ -175,6 +175,10 @@ describe('GuestService', () => {
       expect(setCall.dateOfBirth).toBeNull();
       expect(setCall.idNumber).toBeNull();
       expect(setCall.addressLine1).toBeNull();
+      expect(setCall.taxId).toBeNull();
+      expect(setCall.gender).toBeNull();
+      expect(setCall.profession).toBeNull();
+      expect(setCall.registrationData).toEqual({});
       expect(setCall.isDeleted).toBe(true);
       expect(setCall.deletedAt).toBeInstanceOf(Date);
       // Email is replaced with a non-identifying sentinel
