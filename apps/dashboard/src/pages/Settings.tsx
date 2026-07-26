@@ -85,6 +85,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
   const [revparWarnBelow, setRevparWarnBelow] = useState('');
   const [guestRegistrationRequired, setGuestRegistrationRequired] = useState(true);
   const [minorGuardianIdentificationRequired, setMinorGuardianIdentificationRequired] = useState(true);
+  const [registrationJurisdiction, setRegistrationJurisdiction] = useState('BR');
 
   const { data } = useQuery({
     queryKey: ['properties', propertyId],
@@ -111,6 +112,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
       setStaffAccentColor(property.staffAccentColor ?? '');
       setGuestRegistrationRequired(property.guestRegistrationRequired !== false);
       setMinorGuardianIdentificationRequired(property.settings?.minorGuardianIdentificationRequired !== false);
+      setRegistrationJurisdiction(property.settings?.registrationJurisdiction ?? property.countryCode ?? 'BR');
       const thr = property.settings?.kpiThresholds ?? {};
       setOccWarnBelow(thr.occupancyRate?.warnBelow != null ? String(thr.occupancyRate.warnBelow) : '');
       setAdrWarnBelow(thr.adr?.warnBelow != null ? String(thr.adr.warnBelow) : '');
@@ -147,6 +149,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
         guestRegistrationRequired,
         settings: {
           ...(property?.settings ?? {}),
+          registrationJurisdiction,
           minorGuardianIdentificationRequired,
           kpiThresholds,
         },
@@ -181,7 +184,23 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
         <div className="border-t border-gray-100 pt-4 mt-2">
           <h3 className="text-sm font-semibold text-telivity-navy mb-3">{t('settings.guestRegistration')}</h3>
           <p className="text-xs text-telivity-mid-grey mb-3">{t('settings.guestRegistrationDescription')}</p>
-          <div className="space-y-2.5">
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('settings.registrationJurisdiction')}</label>
+              <select
+                value={registrationJurisdiction}
+                onChange={(e) => setRegistrationJurisdiction(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
+              >
+                <option value="BR">Brasil (FNRH - Ficha Nacional Embratur)</option>
+                <option value="PT">Portugal (SIBA - Serviço de Estrangeiros e Fronteiras)</option>
+                <option value="LU">Luxemburgo (Fiches de Déclaration)</option>
+                <option value="CZ">Chéquia (Ubyport)</option>
+                <option value="IT">Itália (Alloggiati Web)</option>
+                <option value="GENERIC">Internacional / Genérico</option>
+              </select>
+              <p className="text-[11px] text-telivity-mid-grey mt-1">{t('settings.registrationJurisdictionDescription')}</p>
+            </div>
             <label className="flex items-center gap-2 text-sm text-telivity-navy cursor-pointer">
               <input
                 type="checkbox"
@@ -198,7 +217,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
                 onChange={(e) => setMinorGuardianIdentificationRequired(e.target.checked)}
                 className="rounded border-gray-300 text-telivity-teal focus:ring-telivity-teal"
               />
-              Exigir identificação e documento do responsável legal para menores de idade
+              {t('settings.minorGuardianIdentificationRequired')}
             </label>
           </div>
         </div>

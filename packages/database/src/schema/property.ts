@@ -66,6 +66,7 @@ export const properties = pgTable('properties', {
     noShowFeeAmount?: number;
     noShowCutoffHour?: number;
     auditAutoLock?: boolean;
+    registrationJurisdiction?: string;
     minorGuardianIdentificationRequired?: boolean;
     fiscal?: {
       providerKey?: string | null;

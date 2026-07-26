@@ -20,6 +20,7 @@
     "@stripe/stripe-js": "^9.1.0",
     "@tanstack/react-query": "^5.60.0",
     "@tanstack/react-table": "^8.20.0",
+    "@telivityhaip/shared": "workspace:^",
     "axios": "^1.7.0",
     "date-fns": "^4.1.0",
     "i18next": "^23.16.0",

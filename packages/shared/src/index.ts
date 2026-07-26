@@ -227,18 +227,38 @@ export function formatCpf(cpfRaw?: string | null): string {
   return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9, 11)}`;
 }
 
+/** Calculates age in years from date string or Date object */
+export function calculateAge(dobInput?: string | Date | null): number | null {
+  if (!dobInput) return null;
+  const dob = typeof dobInput === 'string' ? new Date(dobInput) : dobInput;
+  if (isNaN(dob.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 /** Evaluates whether a guest record contains required Brazilian FNRH fields */
-export function isFnrhComplete(guest: Record<string, any>): boolean {
+export function checkFnrhComplete(
+  guest: Record<string, any>,
+  minorGuardianRequired = true,
+): boolean {
   if (!guest) return false;
   const reg = (guest['registrationData'] as Record<string, any>) || {};
-  const hasCpfOrPassport = Boolean(guest['taxId'] || guest['idNumber']);
+  const hasCpfOrDoc = Boolean(guest['taxId'] || guest['idNumber']);
   const hasName = Boolean(guest['firstName'] && guest['lastName']);
-  const hasDob = Boolean(guest['dateOfBirth']);
   const hasGender = Boolean(guest['gender'] || reg['gender']);
-  const hasCity = Boolean(guest['city']);
-  const hasState = Boolean(guest['stateProvince']);
-  const hasCountry = Boolean(guest['countryCode']);
 
-  return Boolean(hasName && hasCpfOrPassport && hasDob && hasGender && hasCity && hasState && hasCountry);
+  const age = calculateAge(guest['dateOfBirth']);
+  const isMinor = (age !== null && age < 18) || Boolean(reg['isMinor']);
+  const guardianOk = !isMinor || !minorGuardianRequired || Boolean(reg['guardianName'] && reg['guardianTaxId']);
+
+  return Boolean(hasName && hasCpfOrDoc && hasGender && guardianOk);
 }
+
+/** Legacy alias for checkFnrhComplete */
+export const isFnrhComplete = checkFnrhComplete;
 
