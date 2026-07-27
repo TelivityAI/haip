@@ -42,6 +42,14 @@ export default function FindGuest({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const { data: propertyData } = useQuery({
+    queryKey: ['properties', propertyId],
+    queryFn: () => api.get(`/v1/properties/${propertyId}`).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+  const property = propertyData?.data ?? propertyData;
+  const isBR = (property?.countryCode ?? 'US').toUpperCase() === 'BR';
+
   const { data, isFetching } = useQuery({
     queryKey: ['guests', 'find', propertyId, searchTerm],
     queryFn: () =>
@@ -79,7 +87,7 @@ export default function FindGuest({
                 <span className="text-sm font-semibold text-telivity-navy">
                   {selectedGuest.firstName} {selectedGuest.lastName}
                 </span>
-                {checkFnrhComplete(selectedGuest) && (
+                {isBR && checkFnrhComplete(selectedGuest) && (
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
                     <ShieldCheck size={11} /> FNRH
                   </span>
@@ -152,7 +160,7 @@ export default function FindGuest({
                         <span className="text-sm font-semibold text-telivity-navy group-hover:text-telivity-teal">
                           {g.firstName} {g.lastName}
                         </span>
-                        {checkFnrhComplete(g) && (
+                        {isBR && checkFnrhComplete(g) && (
                           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
                             FNRH
                           </span>
