@@ -131,6 +131,10 @@ export class GuestService {
         idCountry: null,
         idExpiry: null,
         nationality: null,
+        gender: null,
+        profession: null,
+        taxId: null,
+        registrationData: null,
         addressLine1: null,
         addressLine2: null,
         city: null,
@@ -192,6 +196,9 @@ export class GuestService {
           ilike(guests.lastName, pattern),
           ilike(guests.email, pattern),
           ilike(guests.phone, pattern),
+          ilike(guests.taxId, pattern),
+          ilike(guests.idNumber, pattern),
+          ilike(guests.loyaltyNumber, pattern),
         ),
       );
     }

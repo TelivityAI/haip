@@ -75,6 +75,15 @@ export default function FrontDesk() {
   const [registrationSigned, setRegistrationSigned] = useState(false);
   const [regAddress, setRegAddress] = useState('');
   const [regNationality, setRegNationality] = useState('');
+  const [travelReason, setTravelReason] = useState('leisure');
+  const [transportationMode, setTransportationMode] = useState('plane');
+  const [originCity, setOriginCity] = useState('');
+  const [originState, setOriginState] = useState('');
+  const [originCountry, setOriginCountry] = useState('');
+  const [destinationCity, setDestinationCity] = useState('');
+  const [destinationState, setDestinationState] = useState('');
+  const [destinationCountry, setDestinationCountry] = useState('');
+  const [showFnrhTravel, setShowFnrhTravel] = useState(false);
 
   // Move form
   const [moveRoomId, setMoveRoomId] = useState('');
@@ -379,6 +388,15 @@ export default function FrontDesk() {
     setRegistrationSigned(false);
     setRegAddress('');
     setRegNationality('');
+    setTravelReason('leisure');
+    setTransportationMode('plane');
+    setOriginCity('');
+    setOriginState('');
+    setOriginCountry('');
+    setDestinationCity('');
+    setDestinationState('');
+    setDestinationCountry('');
+    setShowFnrhTravel(false);
   }
 
   function resetWalkIn() {
@@ -719,132 +737,234 @@ export default function FrontDesk() {
       <Modal
         open={!!checkInModal}
         onClose={() => setCheckInModal(null)}
-        title={t('frontDesk.checkInGuest')}
+        title=""
         wide
       >
         {checkInModal && (
-          <div className="space-y-4">
-            <div className="bg-telivity-light-grey rounded-lg p-4">
-              <p className="text-sm font-semibold text-telivity-navy">{guestName(checkInModal)}</p>
-              <p className="text-xs text-telivity-mid-grey mt-1">
-                {checkInModal.confirmationNumber} &middot; {checkInModal.arrivalDate} →{' '}
-                {checkInModal.departureDate}
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-telivity-navy mb-1">
-                {t('frontDesk.idDocumentType')}
-              </label>
-              <select
-                value={idType}
-                onChange={(e) => setIdType(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
-              >
-                <option value="passport">{t('frontDesk.passport')}</option>
-                <option value="drivers_license">{t('frontDesk.driversLicense')}</option>
-                <option value="national_id">{t('frontDesk.nationalId')}</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-telivity-navy mb-1">
-                {t('frontDesk.idNumber')}
-              </label>
-              <input
-                type="text"
-                value={idNumber}
-                onChange={(e) => setIdNumber(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
-                placeholder={t('frontDesk.enterIdNumber')}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-telivity-navy mb-1">
-                  {t('frontDesk.idCountry')}
-                </label>
-                <input
-                  type="text"
-                  maxLength={2}
-                  value={idCountry}
-                  onChange={(e) => setIdCountry(e.target.value.toUpperCase())}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
-                  placeholder="US"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-telivity-navy mb-1">
-                  {t('frontDesk.idExpiry')}
-                </label>
-                <input
-                  type="date"
-                  value={idExpiry}
-                  onChange={(e) => setIdExpiry(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
-                />
+          <div className="space-y-5">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 -mx-6 -mt-6 p-6 rounded-t-2xl text-white relative overflow-hidden border-b border-teal-500/20">
+              <div className="relative z-10 flex items-center justify-between">
+                <div className="flex items-center gap-3.5">
+                  <div className="p-3 bg-teal-500/20 border border-teal-500/30 rounded-xl text-teal-300">
+                    <StickyNote size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold tracking-tight text-white">{t('frontDesk.checkInGuest')}</h2>
+                    <p className="text-xs text-teal-200/80 mt-0.5">
+                      <span className="font-semibold text-white">{guestName(checkInModal)}</span> &middot; {checkInModal.confirmationNumber} ({checkInModal.arrivalDate} → {checkInModal.departureDate})
+                    </p>
+                  </div>
+                </div>
+                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-semibold">
+                  FNRH Ativa
+                </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-telivity-navy mb-1">
-                  {t('frontDesk.regNationality')}
-                </label>
-                <input
-                  type="text"
-                  value={regNationality}
-                  onChange={(e) => setRegNationality(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-telivity-navy mb-1">
-                  {t('frontDesk.regAddress')}
-                </label>
-                <input
-                  type="text"
-                  value={regAddress}
-                  onChange={(e) => setRegAddress(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
-                />
-              </div>
-            </div>
+            <div className="max-h-[65vh] overflow-y-auto pr-1 space-y-4 pt-1">
+              {/* Document Identity Section */}
+              <div className="p-4 bg-gray-50/70 rounded-xl border border-gray-100 space-y-3">
+                <h3 className="text-xs font-bold text-telivity-navy uppercase tracking-wider flex items-center gap-1.5">
+                  Identificação & Registro FNRH
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-telivity-navy mb-1">
+                      {t('frontDesk.idDocumentType')}
+                    </label>
+                    <select
+                      value={idType}
+                      onChange={(e) => setIdType(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-telivity-teal focus:ring-2 focus:ring-telivity-teal/10 transition-all bg-white"
+                    >
+                      <option value="passport">{t('frontDesk.passport')}</option>
+                      <option value="drivers_license">{t('frontDesk.driversLicense')}</option>
+                      <option value="national_id">{t('frontDesk.nationalId')}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-telivity-navy mb-1">
+                      {t('frontDesk.idNumber')}
+                    </label>
+                    <input
+                      type="text"
+                      value={idNumber}
+                      onChange={(e) => setIdNumber(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-telivity-teal focus:ring-2 focus:ring-telivity-teal/10 transition-all bg-white"
+                      placeholder={t('frontDesk.enterIdNumber')}
+                    />
+                  </div>
+                </div>
 
-            <label className="flex items-center gap-2 text-sm text-telivity-navy">
-              <input
-                type="checkbox"
-                checked={registrationSigned}
-                onChange={(e) => setRegistrationSigned(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              {t('frontDesk.registrationSigned')}
-              {registrationRequired && (
-                <span className="text-telivity-orange text-xs">({t('common.required')})</span>
-              )}
-            </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-telivity-navy mb-1">
+                      {t('frontDesk.idCountry')}
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={2}
+                      value={idCountry}
+                      onChange={(e) => setIdCountry(e.target.value.toUpperCase())}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-telivity-teal focus:ring-2 focus:ring-telivity-teal/10 transition-all uppercase bg-white"
+                      placeholder="BR / US"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-telivity-navy mb-1">
+                      {t('frontDesk.idExpiry')}
+                    </label>
+                    <input
+                      type="date"
+                      value={idExpiry}
+                      onChange={(e) => setIdExpiry(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-telivity-teal focus:ring-2 focus:ring-telivity-teal/10 transition-all bg-white"
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-telivity-navy mb-1">
-                {t('frontDesk.assignRoom')}
-              </label>
-              <select
-                value={selectedRoom}
-                onChange={(e) => setSelectedRoom(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
-              >
-                <option value="">{t('frontDesk.usePreAssignedRoom')}</option>
-                {roomList.map((room) => (
-                  <option key={room.id} value={room.id}>
-                    {t('frontDesk.roomNumber', {
-                      number: room.roomNumber ?? room.number ?? room.id.slice(0, 8),
-                    })}{' '}
-                    {room.roomTypeName ? `(${room.roomTypeName})` : ''} —{' '}
-                    {formatLabel(room.status, t)}
-                  </option>
-                ))}
-              </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-telivity-navy mb-1">
+                      {t('frontDesk.regNationality')}
+                    </label>
+                    <input
+                      type="text"
+                      value={regNationality}
+                      onChange={(e) => setRegNationality(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-telivity-teal focus:ring-2 focus:ring-telivity-teal/10 transition-all bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-telivity-navy mb-1">
+                      {t('frontDesk.regAddress')}
+                    </label>
+                    <input
+                      type="text"
+                      value={regAddress}
+                      onChange={(e) => setRegAddress(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-telivity-teal focus:ring-2 focus:ring-telivity-teal/10 transition-all bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* FNRH Stay Details Section */}
+              <div className="border border-teal-100 rounded-xl p-4 bg-teal-50/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-telivity-teal uppercase tracking-wider flex items-center gap-1.5">
+                    FNRH — Detalhes da Viagem & Procedência
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowFnrhTravel(!showFnrhTravel)}
+                    className="text-xs text-telivity-teal font-semibold hover:underline"
+                  >
+                    {showFnrhTravel ? 'Recolher −' : 'Expandir +'}
+                  </button>
+                </div>
+
+                {showFnrhTravel && (
+                  <div className="space-y-3 pt-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-telivity-slate mb-1">{t('frontDesk.travelReason')}</label>
+                        <select value={travelReason} onChange={(e) => setTravelReason(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-telivity-teal bg-white">
+                          <option value="leisure">{t('frontDesk.travelReasons.leisure')}</option>
+                          <option value="business">{t('frontDesk.travelReasons.business')}</option>
+                          <option value="congress">{t('frontDesk.travelReasons.congress')}</option>
+                          <option value="relatives">{t('frontDesk.travelReasons.relatives')}</option>
+                          <option value="studies">{t('frontDesk.travelReasons.studies')}</option>
+                          <option value="health">{t('frontDesk.travelReasons.health')}</option>
+                          <option value="shopping">{t('frontDesk.travelReasons.shopping')}</option>
+                          <option value="other">{t('frontDesk.travelReasons.other')}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-telivity-slate mb-1">{t('frontDesk.transportationMode')}</label>
+                        <select value={transportationMode} onChange={(e) => setTransportationMode(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-telivity-teal bg-white">
+                          <option value="plane">{t('frontDesk.transportModes.plane')}</option>
+                          <option value="car">{t('frontDesk.transportModes.car')}</option>
+                          <option value="bus">{t('frontDesk.transportModes.bus')}</option>
+                          <option value="motorcycle">{t('frontDesk.transportModes.motorcycle')}</option>
+                          <option value="train">{t('frontDesk.transportModes.train')}</option>
+                          <option value="ship">{t('frontDesk.transportModes.ship')}</option>
+                          <option value="other">{t('frontDesk.transportModes.other')}</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-medium text-telivity-slate mb-1">{t('frontDesk.originCity')}</label>
+                        <input type="text" value={originCity} onChange={(e) => setOriginCity(e.target.value)} className="w-full border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-telivity-teal bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-telivity-slate mb-1">{t('frontDesk.originState')}</label>
+                        <input type="text" maxLength={2} value={originState} onChange={(e) => setOriginState(e.target.value.toUpperCase())} className="w-full border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-telivity-teal uppercase bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-telivity-slate mb-1">{t('frontDesk.originCountry')}</label>
+                        <input type="text" maxLength={2} value={originCountry} onChange={(e) => setOriginCountry(e.target.value.toUpperCase())} placeholder="BR" className="w-full border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-telivity-teal uppercase bg-white" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-medium text-telivity-slate mb-1">{t('frontDesk.destinationCity')}</label>
+                        <input type="text" value={destinationCity} onChange={(e) => setDestinationCity(e.target.value)} className="w-full border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-telivity-teal bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-telivity-slate mb-1">{t('frontDesk.destinationState')}</label>
+                        <input type="text" maxLength={2} value={destinationState} onChange={(e) => setDestinationState(e.target.value.toUpperCase())} className="w-full border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-telivity-teal uppercase bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-telivity-slate mb-1">{t('frontDesk.destinationCountry')}</label>
+                        <input type="text" maxLength={2} value={destinationCountry} onChange={(e) => setDestinationCountry(e.target.value.toUpperCase())} placeholder="BR" className="w-full border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-telivity-teal uppercase bg-white" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Room Assignment & Confirmation */}
+              <div className="p-4 bg-gray-50/70 rounded-xl border border-gray-100 space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-telivity-navy mb-1">
+                    {t('frontDesk.assignRoom')}
+                  </label>
+                  <select
+                    value={selectedRoom}
+                    onChange={(e) => setSelectedRoom(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-telivity-teal focus:ring-2 focus:ring-telivity-teal/10 transition-all bg-white"
+                  >
+                    <option value="">{t('frontDesk.usePreAssignedRoom')}</option>
+                    {roomList.map((room) => (
+                      <option key={room.id} value={room.id}>
+                        {t('frontDesk.roomNumber', {
+                          number: room.roomNumber ?? room.number ?? room.id.slice(0, 8),
+                        })}{' '}
+                        {room.roomTypeName ? `(${room.roomTypeName})` : ''} —{' '}
+                        {formatLabel(room.status, t)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <label className="flex items-center gap-2 text-xs font-semibold text-telivity-navy pt-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={registrationSigned}
+                    onChange={(e) => setRegistrationSigned(e.target.checked)}
+                    className="rounded border-gray-300 text-telivity-teal focus:ring-telivity-teal"
+                  />
+                  {t('frontDesk.registrationSigned')}
+                  {registrationRequired && (
+                    <span className="text-telivity-orange text-[11px]">({t('common.required')})</span>
+                  )}
+                </label>
+              </div>
             </div>
 
             <div className="flex gap-3 pt-2">
@@ -869,6 +989,14 @@ export default function FrontDesk() {
                     registrationData: {
                       nationality: regNationality,
                       address: regAddress,
+                      travelReason,
+                      transportationMode,
+                      originCity,
+                      originState,
+                      originCountry,
+                      destinationCity,
+                      destinationState,
+                      destinationCountry,
                     },
                   })
                 }

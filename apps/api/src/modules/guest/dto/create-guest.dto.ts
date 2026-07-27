@@ -70,6 +70,29 @@ export class CreateGuestDto {
   @IsDateString()
   dateOfBirth?: string;
 
+  @ApiPropertyOptional({ example: 'male', enum: ['male', 'female', 'other'] })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  gender?: string;
+
+  @ApiPropertyOptional({ example: 'Engineer' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  profession?: string;
+
+  @ApiPropertyOptional({ example: '123.456.789-00', description: 'Generic tax or national ID (CPF, SSN, NIF, etc.)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  taxId?: string;
+
+  @ApiPropertyOptional({ example: { idIssuer: 'SSP', idIssuerState: 'SP', neighborhood: 'Centro' }, description: 'Jurisdiction-specific registration extension' })
+  @IsOptional()
+  @IsObject()
+  registrationData?: Record<string, unknown>;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

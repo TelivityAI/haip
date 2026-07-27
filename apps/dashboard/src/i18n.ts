@@ -30,7 +30,7 @@ export const SUPPORTED_LANGUAGES = [
 const SUPPORTED_LOCALES = [...SUPPORTED_LANGUAGES.map((l) => l.code), 'pt'] as const;
 
 // Migrate legacy locale code saved before pt-BR was registered correctly.
-if (typeof localStorage !== 'undefined' && localStorage.getItem('haip.lang') === 'ptBR') {
+if (typeof window !== 'undefined' && typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function' && localStorage.getItem('haip.lang') === 'ptBR') {
   localStorage.setItem('haip.lang', 'pt-BR');
 }
 

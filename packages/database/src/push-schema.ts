@@ -176,6 +176,10 @@ async function main() {
       id_expiry timestamptz,
       nationality varchar(2),
       date_of_birth timestamp,
+      gender varchar(20),
+      profession varchar(100),
+      tax_id varchar(50),
+      registration_data jsonb,
       address_line_1 varchar(255),
       address_line_2 varchar(255),
       city varchar(100),
@@ -198,6 +202,10 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE guests ADD COLUMN IF NOT EXISTS gender varchar(20)`,
+    `ALTER TABLE guests ADD COLUMN IF NOT EXISTS profession varchar(100)`,
+    `ALTER TABLE guests ADD COLUMN IF NOT EXISTS tax_id varchar(50)`,
+    `ALTER TABLE guests ADD COLUMN IF NOT EXISTS registration_data jsonb`,
     // rate_plans
     `CREATE TABLE IF NOT EXISTS rate_plans (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
