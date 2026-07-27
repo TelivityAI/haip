@@ -8,6 +8,8 @@ import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
+import FindGuest from '../components/guests/FindGuest';
+import type { Guest } from '../types/guest';
 
 type Tab = 'arrivals' | 'in-house' | 'departures';
 
@@ -91,9 +93,7 @@ export default function FrontDesk() {
   const [moveReason, setMoveReason] = useState('');
 
   // Walk-in form
-  const [wiFirst, setWiFirst] = useState('');
-  const [wiLast, setWiLast] = useState('');
-  const [wiEmail, setWiEmail] = useState('');
+  const [wiGuest, setWiGuest] = useState<Guest | null>(null);
   const [wiRoomTypeId, setWiRoomTypeId] = useState('');
   const [wiRatePlanId, setWiRatePlanId] = useState('');
   const [wiRoomId, setWiRoomId] = useState('');
@@ -310,17 +310,12 @@ export default function FrontDesk() {
     mutationFn: async () => {
       requirePropertyId(propertyId);
       setWiError('');
-      if (!wiFirst.trim() || !wiLast.trim() || !wiRoomTypeId || !wiRatePlanId || !wiRoomId) {
+      if (!wiGuest?.id || !wiRoomTypeId || !wiRatePlanId || !wiRoomId) {
         throw new Error(t('frontDesk.walkInRequired'));
       }
       const plans: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
       const plan = plans.find((p) => p.id === wiRatePlanId);
-      const guestRes = await api.post('/v1/guests', {
-        firstName: wiFirst.trim(),
-        lastName: wiLast.trim(),
-        email: wiEmail.trim() || undefined,
-      });
-      const guestId = guestRes.data.id;
+      const guestId = wiGuest.id;
       const resCreate = await api.post('/v1/reservations', {
         propertyId,
         guestId,
@@ -354,7 +349,7 @@ export default function FrontDesk() {
         arrivalDate: today,
         departureDate: tomorrow,
         roomId: wiRoomId,
-        guestName: `${wiFirst} ${wiLast}`.trim(),
+        guestName: wiGuest ? `${wiGuest.firstName} ${wiGuest.lastName}`.trim() : '—',
       };
       invalidateAll();
       setWalkInOpen(false);
@@ -400,9 +395,7 @@ export default function FrontDesk() {
   }
 
   function resetWalkIn() {
-    setWiFirst('');
-    setWiLast('');
-    setWiEmail('');
+    setWiGuest(null);
     setWiRoomTypeId('');
     setWiRatePlanId('');
     setWiRoomId('');
@@ -507,18 +500,16 @@ export default function FrontDesk() {
           <button
             key={tb.key}
             onClick={() => setTab(tb.key)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              tab === tb.key
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${tab === tb.key
                 ? 'bg-telivity-teal text-white'
                 : 'text-telivity-slate hover:bg-telivity-light-grey'
-            }`}
+              }`}
           >
             <tb.icon size={16} />
             {tb.label}
             <span
-              className={`px-1.5 py-0.5 rounded-full text-xs ${
-                tab === tb.key ? 'bg-white/20' : 'bg-telivity-light-grey'
-              }`}
+              className={`px-1.5 py-0.5 rounded-full text-xs ${tab === tb.key ? 'bg-white/20' : 'bg-telivity-light-grey'
+                }`}
             >
               {tb.count}
             </span>
@@ -1103,38 +1094,11 @@ export default function FrontDesk() {
         wide
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-                {t('frontDesk.firstName')}
-              </label>
-              <input
-                value={wiFirst}
-                onChange={(e) => setWiFirst(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-                {t('frontDesk.lastName')}
-              </label>
-              <input
-                value={wiLast}
-                onChange={(e) => setWiLast(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-              {t('frontDesk.emailOptional')}
-            </label>
-            <input
-              value={wiEmail}
-              onChange={(e) => setWiEmail(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
+          <FindGuest
+            label={t('reservations.guest')}
+            selectedGuest={wiGuest}
+            onSelectGuest={setWiGuest}
+          />
           <div>
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
               {t('frontDesk.roomType')}

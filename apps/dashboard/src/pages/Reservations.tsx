@@ -19,6 +19,8 @@ import { useProperty } from '../context/PropertyContext';
 import { useToast } from '../components/ui/Toast';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
+import FindGuest from '../components/guests/FindGuest';
+import type { Guest } from '../types/guest';
 
 interface Reservation {
   id: string;
@@ -140,10 +142,7 @@ function ReservationList() {
   const [availResults, setAvailResults] = useState<{ roomTypeId: string; roomTypeName: string; ratePlans: { id: string; name: string; rate: number }[] }[]>([]);
   const [selectedRoomType, setSelectedRoomType] = useState('');
   const [selectedRatePlan, setSelectedRatePlan] = useState('');
-  const [guestFirstName, setGuestFirstName] = useState('');
-  const [guestLastName, setGuestLastName] = useState('');
-  const [guestEmail, setGuestEmail] = useState('');
-  const [guestPhone, setGuestPhone] = useState('');
+  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
 
   const params: Record<string, string> = {};
   if (propertyId) params.propertyId = propertyId;
@@ -215,18 +214,15 @@ function ReservationList() {
   const createResMutation = useMutation({
     mutationFn: async () => {
       requirePropertyId(propertyId);
-      const guestRes = await api.post('/v1/guests', {
-        firstName: guestFirstName,
-        lastName: guestLastName,
-        email: guestEmail || undefined,
-        phone: guestPhone || undefined,
-      });
-      const guestId = guestRes.data?.id ?? guestRes.data?.data?.id;
+      if (!selectedGuest?.id) {
+        throw new Error('Guest is required');
+      }
+      const guestId = selectedGuest.id;
       const nights = Math.max(
         1,
         Math.round(
           (new Date(createCheckOut).getTime() - new Date(createCheckIn).getTime()) /
-            (1000 * 60 * 60 * 24),
+          (1000 * 60 * 60 * 24),
         ),
       );
       const selectedPlan = availResults
@@ -333,10 +329,8 @@ function ReservationList() {
     setAvailResults([]);
     setSelectedRoomType('');
     setSelectedRatePlan('');
-    setGuestFirstName('');
-    setGuestLastName('');
-    setGuestEmail('');
-    setGuestPhone('');
+    setSelectedGuest(null);
+    setCreateStep(0);
   }
 
   function guestName(r: Reservation) {
@@ -388,10 +382,12 @@ function ReservationList() {
     { accessorKey: 'roomNumber', header: t('reservations.roomNumber'), cell: ({ getValue }) => (getValue() as string) ?? '—', size: 80 },
     { accessorKey: 'arrivalDate', header: t('reservations.arrival'), size: 110 },
     { accessorKey: 'departureDate', header: t('reservations.departure'), size: 110 },
-    { accessorKey: 'status', header: t('reservations.status'), cell: ({ getValue }) => {
-      const status = getValue() as string;
-      return <StatusBadge status={status} label={t(`reservations.statuses.${status}`, { defaultValue: status })} />;
-    }, size: 120 },
+    {
+      accessorKey: 'status', header: t('reservations.status'), cell: ({ getValue }) => {
+        const status = getValue() as string;
+        return <StatusBadge status={status} label={t(`reservations.statuses.${status}`, { defaultValue: status })} />;
+      }, size: 120
+    },
     { accessorKey: 'totalAmount', header: t('reservations.total'), cell: ({ getValue }) => getValue() != null ? `$${Number(getValue()).toFixed(2)}` : '—', size: 100 },
     { accessorKey: 'source', header: t('reservations.source'), cell: ({ getValue }) => (getValue() as string) ?? 'direct', size: 90 },
     {
@@ -760,27 +756,13 @@ function ReservationList() {
         {createStep === 2 && (
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-telivity-navy">{t('reservations.guestDetailsStep')}</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.firstName')} *</label>
-                <input type="text" value={guestFirstName} onChange={(e) => setGuestFirstName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.lastName')} *</label>
-                <input type="text" value={guestLastName} onChange={(e) => setGuestLastName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.email')}</label>
-                <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.phone')}</label>
-                <input type="tel" value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-              </div>
-            </div>
+            <FindGuest
+              selectedGuest={selectedGuest}
+              onSelectGuest={setSelectedGuest}
+            />
             <div className="flex gap-3">
               <button onClick={() => setCreateStep(1)} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold">{t('reservations.back')}</button>
-              <button onClick={() => setCreateStep(3)} disabled={!guestFirstName || !guestLastName} className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('reservations.review')}</button>
+              <button onClick={() => setCreateStep(3)} disabled={!selectedGuest} className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('reservations.review')}</button>
             </div>
           </div>
         )}
@@ -789,10 +771,10 @@ function ReservationList() {
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-telivity-navy">{t('reservations.reviewConfirmStep')}</h3>
             <div className="bg-telivity-light-grey rounded-lg p-4 space-y-2 text-sm">
-              <p><span className="text-telivity-mid-grey">{t('reservations.guest')}:</span> {guestFirstName} {guestLastName}</p>
+              <p><span className="text-telivity-mid-grey">{t('reservations.guest')}:</span> {selectedGuest?.firstName} {selectedGuest?.lastName}</p>
               <p><span className="text-telivity-mid-grey">{t('reservations.dates')}:</span> {createCheckIn} → {createCheckOut}</p>
               <p><span className="text-telivity-mid-grey">{t('reservations.occupancy')}:</span> {t('reservations.occupancySummary', { adults: createAdults, children: createChildren })}</p>
-              {guestEmail && <p><span className="text-telivity-mid-grey">{t('common.email')}:</span> {guestEmail}</p>}
+              {selectedGuest?.email && <p><span className="text-telivity-mid-grey">{t('common.email')}:</span> {selectedGuest.email}</p>}
             </div>
             <div className="flex gap-3">
               <button onClick={() => setCreateStep(2)} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold">{t('reservations.back')}</button>

@@ -1,0 +1,37 @@
+export interface Guest {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phone?: string;
+  vipLevel?: string;
+  isDnr?: boolean;
+  dnrReason?: string;
+  dnrDate?: string;
+  totalStays?: number;
+  lastVisit?: string;
+  preferences?: Record<string, unknown>;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  companyName?: string;
+  idType?: string;
+  idNumber?: string;
+  idCountry?: string;
+  idExpiry?: string;
+  gender?: string;
+  profession?: string;
+  taxId?: string;
+  registrationData?: Record<string, unknown>;
+  gdprConsentMarketing?: boolean;
+  gdprConsentDate?: string;
+  loyaltyNumber?: string;
+  dateOfBirth?: string;
+  nationality?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  stateProvince?: string;
+  postalCode?: string;
+  countryCode?: string;
+}
