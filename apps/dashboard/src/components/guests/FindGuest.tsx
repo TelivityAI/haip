@@ -125,7 +125,7 @@ export default function FindGuest({
               onClick={() => setCreateModalOpen(true)}
               className="absolute right-1.5 flex items-center gap-1 bg-telivity-teal/10 hover:bg-telivity-teal text-telivity-teal hover:text-white px-2.5 py-1 rounded-md text-xs font-semibold transition-colors"
             >
-              <Plus size={14} /> {t('guests.quickCreate')}
+              <Plus size={14} /> {t('guests.newGuest')}
             </button>
           </div>
 
