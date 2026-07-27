@@ -43,11 +43,6 @@ interface Reservation {
   createdAt?: string;
 }
 
-function errMsg(e: unknown): string {
-  const anyE = e as { response?: { data?: { message?: string } }; message?: string };
-  const m = anyE?.response?.data?.message ?? anyE?.message;
-  return Array.isArray(m) ? m.join(', ') : (m ?? 'Request failed');
-}
 
 /** Statuses that a bulk action can still move. */
 const BULK_ELIGIBLE: Record<'check_in' | 'check_out' | 'cancel', string[]> = {
@@ -272,7 +267,6 @@ function ReservationList() {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
       toast('success', t('reservations.noShowMarked'));
     },
-    onError: (e) => toast('error', `${t('reservations.noShowFailed')}: ${errMsg(e)}`),
   });
 
   // Only reservations whose current status the chosen action can actually move.
@@ -307,7 +301,6 @@ function ReservationList() {
       setBulkAction('');
       setBulkReason('');
     },
-    onError: (e) => toast('error', `${t('reservations.bulkFailed')}: ${errMsg(e)}`),
   });
 
   const importMutation = useMutation({
@@ -321,7 +314,6 @@ function ReservationList() {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
       setImportResult(res.data?.data ?? res.data ?? null);
     },
-    onError: (e) => toast('error', `${t('reservations.importFailed')}: ${errMsg(e)}`),
   });
 
   function resetCreateForm() {
@@ -962,7 +954,6 @@ function UnassignedQueue() {
       setAssignRoomId('');
       toast('success', t('reservations.roomAssigned'));
     },
-    onError: (e) => toast('error', `${t('reservations.assignFailed')}: ${errMsg(e)}`),
   });
 
   if (!propertyId) {

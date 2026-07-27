@@ -383,5 +383,9 @@
       "flat": "Pauschal",
       "percentage": "Prozentsatz"
     }
+  },
+  "errors": {
+    "apiError": "Anfrage fehlgeschlagen",
+    "networkError": "Netzwerkfehler. Bitte überprüfen Sie Ihre Verbindung."
   }
 }

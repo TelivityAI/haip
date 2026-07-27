@@ -14,13 +14,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <PropertyProvider>
-            <ToastProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <PropertyProvider>
               <App />
-            </ToastProvider>
-          </PropertyProvider>
-        </AuthProvider>
+            </PropertyProvider>
+          </AuthProvider>
+        </ToastProvider>
       </QueryClientProvider>
     </BrowserRouter>
   </React.StrictMode>,

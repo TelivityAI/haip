@@ -116,7 +116,6 @@ function RoomDetailPanel({
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       toast('success', t('rooms.featuresUpdated'));
     },
-    onError: () => toast('error', t('rooms.featuresUpdateFailed')),
   });
 
   const addAmenity = () => {

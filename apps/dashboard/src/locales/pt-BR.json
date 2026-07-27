@@ -1565,5 +1565,9 @@
       "flat": "Fixo",
       "percentage": "Percentual"
     }
+  },
+  "errors": {
+    "apiError": "Falha na requisição",
+    "networkError": "Erro de rede. Verifique sua conexão."
   }
 }

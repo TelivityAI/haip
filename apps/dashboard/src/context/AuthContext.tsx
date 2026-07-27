@@ -10,6 +10,8 @@ import {
 import { keycloak, AUTH_ENABLED } from '../lib/keycloak';
 import { api } from '../lib/api';
 import { reconnectSocket } from '../lib/socket';
+import { useToast } from '../components/ui/Toast';
+import { useTranslation } from 'react-i18next';
 
 export interface AuthUser {
   sub: string;
@@ -66,6 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(AUTH_ENABLED);
+  const { toast } = useToast();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!AUTH_ENABLED) return;
@@ -109,22 +113,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       });
 
-    // Intercept 401 responses — redirect to login
+    return () => {
+      if (refreshInterval) clearInterval(refreshInterval);
+    };
+  }, []);
+
+  // Intercept response errors globally: handle 401 login redirects and toast API errors
+  useEffect(() => {
     const interceptor = api.interceptors.response.use(
       (response) => response,
       (error) => {
         if (error.response?.status === 401 && AUTH_ENABLED) {
           keycloak.login();
+          return Promise.reject(error);
         }
+
+        // Check if caller or query wants to suppress error toasts
+        const config = (error as any).config;
+        if (config?.skipErrorToast || config?.isSilentPoll) {
+          return Promise.reject(error);
+        }
+
+        // Automatically suppress background polling endpoints
+        const url = config?.url || '';
+        if (url.includes('/staff-notifications')) {
+          return Promise.reject(error);
+        }
+
+        // Extract error message from NestJS exception payload or standard Error
+        const anyE = error as { response?: { data?: { message?: string | string[] }; statusText?: string }; message?: string };
+        const m = anyE?.response?.data?.message ?? anyE?.message;
+        const errorMessage = Array.isArray(m)
+          ? m.join(', ')
+          : (m ?? anyE?.response?.statusText ?? t('errors.apiError', 'Request failed'));
+
+        toast('error', errorMessage);
         return Promise.reject(error);
       },
     );
 
     return () => {
-      if (refreshInterval) clearInterval(refreshInterval);
       api.interceptors.response.eject(interceptor);
     };
-  }, []);
+  }, [toast, t]);
 
   const logout = useCallback(() => {
     if (AUTH_ENABLED) {

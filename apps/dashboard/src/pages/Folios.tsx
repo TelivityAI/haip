@@ -71,11 +71,6 @@ interface Payment {
   createdAt: string;
 }
 
-function errMsg(e: unknown): string {
-  const anyE = e as { response?: { data?: { message?: string } }; message?: string };
-  const m = anyE?.response?.data?.message ?? anyE?.message;
-  return Array.isArray(m) ? m.join(', ') : (m ?? 'Request failed');
-}
 
 const REFUNDABLE_STATUSES = new Set(['captured', 'settled', 'partially_refunded']);
 
@@ -227,7 +222,6 @@ function SplitFolioPanel({
       setRulePriority('0');
       toast('success', t('folios.routingRuleCreated'));
     },
-    onError: (e) => toast('error', `${t('folios.routingRuleFailed')}: ${errMsg(e)}`),
   });
 
   const moveTransactions = useMutation({
@@ -245,7 +239,6 @@ function SplitFolioPanel({
       const moved = res.data?.moved ?? res.data?.data?.moved;
       toast('success', moved != null ? t('folios.movedCount', { count: moved }) : t('folios.moveSuccess'));
     },
-    onError: (e) => toast('error', `${t('folios.moveFailed')}: ${errMsg(e)}`),
   });
 
   const createSplitFolio = useMutation({
@@ -262,7 +255,6 @@ function SplitFolioPanel({
       setSplitOpen(false);
       toast('success', t('folios.splitFolioCreated'));
     },
-    onError: (e) => toast('error', `${t('folios.splitFolioFailed')}: ${errMsg(e)}`),
   });
 
   if (!reservationId) {
@@ -533,7 +525,6 @@ function FolioDetail() {
   const reverseMutation = useMutation({
     mutationFn: (chargeId: string) => api.post(`/v1/folios/${id}/charges/${chargeId}/reverse`),
     onSuccess: invalidate,
-    onError: (e) => toast('error', `${t('folios.reverseFailed')}: ${errMsg(e)}`),
   });
 
   const recordPaymentMutation = useMutation({
@@ -574,7 +565,6 @@ function FolioDetail() {
       setAuthAmount('');
       toast('success', t('folios.authorizeSuccess'));
     },
-    onError: (e) => toast('error', `${t('folios.authorizeFailed')}: ${errMsg(e)}`),
   });
 
   const captureMutation = useMutation({
@@ -583,7 +573,6 @@ function FolioDetail() {
       invalidate();
       toast('success', t('folios.captureSuccess'));
     },
-    onError: (e) => toast('error', `${t('folios.captureFailed')}: ${errMsg(e)}`),
   });
 
   const voidMutation = useMutation({
@@ -592,7 +581,6 @@ function FolioDetail() {
       invalidate();
       toast('success', t('folios.voidSuccess'));
     },
-    onError: (e) => toast('error', `${t('folios.voidFailed')}: ${errMsg(e)}`),
   });
 
   const refundMutation = useMutation({
@@ -604,7 +592,6 @@ function FolioDetail() {
       setRefundAmount('');
       toast('success', t('folios.refundSuccess'));
     },
-    onError: (e) => toast('error', `${t('folios.refundFailed')}: ${errMsg(e)}`),
   });
 
   /**
@@ -627,7 +614,6 @@ function FolioDetail() {
       const applied = res.data?.op ?? res.data?.data?.op;
       toast('success', applied ? t('folios.correctApplied', { op: applied }) : t('folios.correctSuccess'));
     },
-    onError: (e) => toast('error', `${t('folios.correctFailed')}: ${errMsg(e)}`),
   });
 
   const settleMutation = useMutation({ mutationFn: () => api.patch(`/v1/folios/${id}/settle`), onSuccess: invalidate });
@@ -649,7 +635,6 @@ function FolioDetail() {
       setArLedgerId('');
       toast('success', t('folios.transferredToAr'));
     },
-    onError: (e) => toast('error', `${t('folios.transferToArFailed')}: ${errMsg(e)}`),
   });
 
   if (!folio) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.loading')}</div>;

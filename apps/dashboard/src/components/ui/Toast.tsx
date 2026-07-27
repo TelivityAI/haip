@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { CheckCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -23,9 +23,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const toast = useCallback((type: ToastType, message: string) => {
     const id = nextId++;
     setToasts((prev) => [...prev, { id, type, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
   }, []);
 
   const dismiss = useCallback((id: number) => {
@@ -66,18 +63,84 @@ const ICON_COLORS = {
   info: 'text-telivity-deep-blue',
 };
 
+const BAR_COLORS = {
+  success: 'bg-telivity-dark-teal',
+  error: 'bg-telivity-orange',
+  info: 'bg-telivity-deep-blue',
+};
+
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
   const Icon = ICONS[toast.type];
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const remainingRef = useRef(4000);
+  const startRef = useRef(Date.now());
+  const onDismissRef = useRef(onDismiss);
+  const [progress, setProgress] = useState(100);
+
+  useEffect(() => {
+    onDismissRef.current = onDismiss;
+  }, [onDismiss]);
+
+  const startTimer = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    startRef.current = Date.now();
+    timerRef.current = setTimeout(() => {
+      onDismissRef.current();
+    }, remainingRef.current);
+    progressIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - startRef.current;
+      const rem = Math.max(0, remainingRef.current - elapsed);
+      setProgress((rem / 4000) * 100);
+    }, 50);
+  }, []);
+
+  const pauseTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      const elapsed = Date.now() - startRef.current;
+      remainingRef.current = Math.max(0, remainingRef.current - elapsed);
+      setProgress((remainingRef.current / 4000) * 100);
+    }
+  }, []);
+
+  useEffect(() => {
+    startTimer();
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    };
+  }, [startTimer]);
+
   return (
     <div
-      className={`flex items-start gap-3 px-4 py-3 bg-white rounded-xl shadow-lg border-l-4 ${STYLES[toast.type]} animate-slide-in`}
+      className={`flex items-start gap-3 px-4 py-3 bg-white rounded-xl shadow-lg border-l-4 relative overflow-hidden ${STYLES[toast.type]} animate-slide-in`}
       role="alert"
+      onMouseEnter={pauseTimer}
+      onMouseLeave={startTimer}
     >
       <Icon size={18} className={`mt-0.5 flex-shrink-0 ${ICON_COLORS[toast.type]}`} aria-hidden="true" />
       <p className="text-sm text-telivity-navy flex-1">{toast.message}</p>
       <button onClick={onDismiss} className="p-0.5 hover:bg-black/5 rounded" aria-label="Dismiss">
         <X size={14} className="text-telivity-mid-grey" />
       </button>
+      <div
+        className={`absolute bottom-0 left-0 h-1 transition-all duration-75 ease-linear ${BAR_COLORS[toast.type]}`}
+        style={{ width: `${progress}%` }}
+        role="progressbar"
+        aria-valuenow={Math.round(progress)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Toast timeout"
+      />
     </div>
   );
 }
+
+

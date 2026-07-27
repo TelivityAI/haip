@@ -29,7 +29,7 @@ export default function NotificationBell({ className }: NotificationBellProps) {
     queryKey: ['staff-notifications', propertyId],
     queryFn: () =>
       api
-        .get('/v1/staff-notifications', { params: { propertyId } })
+        .get('/v1/staff-notifications', { params: { propertyId }, skipErrorToast: true })
         .then((r) => (r.data?.data ?? r.data ?? []) as StaffNotification[]),
     enabled: !!propertyId && !isPortfolioMode,
     refetchInterval: 60_000,
@@ -39,7 +39,7 @@ export default function NotificationBell({ className }: NotificationBellProps) {
     queryKey: ['staff-notifications-unread', propertyId],
     queryFn: () =>
       api
-        .get('/v1/staff-notifications/unread-count', { params: { propertyId } })
+        .get('/v1/staff-notifications/unread-count', { params: { propertyId }, skipErrorToast: true })
         .then((r) => r.data?.count ?? r.data ?? 0),
     enabled: !!propertyId && !isPortfolioMode,
   });

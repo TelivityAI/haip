@@ -36,11 +36,6 @@ interface ImportResult {
   results: RowResult[];
 }
 
-function errMsg(e: unknown): string {
-  const anyE = e as { response?: { data?: { message?: string } }; message?: string };
-  const m = anyE?.response?.data?.message ?? anyE?.message;
-  return Array.isArray(m) ? m.join(', ') : (m ?? 'Request failed');
-}
 
 const UNMAPPED = '';
 
@@ -196,7 +191,6 @@ export default function Import() {
         );
       }
     },
-    onError: (e) => toast('error', `Import failed: ${errMsg(e)}`),
   });
 
   function downloadTemplate() {
@@ -214,7 +208,7 @@ export default function Import() {
         a.remove();
         URL.revokeObjectURL(url);
       })
-      .catch((e) => toast('error', `Could not download template: ${errMsg(e)}`));
+      .catch(() => {});
   }
 
   if (!propertyId) {
