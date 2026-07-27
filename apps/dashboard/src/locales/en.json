@@ -671,6 +671,7 @@
   },
   "guests": {
     "ageYears": "{{age}} years",
+    "changeGuest": "Change selected guest",
     "company": "Company",
     "confirmDeletion": "Confirm Guest Deletion",
     "confirmDeletionPrompt": "Are you absolutely sure? This cannot be undone.",
@@ -765,9 +766,12 @@
     "neighborhood": "Neighborhood",
     "newGuest": "New Guest",
     "noGuestsFound": "No guests found",
+    "noResultsCreate": "No guests found. Click below to register a new guest.",
     "noStayHistory": "No stay history",
     "none": "None",
     "permanentlyDelete": "Permanently Delete",
+    "quickCreate": "+ New Guest",
+    "searchOrRegister": "Search by name, email, tax ID, phone...",
     "placeholders": {
       "address": "123 Main Street",
       "addressLine2": "Apt, Suite, Unit",
