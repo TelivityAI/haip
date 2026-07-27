@@ -63,6 +63,10 @@ const AGENT_LABEL_KEYS: Record<string, string> = {
   night_audit: 'nightAuditAnomaly',
   housekeeping: 'housekeepingOptimizer',
   cancellation: 'cancellationPredictor',
+  revenue_manager: 'revenueManager',
+  group_pickup: 'groupPickup',
+  ar_collections: 'arCollections',
+  deposit_risk: 'depositRisk',
 };
 
 function agentLabel(t: TFunction, agentType: string) {
@@ -75,7 +79,25 @@ function decisionLabel(t: TFunction, decisionType: string) {
   return key ? t(`revenue.decisionTypes.${key}`) : decisionType.replace(/_/g, ' ');
 }
 
-const AGENT_TYPES = ['demand_forecast', 'pricing', 'channel_mix', 'overbooking', 'night_audit', 'housekeeping', 'cancellation'];
+/**
+ * Agents surfaced on the Revenue console. guest_comms / review_response are
+ * driven from the Communications and Reviews pages, so they stay off this list.
+ * deposit_risk is a valid agent type with no implementation yet — it renders
+ * with Run Now disabled (hasImplementation === false) rather than being hidden.
+ */
+const AGENT_TYPES = [
+  'demand_forecast',
+  'pricing',
+  'channel_mix',
+  'overbooking',
+  'night_audit',
+  'housekeeping',
+  'cancellation',
+  'revenue_manager',
+  'group_pickup',
+  'ar_collections',
+  'deposit_risk',
+];
 
 // ---------------------------------------------------------------------------
 // Revenue Dashboard (top KPIs)
@@ -177,15 +199,17 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
   const { data: allDecisions = [] } = useQuery({
     queryKey: ['agent-decisions', propertyId],
     queryFn: async () => {
-      const results: AgentDecision[] = [];
-      for (const type of AGENT_TYPES) {
-        try {
-          const res = await api.get(`/v1/agents/${propertyId}/${type}/decisions`, { params: { limit: 20 } });
-          const items = res.data?.data ?? res.data ?? [];
-          results.push(...items);
-        } catch { /* agent may not exist */ }
-      }
-      return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const perAgent = await Promise.all(
+        AGENT_TYPES.map((type) =>
+          api
+            .get(`/v1/agents/${propertyId}/${type}/decisions`, { params: { limit: 20 } })
+            .then((res) => (res.data?.data ?? res.data ?? []) as AgentDecision[])
+            .catch(() => [] as AgentDecision[]), // agent may have no config/decisions yet
+        ),
+      );
+      return perAgent
+        .flat()
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     },
     enabled: !!propertyId,
   });
@@ -211,10 +235,10 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
-      <div className="flex items-center gap-3 mb-4">
-        <Brain size={20} className="text-telivity-teal" />
+      <div className="flex items-start gap-3 mb-4 flex-wrap">
+        <Brain size={20} className="text-telivity-teal shrink-0 mt-0.5" />
         <h2 className="text-lg font-semibold text-telivity-navy">{t('revenue.aiRecommendations')}</h2>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2 justify-end">
           {['all', ...AGENT_TYPES].map((agentType) => (
             <button
               key={agentType}
@@ -332,14 +356,15 @@ function PerformanceSection({ propertyId }: { propertyId: string }) {
   const { data: performances = [] } = useQuery({
     queryKey: ['agent-performance', propertyId],
     queryFn: async () => {
-      const results: AgentPerformance[] = [];
-      for (const type of AGENT_TYPES) {
-        try {
-          const res = await api.get(`/v1/agents/${propertyId}/${type}/performance`);
-          results.push(res.data?.data ?? res.data);
-        } catch { /* skip */ }
-      }
-      return results;
+      const results = await Promise.all(
+        AGENT_TYPES.map((type) =>
+          api
+            .get(`/v1/agents/${propertyId}/${type}/performance`)
+            .then((res) => (res.data?.data ?? res.data) as AgentPerformance)
+            .catch(() => null),
+        ),
+      );
+      return results.filter((p): p is AgentPerformance => p != null);
     },
     enabled: !!propertyId,
   });
