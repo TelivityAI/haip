@@ -1651,7 +1651,24 @@
     }
   },
   "errors": {
-    "apiError": "Request failed",
-    "networkError": "Network error. Please check your connection."
+    "Request failed": "Request failed",
+    "Network error. Please check your connection.": "Network error. Please check your connection.",
+    "Minimum length of stay is 2 night(s)": "Minimum length of stay is 2 night(s)",
+    "Check-out must be after check-in": "Check-out must be after check-in",
+    "Direct booking is not enabled for this property": "Direct booking is not enabled for this property",
+    "No availability for the requested room type and dates": "No availability for the requested room type and dates",
+    "Rate plan does not apply to the selected room type": "Rate plan does not apply to the selected room type",
+    "No rows to import": "No rows to import",
+    "No rows to import (provide `csv` text or `rows`)": "No rows to import (provide `csv` text or `rows`)",
+    "A payment is required to confirm this booking": "A payment is required to confirm this booking",
+    "Reservation not found for this booking": "Reservation not found for this booking",
+    "This room type is not available for direct booking": "This room type is not available for direct booking",
+    "This rate is not available for direct booking": "This rate is not available for direct booking",
+    "Too many booking attempts": "Too many booking attempts",
+    "SMS rate limit exceeded for this property": "SMS rate limit exceeded for this property",
+    "Guest has not consented to marketing messages": "Guest has not consented to marketing messages",
+    "Bad Request": "Bad Request",
+    "Resource not found": "Resource not found",
+    "Action not permitted": "Action not permitted"
   }
 }

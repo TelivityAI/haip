@@ -1567,7 +1567,24 @@
     }
   },
   "errors": {
-    "apiError": "Falha na requisição",
-    "networkError": "Erro de rede. Verifique sua conexão."
+    "Request failed": "Falha na requisição",
+    "Network error. Please check your connection.": "Erro de rede. Verifique sua conexão.",
+    "Minimum length of stay is 2 night(s)": "A estadia mínima é de 2 noite(s)",
+    "Check-out must be after check-in": "O check-out deve ser após o check-in",
+    "Direct booking is not enabled for this property": "A reserva direta não está habilitada para esta propriedade",
+    "No availability for the requested room type and dates": "Sem disponibilidade para o tipo de quarto e datas solicitados",
+    "Rate plan does not apply to the selected room type": "O plano de tarifas não se aplica ao tipo de quarto selecionado",
+    "No rows to import": "Nenhuma linha para importar",
+    "No rows to import (provide `csv` text or `rows`)": "Nenhuma linha para importar (forneça texto `csv` ou `rows`)",
+    "A payment is required to confirm this booking": "É necessário um pagamento para confirmar esta reserva",
+    "Reservation not found for this booking": "Reserva não encontrada para esta reserva",
+    "This room type is not available for direct booking": "Este tipo de quarto não está disponível para reserva direta",
+    "This rate is not available for direct booking": "Esta tarifa não está disponível para reserva direta",
+    "Too many booking attempts": "Muitas tentativas de reserva. Por favor, tente novamente mais tarde.",
+    "SMS rate limit exceeded for this property": "Limite de envio de SMS excedido para esta propriedade",
+    "Guest has not consented to marketing messages": "O hóspede não consentiu em receber mensagens de marketing",
+    "Bad Request": "Requisição inválida",
+    "Resource not found": "Recurso não encontrado",
+    "Action not permitted": "Ação não permitida"
   }
 }

@@ -13,6 +13,26 @@ import { reconnectSocket } from '../lib/socket';
 import { useToast } from '../components/ui/Toast';
 import { useTranslation } from 'react-i18next';
 
+interface ApiErrorResponse {
+  config?: {
+    url?: string;
+    method?: string;
+    skipErrorToast?: boolean;
+    isSilentPoll?: boolean;
+  };
+  response?: {
+    status?: number;
+    statusText?: string;
+    data?: {
+      message?: string | string[];
+      label?: string;
+      code?: string;
+    };
+  };
+  message?: string;
+  label?: string;
+}
+
 export interface AuthUser {
   sub: string;
   email: string;
@@ -128,26 +148,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return Promise.reject(error);
         }
 
-        // Check if caller or query wants to suppress error toasts
-        const config = (error as any).config;
+        const apiError = error as ApiErrorResponse;
+        const config = apiError.config;
         if (config?.skipErrorToast || config?.isSilentPoll) {
           return Promise.reject(error);
         }
 
-        // Automatically suppress background polling endpoints
         const url = config?.url || '';
         if (url.includes('/staff-notifications')) {
           return Promise.reject(error);
         }
 
-        // Extract error message from NestJS exception payload or standard Error
-        const anyE = error as { response?: { data?: { message?: string | string[] }; statusText?: string }; message?: string };
-        const m = anyE?.response?.data?.message ?? anyE?.message;
-        const errorMessage = Array.isArray(m)
+        const data = apiError.response?.data;
+        const m = data?.message ?? apiError.message;
+        const rawMessage = Array.isArray(m)
           ? m.join(', ')
-          : (m ?? anyE?.response?.statusText ?? t('errors.apiError', 'Request failed'));
+          : (m ?? apiError.response?.statusText ?? 'Request failed');
 
-        toast('error', errorMessage);
+        console.error('[API Error]', config?.method?.toUpperCase() || 'GET', url, rawMessage);
+
+        const displayMessage = String(t(`errors.${rawMessage}`, { defaultValue: rawMessage }));
+
+        toast('error', displayMessage);
         return Promise.reject(error);
       },
     );
