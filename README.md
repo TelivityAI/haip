@@ -57,8 +57,10 @@ HAIP is not a wrapper around another PMS. It's not a SaaS dashboard with "AI" sl
 graph TB
     subgraph Clients
         Dashboard["React Dashboard<br/>(Vite + TanStack Query)"]
+        BookingWidget["Booking Widget<br/>(Direct Booking Engine)"]
+        ChatGPT["ChatGPT Gateway<br/>(Connect GPT Actions)"]
         OTAIP["OTAIP Agents<br/>(Hotel Search · Rate Compare · Booking)"]
-        ThirdParty["Third-Party Integrations"]
+        ThirdParty["Third-Party Systems<br/>(Webhooks · Adapters)"]
     end
 
     subgraph HAIP["HAIP PMS (NestJS)"]
@@ -75,24 +77,32 @@ graph TB
             Room["Rooms<br/>Status State Machine"]
             Guest["Guest Profiles<br/>VIP + Preferences"]
             RatePlan["Rate Plans<br/>BAR + Derived + Restrictions"]
-            Payment["Payments<br/>Stripe Processing"]
+            Payment["Payments<br/>Pluggable Gateways"]
             Tax["Tax Engine<br/>Jurisdiction-based"]
             HK["Housekeeping<br/>Tasks + Checklists + Inspection"]
             NA["Night Audit<br/>Automated Day Close"]
             Channel["Channel Manager<br/>ARI Sync + Rate Parity"]
+            BookingEngine["Booking Engine<br/>Public API + Widget"]
+            Groups["Groups & Commercial<br/>Allotment + Rooming Lists"]
+            Accounting["Accounting & Cashier<br/>A/R · Deposits · GL"]
+            Fiscal["Fiscal & Compliance<br/>Invoicing + Guest Reg"]
+            Integrations["Integration Registry<br/>Adapters + Providers"]
+            DoorLocks["Door Locks<br/>Credential Hooks"]
             Reports["Reports<br/>Revenue + Occupancy + KPIs"]
         end
 
-        subgraph AI["AI Agent Framework"]
+        subgraph AI["AI Agent Framework — 12 agents"]
             direction LR
             RManager["Revenue Manager<br/>(Orchestrator)"]
             DemandAgent["Demand<br/>Forecasting"]
             PricingAgent["Dynamic<br/>Pricing"]
             ChannelMix["Channel-Mix<br/>Optimization"]
             Overbooking["Overbooking<br/>Management"]
+            GroupPickup["Group Pickup<br/>Forecasting"]
             AuditAnomaly["Night Audit<br/>Anomaly Detection"]
             HKOptimizer["Housekeeping<br/>Optimization"]
             CancelPredict["Cancellation<br/>Prediction"]
+            ARCollections["A/R Collections<br/>Prioritization"]
             GuestComms["Guest<br/>Communication"]
             ReviewResp["Review<br/>Response"]
         end
@@ -102,16 +112,19 @@ graph TB
 
     subgraph Infrastructure
         PG["PostgreSQL 16<br/>(Multi-tenant)"]
-        Redis["Redis 7<br/>(Cache + Pub/Sub)"]
+        Redis["Redis 7<br/>(Cache + Pub/Sub + Queues)"]
         Keycloak["Keycloak<br/>(Identity Provider)"]
-        Stripe["Stripe<br/>(Payment Processing)"]
-        OTAs["OTA Channels<br/>Booking.com · SiteMinder · 450+"]
+        Payments["Payment Gateways<br/>(Stripe + pluggable PSPs)"]
+        OTAs["OTA Channels<br/>Direct + Aggregators · 450+"]
     end
 
     Dashboard -->|HTTP + WebSocket| REST
     Dashboard -->|Real-time| WS
+    BookingWidget -->|HTTP| BookingEngine
+    ChatGPT -->|REST| Connect
     OTAIP -->|REST| Connect
     ThirdParty -->|REST| REST
+    ThirdParty -->|REST| Integrations
 
     Auth --> Keycloak
     REST --> Auth
@@ -122,7 +135,7 @@ graph TB
     AI --> PG
     AI --> Modules
     Channel --> OTAs
-    Payment --> Stripe
+    Payment --> Payments
     Webhook -->|POST| ThirdParty
     WS -->|Broadcast| Dashboard
 ```
