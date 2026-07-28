@@ -38,7 +38,7 @@ export const bookingSourceEnum = pgEnum('booking_source', [
 
 /**
  * Bookings — container for one or more reservations; identifies the booker.
- * Follows Apaleo/Mews pattern: booking is the wrapper, reservations are per-room.
+ * Booking is the party wrapper; reservations are per-room.
  */
 export const bookings = pgTable('bookings', {
   id: uuid('id').primaryKey().defaultRandom(),
