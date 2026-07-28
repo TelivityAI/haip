@@ -940,6 +940,31 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // Named occupants per reservation (primary + accompanying). Booking remains
+    // the multi-room wrapper; each reservation is still one physical unit.
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reservation_guest_role') THEN CREATE TYPE reservation_guest_role AS ENUM ('primary','accompanying'); END IF; END $$`,
+    `CREATE TABLE IF NOT EXISTS reservation_guests (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      reservation_id uuid NOT NULL REFERENCES reservations(id),
+      guest_id uuid NOT NULL REFERENCES guests(id),
+      role reservation_guest_role NOT NULL DEFAULT 'accompanying',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS reservation_guests_res_guest_uidx
+      ON reservation_guests (reservation_id, guest_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS reservation_guests_one_primary_uidx
+      ON reservation_guests (reservation_id) WHERE role = 'primary'`,
+    `CREATE INDEX IF NOT EXISTS reservation_guests_property_guest_idx
+      ON reservation_guests (property_id, guest_id)`,
+    // Backfill primary occupant from reservations.guest_id for existing rows.
+    `INSERT INTO reservation_guests (property_id, reservation_id, guest_id, role)
+      SELECT r.property_id, r.id, r.guest_id, 'primary'::reservation_guest_role
+      FROM reservations r
+      WHERE NOT EXISTS (
+        SELECT 1 FROM reservation_guests rg WHERE rg.reservation_id = r.id AND rg.guest_id = r.guest_id
+      )`,
     // media — polymorphic images for property / room types / rooms
     `CREATE TABLE IF NOT EXISTS media (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

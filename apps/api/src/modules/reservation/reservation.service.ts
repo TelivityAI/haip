@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { eq, and, sql, gte, lte, inArray, isNull } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { reservations, bookings, guests, rooms, roomTypes, ratePlans, properties, payments } from '@telivityhaip/database';
+import { reservations, reservationGuests, bookings, guests, rooms, roomTypes, ratePlans, properties, payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { assertTransition, type ReservationStatus } from './reservation-state-machine';
 import { AvailabilityService } from './availability.service';
@@ -150,6 +150,14 @@ export class ReservationService {
           status: 'pending',
         })
         .returning();
+
+      // Named occupants roster — primary mirrors reservations.guestId.
+      await tx.insert(reservationGuests).values({
+        propertyId: dto.propertyId,
+        reservationId: reservation.id,
+        guestId: dto.guestId,
+        role: 'primary',
+      });
 
       return { ...reservation, booking };
     });

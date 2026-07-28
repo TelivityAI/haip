@@ -12,6 +12,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { ReservationService } from './reservation.service';
+import { ReservationPartyService } from './reservation-party.service';
 import { AvailabilityService } from './availability.service';
 import { ReservationNotesService } from './reservation-notes.service';
 import { ReservationMessagingService } from './reservation-messaging.service';
@@ -33,12 +34,16 @@ import { ImportReservationsDto } from './dto/import-reservations.dto';
 import { CreateNoteDto } from './dto/create-note.dto';
 import { UpdateNoteDto } from './dto/update-note.dto';
 import { ComposeMessageDto } from './dto/compose-message.dto';
+import { AddReservationGuestDto } from './dto/add-reservation-guest.dto';
+import { SplitReservationDto } from './dto/split-reservation.dto';
+import { MoveReservationGuestDto } from './dto/move-reservation-guest.dto';
 
 @ApiTags('reservations')
 @Controller('reservations')
 export class ReservationController {
   constructor(
     private readonly reservationService: ReservationService,
+    private readonly partyService: ReservationPartyService,
     private readonly availabilityService: AvailabilityService,
     private readonly notesService: ReservationNotesService,
     private readonly messagingService: ReservationMessagingService,
@@ -207,6 +212,90 @@ export class ReservationController {
     @Body() dto: MoveRoomDto,
   ) {
     return this.reservationService.moveRoom(id, propertyId, dto);
+  }
+
+  // --- Multi-guest / multi-room party ops (booking wrapper pattern) ---
+
+  @Get(':id/guests')
+  @ApiOperation({ summary: 'List named guests (primary + accompanying) on a reservation' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 200, description: 'Named occupants' })
+  listReservationGuests(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.partyService.listGuests(id, propertyId);
+  }
+
+  @Post(':id/guests')
+  @Roles('admin', 'front_desk')
+  @ApiOperation({ summary: 'Add an accompanying guest to this room reservation' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 201, description: 'Guest added' })
+  addReservationGuest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: AddReservationGuestDto,
+  ) {
+    return this.partyService.addGuest(id, propertyId, dto);
+  }
+
+  @Delete(':id/guests/:guestId')
+  @Roles('admin', 'front_desk')
+  @ApiOperation({ summary: 'Remove an accompanying guest from this reservation' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 200, description: 'Guest removed' })
+  removeReservationGuest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('guestId', ParseUUIDPipe) guestId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.partyService.removeGuest(id, propertyId, guestId);
+  }
+
+  @Post(':id/guests/:guestId/move')
+  @Roles('admin', 'front_desk')
+  @ApiOperation({
+    summary: 'Move a named guest to another reservation on the same booking',
+  })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 200, description: 'Guest moved' })
+  moveReservationGuest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('guestId', ParseUUIDPipe) guestId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: MoveReservationGuestDto,
+  ) {
+    return this.partyService.moveGuest(id, propertyId, guestId, dto);
+  }
+
+  @Post(':id/split')
+  @Roles('admin', 'front_desk')
+  @ApiOperation({
+    summary:
+      'Split guests onto a new sibling reservation under the same booking (new room)',
+  })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 201, description: 'Split completed' })
+  splitReservation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: SplitReservationDto,
+  ) {
+    return this.partyService.split(id, propertyId, dto);
+  }
+
+  @Get(':id/booking-siblings')
+  @ApiOperation({
+    summary: 'List other active reservations on the same booking (sibling rooms)',
+  })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 200, description: 'Sibling reservations' })
+  listBookingSiblings(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.partyService.listBookingSiblings(id, propertyId);
   }
 
   @Patch(':id/cancel')
