@@ -36,7 +36,7 @@ type OccupantRow = {
 /**
  * Multi-guest / multi-room party operations.
  *
- * Domain (schema + Apaleo/Mews pattern already in HAIP):
+ * Domain (HAIP booking / reservation model):
  * - booking = wrapper for one or more room reservations
  * - reservation = one physical unit + named occupants
  * - reservations.guestId = primary/lead guest (synced with reservation_guests)
