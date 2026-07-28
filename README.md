@@ -419,9 +419,9 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 
 Operator notes for activating existing adapters, metasearch landings on the direct booking engine, and GDS via a channel manager: [`docs/channels/`](./docs/channels/).
 
-### Payments (Stripe)
+### Payments (pluggable gateways)
 - PCI DSS compliant — never stores raw card data
-- Full Stripe integration: PaymentIntents, customer creation, tokenization
+- Pluggable payment gateway adapters — **Stripe** is the default full path (PaymentIntents, customer creation, tokenization); additional PSP adapters are available via the integration registry
 - Authorization, capture, void, and refund workflows
 - Payment recording with method tracking (card, cash, bank transfer)
 - Linked to folio charges
@@ -717,7 +717,7 @@ haip/
 │   │   │       ├── health/         # Health check
 │   │   │       ├── housekeeping/   # Tasks, checklists, inspection, dashboard
 │   │   │       ├── night-audit/    # Automated night audit + day close
-│   │   │       ├── payment/        # Stripe payment processing
+│   │   │       ├── payment/        # Pluggable payment gateways (Stripe default)
 │   │   │       ├── property/       # Multi-property configuration
 │   │   │       ├── rate-plan/      # Rates, derivation, restrictions
 │   │   │       ├── reports/        # Revenue, occupancy, financial reports
