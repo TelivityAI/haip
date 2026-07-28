@@ -688,7 +688,7 @@
       "national_id": "Documento Nacional / National ID",
       "passport": "Passaporte / Passport",
       "rg": "RG (Carteira de Identidade)",
-      "tax_id": "CPF / Tax ID"
+      "tax_id": "CPF"
     },
     "irreversible": "Esta ação é irreversível.",
     "labels": {
