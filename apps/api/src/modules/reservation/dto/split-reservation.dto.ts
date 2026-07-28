@@ -13,7 +13,7 @@ import { IsMoneyString } from '../../../common/validation/is-money-string.valida
 
 /**
  * Split named guests from one reservation (room) onto a new sibling reservation
- * under the same booking — Apaleo/Mews booking-wrapper pattern.
+ * under the same booking.
  */
 export class SplitReservationDto {
   @ApiProperty({ type: [String], description: 'Guest IDs to move onto the new room reservation' })

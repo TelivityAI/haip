@@ -140,7 +140,7 @@ export const reservations = pgTable('reservations', {
 
 /**
  * Named occupants on a reservation (one physical room).
- * Follows Apaleo/Mews: reservation = one unit; booking = multi-room wrapper.
+ * Reservation = one unit; booking = multi-room wrapper.
  * `reservations.guestId` remains the primary/lead guest for backwards compat
  * and is kept in sync with the row where role = 'primary'.
  */
