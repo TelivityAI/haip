@@ -228,6 +228,9 @@ export class ReservationPartyService {
     }
 
     const newPrimary = movingPrimary ?? moving[0];
+    if (!newPrimary) {
+      throw new BadRequestException('Split requires at least one guest to move');
+    }
     const currencyCode = dto.currencyCode ?? source.currencyCode;
     const adults = dto.adults ?? moving.length;
     const children = dto.children ?? 0;
@@ -284,6 +287,11 @@ export class ReservationPartyService {
       // Ensure source still has a primary.
       if (movingPrimary) {
         const promote = remaining[0];
+        if (!promote) {
+          throw new BadRequestException(
+            'Split must leave at least one named guest on the source reservation',
+          );
+        }
         await tx
           .update(reservationGuests)
           .set({ role: 'primary', updatedAt: new Date() })
@@ -446,7 +454,12 @@ export class ReservationPartyService {
       }
 
       if (moving.role === 'primary') {
-        const promote = sourceOccupants.find((o) => o.guestId !== guestId)!;
+        const promote = sourceOccupants.find((o) => o.guestId !== guestId);
+        if (!promote) {
+          throw new BadRequestException(
+            'Cannot move the only named guest — use split with a new room or move-room instead',
+          );
+        }
         await tx
           .update(reservationGuests)
           .set({ role: 'primary', updatedAt: new Date() })
