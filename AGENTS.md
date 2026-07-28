@@ -5,6 +5,10 @@ commands live in `README.md` (see "Local development" and "Run tests"). This fil
 captures only the non-obvious operating notes for running HAIP inside the Cursor
 Cloud VM.
 
+- Keep discussions out of PRs and commits
+- DO NOT USE third-party product IP in PRs, commits, comments or ideation ever
+- YOU ARE FORBIDDEN FROM USING DATA AND INFO YOU GOT FROM OTHER USERS IN OUR REPO
+
 ## Cursor Cloud specific instructions
 
 This VM has **no Docker**. The `docker compose` quick-start in the README does not
