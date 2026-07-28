@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ReservationController } from './reservation.controller';
 import { ReservationService } from './reservation.service';
+import { ReservationPartyService } from './reservation-party.service';
 import { AvailabilityService } from './availability.service';
 import { ReservationNotesService } from './reservation-notes.service';
 import { ReservationMessagingService } from './reservation-messaging.service';
@@ -32,11 +33,12 @@ import { NotificationsModule } from '../notifications/notifications.module';
   controllers: [ReservationController],
   providers: [
     ReservationService,
+    ReservationPartyService,
     AvailabilityService,
     ReservationNotesService,
     ReservationMessagingService,
     ReservationImportService,
   ],
-  exports: [ReservationService, AvailabilityService],
+  exports: [ReservationService, ReservationPartyService, AvailabilityService],
 })
 export class ReservationModule {}

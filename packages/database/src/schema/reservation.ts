@@ -139,6 +139,28 @@ export const reservations = pgTable('reservations', {
 });
 
 /**
+ * Named occupants on a reservation (one physical room).
+ * Follows Apaleo/Mews: reservation = one unit; booking = multi-room wrapper.
+ * `reservations.guestId` remains the primary/lead guest for backwards compat
+ * and is kept in sync with the row where role = 'primary'.
+ */
+export const reservationGuestRoleEnum = pgEnum('reservation_guest_role', [
+  'primary',
+  'accompanying',
+]);
+
+export const reservationGuests = pgTable('reservation_guests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  reservationId: uuid('reservation_id').notNull().references(() => reservations.id),
+  guestId: uuid('guest_id').notNull().references(() => guests.id),
+  role: reservationGuestRoleEnum('role').notNull().default('accompanying'),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Reservation Notes — free-text operational notes attached to a reservation
  * (front-desk handover, special handling, follow-ups). Property-scoped.
  * `isActive` supports an active-count badge without hard-deleting history.

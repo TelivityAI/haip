@@ -20,6 +20,7 @@ import { useToast } from '../components/ui/Toast';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import FindGuest from '../components/guests/FindGuest';
+import ReservationPartyPanel from '../components/reservations/ReservationPartyPanel';
 import type { Guest } from '../types/guest';
 
 interface Reservation {
@@ -39,7 +40,8 @@ interface Reservation {
   guest?: { id: string; firstName: string; lastName: string; email?: string };
   adults: number;
   children: number;
-  totalAmount?: number;
+  totalAmount?: number | string;
+  currencyCode?: string;
   source?: string;
   notes?: string;
   createdAt?: string;
@@ -635,6 +637,16 @@ function ReservationList() {
                   <p className="text-sm bg-telivity-light-grey rounded-lg p-3">{detailRes.notes}</p>
                 </div>
               )}
+              <ReservationPartyPanel
+                reservationId={detailRes.id}
+                propertyId={propertyId!}
+                roomTypeId={detailRes.roomTypeId}
+                ratePlanId={detailRes.ratePlanId}
+                totalAmount={
+                  detailRes.totalAmount != null ? String(detailRes.totalAmount) : undefined
+                }
+                currencyCode={detailRes.currencyCode ?? 'USD'}
+              />
               <ReservationOpsNotes reservationId={detailRes.id} propertyId={propertyId!} />
               <ReservationMessageCompose reservationId={detailRes.id} propertyId={propertyId!} />
               <div className="flex gap-2 pt-2">
