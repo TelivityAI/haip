@@ -202,9 +202,15 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
       const perAgent = await Promise.all(
         AGENT_TYPES.map((type) =>
           api
-            .get(`/v1/agents/${propertyId}/${type}/decisions`, { params: { limit: 20 } })
+            .get(`/v1/agents/${propertyId}/${type}/decisions`, {
+              params: { limit: 20 },
+              skipErrorToast: true,
+            })
             .then((res) => (res.data?.data ?? res.data ?? []) as AgentDecision[])
-            .catch(() => [] as AgentDecision[]), // agent may have no config/decisions yet
+            .catch((err) => {
+              console.error(`Failed to fetch agent decisions for ${type}:`, err);
+              return [] as AgentDecision[];
+            }), // agent may have no config/decisions yet
         ),
       );
       return perAgent
@@ -359,9 +365,12 @@ function PerformanceSection({ propertyId }: { propertyId: string }) {
       const results = await Promise.all(
         AGENT_TYPES.map((type) =>
           api
-            .get(`/v1/agents/${propertyId}/${type}/performance`)
+            .get(`/v1/agents/${propertyId}/${type}/performance`, { skipErrorToast: true })
             .then((res) => (res.data?.data ?? res.data) as AgentPerformance)
-            .catch(() => null),
+            .catch((err) => {
+              console.error(`Failed to fetch agent performance for ${type}:`, err);
+              return null;
+            }),
         ),
       );
       return results.filter((p): p is AgentPerformance => p != null);
