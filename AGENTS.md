@@ -5,6 +5,19 @@ commands live in `README.md` (see "Local development" and "Run tests"). This fil
 captures only the non-obvious operating notes for running HAIP inside the Cursor
 Cloud VM.
 
+## PR / commit content (non-negotiable — legal)
+
+Before opening or updating any PR, re-read `CLAUDE.md` → **Public artifacts —
+non-negotiable (legal)**. In short:
+
+- **Private discussion never goes into PRs.** No Discord/Slack quotes, no
+  “user said…”, no chat transcript, no internal debate. PR body = code change
+  summary + test plan only.
+- **Never name third-party / competitor product IP** in PR titles, bodies,
+  commit messages, or new code comments. Describe HAIP in HAIP terms only.
+  Violation risk includes legal exposure for the project owner — treat as a
+  hard stop, not a style preference.
+
 ## Cursor Cloud specific instructions
 
 This VM has **no Docker**. The `docker compose` quick-start in the README does not
