@@ -82,8 +82,9 @@ describe('Toast', () => {
     // Unhover the toast item to resume timeout
     await user.unhover(toastEl);
 
-    // Advance the remaining 2000ms
+    // Advance the remaining 2000ms — should dismiss after resume
     await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(screen.queryByText('Hover test')).not.toBeInTheDocument();
     vi.useRealTimers();
   });
 

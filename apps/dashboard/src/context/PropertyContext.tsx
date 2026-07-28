@@ -53,7 +53,7 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
     setPropertiesError(null);
     Promise.all([
       api.get('/v1/properties'),
-      api.get('/v1/organizations').catch((err) => {
+      api.get('/v1/organizations', { skipErrorToast: true }).catch((err) => {
         console.error('Failed to load organizations:', err);
         return { data: [] };
       }),

@@ -316,28 +316,32 @@ export default function FrontDesk() {
       const plans: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
       const plan = plans.find((p) => p.id === wiRatePlanId);
       const guestId = wiGuest.id;
-      const resCreate = await api.post('/v1/reservations', {
-        propertyId,
-        guestId,
-        roomTypeId: wiRoomTypeId,
-        ratePlanId: wiRatePlanId,
-        arrivalDate: today,
-        departureDate: tomorrow,
-        adults: 1,
-        source: 'walk_in',
-        totalAmount: plan?.baseAmount ?? '0.00',
-        currencyCode: plan?.currencyCode ?? 'USD',
-      });
+      const resCreate = await api.post(
+        '/v1/reservations',
+        {
+          propertyId,
+          guestId,
+          roomTypeId: wiRoomTypeId,
+          ratePlanId: wiRatePlanId,
+          arrivalDate: today,
+          departureDate: tomorrow,
+          adults: 1,
+          source: 'walk_in',
+          totalAmount: plan?.baseAmount ?? '0.00',
+          currencyCode: plan?.currencyCode ?? 'USD',
+        },
+        { skipErrorToast: true },
+      );
       const reservationId = resCreate.data.id ?? resCreate.data.reservation?.id;
       await api.patch(
         `/v1/reservations/${reservationId}/confirm`,
         {},
-        { params: { propertyId } },
+        { params: { propertyId }, skipErrorToast: true },
       );
       await api.patch(
         `/v1/reservations/${reservationId}/assign-room`,
         { roomId: wiRoomId },
-        { params: { propertyId } },
+        { params: { propertyId }, skipErrorToast: true },
       );
       return reservationId as string;
     },

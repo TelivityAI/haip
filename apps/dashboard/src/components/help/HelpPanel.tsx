@@ -29,7 +29,9 @@ export default function HelpPanel({ open, onClose }: HelpPanelProps) {
   const { data: help, isFetching, error } = useQuery({
     queryKey: ['help', route],
     queryFn: () =>
-      api.get('/v1/help', { params: { route } }).then((r) => (r.data?.data ?? r.data) as HelpEntry),
+      api
+        .get('/v1/help', { params: { route }, skipErrorToast: true })
+        .then((r) => (r.data?.data ?? r.data) as HelpEntry),
     enabled: open,
     retry: false,
   });

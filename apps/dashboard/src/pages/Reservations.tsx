@@ -1049,13 +1049,17 @@ function ReservationMessageCompose({
 
   const send = useMutation({
     mutationFn: () =>
-      api.post(`/v1/reservations/${reservationId}/messages`, {
-        propertyId,
-        channel,
-        ...(channel === 'email' ? { subject: subject.trim() } : {}),
-        body: body.trim(),
-        isMarketing,
-      }),
+      api.post(
+        `/v1/reservations/${reservationId}/messages`,
+        {
+          propertyId,
+          channel,
+          ...(channel === 'email' ? { subject: subject.trim() } : {}),
+          body: body.trim(),
+          isMarketing,
+        },
+        { skipErrorToast: true },
+      ),
     onSuccess: (res) => {
       const sent = res.data?.sent ?? res.data?.data?.sent;
       if (channel === 'sms') {

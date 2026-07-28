@@ -307,13 +307,17 @@ function RestrictionsPanel({ ratePlanId }: { ratePlanId: string }) {
         return api.patch(
           `/v1/rate-plans/${ratePlanId}/restrictions/${editingId}`,
           body,
-          { params: { propertyId } },
+          { params: { propertyId }, skipErrorToast: true },
         );
       }
-      return api.post(`/v1/rate-plans/${ratePlanId}/restrictions`, {
-        propertyId,
-        ...body,
-      });
+      return api.post(
+        `/v1/rate-plans/${ratePlanId}/restrictions`,
+        {
+          propertyId,
+          ...body,
+        },
+        { skipErrorToast: true },
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rate-restrictions', ratePlanId] });
