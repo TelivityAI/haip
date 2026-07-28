@@ -55,4 +55,63 @@ describe('Toast', () => {
     expect(screen.queryByText('Auto dismiss')).not.toBeInTheDocument();
     vi.useRealTimers();
   });
+
+  it('pauses timeout on hover', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <ToastProvider>
+        <ToastTrigger type="success" message="Hover test" />
+      </ToastProvider>,
+    );
+    await user.click(screen.getByText('Show Toast'));
+    const toastEl = screen.getByRole('alert');
+    expect(screen.getByText('Hover test')).toBeInTheDocument();
+
+    // Advance 2000ms (halfway to 4000ms timeout)
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(screen.getByText('Hover test')).toBeInTheDocument();
+
+    // Hover over the toast item to pause timeout
+    await user.hover(toastEl);
+
+    // Advance another 3000ms (would have expired at 4000ms total if not paused)
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    expect(screen.getByText('Hover test')).toBeInTheDocument();
+
+    // Unhover the toast item to resume timeout
+    await user.unhover(toastEl);
+
+    // Advance the remaining 2000ms — should dismiss after resume
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(screen.queryByText('Hover test')).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('renders countdown progress bar that updates over time and pauses on hover', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <ToastProvider>
+        <ToastTrigger type="info" message="Progress bar test" />
+      </ToastProvider>,
+    );
+    await user.click(screen.getByText('Show Toast'));
+
+    const bar = screen.getByRole('progressbar', { name: /toast timeout/i });
+    expect(bar).toBeInTheDocument();
+    expect(bar).toHaveAttribute('aria-valuenow', '100');
+
+    // Advance 2000ms (halfway)
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(bar).toHaveAttribute('aria-valuenow', '50');
+
+    // Hover over toast to pause progress bar
+    await user.hover(screen.getByRole('alert'));
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    // Should stay paused at 50
+    expect(bar).toHaveAttribute('aria-valuenow', '50');
+
+    vi.useRealTimers();
+  });
 });
