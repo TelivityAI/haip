@@ -6,26 +6,6 @@
 
 All hotel domain knowledge comes from `kb/HAIP_KNOWLEDGE_BASE.md`. If something is ambiguous or missing, STOP and surface the question. Do not guess. Do not hallucinate hotel operations.
 
-## Public artifacts — non-negotiable (legal)
-
-These rules apply to **every** PR title/body, commit message, code comment, doc,
-issue, and other artifact that can leave the private chat:
-
-1. **Chat stays in chat.** Never paste private discussion, Discord/Slack quotes,
-   legal fears, “someone said…”, negotiation context, or internal debate into a
-   PR, commit, or public doc. PRs describe *what changed in the code*, not the
-   conversation that led there.
-2. **No third-party IP in public text.** Never name or allude to competitor /
-   third-party PMS products, vendors, or their proprietary models, APIs, or
-   “patterns” in PR titles/bodies, commits, code comments, or shipped docs
-   unless that name is already required as a literal integration identifier
-   that already exists in-repo (e.g. an adapter slug the product must call).
-   Describe HAIP’s own model in HAIP’s own words (booking wrapper, per-room
-   reservation, etc.). Do **not** write “follows X/Y pattern” or attribute
-   design to another company’s product.
-3. If domain research used external vendors privately, keep that in `kb/` /
-   research notes — **never** promote those names into PR copy or new comments.
-
 ## What Is HAIP
 
 HAIP (Hotel AI Platform) is an open-source, TypeScript/Node.js, API-first hotel PMS. Sister project to OTAIP. HAIP handles lodging. OTAIP handles air.
@@ -118,5 +98,5 @@ module-name/
 - Don't invent hotel domain concepts not in the KB
 - Don't use raw SQL outside of migration files
 - Don't store sensitive data unencrypted
-- Don't put chat/Discord/Slack discussion into PRs or commits
-- Don't name third-party / competitor product IP in PRs, commits, or new comments
+- Keep private discussion out of PRs and commits
+- No third-party product IP in PRs, commits, comments or ideation used ever.
