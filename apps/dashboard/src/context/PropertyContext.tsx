@@ -53,7 +53,10 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
     setPropertiesError(null);
     Promise.all([
       api.get('/v1/properties'),
-      api.get('/v1/organizations').catch(() => ({ data: [] })),
+      api.get('/v1/organizations').catch((err) => {
+        console.error('Failed to load organizations:', err);
+        return { data: [] };
+      }),
     ])
       .then(([propRes, orgRes]) => {
         const list: PropertySummary[] = propRes.data?.data ?? propRes.data ?? [];

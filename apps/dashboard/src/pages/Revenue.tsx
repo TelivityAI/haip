@@ -204,7 +204,10 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
           api
             .get(`/v1/agents/${propertyId}/${type}/decisions`, { params: { limit: 20 } })
             .then((res) => (res.data?.data ?? res.data ?? []) as AgentDecision[])
-            .catch(() => [] as AgentDecision[]), // agent may have no config/decisions yet
+            .catch((err) => {
+              console.error(`Failed to fetch agent decisions for ${type}:`, err);
+              return [] as AgentDecision[];
+            }), // agent may have no config/decisions yet
         ),
       );
       return perAgent
@@ -361,7 +364,10 @@ function PerformanceSection({ propertyId }: { propertyId: string }) {
           api
             .get(`/v1/agents/${propertyId}/${type}/performance`)
             .then((res) => (res.data?.data ?? res.data) as AgentPerformance)
-            .catch(() => null),
+            .catch((err) => {
+              console.error(`Failed to fetch agent performance for ${type}:`, err);
+              return null;
+            }),
         ),
       );
       return results.filter((p): p is AgentPerformance => p != null);

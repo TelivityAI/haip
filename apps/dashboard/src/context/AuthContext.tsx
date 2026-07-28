@@ -122,14 +122,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 api.defaults.headers.common['Authorization'] = `Bearer ${keycloak.token}`;
                 reconnectSocket();
               }
-            }).catch(() => {
+            }).catch((err) => {
+              console.error('Token refresh failed:', err);
               keycloak.login();
             });
           }, 4 * 60 * 1000);
         }
         setIsLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('Keycloak initialization failed:', err);
         setIsLoading(false);
       });
 

@@ -206,9 +206,10 @@ export default function Import() {
         document.body.appendChild(a);
         a.click();
         a.remove();
-        URL.revokeObjectURL(url);
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error('Failed to download template:', err);
+      });
   }
 
   if (!propertyId) {
