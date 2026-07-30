@@ -270,6 +270,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | 13 | **WhatsApp messaging** | [#205](https://github.com/telivityai/haip/pull/205) | Outbound WhatsApp templates via Twilio (console fallback in demo); marketing uses existing GDPR marketing consent. See **Guest Engagement Agents**. |
 | 14 | **Folio inbound posting** | [#205](https://github.com/telivityai/haip/pull/205) | Property-scoped inbound charges (e.g. phone / minibar) to in-house folios with vendor transaction idempotency. See **Folio & Billing**. |
 | 15 | **Booking deep links** | [#205](https://github.com/telivityai/haip/pull/205) | Direct-booking deep-link helper for marketing / metasearch landings; channel activation notes under `docs/channels/`. See **Direct Booking Engine**. |
+| 16 | **Agent orchestration** | [#262](https://github.com/telivityai/haip/pull/262) | Agent dependency graph (`agent-graph.ts`), RManager lever order + `upstreamResults`, external cron via `scripts/cron/agent-runs.sh`, `GET .../graph` + `orchestration-performance`, Revenue UI graph / RManager runs. See **AI Agents** and [`docs/agents-orchestration.md`](./docs/agents-orchestration.md). |
 
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
@@ -757,23 +758,28 @@ haip/
 
 All endpoints are prefixed with `/api/v1/` and documented via OpenAPI 3.0. Run the API and visit `http://localhost:3000/docs` for the interactive Swagger UI.
 
-### Core Endpoints (~165 total)
+### Core Endpoints (~167 total)
 
 <details>
-<summary><strong>AI Agents</strong> — 11 endpoints</summary>
+<summary><strong>AI Agents</strong> — 16 endpoints</summary>
 
 ```
-GET    /api/v1/agents/:propertyId                         # List all agents with status
-GET    /api/v1/agents/:propertyId/:agentType/config       # Get agent configuration
-PUT    /api/v1/agents/:propertyId/:agentType/config       # Update config (mode, enabled, threshold)
-POST   /api/v1/agents/:propertyId/:agentType/run          # Trigger manual agent run
-GET    /api/v1/agents/:propertyId/:agentType/decisions     # Decision history
-POST   /api/v1/agents/:propertyId/decisions/:id/approve    # Approve recommendation
-POST   /api/v1/agents/:propertyId/decisions/:id/reject     # Reject recommendation
-GET    /api/v1/agents/:propertyId/:agentType/performance   # Performance metrics
-POST   /api/v1/agents/:propertyId/reviews                  # Submit guest review
-GET    /api/v1/agents/:propertyId/reviews                  # List reviews (filter by status/source)
-PATCH  /api/v1/agents/:propertyId/reviews/:id              # Update review response
+GET    /api/v1/agents/:propertyId                              # List all agents with status
+GET    /api/v1/agents/:propertyId/graph                        # Dependency graph (nodes + edges + status)
+GET    /api/v1/agents/:propertyId/orchestration-performance    # All-agent metrics + RManager summary
+GET    /api/v1/agents/:propertyId/:agentType/config            # Get agent configuration
+PUT    /api/v1/agents/:propertyId/:agentType/config            # Update config (mode, enabled, threshold)
+POST   /api/v1/agents/:propertyId/:agentType/run               # Run agent (?triggeredBy=manual|schedule)
+POST   /api/v1/agents/:propertyId/:agentType/train             # Train one agent (writes modelState)
+POST   /api/v1/agents/:propertyId/train-all                    # Train every enabled agent
+GET    /api/v1/agents/:propertyId/:agentType/decisions         # Decision history
+POST   /api/v1/agents/:propertyId/decisions/:id/approve        # Approve recommendation
+POST   /api/v1/agents/:propertyId/decisions/:id/reject         # Reject recommendation
+POST   /api/v1/agents/:propertyId/decisions/:id/explain        # HAIP AI grounded explanation
+GET    /api/v1/agents/:propertyId/:agentType/performance       # Performance metrics
+POST   /api/v1/agents/:propertyId/reviews                      # Submit guest review
+GET    /api/v1/agents/:propertyId/reviews                      # List reviews (filter by status/source)
+PATCH  /api/v1/agents/:propertyId/reviews/:id                  # Update review response
 ```
 </details>
 
