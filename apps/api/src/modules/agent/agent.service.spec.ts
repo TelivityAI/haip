@@ -410,4 +410,70 @@ describe('AgentService', () => {
     expect(avgConfidence).toBeCloseTo(0.77, 1);
     expect(Math.round((approved.length / total) * 100)).toBe(67);
   });
+
+  it('passes triggeredBy=schedule into agent.analyze', async () => {
+    const db = createMockDb({
+      selectResult: [existingConfig],
+      insertResult: [{ id: 'dec-sched', decisionType: 'test_decision', confidence: '0.75', status: 'pending' }],
+    });
+    const module = await Test.createTestingModule({
+      providers: [
+        AgentService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
+      ],
+    }).compile();
+    const service = module.get(AgentService);
+    const mockAgent = createMockAgent('pricing');
+    const analyzeSpy = vi.spyOn(mockAgent, 'analyze');
+    service.registerAgent(mockAgent);
+
+    await service.runAgent('prop-1', 'pricing', { triggeredBy: 'schedule' });
+    expect(analyzeSpy).toHaveBeenCalledWith(
+      'prop-1',
+      expect.objectContaining({ triggeredBy: 'schedule' }),
+    );
+  });
+
+  it('getPerformance returns confidence distribution scoped by property', async () => {
+    const decisions = [
+      { status: 'approved', confidence: '0.90', outcome: { accuracy: 0.8 } },
+      { status: 'rejected', confidence: '0.40', outcome: null },
+    ];
+    const db = createMockDb({ selectResult: decisions });
+    const module = await Test.createTestingModule({
+      providers: [
+        AgentService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
+      ],
+    }).compile();
+    const service = module.get(AgentService);
+    const perf = await service.getPerformance('prop-1', 'pricing');
+    expect(perf.totalDecisions).toBe(2);
+    expect(perf.confidenceDistribution).toEqual({ low: 1, medium: 0, high: 1 });
+    expect(perf.averageOutcomeAccuracy).toBe(0.8);
+  });
+
+  it('getGraph returns nodes and revenue edges for propertyId', async () => {
+    const db = createMockDb({ selectResult: [existingConfig] });
+    const module = await Test.createTestingModule({
+      providers: [
+        AgentService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: WebhookService, useValue: { emit: vi.fn() } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
+      ],
+    }).compile();
+    const service = module.get(AgentService);
+    service.registerAgent(createMockAgent('pricing'));
+
+    const graph = await service.getGraph('prop-1');
+    expect(graph.nodes.length).toBe(13);
+    expect(graph.revenueLeverOrder[0]).toBe('demand_forecast');
+    expect(graph.edges.some((e) => e.to === 'revenue_manager')).toBe(true);
+    expect(graph.nodes.find((n) => n.agentType === 'pricing')?.hasImplementation).toBe(true);
+  });
 });

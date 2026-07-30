@@ -37,6 +37,24 @@ export class AgentController {
     return this.agentService.listAgentStatuses(propertyId);
   }
 
+  @Get(':propertyId/graph')
+  @ApiOperation({
+    summary: 'Agent dependency graph (12 specialists + RManager) with property status',
+  })
+  async getGraph(@Param('propertyId', ParseUUIDPipe) propertyId: string) {
+    return this.agentService.getGraph(propertyId);
+  }
+
+  @Get(':propertyId/orchestration-performance')
+  @ApiOperation({
+    summary: 'Performance metrics for all agents plus RManager orchestration summary',
+  })
+  async getOrchestrationPerformance(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.agentService.getOrchestrationPerformance(propertyId);
+  }
+
   @Get(':propertyId/:agentType/config')
   @ApiOperation({ summary: 'Get agent configuration' })
   async getConfig(
@@ -58,12 +76,21 @@ export class AgentController {
   }
 
   @Post(':propertyId/:agentType/run')
-  @ApiOperation({ summary: 'Trigger a manual agent run' })
+  @ApiOperation({ summary: 'Trigger an agent run (manual or schedule)' })
+  @ApiQuery({
+    name: 'triggeredBy',
+    required: false,
+    enum: ['manual', 'schedule'],
+    description: 'Defaults to manual; use schedule from external cron',
+  })
   async runAgent(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('agentType') agentType: string,
+    @Query('triggeredBy') triggeredBy?: string,
   ) {
-    return this.agentService.runAgent(propertyId, agentType, { triggeredBy: 'manual' });
+    const by =
+      triggeredBy === 'schedule' || triggeredBy === 'manual' ? triggeredBy : 'manual';
+    return this.agentService.runAgent(propertyId, agentType, { triggeredBy: by });
   }
 
   @Post(':propertyId/:agentType/train')

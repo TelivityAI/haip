@@ -4,8 +4,8 @@
  * Each agent follows the same lifecycle:
  *   analyze() → recommend() → [approve] → execute() → recordOutcome()
  *
- * Orchestration-ready: a future orchestration layer can chain agents
- * by calling these methods in sequence.
+ * Orchestration: RManager chains revenue levers via AgentContext.upstreamResults
+ * (see agent-graph.ts). Ops/guest agents use triggeredBy + eventPayload.
  */
 export interface HaipAgent {
   readonly agentType: string;
@@ -32,6 +32,11 @@ export interface HaipAgent {
 export interface AgentContext {
   triggeredBy?: 'schedule' | 'manual' | 'event';
   eventPayload?: Record<string, unknown>;
+  /**
+   * Results from upstream agents in the same orchestration run
+   * (keyed by agent type). Populated by RManager for revenue levers.
+   */
+  upstreamResults?: Record<string, unknown>;
 }
 
 export interface AgentAnalysis {
