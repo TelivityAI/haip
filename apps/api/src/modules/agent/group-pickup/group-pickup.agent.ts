@@ -177,7 +177,8 @@ export class GroupPickupAgent implements HaipAgent, OnModuleInit {
   getDefaultConfig(): Record<string, unknown> {
     return {
       historicalPickupRate: 0.7,
-      runScheduleCron: '0 8 * * *', // daily at 8am
+      // No independent cron — runs via RManager (manual still allowed).
+      runScheduleCron: '',
     };
   }
 }

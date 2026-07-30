@@ -73,5 +73,8 @@ set +a
 |--------|-------------------|-----|
 | `night-audit.sh` | Daily ~00:30 property local time | `POST /api/v1/night-audit/run` |
 | `group-cutoffs.sh` | Daily after night audit | `POST /api/v1/groups/blocks/process-cutoffs` |
+| `agent-runs.sh <agentType>` | See matrix in [`docs/operations/cron.md`](../../docs/operations/cron.md) | `POST /api/v1/agents/:propertyId/:agentType/run?triggeredBy=schedule` |
 
-Scripts exit non-zero on HTTP errors (non-2xx).
+**Revenue cadence:** cron `revenue_manager` only — do **not** also schedule `demand_forecast` / `pricing` / `overbooking` / `channel_mix` / `group_pickup` (they run inside RManager).
+
+Scripts exit non-zero on HTTP errors (non-2xx). Role: `admin`.
