@@ -3,6 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { ratePlans } from '@telivityhaip/database';
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
+import { REVENUE_LEVER_ORDER } from '../agent-graph';
 import type {
   HaipAgent,
   AgentContext,
@@ -30,12 +31,8 @@ import {
  *
  * Where the other agents each own one lever (forecast, price, overbooking,
  * channel mix, group pickup), RManager is the meta-agent that runs them in
- * dependency order (demand first, then the levers that consume it) and reconciles
- * their outputs into ONE coherent revenue strategy, applying the RM knowledge
- * base's decision rules: optimize GOPPAR over raw revenue, move price with demand
- * and pace, protect peak dates with length-of-stay controls, keep the rate grid
- * consistent, evaluate group displacement on net contribution, and treat
- * discounting as a last resort.
+ * dependency order (from REVENUE_LEVER_ORDER in agent-graph) and reconciles
+ * their outputs into ONE coherent revenue strategy.
  *
  * It is intentionally read-and-coordinate: each sub-agent still owns and executes
  * its own lever; RManager produces the unified plan and surfaces conflicts.
@@ -59,29 +56,44 @@ export class RevenueManagerAgent implements HaipAgent, OnModuleInit {
     this.agentService.registerAgent(this);
   }
 
+  /** Lever agents keyed by graph order — must match REVENUE_LEVER_ORDER. */
+  private leverAgents(): Record<(typeof REVENUE_LEVER_ORDER)[number], HaipAgent> {
+    return {
+      demand_forecast: this.demandAgent,
+      pricing: this.pricingAgent,
+      overbooking: this.overbookingAgent,
+      channel_mix: this.channelMixAgent,
+      group_pickup: this.groupPickupAgent,
+    };
+  }
+
   async analyze(propertyId: string, context?: AgentContext): Promise<AgentAnalysis> {
     const config = await this.agentService.getOrCreateConfig(propertyId, this.agentType);
     const cfg = (config.config as Record<string, unknown>) ?? {};
     const objective = (cfg['objective'] as RevenueObjective) ?? 'goppar';
     const horizonDays = (cfg['horizonDays'] as number) ?? 30;
 
-    // 1. Demand forecast — the backbone every other lever consumes.
-    const forecasts = await this.gatherForecasts(propertyId, horizonDays);
+    const agents = this.leverAgents();
+    const upstreamResults: Record<string, unknown> = {
+      ...(context?.upstreamResults ?? {}),
+    };
+    const leverRecs: Record<string, AgentDecisionInput[] | null> = {};
 
-    // 2. Dynamic pricing — proposed per-date adjustments (best-effort).
-    const pricingByDate = await this.gatherPricing(propertyId);
+    // Run levers in graph order; each receives accumulated upstreamResults.
+    for (const leverType of REVENUE_LEVER_ORDER) {
+      const leverContext: AgentContext = {
+        ...context,
+        upstreamResults: { ...upstreamResults },
+      };
+      const result = await this.safeRecommend(leverType, () =>
+        this.runLever(agents[leverType], propertyId, leverContext),
+      );
+      leverRecs[leverType] = result;
+      upstreamResults[leverType] = summarize(result);
+    }
 
-    // 3. Companion levers — gathered for context/conflict surfacing (best-effort,
-    //    a failing sub-agent must not abort the orchestration).
-    const overbooking = await this.safeRecommend('overbooking', () =>
-      this.runLever(this.overbookingAgent, propertyId, context),
-    );
-    const channelMix = await this.safeRecommend('channel_mix', () =>
-      this.runLever(this.channelMixAgent, propertyId, context),
-    );
-    const groupPickup = await this.safeRecommend('group_pickup', () =>
-      this.runLever(this.groupPickupAgent, propertyId, context),
-    );
+    const forecasts = this.normalizeForecasts(leverRecs['demand_forecast'], horizonDays);
+    const pricingByDate = this.normalizePricing(leverRecs['pricing']);
 
     // Baseline ADR: configured, else mean of active rate-plan base amounts.
     const baselineAdr = (cfg['baselineAdr'] as number) ?? (await this.deriveBaselineAdr(propertyId));
@@ -98,10 +110,11 @@ export class RevenueManagerAgent implements HaipAgent, OnModuleInit {
         baselineAdr,
         forecasts,
         pricingByDate,
+        upstreamResults,
         leverSummaries: {
-          overbooking: summarize(overbooking),
-          channelMix: summarize(channelMix),
-          groupPickup: summarize(groupPickup),
+          overbooking: summarize(leverRecs['overbooking'] ?? null),
+          channelMix: summarize(leverRecs['channel_mix'] ?? null),
+          groupPickup: summarize(leverRecs['group_pickup'] ?? null),
         },
       },
     };
@@ -117,6 +130,7 @@ export class RevenueManagerAgent implements HaipAgent, OnModuleInit {
       forecasts: ForecastInput[];
       pricingByDate: Record<string, number>;
       leverSummaries: Record<string, unknown>;
+      upstreamResults?: Record<string, unknown>;
     };
 
     if (!s.forecasts || s.forecasts.length === 0) {
@@ -146,6 +160,7 @@ export class RevenueManagerAgent implements HaipAgent, OnModuleInit {
         recommendation: {
           ...strategy,
           leverSummaries: s.leverSummaries,
+          upstreamResults: s.upstreamResults,
         },
         confidence,
         inputSnapshot: {
@@ -156,6 +171,7 @@ export class RevenueManagerAgent implements HaipAgent, OnModuleInit {
           fcpar: s.fcpar,
           forecastDays: s.forecasts.length,
           analyzedAt: analysis.timestamp.toISOString(),
+          revenueLeverOrder: [...REVENUE_LEVER_ORDER],
         },
       },
     ];
@@ -213,17 +229,16 @@ export class RevenueManagerAgent implements HaipAgent, OnModuleInit {
       fcpar: 60, // fixed cost per available room
       baselineAdr: null, // null → derive from active rate plans
       horizonDays: 30,
-      runScheduleCron: '0 6 * * *', // daily at 06:00
+      runScheduleCron: '0 6 * * *', // daily at 06:00 — owns revenue cadence
     };
   }
 
   // --- private ---
 
-  /** Run demand agent fresh and normalize to ForecastInput[]. */
-  private async gatherForecasts(propertyId: string, horizonDays: number): Promise<ForecastInput[]> {
-    const result = await this.safeRecommend('demand_forecast', () =>
-      this.runLever(this.demandAgent, propertyId),
-    );
+  private normalizeForecasts(
+    result: AgentDecisionInput[] | null | undefined,
+    horizonDays: number,
+  ): ForecastInput[] {
     const rec = result?.[0]?.recommendation as any;
     const forecasts: any[] = rec?.forecasts ?? [];
     return forecasts.slice(0, horizonDays).map((f) => ({
@@ -233,11 +248,7 @@ export class RevenueManagerAgent implements HaipAgent, OnModuleInit {
     }));
   }
 
-  /** Run pricing agent fresh and collapse per-plan adjustments into a per-date mean. */
-  private async gatherPricing(propertyId: string): Promise<Record<string, number>> {
-    const result = await this.safeRecommend('pricing', () =>
-      this.runLever(this.pricingAgent, propertyId),
-    );
+  private normalizePricing(result: AgentDecisionInput[] | null | undefined): Record<string, number> {
     const adjustments: any[] = (result?.[0]?.recommendation as any)?.adjustments ?? [];
     const byDate = new Map<string, { sum: number; n: number }>();
     for (const a of adjustments) {

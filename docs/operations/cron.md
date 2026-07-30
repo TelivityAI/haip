@@ -31,6 +31,31 @@ Authorization: Bearer <token>
 
 Role: `admin`
 
+## AI agent runs (orchestration)
+
+HAIP does not run in-process agent cron. Use `scripts/cron/agent-runs.sh <agentType>` (or call the API directly).
+
+```
+POST /agents/<propertyId>/<agentType>/run?triggeredBy=schedule
+Authorization: Bearer <token>
+```
+
+Role: `admin`
+
+### Default schedule matrix
+
+| Trigger | Agents | Notes |
+|---------|--------|-------|
+| `0 6 * * *` | `revenue_manager` | Owns revenue cadence; pulls demand + levers |
+| `0 6 * * *` | `ar_collections` | Daily ops / commercial |
+| `0 8 * * *` | `housekeeping` | Daily ops window |
+| `0 */6 * * *` | `cancellation` | Every 6 hours |
+| `0 23 * * *` | `night_audit` | Before night-audit close |
+| Events | `guest_comms`, `review_response` | Reservation lifecycle / review ingest |
+| Manual | Any specialist + RManager | Dashboard **Run Now** or `triggeredBy=manual` |
+
+**Do not** independently cron `demand_forecast`, `pricing`, `overbooking`, `channel_mix`, or `group_pickup` — they run via RManager and would double-fire. See [`docs/agents-orchestration.md`](../agents-orchestration.md).
+
 ## Group block cutoffs (auto-release sweep)
 
 Release all blocks past their cutoff date for a property. Run daily (typically after night audit).

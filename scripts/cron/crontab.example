@@ -5,6 +5,10 @@
 # Suggested schedule (adjust to property timezone):
 #   Night audit: 00:30 daily
 #   Group cutoffs: 01:00 daily (after night audit)
+#   RManager (+ A/R): 06:00 daily — owns revenue cadence (do NOT also cron demand/pricing)
+#   Housekeeping: 08:00 daily
+#   Cancellation: every 6 hours
+#   Night-audit anomaly agent: 23:00 daily (before night audit)
 
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
@@ -19,3 +23,8 @@ PATH=/usr/local/bin:/usr/bin:/bin
 
 30 0 * * * set -a && source /etc/haip/cron.env && set +a && /opt/haip/scripts/cron/night-audit.sh >> /var/log/haip/night-audit.log 2>&1
 0 1 * * * set -a && source /etc/haip/cron.env && set +a && /opt/haip/scripts/cron/group-cutoffs.sh >> /var/log/haip/group-cutoffs.log 2>&1
+0 6 * * * set -a && source /etc/haip/cron.env && set +a && /opt/haip/scripts/cron/agent-runs.sh revenue_manager >> /var/log/haip/agent-revenue.log 2>&1
+0 6 * * * set -a && source /etc/haip/cron.env && set +a && /opt/haip/scripts/cron/agent-runs.sh ar_collections >> /var/log/haip/agent-ar.log 2>&1
+0 8 * * * set -a && source /etc/haip/cron.env && set +a && /opt/haip/scripts/cron/agent-runs.sh housekeeping >> /var/log/haip/agent-hk.log 2>&1
+0 */6 * * * set -a && source /etc/haip/cron.env && set +a && /opt/haip/scripts/cron/agent-runs.sh cancellation >> /var/log/haip/agent-cancel.log 2>&1
+0 23 * * * set -a && source /etc/haip/cron.env && set +a && /opt/haip/scripts/cron/agent-runs.sh night_audit >> /var/log/haip/agent-night-audit.log 2>&1
