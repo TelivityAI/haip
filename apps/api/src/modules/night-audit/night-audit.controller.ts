@@ -20,7 +20,7 @@ export class NightAuditController {
   constructor(private readonly nightAuditService: NightAuditService) {}
 
   @Post('/run')
-  @Roles('admin', 'night_auditor')
+  @Roles('admin', 'general_manager', 'night_auditor', 'accounting')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Execute night audit for a business date' })
   async runAudit(@Body() dto: RunAuditDto) {

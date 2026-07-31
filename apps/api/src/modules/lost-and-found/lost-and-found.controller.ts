@@ -27,7 +27,7 @@ export class LostAndFoundController {
   constructor(private readonly lostAndFoundService: LostAndFoundService) {}
 
   @Post()
-  @Roles('admin', 'front_desk', 'housekeeping', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Log a lost-and-found item' })
   @HttpCode(HttpStatus.CREATED)
@@ -54,7 +54,7 @@ export class LostAndFoundController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'front_desk', 'housekeeping', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Update lost-and-found item' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })
@@ -67,7 +67,7 @@ export class LostAndFoundController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Delete lost-and-found item' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })

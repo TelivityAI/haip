@@ -12,7 +12,7 @@ import { AccountingExportService } from './accounting-export.service';
  */
 @ApiTags('accounting-export')
 @Controller('accounting-export')
-@Roles('admin')
+@Roles('admin', 'general_manager', 'accounting')
 export class AccountingExportController {
   constructor(private readonly service: AccountingExportService) {}
 

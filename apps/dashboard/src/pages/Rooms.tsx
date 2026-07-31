@@ -94,8 +94,8 @@ function RoomDetailPanel({
   // would 403: PATCH /rooms/:id allows admin/front_desk/housekeeping_manager,
   // but every media route is admin-only. In the demo (auth off) hasRole
   // returns true so admins see all editing controls.
-  const canManageAmenities = hasRole('admin', 'front_desk', 'housekeeping_manager');
-  const canManagePhotos = hasRole('admin');
+  const canManageAmenities = hasRole('admin', 'general_manager', 'front_desk', 'housekeeping_manager');
+  const canManagePhotos = hasRole('admin', 'general_manager');
 
   // Main photo: the room's own primary, falling back to the room type's primary
   // (rooms usually inherit their type's photos rather than having their own).

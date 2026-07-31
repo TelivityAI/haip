@@ -26,7 +26,7 @@ import { StopSellDto } from './dto/stop-sell.dto';
 
 @ApiTags('Channel Manager')
 @Controller('channels')
-@Roles('admin')
+@Roles('admin', 'general_manager', 'revenue_manager')
 export class ChannelController {
   constructor(
     private readonly channelService: ChannelService,

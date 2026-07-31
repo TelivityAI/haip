@@ -28,7 +28,7 @@ export class CashierController {
   }
 
   @Post('drawers')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Create a cash drawer (KB 12.1)' })
   @ApiResponse({ status: 201, description: 'Cash drawer created' })
   createDrawer(@Body() dto: CreateDrawerDto) {
@@ -61,7 +61,7 @@ export class CashierController {
   }
 
   @Post('sessions')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Open a cash drawer session/shift (KB 12.2)' })
   @ApiResponse({ status: 201, description: 'Session opened' })
   openSession(@Body() dto: OpenSessionDto) {
@@ -98,7 +98,7 @@ export class CashierController {
   }
 
   @Post('sessions/:id/movements')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Record a cash movement (KB 12.3)' })
   @ApiResponse({ status: 201, description: 'Movement recorded' })
   recordMovement(
@@ -109,7 +109,7 @@ export class CashierController {
   }
 
   @Post('sessions/:id/close')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Close a session and compute variance (KB 12.4)' })
   @ApiResponse({ status: 200, description: 'Session closed' })
   closeSession(

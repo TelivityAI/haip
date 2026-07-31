@@ -32,7 +32,7 @@ export class TaxController {
   }
 
   @Post('profiles')
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'accounting')
   @ApiOperation({ summary: 'Create a tax profile' })
   createProfile(@Body() dto: CreateTaxProfileDto) {
     return this.taxService.createProfile(dto);
@@ -48,7 +48,7 @@ export class TaxController {
   }
 
   @Patch('profiles/:id')
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'accounting')
   @ApiOperation({ summary: 'Update a tax profile' })
   updateProfile(
     @Param('id', ParseUUIDPipe) id: string,
@@ -61,7 +61,7 @@ export class TaxController {
   // --- Tax Rules ---
 
   @Post('profiles/:profileId/rules')
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'accounting')
   @ApiOperation({ summary: 'Add a tax rule to a profile' })
   createRule(
     @Param('profileId', ParseUUIDPipe) profileId: string,
@@ -72,7 +72,7 @@ export class TaxController {
   }
 
   @Patch('profiles/:profileId/rules/:ruleId')
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'accounting')
   @ApiOperation({ summary: 'Update a tax rule' })
   updateRule(
     @Param('profileId', ParseUUIDPipe) profileId: string,
@@ -84,7 +84,7 @@ export class TaxController {
   }
 
   @Delete('profiles/:profileId/rules/:ruleId')
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'accounting')
   @ApiOperation({ summary: 'Delete a tax rule' })
   deleteRule(
     @Param('profileId', ParseUUIDPipe) profileId: string,

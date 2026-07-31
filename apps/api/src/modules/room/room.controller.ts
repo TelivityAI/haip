@@ -45,7 +45,7 @@ export class RoomController {
   }
 
   @Post('types')
-  @Roles('admin', 'front_desk', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping_manager')
   @ApiOperation({ summary: 'Create new room type' })
   @ApiResponse({ status: 201, description: 'Room type created' })
   createRoomType(@Body() dto: CreateRoomTypeDto) {
@@ -161,7 +161,7 @@ export class RoomController {
   }
 
   @Post()
-  @Roles('admin', 'front_desk', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping_manager')
   @ApiOperation({ summary: 'Create new room' })
   @ApiResponse({ status: 201, description: 'Room created' })
   createRoom(@Body() dto: CreateRoomDto) {
@@ -181,7 +181,7 @@ export class RoomController {
   }
 
   @Patch(':id/status')
-  @Roles('admin', 'front_desk', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping_manager')
   @ApiOperation({ summary: 'Update room status with transition validation' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room status updated' })
@@ -195,7 +195,7 @@ export class RoomController {
   }
 
   @Put(':id/hk-observation')
-  @Roles('admin', 'front_desk', 'housekeeping', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Set housekeeping observed occupancy for discrepancy detection' })
   @ApiQuery({ name: 'propertyId', required: true })
@@ -208,7 +208,7 @@ export class RoomController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'front_desk', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping_manager')
   @ApiOperation({ summary: 'Update room' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room updated' })

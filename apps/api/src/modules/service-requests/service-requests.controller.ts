@@ -28,7 +28,7 @@ export class ServiceRequestsController {
   constructor(private readonly serviceRequestsService: ServiceRequestsService) {}
 
   @Post()
-  @Roles('admin', 'front_desk', 'housekeeping', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Create a service request' })
   @HttpCode(HttpStatus.CREATED)
@@ -55,7 +55,7 @@ export class ServiceRequestsController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'front_desk', 'housekeeping', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Update service request' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })
@@ -68,7 +68,7 @@ export class ServiceRequestsController {
   }
 
   @Post(':id/create-task')
-  @Roles('admin', 'housekeeping', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Create a linked housekeeping task from a service request' })
   createTask(
@@ -79,7 +79,7 @@ export class ServiceRequestsController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'housekeeping_manager')
+  @Roles('admin', 'general_manager', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Delete service request' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })

@@ -53,7 +53,7 @@ export class ReservationController {
   // --- Action routes BEFORE :id to avoid conflicts ---
 
   @Post('search-availability')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Search room availability for a date range' })
   @ApiResponse({ status: 200, description: 'Availability results' })
   searchAvailability(@Body() dto: SearchAvailabilityDto) {
@@ -66,7 +66,7 @@ export class ReservationController {
   }
 
   @Post('group-check-in')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Batch check-in for group reservations' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Group check-in results (partial success allowed)' })
@@ -78,7 +78,7 @@ export class ReservationController {
   }
 
   @Post('bulk-action')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Apply check_in/check_out/cancel to many reservations (partial success allowed)' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Per-id results with succeeded/failed counts' })
@@ -97,7 +97,7 @@ export class ReservationController {
   }
 
   @Post('import')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Batch import reservations from pre-parsed JSON rows (per-row status)' })
   @ApiResponse({ status: 200, description: 'Per-row import results with created/failed counts' })
   importReservations(@Body() dto: ImportReservationsDto) {
@@ -107,7 +107,7 @@ export class ReservationController {
   // --- Note mutation routes (STATIC paths — MUST precede ':id' routes) ---
 
   @Patch('notes/:noteId')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Update a reservation note (body / active flag)' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Note updated' })
@@ -120,7 +120,7 @@ export class ReservationController {
   }
 
   @Delete('notes/:noteId')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Delete a reservation note' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Note deleted' })
@@ -141,7 +141,7 @@ export class ReservationController {
   }
 
   @Post()
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Create new reservation (status: pending)' })
   @ApiResponse({ status: 201, description: 'Reservation created' })
   createReservation(@Body() dto: CreateReservationDto) {
@@ -161,7 +161,7 @@ export class ReservationController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Modify reservation (dates, room type, rate, occupancy)' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation modified' })
@@ -177,7 +177,7 @@ export class ReservationController {
   // --- Lifecycle transition routes ---
 
   @Patch(':id/confirm')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Confirm reservation' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation confirmed' })
@@ -189,7 +189,7 @@ export class ReservationController {
   }
 
   @Patch(':id/assign-room')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Assign specific room to reservation' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room assigned' })
@@ -202,7 +202,7 @@ export class ReservationController {
   }
 
   @Patch(':id/move-room')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Move assigned or in-house reservation to another room' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room moved' })
@@ -228,7 +228,7 @@ export class ReservationController {
   }
 
   @Post(':id/guests')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Add an accompanying guest to this room reservation' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 201, description: 'Guest added' })
@@ -241,7 +241,7 @@ export class ReservationController {
   }
 
   @Delete(':id/guests/:guestId')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Remove an accompanying guest from this reservation' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Guest removed' })
@@ -254,7 +254,7 @@ export class ReservationController {
   }
 
   @Post(':id/guests/:guestId/move')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({
     summary: 'Move a named guest to another reservation on the same booking',
   })
@@ -270,7 +270,7 @@ export class ReservationController {
   }
 
   @Post(':id/split')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({
     summary:
       'Split guests onto a new sibling reservation under the same booking (new room)',
@@ -299,7 +299,7 @@ export class ReservationController {
   }
 
   @Patch(':id/cancel')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Cancel reservation with optional reason' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation cancelled' })
@@ -312,7 +312,7 @@ export class ReservationController {
   }
 
   @Patch(':id/no-show')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Mark reservation as no-show' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation marked as no-show' })
@@ -324,7 +324,7 @@ export class ReservationController {
   }
 
   @Post(':id/pre-register')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({
     summary:
       'Advance check-in / pre-register — capture registration card and ID without checking in',
@@ -340,7 +340,7 @@ export class ReservationController {
   }
 
   @Patch(':id/check-in')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Check in reservation with optional ID capture, deposit auth, room override' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Guest checked in' })
@@ -353,7 +353,7 @@ export class ReservationController {
   }
 
   @Patch(':id/check-out')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Check out reservation with optional express checkout and late fee' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Guest checked out' })
@@ -366,7 +366,7 @@ export class ReservationController {
   }
 
   @Post(':id/express-checkout')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Express checkout — auto-capture deposits and settle' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Express checkout completed' })
@@ -380,7 +380,7 @@ export class ReservationController {
   // --- Reservation notes ---
 
   @Post(':id/notes')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Add a note to a reservation' })
   @ApiResponse({ status: 201, description: 'Note created' })
   createNote(
@@ -404,7 +404,7 @@ export class ReservationController {
   // --- Guest messaging ---
 
   @Post(':id/messages')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Compose and send an email or SMS to the reservation guest (GDPR-aware)' })
   @ApiResponse({ status: 201, description: 'Email send/draft result' })
   composeMessage(

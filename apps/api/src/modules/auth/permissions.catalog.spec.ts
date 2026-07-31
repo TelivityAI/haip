@@ -29,10 +29,35 @@ describe('permissions catalog', () => {
     expect([...ROLE_DEFAULT_PERMISSIONS.admin].sort()).toEqual([...PERMISSION_KEYS].sort());
   });
 
-  it('defines defaults for all six system roles', () => {
+  it('defines defaults for all ten system roles', () => {
     expect(SYSTEM_ROLE_KEYS.sort()).toEqual(
-      ['admin', 'front_desk', 'housekeeping', 'housekeeping_manager', 'night_auditor', 'readonly'].sort(),
+      [
+        'accounting',
+        'admin',
+        'front_desk',
+        'general_manager',
+        'housekeeping',
+        'housekeeping_manager',
+        'night_auditor',
+        'readonly',
+        'reservations',
+        'revenue_manager',
+      ].sort(),
     );
+  });
+
+  it('general_manager excludes owner-only admin permissions', () => {
+    expect(ROLE_DEFAULT_PERMISSIONS.general_manager).not.toContain('admin.users.manage');
+    expect(ROLE_DEFAULT_PERMISSIONS.general_manager).not.toContain('admin.roles.manage');
+    expect(ROLE_DEFAULT_PERMISSIONS.general_manager).toContain('settings.manage');
+    expect(ROLE_DEFAULT_PERMISSIONS.general_manager).toContain('revenue.manage');
+  });
+
+  it('reservations can book but not post folios or run cashier', () => {
+    expect(ROLE_DEFAULT_PERMISSIONS.reservations).toContain('reservations.write');
+    expect(ROLE_DEFAULT_PERMISSIONS.reservations).toContain('folios.read');
+    expect(ROLE_DEFAULT_PERMISSIONS.reservations).not.toContain('folios.manage');
+    expect(ROLE_DEFAULT_PERMISSIONS.reservations).not.toContain('cashier.access');
   });
 
   it('every navKey-bearing permission has a unique route', () => {
