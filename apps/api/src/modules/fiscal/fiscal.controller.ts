@@ -13,7 +13,7 @@ import { FiscalService } from './fiscal.service';
 
 @ApiTags('Fiscal')
 @Controller('fiscal')
-@Roles('admin')
+@Roles('admin', 'general_manager', 'accounting')
 export class FiscalController {
   constructor(private readonly fiscalService: FiscalService) {}
 

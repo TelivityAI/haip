@@ -24,7 +24,7 @@ import { CreateReviewDto, UpdateReviewResponseDto } from './dto/create-review.dt
 
 @ApiTags('AI Agents')
 @Controller('agents')
-@Roles('admin')
+@Roles('admin', 'general_manager', 'revenue_manager')
 export class AgentController {
   constructor(
     private readonly agentService: AgentService,
@@ -171,7 +171,7 @@ export class AgentController {
 
   @Post(':propertyId/reviews')
   @ApiOperation({ summary: 'Submit a guest review for AI response drafting' })
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   async createReview(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: CreateReviewDto,
@@ -214,7 +214,7 @@ export class AgentController {
   @ApiOperation({ summary: 'List guest reviews for a property' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'source', required: false })
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   async listReviews(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Query('status') status?: string,
@@ -233,7 +233,7 @@ export class AgentController {
 
   @Patch(':propertyId/reviews/:id')
   @ApiOperation({ summary: 'Update review response (edit, approve, mark posted)' })
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   async updateReview(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('id', ParseUUIDPipe) id: string,

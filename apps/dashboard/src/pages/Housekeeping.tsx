@@ -89,7 +89,7 @@ interface OpsForecast {
 }
 
 const TASK_COLUMNS = ['pending', 'assigned', 'in_progress', 'completed', 'inspected'];
-const HK_ROLE_KEYS = new Set(['housekeeping', 'housekeeping_manager', 'admin']);
+const HK_ROLE_KEYS = new Set(['housekeeping', 'housekeeping_manager', 'admin', 'general_manager']);
 
 const ROOM_STATUS_KEYS = [
   'vacant_clean',

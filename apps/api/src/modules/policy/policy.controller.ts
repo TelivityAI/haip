@@ -23,7 +23,7 @@ export class PolicyController {
   constructor(private readonly policyService: PolicyService) {}
 
   @Post()
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('policies.manage')
   @ApiOperation({ summary: 'Create a cancellation policy' })
   @ApiResponse({ status: 201, description: 'Policy created' })
@@ -53,7 +53,7 @@ export class PolicyController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('policies.manage')
   @ApiOperation({ summary: 'Update a cancellation policy' })
   @ApiResponse({ status: 200, description: 'Policy updated' })
@@ -67,7 +67,7 @@ export class PolicyController {
   }
 
   @Delete(':id')
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'revenue_manager')
   @RequirePermissions('policies.manage')
   @ApiOperation({ summary: 'Deactivate a cancellation policy' })
   @ApiResponse({ status: 200, description: 'Policy deactivated' })

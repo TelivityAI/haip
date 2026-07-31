@@ -51,7 +51,7 @@ export class GuestController {
   }
 
   @Post()
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Create new guest profile' })
   @ApiResponse({ status: 201, description: 'Guest created' })
   createGuest(@Body() dto: CreateGuestDto) {
@@ -62,7 +62,7 @@ export class GuestController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({ summary: 'Update guest profile (scoped to property)' })
   @ApiResponse({ status: 200, description: 'Guest updated' })
   @ApiResponse({ status: 404, description: 'Guest not found at this property' })
@@ -75,7 +75,7 @@ export class GuestController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Erase guest profile (GDPR right to erasure, scoped to property). Anonymizes PII and preserves booking history.' })
   @ApiResponse({ status: 204, description: 'Guest erased (anonymized)' })

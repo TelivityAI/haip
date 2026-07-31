@@ -36,7 +36,7 @@ export class GroupsController {
   // --- Group profiles (KB 14.3) ---
 
   @Post('profiles')
-  @Roles('admin', 'front_desk', 'revenue_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'revenue_manager')
   @ApiOperation({ summary: 'Create a group profile (KB 14.3)' })
   @ApiResponse({ status: 201, description: 'Group profile created' })
   createProfile(@Body() dto: CreateGroupProfileDto) {
@@ -76,7 +76,7 @@ export class GroupsController {
   }
 
   @Patch('profiles/:id')
-  @Roles('admin', 'front_desk', 'revenue_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'revenue_manager')
   @ApiOperation({ summary: 'Update a group profile' })
   @ApiResponse({ status: 200, description: 'Group profile updated' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -89,7 +89,7 @@ export class GroupsController {
   }
 
   @Post('profiles/:id/reservations')
-  @Roles('admin', 'front_desk', 'revenue_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'revenue_manager')
   @ApiOperation({ summary: 'Link a member reservation to a group profile (KB 14.3)' })
   @ApiResponse({ status: 201, description: 'Reservation linked' })
   linkReservation(
@@ -112,7 +112,7 @@ export class GroupsController {
   }
 
   @Post('profiles/:id/invoice')
-  @Roles('admin', 'front_desk', 'revenue_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'revenue_manager')
   @ApiOperation({ summary: 'Generate a group invoice from the master folio (KB 14.7)' })
   @ApiResponse({ status: 201, description: 'Group invoice generated' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -127,7 +127,7 @@ export class GroupsController {
   // Static sub-paths declared before ':id' so they are not captured by the param.
 
   @Post('blocks')
-  @Roles('admin', 'front_desk', 'revenue_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'revenue_manager')
   @ApiOperation({ summary: 'Create an allotment block (KB 14.4)' })
   @ApiResponse({ status: 201, description: 'Block created' })
   createBlock(@Body() dto: CreateBlockDto) {
@@ -142,7 +142,7 @@ export class GroupsController {
   }
 
   @Post('blocks/process-cutoffs')
-  @Roles('admin', 'night_auditor', 'revenue_manager')
+  @Roles('admin', 'general_manager', 'night_auditor', 'accounting', 'revenue_manager')
   @ApiOperation({
     summary: 'Release all auto-release blocks past cutoff (KB 14.4)',
     description: 'Called by an external scheduler / night audit — no in-process cron.',
@@ -166,7 +166,7 @@ export class GroupsController {
   }
 
   @Patch('blocks/:id')
-  @Roles('admin', 'front_desk', 'revenue_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'revenue_manager')
   @ApiOperation({ summary: 'Update an allotment block' })
   @ApiResponse({ status: 200, description: 'Block updated' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -179,7 +179,7 @@ export class GroupsController {
   }
 
   @Put('blocks/:id/inventory')
-  @Roles('admin', 'front_desk', 'revenue_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'revenue_manager')
   @ApiOperation({ summary: 'Set held inventory for a date/room-type (KB 14.5)' })
   @ApiResponse({ status: 200, description: 'Inventory upserted' })
   @ApiResponse({ status: 400, description: 'Over-allotment beyond sellable availability' })
@@ -202,7 +202,7 @@ export class GroupsController {
   }
 
   @Post('blocks/:id/release')
-  @Roles('admin', 'front_desk', 'night_auditor', 'revenue_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting', 'revenue_manager')
   @ApiOperation({ summary: 'Release a block — return unpicked rooms to general inventory (KB 14.4)' })
   @ApiResponse({ status: 201, description: 'Block released' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -226,7 +226,7 @@ export class GroupsController {
   }
 
   @Post('blocks/:id/rooming-list')
-  @Roles('admin', 'front_desk', 'revenue_manager')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'revenue_manager')
   @ApiOperation({ summary: 'Import a rooming list to create member reservations (KB 14.6)' })
   @ApiResponse({ status: 201, description: 'Rooming list import result' })
   importRoomingList(

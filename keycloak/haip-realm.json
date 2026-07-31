@@ -14,12 +14,16 @@
 
   "roles": {
     "realm": [
-      { "name": "admin", "description": "Property owner / GM — full access" },
+      { "name": "admin", "description": "Property owner — full access including users and roles" },
       { "name": "front_desk", "description": "Front desk agent — reservations, check-in/out, guests, folios" },
       { "name": "housekeeping", "description": "Housekeeping staff — own task assignments, room status" },
       { "name": "housekeeping_manager", "description": "Head housekeeper — all housekeeping, assignments, analytics" },
       { "name": "night_auditor", "description": "Night audit operator — night audit, reports, folio review" },
-      { "name": "readonly", "description": "View-only / reporting — all read endpoints" }
+      { "name": "readonly", "description": "View-only / reporting — all read endpoints" },
+      { "name": "general_manager", "description": "General manager — full operations; not user/role admin" },
+      { "name": "revenue_manager", "description": "Revenue manager — rates, channels, revenue, group commercial" },
+      { "name": "accounting", "description": "Accounting — folios, house accounts, tax, night audit, reports" },
+      { "name": "reservations", "description": "Reservations desk — bookings and guests without cashier posting" }
     ]
   },
 

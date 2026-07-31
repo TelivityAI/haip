@@ -7,7 +7,7 @@ export const ROLES_KEY = 'roles';
  * If no @Roles() is set, any authenticated user can access.
  *
  * @example
- * @Roles('admin', 'front_desk')
+ * @Roles('admin', 'general_manager', 'front_desk', 'reservations')
  * @Post()
  * create() { ... }
  */
