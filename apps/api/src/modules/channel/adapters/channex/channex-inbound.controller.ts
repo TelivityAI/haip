@@ -87,11 +87,16 @@ export class ChannexInboundController {
       }
 
       // Prefer embedded revision payload (send_data=true); otherwise pull the feed.
+      // Channex "Send test message" often posts a stub/data wrapper without a real
+      // booking revision — ACK those with 200 so webhook delivery succeeds.
       const revision = this.extractRevision(body);
       if (revision) {
         const mapped = mapChannexRevisionToHaip(revision, propertyId);
         if (!mapped) {
-          return res.status(400).json({ error: 'Unreadable booking revision' });
+          this.logger.warn(
+            `Channex webhook: no usable booking revision for property_id=${propertyId} — acking`,
+          );
+          return res.status(200).json({ ok: true, ack: 'no_usable_revision' });
         }
         await this.inboundReservationService.processInboundReservation(connection.id, mapped);
       } else {
