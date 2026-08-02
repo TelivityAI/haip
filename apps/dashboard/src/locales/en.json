@@ -576,8 +576,10 @@
     "viewFolio": "View Folio",
     "walkIn": "Walk-In",
     "walkInFailed": "Walk-in failed",
-    "walkInRequired": "Guest name, room type, rate plan, and room are required",
-    "walkInStay": "Stay: {{checkIn}} → {{checkOut}} (1 night)",
+    "walkInRequired": "Guest name, room type, rate plan, stay dates, and room are required",
+    "walkInStay_one": "Stay {{checkIn}} → {{checkOut}} · {{count}} night",
+    "walkInStay_other": "Stay {{checkIn}} → {{checkOut}} · {{count}} nights",
+    "walkInStay": "Stay {{checkIn}} → {{checkOut}} · {{count}} nights",
     "walkInTitle": "Walk-In Guest"
   },
   "groups": {
