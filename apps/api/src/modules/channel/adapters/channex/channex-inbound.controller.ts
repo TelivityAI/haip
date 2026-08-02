@@ -2,7 +2,7 @@ import { Controller, Post, Req, Res, Logger, Headers } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { Public } from '../../../../auth/public.decorator';
+import { Public } from '../../../auth/public.decorator';
 import { InboundReservationService } from '../../inbound-reservation.service';
 import { ChannelService } from '../../channel.service';
 import { getInboundAuth, type InboundHmacAuth } from '../inbound-auth.util';
