@@ -1136,7 +1136,7 @@ export class ReservationService {
   }
 
   async findById(id: string, propertyId: string) {
-    // Join with guest, room type, rate plan, and room (if assigned).
+    // Join with guest, room type, rate plan, room, and booking (confirmation).
     // Tenant-scoped via propertyId to prevent cross-tenant access.
     const results = await this.db
       .select({
@@ -1145,12 +1145,14 @@ export class ReservationService {
         roomType: roomTypes,
         ratePlan: ratePlans,
         room: rooms,
+        confirmationNumber: bookings.confirmationNumber,
       })
       .from(reservations)
       .leftJoin(guests, eq(reservations.guestId, guests.id))
       .leftJoin(roomTypes, eq(reservations.roomTypeId, roomTypes.id))
       .leftJoin(ratePlans, eq(reservations.ratePlanId, ratePlans.id))
       .leftJoin(rooms, eq(reservations.roomId, rooms.id))
+      .leftJoin(bookings, eq(reservations.bookingId, bookings.id))
       .where(
         and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
       );
@@ -1213,12 +1215,14 @@ export class ReservationService {
           roomNumber: rooms.number,
           roomTypeName: roomTypes.name,
           ratePlanName: ratePlans.name,
+          confirmationNumber: bookings.confirmationNumber,
         })
         .from(reservations)
         .leftJoin(guests, eq(reservations.guestId, guests.id))
         .leftJoin(rooms, eq(reservations.roomId, rooms.id))
         .leftJoin(roomTypes, eq(reservations.roomTypeId, roomTypes.id))
         .leftJoin(ratePlans, eq(reservations.ratePlanId, ratePlans.id))
+        .leftJoin(bookings, eq(reservations.bookingId, bookings.id))
         .where(whereClause)
         .limit(limit)
         .offset(offset)
@@ -1231,6 +1235,7 @@ export class ReservationService {
 
     const data = rows.map((r: any) => ({
       ...r.reservation,
+      confirmationNumber: r.confirmationNumber ?? null,
       guestName: r.guestFirstName ? `${r.guestFirstName} ${r.guestLastName}` : null,
       guest: r.guestFirstName
         ? {
