@@ -18,6 +18,7 @@ import { DerbySoftAdapter } from './adapters/derbysoft/derbysoft.adapter';
 import { DerbySoftInboundController } from './adapters/derbysoft/derbysoft-inbound.controller';
 import { Beds24Adapter } from './adapters/beds24/beds24.adapter';
 import { ChannexAdapter } from './adapters/channex/channex.adapter';
+import { ChannexInboundController } from './adapters/channex/channex-inbound.controller';
 import {
   NamedConsoleChannelAdapter,
   WAVE_CHANNEL_ADAPTERS,
@@ -43,6 +44,7 @@ const waveChannelProviders = WAVE_CHANNEL_CONSOLE_PACKS.map((pack, index) => ({
     BookingComInboundController,
     ExpediaInboundController,
     DerbySoftInboundController,
+    ChannexInboundController,
   ],
   providers: [
     ChannelService,

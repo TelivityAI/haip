@@ -1,12 +1,14 @@
 import {
   Injectable,
   Inject,
+  Optional,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and, lte, gte, sql } from 'drizzle-orm';
 import { ratePlans, rateRestrictions, roomTypes, cancellationPolicies, groupProfiles, properties, rooms, reservations } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { WebhookService } from '../webhook/webhook.service';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
 import { CreateRateRestrictionDto } from './dto/create-rate-restriction.dto';
@@ -33,7 +35,10 @@ export interface EffectiveRateResult {
 
 @Injectable()
 export class RatePlanService {
-  constructor(@Inject(DRIZZLE) private readonly db: any) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: any,
+    @Optional() private readonly webhookService?: WebhookService,
+  ) {}
 
   /**
    * Enforce rate-plan restrictions for a stay [checkIn, checkOut). Throws 400 if
@@ -236,6 +241,18 @@ export class RatePlanService {
     if (!ratePlan) {
       throw new NotFoundException(`Rate plan ${id} not found`);
     }
+    // Drive channel ARI delta when base price / plan fields change in the PMS UI.
+    await this.webhookService?.emit(
+      'rate_plan.updated',
+      'rate_plan',
+      ratePlan.id,
+      {
+        ratePlanId: ratePlan.id,
+        startDate: new Date().toISOString().slice(0, 10),
+        endDate: this.addDaysIso(new Date().toISOString().slice(0, 10), 90),
+      },
+      propertyId,
+    );
     return ratePlan;
   }
 
@@ -360,6 +377,17 @@ export class RatePlanService {
       .insert(rateRestrictions)
       .values({ ...dto, ratePlanId, propertyId })
       .returning();
+    await this.webhookService?.emit(
+      'rate_restriction.created',
+      'rate_restriction',
+      restriction.id,
+      {
+        ratePlanId,
+        startDate: restriction.startDate,
+        endDate: restriction.endDate,
+      },
+      propertyId,
+    );
     return restriction;
   }
 
@@ -394,6 +422,17 @@ export class RatePlanService {
     if (!restriction) {
       throw new NotFoundException(`Rate restriction ${id} not found`);
     }
+    await this.webhookService?.emit(
+      'rate_restriction.updated',
+      'rate_restriction',
+      restriction.id,
+      {
+        ratePlanId: restriction.ratePlanId,
+        startDate: restriction.startDate,
+        endDate: restriction.endDate,
+      },
+      propertyId,
+    );
     return restriction;
   }
 
@@ -410,6 +449,23 @@ export class RatePlanService {
     if (!restriction) {
       throw new NotFoundException(`Rate restriction ${id} not found`);
     }
+    await this.webhookService?.emit(
+      'rate_restriction.deleted',
+      'rate_restriction',
+      id,
+      {
+        ratePlanId: restriction.ratePlanId,
+        startDate: restriction.startDate,
+        endDate: restriction.endDate,
+      },
+      propertyId,
+    );
     return { deleted: true };
+  }
+
+  private addDaysIso(dateStr: string, days: number): string {
+    const d = new Date(`${dateStr}T00:00:00.000Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
   }
 }

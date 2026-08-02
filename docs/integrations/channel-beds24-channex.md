@@ -66,7 +66,8 @@ When credentials are missing, the adapter runs in **console mode** (logged stub,
 |-------|----------------|---------|
 | `apiKey` | `CHANNEX_API_KEY` | `user-api-key` header |
 | `propertyId` | `CHANNEX_PROPERTY_ID` | Channex property UUID |
-| `baseUrl` | `CHANNEX_BASE_URL` | Default `https://api.channex.io/api/v1` |
+| `baseUrl` | `CHANNEX_BASE_URL` | Default `https://api.channex.io/api/v1`; staging `https://staging.channex.io/api/v1` |
+| `inboundAuth.secret` | — | Shared secret for `X-Channex-Webhook-Secret` on inbound webhooks |
 
 ```http
 POST /api/v1/channels/connections?propertyId={uuid}
@@ -77,7 +78,9 @@ Content-Type: application/json
   "adapterType": "channex",
   "config": {
     "apiKey": "YOUR_USER_API_KEY",
-    "propertyId": "CHANNEX_PROPERTY_UUID"
+    "propertyId": "CHANNEX_PROPERTY_UUID",
+    "baseUrl": "https://staging.channex.io/api/v1",
+    "inboundAuth": { "secret": "SHARED_WEBHOOK_SECRET" }
   }
 }
 ```
@@ -88,24 +91,30 @@ Map HAIP room types to Channex **room_type_id** and rate plans to **rate_plan_id
 
 - Availability → `POST …/availability`
 - Rates & restrictions → `POST …/restrictions`
+- Consecutive identical days are collapsed to `date_from` / `date_to`
+- Responses capture Channex **task ids** in sync logs (`response.taskIds`) for certification
 
-Same HAIP push endpoints as other channel adapters (`push-availability`, `push-rates`, `push-restrictions`).
+Same HAIP push endpoints as other channel adapters (`push/availability`, `push/rates`, `push/restrictions`, `push/full`). Rate/restriction saves and reservation create/modify/cancel also trigger delta pushes automatically.
 
-### Booking feed
+### Booking feed + webhook
 
-```http
-POST /api/v1/channels/connections/{id}/pull-reservations?propertyId={uuid}
-```
-
-Pulls unacknowledged revisions from **booking_revisions/feed**. After HAIP creates the reservation, confirm back to Channex:
+Poll:
 
 ```http
-POST /api/v1/channels/connections/{id}/confirm-reservation?propertyId={uuid}
+POST /api/v1/channels/inbound/pull?propertyId={uuid}&channelConnectionId={id}
 ```
 
-(Body includes the Channex revision/booking id as `externalConfirmation`.)
+Or register a Channex webhook to:
+
+`POST /api/v1/channels/inbound/channex/bookings`
+
+HAIP persists the reservation, then ACKs **`booking_revisions/{revisionId}/ack`** (revision id, not booking id).
 
 Console mode applies when `apiKey` or `propertyId` is absent.
+
+### Certification
+
+See [Channex certification runbook](../channels/channex-certification.md).
 
 ## Test connection
 
