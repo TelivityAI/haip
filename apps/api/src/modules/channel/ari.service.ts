@@ -397,6 +397,27 @@ export class AriService {
     }
   }
 
+  /**
+   * Rate / restriction saves in the PMS UI → delta ARI push to active channels.
+   * Required for Channex certification (screenshare must show real UI → API path).
+   */
+  @OnEvent('rate_plan.updated')
+  @OnEvent('rate_restriction.created')
+  @OnEvent('rate_restriction.updated')
+  @OnEvent('rate_restriction.deleted')
+  async handleRateOrRestrictionChanged(payload: WebhookPayload) {
+    if (!payload.propertyId) return;
+    try {
+      const data = payload.data as Record<string, unknown>;
+      const startDate = String(data['startDate'] ?? '');
+      const endDate = String(data['endDate'] ?? startDate);
+      if (!startDate || !endDate) return;
+      await this.pushRates(payload.propertyId, startDate, endDate);
+    } catch {
+      // Fire-and-forget
+    }
+  }
+
   // --- Private Helpers ---
 
   private async logSync(

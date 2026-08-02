@@ -191,13 +191,14 @@ export class InboundReservationService {
 
     const { guest, booking, pmsReservation } = created;
 
-    // Confirm back to channel
+    // Confirm back to channel (Channex ACKs revision id, not booking id)
     try {
       const adapter = this.adapterFactory.getAdapter(conn.adapterType);
       await adapter.confirmReservation({
         channelConnectionId: conn.id,
         connectionConfig: (conn.config ?? {}) as Record<string, unknown>,
         externalConfirmation: reservation.externalConfirmation,
+        externalRevisionId: reservation.externalRevisionId,
         pmsConfirmationNumber: confirmationNumber,
       });
     } catch {
@@ -325,6 +326,20 @@ export class InboundReservationService {
         .returning();
     });
 
+    // ACK revision before/with availability push (Channex requires ACK after persist)
+    try {
+      const adapter = this.adapterFactory.getAdapter(conn.adapterType);
+      await adapter.confirmReservation({
+        channelConnectionId: conn.id,
+        connectionConfig: (conn.config ?? {}) as Record<string, unknown>,
+        externalConfirmation: reservation.externalConfirmation,
+        externalRevisionId: reservation.externalRevisionId,
+        pmsConfirmationNumber: existing.confirmationNumber,
+      });
+    } catch {
+      // Don't fail modification if ACK fails — feed will retry
+    }
+
     // Push updated availability
     try {
       await this.ariService.pushAvailability(
@@ -399,6 +414,20 @@ export class InboundReservationService {
 
     const arrivalDate = reservation.arrivalDate || existingReservation.arrivalDate;
     const departureDate = reservation.departureDate || existingReservation.departureDate;
+
+    // ACK cancellation revision so it leaves the Channex feed
+    try {
+      const adapter = this.adapterFactory.getAdapter(conn.adapterType);
+      await adapter.confirmReservation({
+        channelConnectionId: conn.id,
+        connectionConfig: (conn.config ?? {}) as Record<string, unknown>,
+        externalConfirmation: reservation.externalConfirmation,
+        externalRevisionId: reservation.externalRevisionId,
+        pmsConfirmationNumber: existing.confirmationNumber,
+      });
+    } catch {
+      // Don't fail cancellation if ACK fails
+    }
 
     // Push updated availability
     try {
