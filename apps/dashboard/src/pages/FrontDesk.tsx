@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote } from 'lucide-react';
-import { addDays, format } from 'date-fns';
+import { format } from 'date-fns';
 import { api } from '../lib/api';
-import { moneyString, requirePropertyId } from '../lib/api-helpers';
+import { requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
-import FindGuest from '../components/guests/FindGuest';
-import type { Guest } from '../types/guest';
+import WalkInModal from '../components/front-desk/WalkInModal';
+import GuestDetailsModal from '../components/front-desk/GuestDetailsModal';
 
 type Tab = 'arrivals' | 'in-house' | 'departures';
 
@@ -23,6 +23,7 @@ interface Reservation {
   roomNumber?: string;
   roomTypeId?: string;
   roomTypeName?: string;
+  guestId?: string;
   guestName?: string;
   guest?: { firstName: string; lastName: string; vipLevel?: string; loyaltyNumber?: string | null };
   balance?: number;
@@ -58,13 +59,13 @@ export default function FrontDesk() {
   const { propertyId } = useProperty();
   const queryClient = useQueryClient();
   const today = format(new Date(), 'yyyy-MM-dd');
-  const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
 
   const [tab, setTab] = useState<Tab>('arrivals');
   const [checkInModal, setCheckInModal] = useState<Reservation | null>(null);
   const [checkOutModal, setCheckOutModal] = useState<Reservation | null>(null);
   const [moveModal, setMoveModal] = useState<Reservation | null>(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
+  const [guestDetails, setGuestDetails] = useState<Reservation | null>(null);
   const [notesModal, setNotesModal] = useState<Reservation | null>(null);
   const [selectedForGroup, setSelectedForGroup] = useState<string[]>([]);
 
@@ -91,13 +92,6 @@ export default function FrontDesk() {
   const [moveRoomId, setMoveRoomId] = useState('');
   const [overrideDoNotMove, setOverrideDoNotMove] = useState(false);
   const [moveReason, setMoveReason] = useState('');
-
-  // Walk-in form
-  const [wiGuest, setWiGuest] = useState<Guest | null>(null);
-  const [wiRoomTypeId, setWiRoomTypeId] = useState('');
-  const [wiRatePlanId, setWiRatePlanId] = useState('');
-  const [wiRoomId, setWiRoomId] = useState('');
-  const [wiError, setWiError] = useState('');
 
   // Notes
   const [noteBody, setNoteBody] = useState('');
@@ -177,24 +171,12 @@ export default function FrontDesk() {
     enabled: !!propertyId && !!checkInModal,
   });
 
-  const needReadyRooms = !!checkInModal || !!moveModal || walkInOpen;
+  const needReadyRooms = !!checkInModal || !!moveModal;
   const { data: availableRooms } = useQuery({
     queryKey: ['rooms', 'available', propertyId],
     queryFn: () =>
       api.get('/v1/rooms/by-status', { params: { propertyId, status: 'guest_ready' } }).then((r) => r.data),
     enabled: !!propertyId && needReadyRooms,
-  });
-
-  const { data: roomTypes } = useQuery({
-    queryKey: ['room-types', propertyId],
-    queryFn: () => api.get('/v1/room-types', { params: { propertyId } }).then((r) => r.data),
-    enabled: !!propertyId && walkInOpen,
-  });
-
-  const { data: ratePlans } = useQuery({
-    queryKey: ['rate-plans', propertyId],
-    queryFn: () => api.get('/v1/rate-plans', { params: { propertyId } }).then((r) => r.data),
-    enabled: !!propertyId && walkInOpen,
   });
 
   const { data: notesData, refetch: refetchNotes } = useQuery({
@@ -306,66 +288,6 @@ export default function FrontDesk() {
     },
   });
 
-  const walkInMutation = useMutation({
-    mutationFn: async () => {
-      requirePropertyId(propertyId);
-      setWiError('');
-      if (!wiGuest?.id || !wiRoomTypeId || !wiRatePlanId || !wiRoomId) {
-        throw new Error(t('frontDesk.walkInRequired'));
-      }
-      const plans: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
-      const plan = plans.find((p) => p.id === wiRatePlanId);
-      const guestId = wiGuest.id;
-      const resCreate = await api.post(
-        '/v1/reservations',
-        {
-          propertyId,
-          guestId,
-          roomTypeId: wiRoomTypeId,
-          ratePlanId: wiRatePlanId,
-          arrivalDate: today,
-          departureDate: tomorrow,
-          adults: 1,
-          source: 'walk_in',
-          totalAmount: plan?.baseAmount ?? '0.00',
-          currencyCode: plan?.currencyCode ?? 'USD',
-        },
-        { skipErrorToast: true },
-      );
-      const reservationId = resCreate.data.id ?? resCreate.data.reservation?.id;
-      await api.patch(
-        `/v1/reservations/${reservationId}/confirm`,
-        {},
-        { params: { propertyId }, skipErrorToast: true },
-      );
-      await api.patch(
-        `/v1/reservations/${reservationId}/assign-room`,
-        { roomId: wiRoomId },
-        { params: { propertyId }, skipErrorToast: true },
-      );
-      return reservationId as string;
-    },
-    onSuccess: (reservationId) => {
-      const stub: Reservation = {
-        id: reservationId,
-        confirmationNumber: '—',
-        status: 'assigned',
-        arrivalDate: today,
-        departureDate: tomorrow,
-        roomId: wiRoomId,
-        guestName: wiGuest ? `${wiGuest.firstName} ${wiGuest.lastName}`.trim() : '—',
-      };
-      invalidateAll();
-      setWalkInOpen(false);
-      resetWalkIn();
-      setCheckInModal(stub);
-      resetCheckInForm();
-    },
-    onError: (err: any) => {
-      setWiError(err?.response?.data?.message ?? err?.message ?? t('frontDesk.walkInFailed'));
-    },
-  });
-
   const addNoteMutation = useMutation({
     mutationFn: () =>
       api.post(`/v1/reservations/${notesModal!.id}/notes`, {
@@ -396,14 +318,6 @@ export default function FrontDesk() {
     setDestinationState('');
     setDestinationCountry('');
     setShowFnrhTravel(false);
-  }
-
-  function resetWalkIn() {
-    setWiGuest(null);
-    setWiRoomTypeId('');
-    setWiRatePlanId('');
-    setWiRoomId('');
-    setWiError('');
   }
 
   const guestName = (r: Reservation) =>
@@ -440,15 +354,6 @@ export default function FrontDesk() {
     : (unassigned?.data?.length ?? unassigned?.total ?? 0);
   const noteList: NoteRow[] = notesData?.notes ?? notesData?.data ?? (Array.isArray(notesData) ? notesData : []);
   const activeNoteCount = notesData?.activeCount ?? noteList.filter((n) => n.isActive).length;
-
-  const rtList: any[] = Array.isArray(roomTypes) ? roomTypes : roomTypes?.data ?? [];
-  const rpList: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
-  const filteredPlans = wiRoomTypeId
-    ? rpList.filter((p) => p.roomTypeId === wiRoomTypeId && p.isActive !== false)
-    : rpList;
-  const walkInRooms = wiRoomTypeId
-    ? roomList.filter((r) => !r.roomTypeId || r.roomTypeId === wiRoomTypeId)
-    : roomList;
 
   const tabs: { key: Tab; label: string; icon: typeof LogIn; count: number }[] = [
     {
@@ -487,10 +392,7 @@ export default function FrontDesk() {
             </button>
           )}
           <button
-            onClick={() => {
-              resetWalkIn();
-              setWalkInOpen(true);
-            }}
+            onClick={() => setWalkInOpen(true)}
             className="flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-teal transition-colors"
           >
             <UserPlus size={16} />
@@ -665,6 +567,19 @@ export default function FrontDesk() {
                     )}
                     {tab === 'in-house' && (
                       <>
+                        <a
+                          href={`/folios?reservationId=${r.id}`}
+                          className="text-telivity-teal text-xs font-semibold hover:underline self-center"
+                          title={t('frontDesk.viewFolio')}
+                        >
+                          {t('frontDesk.viewFolio')}
+                        </a>
+                        <button
+                          onClick={() => setGuestDetails(r)}
+                          className="border border-gray-200 text-telivity-slate rounded-lg px-2 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey"
+                        >
+                          {t('frontDesk.guestDetails')}
+                        </button>
                         <button
                           onClick={() => {
                             setMoveModal(r);
@@ -677,12 +592,12 @@ export default function FrontDesk() {
                           <ArrowRightLeft size={12} />
                           {t('frontDesk.moveRoom')}
                         </button>
-                        <a
-                          href={`/folios?reservationId=${r.id}`}
-                          className="text-telivity-teal text-xs font-semibold hover:underline self-center"
+                        <button
+                          onClick={() => setCheckOutModal(r)}
+                          className="text-telivity-orange text-xs font-semibold hover:underline self-center"
                         >
-                          {t('frontDesk.viewFolio')}
-                        </a>
+                          {t('frontDesk.earlyCheckout')}
+                        </button>
                       </>
                     )}
                     {tab === 'departures' && (
@@ -1090,97 +1005,51 @@ export default function FrontDesk() {
         )}
       </Modal>
 
-      {/* Walk-In Modal */}
-      <Modal
+      <WalkInModal
         open={walkInOpen}
+        propertyId={propertyId}
         onClose={() => setWalkInOpen(false)}
-        title={t('frontDesk.walkInTitle')}
-        wide
-      >
-        <div className="space-y-4">
-          <FindGuest
-            label={t('reservations.guest')}
-            selectedGuest={wiGuest}
-            onSelectGuest={setWiGuest}
-          />
-          <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-              {t('frontDesk.roomType')}
-            </label>
-            <select
-              value={wiRoomTypeId}
-              onChange={(e) => {
-                setWiRoomTypeId(e.target.value);
-                setWiRatePlanId('');
-                setWiRoomId('');
-              }}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">{t('frontDesk.selectRoomType')}</option>
-              {rtList.map((rt) => (
-                <option key={rt.id} value={rt.id}>
-                  {rt.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-              {t('frontDesk.ratePlan')}
-            </label>
-            <select
-              value={wiRatePlanId}
-              onChange={(e) => setWiRatePlanId(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">{t('frontDesk.selectRatePlan')}</option>
-              {filteredPlans.map((rp) => (
-                <option key={rp.id} value={rp.id}>
-                  {rp.name} — {moneyString(rp.baseAmount)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-              {t('frontDesk.assignRoom')}
-            </label>
-            <select
-              value={wiRoomId}
-              onChange={(e) => setWiRoomId(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">{t('frontDesk.selectRoom')}</option>
-              {walkInRooms.map((room) => (
-                <option key={room.id} value={room.id}>
-                  {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <p className="text-xs text-telivity-mid-grey">
-            {t('frontDesk.walkInStay', { checkIn: today, checkOut: tomorrow })}
-          </p>
-          {wiError && <p className="text-sm text-telivity-orange">{wiError}</p>}
-          <div className="flex gap-3">
-            <button
-              onClick={() => setWalkInOpen(false)}
-              className="flex-1 border border-gray-200 rounded-lg px-4 py-2 text-sm font-semibold"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              onClick={() => walkInMutation.mutate()}
-              disabled={walkInMutation.isPending}
-              className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
-            >
-              {walkInMutation.isPending
-                ? t('common.processing')
-                : t('frontDesk.createWalkIn')}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        onCreated={(created) => {
+          invalidateAll();
+          setWalkInOpen(false);
+          setCheckInModal({
+            id: created.reservationId,
+            confirmationNumber: '—',
+            status: 'assigned',
+            arrivalDate: created.arrivalDate,
+            departureDate: created.departureDate,
+            roomId: created.roomId,
+            guestName: created.guestName,
+          });
+          resetCheckInForm();
+        }}
+      />
+
+      <GuestDetailsModal
+        open={!!guestDetails}
+        propertyId={propertyId}
+        reservation={guestDetails}
+        doorPin={guestDetails ? doorPinByReservation.get(guestDetails.id)?.accessCode : null}
+        onClose={() => setGuestDetails(null)}
+        onNotes={() => {
+          if (!guestDetails) return;
+          setNotesModal(guestDetails);
+          setGuestDetails(null);
+        }}
+        onMove={() => {
+          if (!guestDetails) return;
+          setMoveModal(guestDetails);
+          setMoveRoomId('');
+          setOverrideDoNotMove(false);
+          setMoveReason('');
+          setGuestDetails(null);
+        }}
+        onEarlyCheckout={() => {
+          if (!guestDetails) return;
+          setCheckOutModal(guestDetails);
+          setGuestDetails(null);
+        }}
+      />
 
       {/* Notes Modal */}
       <Modal
