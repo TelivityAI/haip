@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote } from 'lucide-react';
+import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote, UserRound } from 'lucide-react';
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
@@ -9,6 +9,7 @@ import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import FindGuest from '../components/guests/FindGuest';
+import GuestDetailsModal from '../components/front-desk/GuestDetailsModal';
 import type { Guest } from '../types/guest';
 
 type Tab = 'arrivals' | 'in-house' | 'departures';
@@ -16,6 +17,7 @@ type Tab = 'arrivals' | 'in-house' | 'departures';
 interface Reservation {
   id: string;
   confirmationNumber: string;
+  bookingId?: string;
   status: string;
   arrivalDate: string;
   departureDate: string;
@@ -29,6 +31,33 @@ interface Reservation {
   doNotMove?: boolean;
   totalAmount?: string;
   ratePlanId?: string;
+}
+
+interface PartyGroup {
+  key: string;
+  confirmationNumber: string;
+  members: Reservation[];
+}
+
+function groupByBooking(list: Reservation[]): PartyGroup[] {
+  const order: string[] = [];
+  const map = new Map<string, Reservation[]>();
+  for (const r of list) {
+    const key = r.bookingId || r.confirmationNumber || r.id;
+    if (!map.has(key)) {
+      map.set(key, []);
+      order.push(key);
+    }
+    map.get(key)!.push(r);
+  }
+  return order.map((key) => {
+    const members = map.get(key)!;
+    return {
+      key,
+      confirmationNumber: members[0]?.confirmationNumber || '—',
+      members,
+    };
+  });
 }
 
 interface Room {
@@ -66,6 +95,7 @@ export default function FrontDesk() {
   const [moveModal, setMoveModal] = useState<Reservation | null>(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [notesModal, setNotesModal] = useState<Reservation | null>(null);
+  const [detailsModal, setDetailsModal] = useState<Reservation | null>(null);
   const [selectedForGroup, setSelectedForGroup] = useState<string[]>([]);
 
   // Check-in form
@@ -99,6 +129,11 @@ export default function FrontDesk() {
   const [wiRoomTypeId, setWiRoomTypeId] = useState('');
   const [wiRatePlanId, setWiRatePlanId] = useState('');
   const [wiRoomId, setWiRoomId] = useState('');
+  const [wiSecondRoom, setWiSecondRoom] = useState(false);
+  const [wi2Guest, setWi2Guest] = useState<Guest | null>(null);
+  const [wi2RoomTypeId, setWi2RoomTypeId] = useState('');
+  const [wi2RatePlanId, setWi2RatePlanId] = useState('');
+  const [wi2RoomId, setWi2RoomId] = useState('');
   const [wiError, setWiError] = useState('');
 
   const wiNights = useMemo(() => {
@@ -162,7 +197,7 @@ export default function FrontDesk() {
           params: { propertyId, status: 'active', limit: 200 },
         })
         .then((r) => r.data),
-    enabled: !!propertyId && tab === 'in-house',
+    enabled: !!propertyId && (tab === 'in-house' || !!detailsModal),
   });
 
   const { data: departureData } = useQuery({
@@ -324,9 +359,19 @@ export default function FrontDesk() {
       if (!wiGuest?.id || !wiRoomTypeId || !wiRatePlanId || !wiRoomId || wiNights <= 0) {
         throw new Error(t('frontDesk.walkInRequired'));
       }
+      if (wiSecondRoom) {
+        if (!wi2Guest?.id || !wi2RoomTypeId || !wi2RatePlanId || !wi2RoomId) {
+          throw new Error(t('frontDesk.walkInSecondRequired'));
+        }
+        if (wi2RoomId === wiRoomId) {
+          throw new Error(t('frontDesk.walkInDistinctRooms'));
+        }
+      }
       const plans: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
       const plan = plans.find((p) => p.id === wiRatePlanId);
+      const plan2 = plans.find((p) => p.id === wi2RatePlanId);
       const nightly = Number(plan?.baseAmount ?? 0);
+      const nightly2 = Number(plan2?.baseAmount ?? 0);
       const guestId = wiGuest.id;
       const resCreate = await api.post(
         '/v1/reservations',
@@ -345,6 +390,11 @@ export default function FrontDesk() {
         { skipErrorToast: true },
       );
       const reservationId = resCreate.data.id ?? resCreate.data.reservation?.id;
+      const confirmationNumber =
+        resCreate.data.booking?.confirmationNumber ??
+        resCreate.data.confirmationNumber ??
+        '—';
+      const bookingId = resCreate.data.bookingId ?? resCreate.data.booking?.id;
       await api.patch(
         `/v1/reservations/${reservationId}/confirm`,
         {},
@@ -355,12 +405,40 @@ export default function FrontDesk() {
         { roomId: wiRoomId },
         { params: { propertyId }, skipErrorToast: true },
       );
-      return reservationId as string;
+
+      if (wiSecondRoom && wi2Guest) {
+        await api.post(
+          `/v1/reservations/${reservationId}/guests`,
+          { guestId: wi2Guest.id },
+          { params: { propertyId }, skipErrorToast: true },
+        );
+        await api.post(
+          `/v1/reservations/${reservationId}/split`,
+          {
+            guestIds: [wi2Guest.id],
+            roomTypeId: wi2RoomTypeId,
+            ratePlanId: wi2RatePlanId,
+            totalAmount: moneyString(nightly2 * wiNights),
+            currencyCode: plan2?.currencyCode ?? 'USD',
+            roomId: wi2RoomId,
+            adults: 1,
+          },
+          { params: { propertyId }, skipErrorToast: true },
+        );
+      }
+
+      return {
+        reservationId: reservationId as string,
+        confirmationNumber: confirmationNumber as string,
+        bookingId: bookingId as string | undefined,
+        partySize: wiSecondRoom ? 2 : 1,
+      };
     },
-    onSuccess: (reservationId) => {
+    onSuccess: ({ reservationId, confirmationNumber, bookingId, partySize }) => {
       const stub: Reservation = {
         id: reservationId,
-        confirmationNumber: '—',
+        confirmationNumber,
+        bookingId,
         status: 'assigned',
         arrivalDate: wiArrivalDate,
         departureDate: wiDepartureDate,
@@ -370,8 +448,12 @@ export default function FrontDesk() {
       invalidateAll();
       setWalkInOpen(false);
       resetWalkIn();
-      setCheckInModal(stub);
-      resetCheckInForm();
+      if (partySize > 1) {
+        setDetailsModal(stub);
+      } else {
+        setCheckInModal(stub);
+        resetCheckInForm();
+      }
     },
     onError: (err: any) => {
       setWiError(err?.response?.data?.message ?? err?.message ?? t('frontDesk.walkInFailed'));
@@ -417,6 +499,11 @@ export default function FrontDesk() {
     setWiRoomTypeId('');
     setWiRatePlanId('');
     setWiRoomId('');
+    setWiSecondRoom(false);
+    setWi2Guest(null);
+    setWi2RoomTypeId('');
+    setWi2RatePlanId('');
+    setWi2RoomId('');
     setWiError('');
   }
 
@@ -463,6 +550,16 @@ export default function FrontDesk() {
   const walkInRooms = wiRoomTypeId
     ? roomList.filter((r) => !r.roomTypeId || r.roomTypeId === wiRoomTypeId)
     : roomList;
+  const walkInRooms2 = (wi2RoomTypeId
+    ? roomList.filter((r) => !r.roomTypeId || r.roomTypeId === wi2RoomTypeId)
+    : roomList
+  ).filter((r) => r.id !== wiRoomId);
+  const filteredPlans2 = wi2RoomTypeId
+    ? rpList.filter((p) => p.roomTypeId === wi2RoomTypeId && p.isActive !== false)
+    : rpList;
+
+  const currentList = tab === 'arrivals' ? arrList : tab === 'in-house' ? ihList : depList;
+  const partyGroups = useMemo(() => groupByBooking(currentList), [currentList]);
 
   const tabs: { key: Tab; label: string; icon: typeof LogIn; count: number }[] = [
     {
@@ -594,137 +691,185 @@ export default function FrontDesk() {
             </tr>
           </thead>
           <tbody>
-            {(tab === 'arrivals' ? arrList : tab === 'in-house' ? ihList : depList).map((r, i) => (
-              <tr
-                key={r.id}
-                className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''} hover:bg-telivity-light-grey/50 transition-colors`}
-              >
-                {tab === 'arrivals' && (
-                  <td className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedForGroup.includes(r.id)}
-                      onChange={(e) =>
-                        setSelectedForGroup(
-                          e.target.checked
-                            ? [...selectedForGroup, r.id]
-                            : selectedForGroup.filter((id) => id !== r.id),
-                        )
-                      }
-                      className="rounded border-gray-300"
-                    />
-                  </td>
-                )}
-                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">
-                  <div>{guestName(r)}</div>
-                  {(tab === 'arrivals' || tab === 'in-house') && guestRecognition(r)}
-                </td>
-                <td className="px-4 py-3 text-sm text-telivity-slate">{r.confirmationNumber}</td>
-                {tab === 'arrivals' && (
-                  <td className="px-4 py-3 text-sm text-telivity-slate">{r.roomTypeName ?? '—'}</td>
-                )}
-                <td className="px-4 py-3 text-sm text-telivity-slate">
-                  {r.roomNumber ?? (
-                    <span className="text-telivity-orange font-medium">{t('frontDesk.notAssigned')}</span>
-                  )}
-                  {r.doNotMove && (
-                    <span className="ml-2 text-[10px] uppercase tracking-wide text-telivity-mid-grey">
-                      {t('frontDesk.dnm')}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-sm text-telivity-slate">
-                  {tab === 'departures' ? r.departureDate : r.arrivalDate}
-                </td>
-                {tab === 'in-house' && (
-                  <td className="px-4 py-3 text-sm text-telivity-slate">{r.departureDate}</td>
-                )}
-                {tab === 'in-house' && (
-                  <td className="px-4 py-3 text-sm font-mono text-telivity-navy">
-                    {doorPinByReservation.get(r.id)?.accessCode ?? (
-                      <span className="text-telivity-mid-grey font-sans">{t('frontDesk.doorPinNone')}</span>
-                    )}
-                  </td>
-                )}
-                <td className="px-4 py-3">
-                  <StatusBadge status={r.status} />
-                </td>
-                {(tab === 'in-house' || tab === 'departures') && (
-                  <td className="px-4 py-3 text-sm text-right font-medium">
-                    ${Number(r.balance ?? 0).toFixed(2)}
-                  </td>
-                )}
-                <td className="px-4 py-3 text-right">
-                  <div className="flex gap-2 justify-end flex-wrap">
-                    <button
-                      onClick={() => {
-                        setNotesModal(r);
-                        setNoteBody('');
-                      }}
-                      className="text-telivity-slate hover:text-telivity-teal p-1"
-                      title={t('frontDesk.notes')}
-                    >
-                      <StickyNote size={16} />
-                    </button>
-                    {tab === 'arrivals' && (
-                      <button
-                        onClick={() => {
-                          setCheckInModal(r);
-                          resetCheckInForm();
-                        }}
-                        className="bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-teal transition-colors"
+            {partyGroups.map((group) => {
+              const partyIds = group.members.map((m) => m.id);
+              const showPartyHeader = group.members.length > 1;
+              return (
+                <Fragment key={group.key}>
+                  {showPartyHeader && (
+                    <tr className="bg-telivity-teal/5 border-b border-telivity-teal/10">
+                      <td
+                        colSpan={10}
+                        className="px-4 py-2"
                       >
-                        {t('frontDesk.checkIn')}
-                      </button>
-                    )}
-                    {tab === 'in-house' && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setMoveModal(r);
-                            setMoveRoomId('');
-                            setOverrideDoNotMove(false);
-                            setMoveReason('');
-                          }}
-                          className="border border-gray-200 text-telivity-slate rounded-lg px-2 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey inline-flex items-center gap-1"
-                        >
-                          <ArrowRightLeft size={12} />
-                          {t('frontDesk.moveRoom')}
-                        </button>
-                        <a
-                          href={`/folios?reservationId=${r.id}`}
-                          className="text-telivity-teal text-xs font-semibold hover:underline self-center"
-                        >
-                          {t('frontDesk.viewFolio')}
-                        </a>
-                      </>
-                    )}
-                    {tab === 'departures' && (
-                      <>
-                        <button
-                          onClick={() => setCheckOutModal(r)}
-                          className="bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-teal transition-colors"
-                        >
-                          {t('frontDesk.checkOut')}
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(t('frontDesk.expressCheckoutConfirm'))) {
-                              expressCheckoutMutation.mutate(r.id);
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-telivity-teal">
+                            {t('frontDesk.party')}
+                          </span>
+                          <span className="text-sm font-medium text-telivity-navy">
+                            {group.confirmationNumber}
+                          </span>
+                          <span className="text-xs text-telivity-mid-grey">
+                            {t('frontDesk.partyRooms', { count: group.members.length })}
+                          </span>
+                          {tab === 'arrivals' && (
+                            <button
+                              type="button"
+                              onClick={() => groupCheckInMutation.mutate(partyIds)}
+                              disabled={groupCheckInMutation.isPending}
+                              className="ml-auto inline-flex items-center gap-1.5 bg-telivity-deep-blue text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-deep-blue/90 disabled:opacity-50"
+                            >
+                              <UsersRound size={12} />
+                              {t('frontDesk.partyCheckIn', { count: group.members.length })}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {group.members.map((r, i) => (
+                    <tr
+                      key={r.id}
+                      className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''} hover:bg-telivity-light-grey/50 transition-colors ${showPartyHeader ? 'border-l-2 border-l-telivity-teal/40' : ''}`}
+                    >
+                      {tab === 'arrivals' && (
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedForGroup.includes(r.id)}
+                            onChange={(e) =>
+                              setSelectedForGroup(
+                                e.target.checked
+                                  ? [...selectedForGroup, r.id]
+                                  : selectedForGroup.filter((id) => id !== r.id),
+                              )
                             }
-                          }}
-                          disabled={expressCheckoutMutation.isPending}
-                          className="bg-telivity-orange text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-orange-lt transition-colors disabled:opacity-50"
-                        >
-                          {t('frontDesk.express')}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {(tab === 'arrivals' ? arrList : tab === 'in-house' ? ihList : depList).length === 0 && (
+                            className="rounded border-gray-300"
+                          />
+                        </td>
+                      )}
+                      <td className="px-4 py-3 text-sm font-medium text-telivity-navy">
+                        <div>{guestName(r)}</div>
+                        {(tab === 'arrivals' || tab === 'in-house') && guestRecognition(r)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-telivity-slate">{r.confirmationNumber}</td>
+                      {tab === 'arrivals' && (
+                        <td className="px-4 py-3 text-sm text-telivity-slate">{r.roomTypeName ?? '—'}</td>
+                      )}
+                      <td className="px-4 py-3 text-sm text-telivity-slate">
+                        {r.roomNumber ?? (
+                          <span className="text-telivity-orange font-medium">{t('frontDesk.notAssigned')}</span>
+                        )}
+                        {r.doNotMove && (
+                          <span className="ml-2 text-[10px] uppercase tracking-wide text-telivity-mid-grey">
+                            {t('frontDesk.dnm')}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-telivity-slate">
+                        {tab === 'departures' ? r.departureDate : r.arrivalDate}
+                      </td>
+                      {tab === 'in-house' && (
+                        <td className="px-4 py-3 text-sm text-telivity-slate">{r.departureDate}</td>
+                      )}
+                      {tab === 'in-house' && (
+                        <td className="px-4 py-3 text-sm font-mono text-telivity-navy">
+                          {doorPinByReservation.get(r.id)?.accessCode ?? (
+                            <span className="text-telivity-mid-grey font-sans">{t('frontDesk.doorPinNone')}</span>
+                          )}
+                        </td>
+                      )}
+                      <td className="px-4 py-3">
+                        <StatusBadge status={r.status} />
+                      </td>
+                      {(tab === 'in-house' || tab === 'departures') && (
+                        <td className="px-4 py-3 text-sm text-right font-medium">
+                          ${Number(r.balance ?? 0).toFixed(2)}
+                        </td>
+                      )}
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex gap-2 justify-end flex-wrap">
+                          <button
+                            onClick={() => {
+                              setNotesModal(r);
+                              setNoteBody('');
+                            }}
+                            className="text-telivity-slate hover:text-telivity-teal p-1"
+                            title={t('frontDesk.notes')}
+                          >
+                            <StickyNote size={16} />
+                          </button>
+                          {(tab === 'arrivals' || tab === 'in-house') && (
+                            <button
+                              onClick={() => setDetailsModal(r)}
+                              className="border border-gray-200 text-telivity-slate rounded-lg px-2 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey inline-flex items-center gap-1"
+                            >
+                              <UserRound size={12} />
+                              {t('frontDesk.guestDetails')}
+                            </button>
+                          )}
+                          {tab === 'arrivals' && (
+                            <button
+                              onClick={() => {
+                                setCheckInModal(r);
+                                resetCheckInForm();
+                              }}
+                              className="bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-teal transition-colors"
+                            >
+                              {t('frontDesk.checkIn')}
+                            </button>
+                          )}
+                          {tab === 'in-house' && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setMoveModal(r);
+                                  setMoveRoomId('');
+                                  setOverrideDoNotMove(false);
+                                  setMoveReason('');
+                                }}
+                                className="border border-gray-200 text-telivity-slate rounded-lg px-2 py-1.5 text-xs font-semibold hover:bg-telivity-light-grey inline-flex items-center gap-1"
+                              >
+                                <ArrowRightLeft size={12} />
+                                {t('frontDesk.moveRoom')}
+                              </button>
+                              <a
+                                href={`/folios?reservationId=${r.id}`}
+                                className="text-telivity-teal text-xs font-medium hover:underline self-center"
+                              >
+                                {t('frontDesk.viewFolio')}
+                              </a>
+                            </>
+                          )}
+                          {tab === 'departures' && (
+                            <>
+                              <button
+                                onClick={() => setCheckOutModal(r)}
+                                className="bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-teal transition-colors"
+                              >
+                                {t('frontDesk.checkOut')}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(t('frontDesk.expressCheckoutConfirm'))) {
+                                    expressCheckoutMutation.mutate(r.id);
+                                  }
+                                }}
+                                disabled={expressCheckoutMutation.isPending}
+                                className="bg-telivity-orange text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-orange-lt transition-colors disabled:opacity-50"
+                              >
+                                {t('frontDesk.express')}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
+            {currentList.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">
                   {t('frontDesk.noToday', {
@@ -1111,67 +1256,175 @@ export default function FrontDesk() {
         title={t('frontDesk.walkInTitle')}
         wide
       >
-        <div className="space-y-4">
-          <FindGuest
-            label={t('reservations.guest')}
-            selectedGuest={wiGuest}
-            onSelectGuest={setWiGuest}
-          />
-          <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-              {t('frontDesk.roomType')}
-            </label>
-            <select
-              value={wiRoomTypeId}
-              onChange={(e) => {
-                setWiRoomTypeId(e.target.value);
-                setWiRatePlanId('');
-                setWiRoomId('');
+        <div className="space-y-5">
+          <div className="space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-telivity-mid-grey">
+              {t('frontDesk.room')} 1
+            </p>
+            <FindGuest
+              label={t('reservations.guest')}
+              selectedGuest={wiGuest}
+              onSelectGuest={setWiGuest}
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                  {t('frontDesk.roomType')}
+                </label>
+                <select
+                  value={wiRoomTypeId}
+                  onChange={(e) => {
+                    setWiRoomTypeId(e.target.value);
+                    setWiRatePlanId('');
+                    setWiRoomId('');
+                  }}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">{t('frontDesk.selectRoomType')}</option>
+                  {rtList.map((rt) => (
+                    <option key={rt.id} value={rt.id}>
+                      {rt.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                  {t('frontDesk.ratePlan')}
+                </label>
+                <select
+                  value={wiRatePlanId}
+                  onChange={(e) => setWiRatePlanId(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">{t('frontDesk.selectRatePlan')}</option>
+                  {filteredPlans.map((rp) => (
+                    <option key={rp.id} value={rp.id}>
+                      {rp.name} — {moneyString(rp.baseAmount)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                  {t('frontDesk.assignRoom')}
+                </label>
+                <select
+                  value={wiRoomId}
+                  onChange={(e) => {
+                    setWiRoomId(e.target.value);
+                    if (wi2RoomId === e.target.value) setWi2RoomId('');
+                  }}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">{t('frontDesk.selectRoom')}</option>
+                  {walkInRooms.map((room) => (
+                    <option key={room.id} value={room.id}>
+                      {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {!wiSecondRoom ? (
+            <button
+              type="button"
+              onClick={() => {
+                setWiSecondRoom(true);
+                setWi2RoomTypeId(wiRoomTypeId);
+                setWi2RatePlanId(wiRatePlanId);
               }}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+              className="text-sm font-semibold text-telivity-teal hover:underline"
             >
-              <option value="">{t('frontDesk.selectRoomType')}</option>
-              {rtList.map((rt) => (
-                <option key={rt.id} value={rt.id}>
-                  {rt.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-              {t('frontDesk.ratePlan')}
-            </label>
-            <select
-              value={wiRatePlanId}
-              onChange={(e) => setWiRatePlanId(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">{t('frontDesk.selectRatePlan')}</option>
-              {filteredPlans.map((rp) => (
-                <option key={rp.id} value={rp.id}>
-                  {rp.name} — {moneyString(rp.baseAmount)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-              {t('frontDesk.assignRoom')}
-            </label>
-            <select
-              value={wiRoomId}
-              onChange={(e) => setWiRoomId(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">{t('frontDesk.selectRoom')}</option>
-              {walkInRooms.map((room) => (
-                <option key={room.id} value={room.id}>
-                  {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
-                </option>
-              ))}
-            </select>
-          </div>
+              {t('frontDesk.addSecondRoom')}
+            </button>
+          ) : (
+            <div className="space-y-3 border-t border-gray-100 pt-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-telivity-mid-grey">
+                  {t('frontDesk.room')} 2
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWiSecondRoom(false);
+                    setWi2Guest(null);
+                    setWi2RoomTypeId('');
+                    setWi2RatePlanId('');
+                    setWi2RoomId('');
+                  }}
+                  className="text-xs text-telivity-mid-grey hover:text-telivity-orange"
+                >
+                  {t('common.remove')}
+                </button>
+              </div>
+              <FindGuest
+                label={t('frontDesk.secondGuest')}
+                selectedGuest={wi2Guest}
+                onSelectGuest={setWi2Guest}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                    {t('frontDesk.roomType')}
+                  </label>
+                  <select
+                    value={wi2RoomTypeId}
+                    onChange={(e) => {
+                      setWi2RoomTypeId(e.target.value);
+                      setWi2RatePlanId('');
+                      setWi2RoomId('');
+                    }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="">{t('frontDesk.selectRoomType')}</option>
+                    {rtList.map((rt) => (
+                      <option key={rt.id} value={rt.id}>
+                        {rt.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                    {t('frontDesk.ratePlan')}
+                  </label>
+                  <select
+                    value={wi2RatePlanId}
+                    onChange={(e) => setWi2RatePlanId(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="">{t('frontDesk.selectRatePlan')}</option>
+                    {filteredPlans2.map((rp) => (
+                      <option key={rp.id} value={rp.id}>
+                        {rp.name} — {moneyString(rp.baseAmount)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                    {t('frontDesk.assignRoom')}
+                  </label>
+                  <select
+                    value={wi2RoomId}
+                    onChange={(e) => setWi2RoomId(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="">{t('frontDesk.selectRoom')}</option>
+                    {walkInRooms2.map((room) => (
+                      <option key={room.id} value={room.id}>
+                        {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
@@ -1205,17 +1458,17 @@ export default function FrontDesk() {
             })}
           </p>
           {wiError && <p className="text-sm text-telivity-orange">{wiError}</p>}
-          <div className="flex gap-3">
+          <div className="flex gap-3 pt-1">
             <button
               onClick={() => setWalkInOpen(false)}
-              className="flex-1 border border-gray-200 rounded-lg px-4 py-2 text-sm font-semibold"
+              className="flex-1 border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-semibold"
             >
               {t('common.cancel')}
             </button>
             <button
               onClick={() => walkInMutation.mutate()}
               disabled={walkInMutation.isPending}
-              className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              className="flex-[1.4] bg-telivity-teal text-white rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
             >
               {walkInMutation.isPending
                 ? t('common.processing')
@@ -1224,6 +1477,32 @@ export default function FrontDesk() {
           </div>
         </div>
       </Modal>
+
+      <GuestDetailsModal
+        open={!!detailsModal}
+        reservation={detailsModal}
+        propertyId={propertyId}
+        doorPin={detailsModal ? doorPinByReservation.get(detailsModal.id)?.accessCode : null}
+        onClose={() => setDetailsModal(null)}
+        onNotes={(r) => {
+          setDetailsModal(null);
+          setNotesModal(r as Reservation);
+          setNoteBody('');
+        }}
+        onMove={(r) => {
+          setDetailsModal(null);
+          setMoveModal(r as Reservation);
+          setMoveRoomId('');
+          setOverrideDoNotMove(false);
+          setMoveReason('');
+        }}
+        onCheckIn={(r) => {
+          setDetailsModal(null);
+          setCheckInModal(r as Reservation);
+          resetCheckInForm();
+        }}
+        guestLabel={(r) => guestName(r as Reservation)}
+      />
 
       {/* Notes Modal */}
       <Modal

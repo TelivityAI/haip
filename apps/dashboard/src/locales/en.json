@@ -286,7 +286,9 @@
     "status": "Status",
     "no": "No",
     "yes": "Yes",
-    "delete": "Delete"
+    "delete": "Delete",
+    "close": "Close",
+    "remove": "Remove"
   },
   "commercial": {
     "arLedgers": "A/R ledgers",
@@ -577,10 +579,21 @@
     "walkIn": "Walk-In",
     "walkInFailed": "Walk-in failed",
     "walkInRequired": "Guest name, room type, rate plan, stay dates, and room are required",
+    "walkInSecondRequired": "Second room needs guest, room type, rate plan, and room",
+    "walkInDistinctRooms": "Choose two different rooms for a multi-room walk-in",
     "walkInStay_one": "Stay {{checkIn}} → {{checkOut}} · {{count}} night",
     "walkInStay_other": "Stay {{checkIn}} → {{checkOut}} · {{count}} nights",
     "walkInStay": "Stay {{checkIn}} → {{checkOut}} · {{count}} nights",
-    "walkInTitle": "Walk-In Guest"
+    "walkInTitle": "Walk-In Guest",
+    "addSecondRoom": "+ Add second room",
+    "secondGuest": "Second guest",
+    "guestDetails": "Guest Details",
+    "accompanyingGuests": "Accompanying guests",
+    "accountSummary": "Account summary",
+    "earlyCheckIn": "Early check-in",
+    "party": "Party",
+    "partyRooms": "{{count}} rooms",
+    "partyCheckIn": "Check in party ({{count}})"
   },
   "groups": {
     "allotmentBlocks": "Allotment Blocks",

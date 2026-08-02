@@ -275,7 +275,9 @@
     "status": "Status",
     "no": "Não",
     "yes": "Sim",
-    "delete": "Excluir"
+    "delete": "Excluir",
+    "close": "Fechar",
+    "remove": "Remover"
   },
   "commercial": {
     "arLedgers": "Livros-razão A/R",
@@ -541,10 +543,21 @@
     "walkIn": "Hóspede sem reserva",
     "walkInFailed": "Falha ao registrar hóspede sem reserva",
     "walkInRequired": "Nome do hóspede, tipo de quarto, plano de tarifa, datas e quarto são obrigatórios",
+    "walkInSecondRequired": "O segundo quarto precisa de hóspede, tipo, plano e quarto",
+    "walkInDistinctRooms": "Escolha dois quartos diferentes para walk-in multi-quarto",
     "walkInStay_one": "Estadia {{checkIn}} → {{checkOut}} · {{count}} diária",
     "walkInStay_other": "Estadia {{checkIn}} → {{checkOut}} · {{count}} diárias",
     "walkInStay": "Estadia {{checkIn}} → {{checkOut}} · {{count}} diárias",
-    "walkInTitle": "Hóspede Sem Reserva"
+    "walkInTitle": "Hóspede Sem Reserva",
+    "addSecondRoom": "+ Adicionar segundo quarto",
+    "secondGuest": "Segundo hóspede",
+    "guestDetails": "Detalhes do hóspede",
+    "accompanyingGuests": "Hóspedes acompanhantes",
+    "accountSummary": "Resumo da conta",
+    "earlyCheckIn": "Check-in antecipado",
+    "party": "Grupo",
+    "partyRooms": "{{count}} quartos",
+    "partyCheckIn": "Check-in do grupo ({{count}})"
   },
   "groups": {
     "allotmentBlocks": "Bloqueios de Contingente",
