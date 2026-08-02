@@ -104,6 +104,10 @@ export const rateRestrictions = pgTable('rate_restrictions', {
   closedToDeparture: boolean('closed_to_departure').notNull().default(false), // CTD
   isClosed: boolean('is_closed').notNull().default(false), // Rate not available at all
 
+  // Absolute rate for dates in this window (Channex cert / yield overrides). When set,
+  // channel ARI push uses this instead of rate_plans.base_amount for covered nights.
+  rateOverride: numeric('rate_override', { precision: 12, scale: 2 }),
+
   // Day-of-week overrides (KB 5.3: weekend premium, weekday discount)
   dayOfWeekOverrides: jsonb('day_of_week_overrides').$type<Record<string, number>>(), // { "friday": 20, "saturday": 30 }
 

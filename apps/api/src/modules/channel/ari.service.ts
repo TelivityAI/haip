@@ -176,18 +176,26 @@ export class AriService {
           const dateStr = d.toISOString().split('T')[0]!;
           const baseRate = new Decimal(ratePlan.baseAmount).toNumber();
 
+          // Find applicable restriction for this date (string-compare ISO dates)
+          const restriction = restrictions.find((r: any) => {
+            const rs = String(r.startDate).slice(0, 10);
+            const re = String(r.endDate).slice(0, 10);
+            return rs <= dateStr && re >= dateStr;
+          });
+
+          const overrideRaw = restriction?.rateOverride;
+          const amount =
+            overrideRaw != null && overrideRaw !== ''
+              ? new Decimal(overrideRaw).toNumber()
+              : baseRate;
+
           rateItems.push({
             channelRoomCode: roomMapping.channelRoomCode,
             channelRateCode: rateMapping.channelRateCode,
             date: dateStr,
-            amount: baseRate,
+            amount,
             currencyCode: ratePlan.currencyCode,
           });
-
-          // Find applicable restriction for this date
-          const restriction = restrictions.find(
-            (r: any) => r.startDate <= dateStr && r.endDate >= dateStr,
-          );
 
           restrictionItems.push({
             channelRoomCode: roomMapping.channelRoomCode,
