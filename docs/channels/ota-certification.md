@@ -8,6 +8,7 @@ HAIP ships adapters for:
 | Expedia EQC | `apps/api/src/modules/channel/adapters/expedia/` |
 | SiteMinder pmsXchange | `apps/api/src/modules/channel/adapters/siteminder/` |
 | DerbySoft Property Connector | `apps/api/src/modules/channel/adapters/derbysoft/` |
+| Channex | `apps/api/src/modules/channel/adapters/channex/` — see [channex-certification.md](./channex-certification.md) |
 
 ## Activation checklist
 

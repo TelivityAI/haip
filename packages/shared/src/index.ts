@@ -133,6 +133,12 @@ export const WEBHOOK_EVENTS = {
   'group.rooming_list_imported': 'group.rooming_list_imported',
   'group.reservation_linked': 'group.reservation_linked',
 
+  // Rate / restriction changes (drive channel ARI delta pushes)
+  'rate_plan.updated': 'rate_plan.updated',
+  'rate_restriction.created': 'rate_restriction.created',
+  'rate_restriction.updated': 'rate_restriction.updated',
+  'rate_restriction.deleted': 'rate_restriction.deleted',
+
   // Channel content events (descriptive content: photos, descriptions, amenities)
   'property.content_updated': 'property.content_updated',
   'roomtype.content_updated': 'roomtype.content_updated',

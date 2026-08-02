@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote, UserRound } from 'lucide-react';
-import { addDays, format } from 'date-fns';
+import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
@@ -124,6 +124,8 @@ export default function FrontDesk() {
 
   // Walk-in form
   const [wiGuest, setWiGuest] = useState<Guest | null>(null);
+  const [wiArrivalDate, setWiArrivalDate] = useState(today);
+  const [wiDepartureDate, setWiDepartureDate] = useState(tomorrow);
   const [wiRoomTypeId, setWiRoomTypeId] = useState('');
   const [wiRatePlanId, setWiRatePlanId] = useState('');
   const [wiRoomId, setWiRoomId] = useState('');
@@ -133,6 +135,15 @@ export default function FrontDesk() {
   const [wi2RatePlanId, setWi2RatePlanId] = useState('');
   const [wi2RoomId, setWi2RoomId] = useState('');
   const [wiError, setWiError] = useState('');
+
+  const wiNights = useMemo(() => {
+    try {
+      const n = differenceInCalendarDays(parseISO(wiDepartureDate), parseISO(wiArrivalDate));
+      return Number.isFinite(n) ? n : 0;
+    } catch {
+      return 0;
+    }
+  }, [wiArrivalDate, wiDepartureDate]);
 
   // Notes
   const [noteBody, setNoteBody] = useState('');
@@ -345,7 +356,7 @@ export default function FrontDesk() {
     mutationFn: async () => {
       requirePropertyId(propertyId);
       setWiError('');
-      if (!wiGuest?.id || !wiRoomTypeId || !wiRatePlanId || !wiRoomId) {
+      if (!wiGuest?.id || !wiRoomTypeId || !wiRatePlanId || !wiRoomId || wiNights <= 0) {
         throw new Error(t('frontDesk.walkInRequired'));
       }
       if (wiSecondRoom) {
@@ -359,6 +370,8 @@ export default function FrontDesk() {
       const plans: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
       const plan = plans.find((p) => p.id === wiRatePlanId);
       const plan2 = plans.find((p) => p.id === wi2RatePlanId);
+      const nightly = Number(plan?.baseAmount ?? 0);
+      const nightly2 = Number(plan2?.baseAmount ?? 0);
       const guestId = wiGuest.id;
       const resCreate = await api.post(
         '/v1/reservations',
@@ -367,11 +380,11 @@ export default function FrontDesk() {
           guestId,
           roomTypeId: wiRoomTypeId,
           ratePlanId: wiRatePlanId,
-          arrivalDate: today,
-          departureDate: tomorrow,
+          arrivalDate: wiArrivalDate,
+          departureDate: wiDepartureDate,
           adults: 1,
           source: 'walk_in',
-          totalAmount: moneyString(plan?.baseAmount ?? '0.00'),
+          totalAmount: moneyString(nightly * wiNights),
           currencyCode: plan?.currencyCode ?? 'USD',
         },
         { skipErrorToast: true },
@@ -405,7 +418,7 @@ export default function FrontDesk() {
             guestIds: [wi2Guest.id],
             roomTypeId: wi2RoomTypeId,
             ratePlanId: wi2RatePlanId,
-            totalAmount: moneyString(plan2?.baseAmount ?? '0.00'),
+            totalAmount: moneyString(nightly2 * wiNights),
             currencyCode: plan2?.currencyCode ?? 'USD',
             roomId: wi2RoomId,
             adults: 1,
@@ -427,8 +440,8 @@ export default function FrontDesk() {
         confirmationNumber,
         bookingId,
         status: 'assigned',
-        arrivalDate: today,
-        departureDate: tomorrow,
+        arrivalDate: wiArrivalDate,
+        departureDate: wiDepartureDate,
         roomId: wiRoomId,
         guestName: wiGuest ? `${wiGuest.firstName} ${wiGuest.lastName}`.trim() : '—',
       };
@@ -481,6 +494,8 @@ export default function FrontDesk() {
 
   function resetWalkIn() {
     setWiGuest(null);
+    setWiArrivalDate(today);
+    setWiDepartureDate(tomorrow);
     setWiRoomTypeId('');
     setWiRatePlanId('');
     setWiRoomId('');
@@ -1410,8 +1425,37 @@ export default function FrontDesk() {
             </div>
           )}
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                {t('frontDesk.arrival')}
+              </label>
+              <input
+                type="date"
+                value={wiArrivalDate}
+                onChange={(e) => setWiArrivalDate(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                {t('frontDesk.departure')}
+              </label>
+              <input
+                type="date"
+                value={wiDepartureDate}
+                min={wiArrivalDate}
+                onChange={(e) => setWiDepartureDate(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
           <p className="text-xs text-telivity-mid-grey">
-            {t('frontDesk.walkInStay', { checkIn: today, checkOut: tomorrow })}
+            {t('frontDesk.walkInStay', {
+              checkIn: wiArrivalDate,
+              checkOut: wiDepartureDate,
+              count: Math.max(wiNights, 0),
+            })}
           </p>
           {wiError && <p className="text-sm text-telivity-orange">{wiError}</p>}
           <div className="flex gap-3 pt-1">

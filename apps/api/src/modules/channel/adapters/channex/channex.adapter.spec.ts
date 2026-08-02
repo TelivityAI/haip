@@ -39,9 +39,12 @@ describe('ChannexAdapter', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('pushAvailability posts values to Channex', async () => {
+  it('pushAvailability posts values and captures task ids', async () => {
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ data: [] }), { status: 200 }),
+      new Response(
+        JSON.stringify({ data: [{ id: 'task-avail-1', type: 'task' }], meta: { message: 'Success' } }),
+        { status: 200 },
+      ),
     );
     const adapter = new ChannexAdapter(mockConfig());
 
@@ -53,6 +56,7 @@ describe('ChannexAdapter', () => {
 
     expect(result.success).toBe(true);
     expect(result.itemsSynced).toBe(1);
+    expect(result.taskIds).toEqual(['task-avail-1']);
     expect(fetchMock).toHaveBeenCalledWith(
       'https://channex.example/api/v1/availability',
       expect.objectContaining({ method: 'POST' }),
@@ -68,8 +72,33 @@ describe('ChannexAdapter', () => {
     });
   });
 
+  it('retries on 429 then succeeds', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ errors: { title: 'Too Many Requests' } }), { status: 429 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [{ id: 'task-retry', type: 'task' }] }), { status: 200 }),
+      );
+    const adapter = new ChannexAdapter(mockConfig());
+    const result = await adapter.pushRates({
+      propertyId: 'p1',
+      channelConnectionId: 'c1',
+      items: [
+        {
+          channelRoomCode: 'RT1',
+          channelRateCode: 'BAR',
+          date: '2026-04-01',
+          amount: 120,
+          currencyCode: 'EUR',
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    expect(result.taskIds).toEqual(['task-retry']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('pushRates posts to restrictions endpoint', async () => {
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data: [] }), { status: 200 }));
     const adapter = new ChannexAdapter(mockConfig());
 
     await adapter.pushRates({
@@ -89,7 +118,7 @@ describe('ChannexAdapter', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toContain('/restrictions');
   });
 
-  it('pullReservations reads booking_revisions feed', async () => {
+  it('pullReservations reads booking_revisions feed with revision id for ACK', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -132,16 +161,18 @@ describe('ChannexAdapter', () => {
     expect(result.success).toBe(true);
     expect(result.reservations).toHaveLength(1);
     expect(result.reservations[0]!.externalConfirmation).toBe('bk-1');
+    expect(result.reservations[0]!.externalRevisionId).toBe('rev-1');
     expect(String(fetchMock.mock.calls[0]![0])).toContain('booking_revisions/feed');
   });
 
-  it('confirmReservation acks revision', async () => {
+  it('confirmReservation acks revision id (not booking id)', async () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data: {} }), { status: 200 }));
     const adapter = new ChannexAdapter(mockConfig());
 
     const result = await adapter.confirmReservation({
       channelConnectionId: 'c1',
-      externalConfirmation: 'rev-99',
+      externalConfirmation: 'bk-1',
+      externalRevisionId: 'rev-99',
       pmsConfirmationNumber: 'HAIP-1',
     });
 

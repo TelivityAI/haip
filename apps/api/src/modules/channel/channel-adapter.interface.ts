@@ -120,6 +120,12 @@ export interface ReservationPullParams {
 
 export interface ChannelReservation {
   externalConfirmation: string;
+  /**
+   * Channel-specific revision / notification id used for acknowledgement.
+   * Channex ACKs `booking_revisions/{id}` while `externalConfirmation` stays the
+   * stable booking id for deduplication across new/modify/cancel revisions.
+   */
+  externalRevisionId?: string;
   channelCode: string;
   /**
    * The OTA's hotel/property identifier from the inbound payload. Inbound webhook
@@ -149,6 +155,8 @@ export interface ConfirmReservationParams {
   channelConnectionId: string;
   connectionConfig?: Record<string, unknown>;
   externalConfirmation: string;
+  /** Preferred ACK target when the channel distinguishes booking vs revision ids. */
+  externalRevisionId?: string;
   pmsConfirmationNumber: string;
 }
 
@@ -163,6 +171,8 @@ export interface ChannelSyncResult {
   success: boolean;
   itemsSynced: number;
   errors: Array<{ item: string; message: string }>;
+  /** Vendor task / job ids from the response (e.g. Channex certification evidence). */
+  taskIds?: string[];
 }
 
 export interface ChannelReservationResult {
