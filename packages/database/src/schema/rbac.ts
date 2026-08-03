@@ -93,7 +93,12 @@ export const rolePermissions = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    rolePermUnique: uniqueIndex('role_permissions_role_perm_unique').on(t.roleId, t.permissionKey),
+    // Grants are property-scoped even when role_id points at a global system role.
+    rolePermUnique: uniqueIndex('role_permissions_role_perm_unique').on(
+      t.propertyId,
+      t.roleId,
+      t.permissionKey,
+    ),
   }),
 );
 
