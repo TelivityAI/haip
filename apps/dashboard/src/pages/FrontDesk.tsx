@@ -18,6 +18,7 @@ interface Reservation {
   id: string;
   confirmationNumber: string;
   bookingId?: string;
+  guestId?: string;
   status: string;
   arrivalDate: string;
   departureDate: string;
@@ -26,7 +27,15 @@ interface Reservation {
   roomTypeId?: string;
   roomTypeName?: string;
   guestName?: string;
-  guest?: { firstName: string; lastName: string; vipLevel?: string; loyaltyNumber?: string | null };
+  guest?: {
+    firstName: string;
+    lastName: string;
+    vipLevel?: string;
+    loyaltyNumber?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    nationality?: string | null;
+  };
   balance?: number;
   doNotMove?: boolean;
   totalAmount?: string;
@@ -1500,6 +1509,10 @@ export default function FrontDesk() {
           setDetailsModal(null);
           setCheckInModal(r as Reservation);
           resetCheckInForm();
+        }}
+        onCheckOut={(r) => {
+          setDetailsModal(null);
+          setCheckOutModal(r as Reservation);
         }}
         guestLabel={(r) => guestName(r as Reservation)}
       />
