@@ -245,6 +245,7 @@ async function main() {
       closed_to_arrival boolean NOT NULL DEFAULT false,
       closed_to_departure boolean NOT NULL DEFAULT false,
       is_closed boolean NOT NULL DEFAULT false,
+      rate_override numeric(12,2),
       day_of_week_overrides jsonb,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
@@ -1382,6 +1383,7 @@ async function main() {
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_persons integer`,
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_at timestamptz`,
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_by uuid`,
+    `ALTER TABLE rate_restrictions ADD COLUMN IF NOT EXISTS rate_override numeric(12,2)`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));
