@@ -13,16 +13,24 @@ export interface IdSwipeCaptureProps {
   onParsed: (doc: ParsedIdDocument) => void;
 }
 
+/** Wedge readers emit keystrokes far faster than humans. */
+const WEDGE_GAP_MS = 55;
+const HUMAN_GAP_MS = 140;
+const PARSE_IDLE_MS = 280;
+
 /**
- * Capture zone for HID keyboard-wedge ID / passport readers.
- * Auto-focuses when active so a swipe lands here without clicking a field.
+ * Silent HID keyboard-wedge capture.
+ * Listens while the parent form is open; does not steal focus or block typing.
+ * A desk reader still fills fields when a swipe lands; typing works as usual.
  */
 export default function IdSwipeCapture({ active, onParsed }: IdSwipeCaptureProps) {
   const { t } = useTranslation();
-  const inputRef = useRef<HTMLInputElement>(null);
   const bufferRef = useRef('');
   const lastKeyAtRef = useRef(0);
+  const rapidCountRef = useRef(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onParsedRef = useRef(onParsed);
+  onParsedRef.current = onParsed;
   const [status, setStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [summary, setSummary] = useState('');
 
@@ -31,120 +39,155 @@ export default function IdSwipeCapture({ active, onParsed }: IdSwipeCaptureProps
       setStatus('idle');
       setSummary('');
       bufferRef.current = '';
+      rapidCountRef.current = 0;
       return;
     }
-    const focus = () => inputRef.current?.focus();
-    focus();
-    const tFocus = window.setTimeout(focus, 80);
-    return () => window.clearTimeout(tFocus);
-  }, [active]);
 
-  function clearIdleTimer() {
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
-  }
-
-  function tryParse(raw: string) {
-    const doc = parseIdDocumentSwipe(raw);
-    bufferRef.current = '';
-    if (inputRef.current) inputRef.current.value = '';
-    if (!doc || (!doc.firstName && !doc.lastName)) {
-      if (looksLikeIdSwipe(raw) || raw.length > 40) {
-        setStatus('error');
-        setSummary(t('guests.idSwipeFailed'));
+    function clearIdleTimer() {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
       }
-      return;
     }
-    setStatus('ok');
-    setSummary(formatParsedIdSummary(doc));
-    onParsed(doc);
-  }
 
-  function scheduleParse() {
-    clearIdleTimer();
-    idleTimerRef.current = setTimeout(() => {
-      const raw = bufferRef.current;
-      if (raw.length >= 20) tryParse(raw);
-    }, 280);
-  }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    const now = Date.now();
-    const gap = now - lastKeyAtRef.current;
-    lastKeyAtRef.current = now;
-
-    // Slow typing into this field — reset buffer so names don't false-trigger
-    if (gap > 120 && bufferRef.current.length > 0 && bufferRef.current.length < 15) {
+    function resetBuffer() {
       bufferRef.current = '';
-    }
-
-    if (e.key === 'Enter') {
-      e.preventDefault();
+      rapidCountRef.current = 0;
       clearIdleTimer();
-      tryParse(bufferRef.current || e.currentTarget.value);
-      return;
     }
-    if (e.key === 'Escape') {
-      bufferRef.current = '';
-      setStatus('idle');
-      setSummary('');
-      return;
+
+    function tryParse(raw: string) {
+      const doc = parseIdDocumentSwipe(raw);
+      resetBuffer();
+      if (!doc || (!doc.firstName && !doc.lastName)) {
+        if (looksLikeIdSwipe(raw) || raw.length > 40) {
+          setStatus('error');
+          setSummary(t('guests.idSwipeFailed'));
+        }
+        return;
+      }
+      setStatus('ok');
+      setSummary(formatParsedIdSummary(doc));
+      onParsedRef.current(doc);
     }
-    if (e.key.length === 1) {
-      bufferRef.current += e.key;
+
+    function scheduleParse() {
+      clearIdleTimer();
+      idleTimerRef.current = setTimeout(() => {
+        const raw = bufferRef.current;
+        if (raw.length >= 20) tryParse(raw);
+        else resetBuffer();
+      }, PARSE_IDLE_MS);
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const now = Date.now();
+      const gap = now - lastKeyAtRef.current;
+      lastKeyAtRef.current = now;
+
+      if (e.key === 'Escape') {
+        resetBuffer();
+        setStatus('idle');
+        setSummary('');
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        if (bufferRef.current.length >= 20 || looksLikeIdSwipe(bufferRef.current)) {
+          e.preventDefault();
+          e.stopPropagation();
+          clearIdleTimer();
+          tryParse(bufferRef.current);
+        } else {
+          resetBuffer();
+        }
+        return;
+      }
+
+      if (e.key.length !== 1) return;
+
+      // Slow keystroke into a short buffer = human typing in a form field — ignore.
+      if (gap > HUMAN_GAP_MS && bufferRef.current.length > 0 && bufferRef.current.length < 20) {
+        resetBuffer();
+        return;
+      }
+
+      if (gap <= WEDGE_GAP_MS || bufferRef.current.length === 0) {
+        if (gap <= WEDGE_GAP_MS) rapidCountRef.current += 1;
+        bufferRef.current += e.key;
+      } else if (looksLikeIdSwipe(bufferRef.current + e.key)) {
+        bufferRef.current += e.key;
+      } else {
+        resetBuffer();
+        return;
+      }
+
+      const capturing =
+        rapidCountRef.current >= 4 ||
+        bufferRef.current.length >= 20 ||
+        looksLikeIdSwipe(bufferRef.current);
+
+      if (capturing) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
       if (bufferRef.current.length >= 20) scheduleParse();
     }
-  }
 
-  function onPaste(e: React.ClipboardEvent<HTMLInputElement>) {
-    const text = e.clipboardData.getData('text');
-    if (text && looksLikeIdSwipe(text)) {
-      e.preventDefault();
-      tryParse(text);
+    function onPaste(e: ClipboardEvent) {
+      const text = e.clipboardData?.getData('text') ?? '';
+      if (text && looksLikeIdSwipe(text)) {
+        e.preventDefault();
+        tryParse(text);
+      }
     }
-  }
+
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('paste', onPaste, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('paste', onPaste, true);
+      clearIdleTimer();
+      bufferRef.current = '';
+      rapidCountRef.current = 0;
+    };
+  }, [active, t]);
 
   if (!active) return null;
 
+  if (status === 'idle') {
+    return (
+      <p className="text-[11px] text-telivity-mid-grey flex items-center gap-1.5">
+        <CreditCard size={12} className="text-telivity-teal shrink-0" />
+        {t('guests.idSwipeHint')}
+      </p>
+    );
+  }
+
   return (
     <div
-      className={`rounded-xl border px-3 py-3 ${
+      className={`rounded-lg border px-3 py-2 flex items-start gap-2 ${
         status === 'ok'
           ? 'border-telivity-teal/40 bg-telivity-teal/5'
-          : status === 'error'
-            ? 'border-telivity-orange/40 bg-telivity-orange/5'
-            : 'border-dashed border-telivity-teal/40 bg-white'
+          : 'border-telivity-orange/40 bg-telivity-orange/5'
       }`}
+      role="status"
     >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 text-telivity-teal">
-          {status === 'ok' ? <CheckCircle2 size={20} /> : <CreditCard size={20} />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-telivity-navy">
-            {status === 'ok' ? t('guests.idSwipeSuccess') : t('guests.idSwipeTitle')}
-          </p>
-          <p className="text-xs text-telivity-mid-grey mt-0.5">
-            {status === 'idle' ? t('guests.idSwipeHint') : summary}
-          </p>
-          <input
-            ref={inputRef}
-            type="text"
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            aria-label={t('guests.idSwipeTitle')}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            onBlur={() => {
-              if (active) window.setTimeout(() => inputRef.current?.focus(), 0);
-            }}
-            className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-telivity-teal"
-            placeholder={t('guests.idSwipePlaceholder')}
-          />
-        </div>
+      {status === 'ok' ? (
+        <CheckCircle2 size={16} className="text-telivity-teal mt-0.5 shrink-0" />
+      ) : (
+        <CreditCard size={16} className="text-telivity-orange mt-0.5 shrink-0" />
+      )}
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-telivity-navy">
+          {status === 'ok' ? t('guests.idSwipeSuccess') : t('guests.idSwipeFailedShort', {
+            defaultValue: 'Swipe not read',
+          })}
+        </p>
+        <p className="text-[11px] text-telivity-mid-grey mt-0.5">{summary}</p>
       </div>
     </div>
   );
