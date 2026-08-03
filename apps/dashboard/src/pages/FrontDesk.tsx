@@ -1249,15 +1249,17 @@ export default function FrontDesk() {
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-telivity-teal focus:ring-2 focus:ring-telivity-teal/10 transition-all bg-white"
                   >
                     <option value="">{t('frontDesk.usePreAssignedRoom')}</option>
-                    {roomList.map((room) => (
-                      <option key={room.id} value={room.id}>
-                        {t('frontDesk.roomNumber', {
-                          number: room.roomNumber ?? room.number ?? room.id.slice(0, 8),
-                        })}{' '}
-                        {room.roomTypeName ? `(${room.roomTypeName})` : ''} —{' '}
-                        {formatLabel(room.status, t)}
-                      </option>
-                    ))}
+                    {roomList
+                      .filter((room) => !checkInModal.roomTypeId || !room.roomTypeId || room.roomTypeId === checkInModal.roomTypeId)
+                      .map((room) => (
+                        <option key={room.id} value={room.id}>
+                          {t('frontDesk.roomNumber', {
+                            number: room.roomNumber ?? room.number ?? room.id.slice(0, 8),
+                          })}{' '}
+                          {room.roomTypeName ? `(${room.roomTypeName})` : ''} —{' '}
+                          {formatLabel(room.status, t)}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -1431,11 +1433,14 @@ export default function FrontDesk() {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
               >
                 <option value="">{t('frontDesk.selectRoom')}</option>
-                {roomList.map((room) => (
-                  <option key={room.id} value={room.id}>
-                    {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
-                  </option>
-                ))}
+                {roomList
+                  .filter((room) => room.id !== moveModal.roomId)
+                  .filter((room) => !moveModal.roomTypeId || !room.roomTypeId || room.roomTypeId === moveModal.roomTypeId)
+                  .map((room) => (
+                    <option key={room.id} value={room.id}>
+                      {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                    </option>
+                  ))}
               </select>
             </div>
             <div>
