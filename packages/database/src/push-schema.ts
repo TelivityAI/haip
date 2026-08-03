@@ -1020,7 +1020,7 @@ async function main() {
       permission_key varchar(100) NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS role_permissions_role_perm_unique ON role_permissions (role_id, permission_key)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS role_permissions_role_perm_unique ON role_permissions (property_id, role_id, permission_key)`,
     `CREATE TABLE IF NOT EXISTS user_roles (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id uuid NOT NULL REFERENCES properties(id),
