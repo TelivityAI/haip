@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert } from 'lucide-react';
 import { validateCpf, calculateAge } from '@telivityhaip/shared';
 import { api } from '../../lib/api';
+import type { ParsedIdDocument } from '../../lib/id-document-swipe';
 import { useProperty } from '../../context/PropertyContext';
 import Modal from '../ui/Modal';
+import IdSwipeCapture from './IdSwipeCapture';
 import type { Guest } from '../../types/guest';
 
 export interface CreateGuestModalProps {
@@ -192,9 +194,30 @@ export default function CreateGuestModal({
   const isCpfValid = taxId ? validateCpf(taxId) : true;
   const isGuardianCpfValid = guardianTaxId ? validateCpf(guardianTaxId) : true;
 
+  function applyIdSwipe(doc: ParsedIdDocument) {
+    if (doc.firstName) setFirstName(doc.firstName);
+    if (doc.lastName) setLastName(doc.lastName);
+    if (doc.dateOfBirth) setDateOfBirth(doc.dateOfBirth);
+    if (doc.gender) setGender(doc.gender);
+    if (doc.nationality) setNationality(doc.nationality);
+    if (doc.idType) setIdType(doc.idType);
+    if (doc.idNumber) setIdNumber(doc.idNumber);
+    if (doc.idCountry) {
+      setIdCountry(doc.idCountry);
+      setCountryCode(doc.idCountry);
+    }
+    if (doc.idExpiry) setIdExpiry(doc.idExpiry);
+    if (doc.addressLine1) setAddressLine1(doc.addressLine1);
+    if (doc.city) setCity(doc.city);
+    if (doc.stateProvince) setStateProvince(doc.stateProvince);
+    if (doc.postalCode) setPostalCode(doc.postalCode);
+  }
+
   return (
     <Modal open={open} onClose={onClose} title={t('guests.newGuest')} wide>
       <div className="space-y-6">
+        <IdSwipeCapture active={open} onParsed={applyIdSwipe} />
+
         {/* Section 1: Personal Details */}
         <div className="p-4 bg-gray-50/60 rounded-xl border border-gray-100 space-y-3">
           <h3 className="text-xs font-semibold text-telivity-navy uppercase tracking-wider">
