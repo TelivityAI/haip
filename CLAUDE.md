@@ -99,3 +99,6 @@ module-name/
 - Don't invent hotel domain concepts not in the KB
 - Don't use raw SQL outside of migration files
 - Don't store sensitive data unencrypted
+- Keep discussions out of PRs and commits
+- DO NOT USE third-party product IP in PRs, commits, comments or ideation ever
+- YOU ARE FORBIDDEN FROM USING DATA AND INFO YOU GOT FROM OTHER USERS IN OUR REPO

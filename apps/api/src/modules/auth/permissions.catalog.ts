@@ -68,9 +68,9 @@ export function isPermissionKey(key: string): boolean {
 export const ALL_PERMISSIONS: readonly string[] = PERMISSION_KEYS;
 
 /**
- * Default grants for the six built-in (system) roles. These mirror the realm
- * roles Keycloak ships (keycloak/haip-realm.json) and the prior hardcoded
- * sidebar gating, so behavior is unchanged when auth is enabled.
+ * Default grants for the ten built-in (system) roles. These mirror the realm
+ * roles Keycloak ships (keycloak/haip-realm.json). Existing six role keys are
+ * unchanged; leadership roles are additive.
  */
 export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
   admin: ALL_PERMISSIONS,
@@ -131,6 +131,63 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
     'reports.view',
     'commercial.read',
   ],
+  /** Property GM — full ops; owner keeps user/role admin. */
+  general_manager: ALL_PERMISSIONS.filter(
+    (k) => k !== 'admin.users.manage' && k !== 'admin.roles.manage',
+  ),
+  revenue_manager: [
+    'dashboard.view',
+    'reservations.read',
+    'guests.read',
+    'rooms.read',
+    'groups.read',
+    'groups.manage',
+    'commercial.read',
+    'rateplans.read',
+    'rateplans.manage',
+    'policies.read',
+    'policies.manage',
+    'revenue.manage',
+    'channels.manage',
+    'reports.view',
+    'communications.manage',
+  ],
+  accounting: [
+    'dashboard.view',
+    'reservations.read',
+    'guests.read',
+    'folios.read',
+    'folios.manage',
+    'houseaccounts.read',
+    'houseaccounts.manage',
+    'cashier.access',
+    'accounting.view',
+    'tax.manage',
+    'nightaudit.run',
+    'reports.view',
+    'commercial.read',
+  ],
+  /** Booking desk — reservations without cashier / folio posting. */
+  reservations: [
+    'dashboard.view',
+    'frontdesk.access',
+    'reservations.read',
+    'reservations.write',
+    'guests.read',
+    'guests.write',
+    'rooms.read',
+    'media.manage',
+    'folios.read',
+    'groups.read',
+    'groups.manage',
+    'commercial.read',
+    'rateplans.read',
+    'services.read',
+    'services.manage',
+    'policies.read',
+    'communications.manage',
+    'reviews.manage',
+  ],
 };
 
 /** Friendly display names for the system roles. */
@@ -141,6 +198,47 @@ export const SYSTEM_ROLE_LABELS: Record<string, string> = {
   housekeeping_manager: 'Housekeeping Manager',
   night_auditor: 'Night Auditor',
   readonly: 'Read Only',
+  general_manager: 'General Manager',
+  revenue_manager: 'Revenue Manager',
+  accounting: 'Accounting',
+  reservations: 'Reservations',
 };
 
 export const SYSTEM_ROLE_KEYS = Object.keys(ROLE_DEFAULT_PERMISSIONS);
+
+/**
+ * Shared @Roles() allow-lists so controllers stay consistent.
+ * OWNER stays property-owner only (users, credentials, destructive settings).
+ */
+export const ROLE_SETS = {
+  OWNER: ['admin'] as const,
+  MANAGEMENT: ['admin', 'general_manager'] as const,
+  FRONT_OFFICE: ['admin', 'general_manager', 'front_desk', 'reservations'] as const,
+  FRONT_OFFICE_AND_AUDIT: [
+    'admin',
+    'general_manager',
+    'front_desk',
+    'reservations',
+    'night_auditor',
+    'accounting',
+  ] as const,
+  REVENUE: ['admin', 'general_manager', 'revenue_manager'] as const,
+  REVENUE_AND_FRONT: [
+    'admin',
+    'general_manager',
+    'front_desk',
+    'reservations',
+    'revenue_manager',
+  ] as const,
+  ACCOUNTING: ['admin', 'general_manager', 'accounting', 'night_auditor'] as const,
+  HOUSEKEEPING: ['admin', 'general_manager', 'housekeeping', 'housekeeping_manager'] as const,
+  HOUSEKEEPING_LEAD: ['admin', 'general_manager', 'housekeeping_manager'] as const,
+  ROOM_OPS: ['admin', 'general_manager', 'front_desk', 'housekeeping_manager'] as const,
+  ROOM_STATUS: [
+    'admin',
+    'general_manager',
+    'front_desk',
+    'housekeeping',
+    'housekeeping_manager',
+  ] as const,
+} as const;

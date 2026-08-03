@@ -55,6 +55,31 @@ interface AgentPerformance {
   approvalRate: number;
 }
 
+interface GraphNode {
+  agentType: string;
+  subgraph: string;
+  isEnabled: boolean;
+  lastRunAt: string | null;
+  hasImplementation: boolean;
+}
+
+interface AgentGraph {
+  nodes: GraphNode[];
+  edges: Array<{ from: string; to: string }>;
+  revenueLeverOrder: string[];
+}
+
+interface OrchestrationPerformance {
+  propertyId: string;
+  agents: AgentPerformance[];
+  revenueManager: {
+    recentRuns: number;
+    leverParticipation: Record<string, number>;
+    conflictCounts: number;
+    averageHorizonDays: number;
+  };
+}
+
 const AGENT_LABEL_KEYS: Record<string, string> = {
   demand_forecast: 'demandForecast',
   pricing: 'dynamicPricing',
@@ -63,6 +88,10 @@ const AGENT_LABEL_KEYS: Record<string, string> = {
   night_audit: 'nightAuditAnomaly',
   housekeeping: 'housekeepingOptimizer',
   cancellation: 'cancellationPredictor',
+  revenue_manager: 'revenueManager',
+  group_pickup: 'groupPickup',
+  ar_collections: 'arCollections',
+  deposit_risk: 'depositRisk',
 };
 
 function agentLabel(t: TFunction, agentType: string) {
@@ -75,7 +104,25 @@ function decisionLabel(t: TFunction, decisionType: string) {
   return key ? t(`revenue.decisionTypes.${key}`) : decisionType.replace(/_/g, ' ');
 }
 
-const AGENT_TYPES = ['demand_forecast', 'pricing', 'channel_mix', 'overbooking', 'night_audit', 'housekeeping', 'cancellation'];
+/**
+ * Agents surfaced on the Revenue console. guest_comms / review_response are
+ * driven from the Communications and Reviews pages, so they stay off this list.
+ * deposit_risk is a valid agent type with no implementation yet — it renders
+ * with Run Now disabled (hasImplementation === false) rather than being hidden.
+ */
+const AGENT_TYPES = [
+  'demand_forecast',
+  'pricing',
+  'channel_mix',
+  'overbooking',
+  'night_audit',
+  'housekeeping',
+  'cancellation',
+  'revenue_manager',
+  'group_pickup',
+  'ar_collections',
+  'deposit_risk',
+];
 
 // ---------------------------------------------------------------------------
 // Revenue Dashboard (top KPIs)
@@ -164,6 +211,153 @@ function HaipAiExplanation({ propertyId, decisionId }: { propertyId: string; dec
 }
 
 // ---------------------------------------------------------------------------
+// Revenue orchestration graph (CSS — no graph library)
+// ---------------------------------------------------------------------------
+
+function OrchestrationGraphSection({ propertyId }: { propertyId: string }) {
+  const { t } = useTranslation();
+  const { data: graph } = useQuery<AgentGraph>({
+    queryKey: ['agent-graph', propertyId],
+    queryFn: async () => {
+      const res = await api.get(`/v1/agents/${propertyId}/graph`);
+      return res.data?.data ?? res.data;
+    },
+    enabled: !!propertyId,
+  });
+
+  const order = graph?.revenueLeverOrder ?? [
+    'demand_forecast',
+    'pricing',
+    'overbooking',
+    'channel_mix',
+    'group_pickup',
+  ];
+  const demand = order[0] ?? 'demand_forecast';
+  const levers = order.slice(1);
+  const nodeByType = new Map((graph?.nodes ?? []).map((n) => [n.agentType, n]));
+
+  const chip = (agentType: string) => {
+    const node = nodeByType.get(agentType);
+    const disabled = node && !node.isEnabled;
+    return (
+      <div
+        key={agentType}
+        className={`rounded-lg border px-3 py-2 text-center text-xs font-medium ${
+          disabled
+            ? 'border-gray-200 bg-gray-50 text-telivity-mid-grey'
+            : 'border-telivity-teal/30 bg-telivity-teal/5 text-telivity-navy'
+        }`}
+      >
+        {agentLabel(t, agentType)}
+        {node?.lastRunAt && (
+          <div className="mt-0.5 text-[10px] font-normal text-telivity-mid-grey">
+            {new Date(node.lastRunAt).toLocaleString()}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
+      <div className="flex items-center gap-3 mb-2">
+        <Brain size={20} className="text-telivity-teal" />
+        <h2 className="text-lg font-semibold text-telivity-navy">{t('revenue.orchestrationGraph')}</h2>
+      </div>
+      <p className="text-xs text-telivity-mid-grey mb-4">{t('revenue.orchestrationGraphHint')}</p>
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 lg:gap-4">
+        <div className="lg:w-40 shrink-0">{chip(demand)}</div>
+        <div className="hidden lg:block text-telivity-mid-grey text-lg">→</div>
+        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2">
+          {levers.map((l) => chip(l))}
+        </div>
+        <div className="hidden lg:block text-telivity-mid-grey text-lg">→</div>
+        <div className="lg:w-44 shrink-0">{chip('revenue_manager')}</div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RManager recent runs
+// ---------------------------------------------------------------------------
+
+function RManagerRunsSection({ propertyId }: { propertyId: string }) {
+  const { t } = useTranslation();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const { data: decisions = [] } = useQuery<AgentDecision[]>({
+    queryKey: ['agent-decisions', propertyId, 'revenue_manager'],
+    queryFn: async () => {
+      const res = await api.get(`/v1/agents/${propertyId}/revenue_manager/decisions`, {
+        params: { limit: 15 },
+        skipErrorToast: true,
+      });
+      return (res.data?.data ?? res.data ?? []) as AgentDecision[];
+    },
+    enabled: !!propertyId,
+  });
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
+      <div className="flex items-center gap-3 mb-4">
+        <TrendingUp size={20} className="text-telivity-teal" />
+        <h2 className="text-lg font-semibold text-telivity-navy">{t('revenue.rmanagerRuns')}</h2>
+      </div>
+      {decisions.length === 0 ? (
+        <p className="text-sm text-telivity-mid-grey text-center py-6">{t('revenue.noRManagerRuns')}</p>
+      ) : (
+        <div className="space-y-2">
+          {decisions.map((d) => (
+            <div key={d.id} className="border border-gray-100 rounded-lg p-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <StatusBadge
+                  status={
+                    d.status === 'approved' || d.status === 'auto_executed'
+                      ? 'success'
+                      : d.status === 'rejected'
+                        ? 'error'
+                        : d.status
+                  }
+                  label={
+                    d.status === 'auto_executed'
+                      ? t('revenue.autoExecuted')
+                      : t(`revenue.decisionStatuses.${d.status}`, { defaultValue: d.status })
+                  }
+                />
+                <span className="text-sm text-telivity-navy font-medium">
+                  {decisionLabel(t, d.decisionType)}
+                </span>
+                <span className="text-xs text-telivity-mid-grey">
+                  {t('revenue.confidence')}: {(parseFloat(d.confidence) * 100).toFixed(0)}%
+                </span>
+                <span className="text-xs text-telivity-mid-grey ml-auto">
+                  {new Date(d.createdAt).toLocaleString()}
+                </span>
+                <button
+                  onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
+                  className="text-telivity-slate hover:text-telivity-navy"
+                >
+                  {expandedId === d.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+              </div>
+              {expandedId === d.id && (
+                <div className="mt-3 bg-gray-50 rounded-lg p-3">
+                  <HaipAiExplanation propertyId={propertyId} decisionId={d.id} />
+                  <pre className="text-xs text-telivity-slate whitespace-pre-wrap overflow-x-auto">
+                    {JSON.stringify(d.recommendation, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // AI Recommendations (pending decisions table)
 // ---------------------------------------------------------------------------
 
@@ -177,15 +371,23 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
   const { data: allDecisions = [] } = useQuery({
     queryKey: ['agent-decisions', propertyId],
     queryFn: async () => {
-      const results: AgentDecision[] = [];
-      for (const type of AGENT_TYPES) {
-        try {
-          const res = await api.get(`/v1/agents/${propertyId}/${type}/decisions`, { params: { limit: 20 } });
-          const items = res.data?.data ?? res.data ?? [];
-          results.push(...items);
-        } catch { /* agent may not exist */ }
-      }
-      return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const perAgent = await Promise.all(
+        AGENT_TYPES.map((type) =>
+          api
+            .get(`/v1/agents/${propertyId}/${type}/decisions`, {
+              params: { limit: 20 },
+              skipErrorToast: true,
+            })
+            .then((res) => (res.data?.data ?? res.data ?? []) as AgentDecision[])
+            .catch((err) => {
+              console.error(`Failed to fetch agent decisions for ${type}:`, err);
+              return [] as AgentDecision[];
+            }), // agent may have no config/decisions yet
+        ),
+      );
+      return perAgent
+        .flat()
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     },
     enabled: !!propertyId,
   });
@@ -211,10 +413,10 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
-      <div className="flex items-center gap-3 mb-4">
-        <Brain size={20} className="text-telivity-teal" />
+      <div className="flex items-start gap-3 mb-4 flex-wrap">
+        <Brain size={20} className="text-telivity-teal shrink-0 mt-0.5" />
         <h2 className="text-lg font-semibold text-telivity-navy">{t('revenue.aiRecommendations')}</h2>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2 justify-end">
           {['all', ...AGENT_TYPES].map((agentType) => (
             <button
               key={agentType}
@@ -329,20 +531,19 @@ function RecommendationsSection({ propertyId }: { propertyId: string }) {
 
 function PerformanceSection({ propertyId }: { propertyId: string }) {
   const { t } = useTranslation();
-  const { data: performances = [] } = useQuery({
+  const { data: orch } = useQuery<OrchestrationPerformance>({
     queryKey: ['agent-performance', propertyId],
     queryFn: async () => {
-      const results: AgentPerformance[] = [];
-      for (const type of AGENT_TYPES) {
-        try {
-          const res = await api.get(`/v1/agents/${propertyId}/${type}/performance`);
-          results.push(res.data?.data ?? res.data);
-        } catch { /* skip */ }
-      }
-      return results;
+      const res = await api.get(`/v1/agents/${propertyId}/orchestration-performance`, {
+        skipErrorToast: true,
+      });
+      return res.data?.data ?? res.data;
     },
     enabled: !!propertyId,
   });
+
+  const performances = (orch?.agents ?? []).filter((p) => AGENT_TYPES.includes(p.agentType));
+  const rm = orch?.revenueManager;
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
@@ -351,10 +552,48 @@ function PerformanceSection({ propertyId }: { propertyId: string }) {
         <h2 className="text-lg font-semibold text-telivity-navy">{t('revenue.agentPerformance')}</h2>
       </div>
 
+      {rm && (
+        <div className="mb-4 border border-telivity-teal/20 rounded-lg p-4 bg-telivity-teal/5">
+          <h3 className="text-sm font-semibold text-telivity-navy mb-2">
+            {t('revenue.orchestrationSummary')}
+          </h3>
+          <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+            <div className="flex justify-between">
+              <span className="text-telivity-mid-grey">{t('revenue.rmanagerRuns')}</span>
+              <span className="font-medium text-telivity-navy">{rm.recentRuns}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-telivity-mid-grey">{t('revenue.orchestrationHorizon')}</span>
+              <span className="font-medium text-telivity-navy">{rm.averageHorizonDays}</span>
+            </div>
+          </div>
+          <p className="text-[10px] uppercase text-telivity-mid-grey mb-1">
+            {t('revenue.orchestrationLevers')}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(rm.leverParticipation ?? {}).map(([k, v]) => (
+              <span
+                key={k}
+                className="text-[10px] px-2 py-0.5 rounded bg-white border border-gray-100 text-telivity-slate"
+              >
+                {agentLabel(t, k)}: {v}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {performances.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {performances.map((p) => (
-            <div key={p.agentType} className="border border-gray-100 rounded-lg p-4">
+            <div
+              key={p.agentType}
+              className={`border rounded-lg p-4 ${
+                p.agentType === 'revenue_manager'
+                  ? 'border-telivity-teal/40'
+                  : 'border-gray-100'
+              }`}
+            >
               <h3 className="text-sm font-semibold text-telivity-navy mb-2">{agentLabel(t, p.agentType)}</h3>
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
@@ -517,6 +756,8 @@ export default function Revenue() {
       </div>
 
       <RevenueDashboard agents={agentStatuses} />
+      <OrchestrationGraphSection propertyId={propertyId} />
+      <RManagerRunsSection propertyId={propertyId} />
       <RecommendationsSection propertyId={propertyId} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

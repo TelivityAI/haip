@@ -18,9 +18,24 @@ import { DerbySoftAdapter } from './adapters/derbysoft/derbysoft.adapter';
 import { DerbySoftInboundController } from './adapters/derbysoft/derbysoft-inbound.controller';
 import { Beds24Adapter } from './adapters/beds24/beds24.adapter';
 import { ChannexAdapter } from './adapters/channex/channex.adapter';
+import { ChannexInboundController } from './adapters/channex/channex-inbound.controller';
+import {
+  NamedConsoleChannelAdapter,
+  WAVE_CHANNEL_ADAPTERS,
+  WAVE_CHANNEL_CONSOLE_PACKS,
+} from './adapters/wave3-console/named-console-channel.adapter';
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { MediaModule } from '../media/media.module';
+
+const WAVE_CHANNEL_TOKENS = WAVE_CHANNEL_CONSOLE_PACKS.map(
+  (pack) => `WAVE_CHANNEL_${pack.key.toUpperCase()}`,
+);
+
+const waveChannelProviders = WAVE_CHANNEL_CONSOLE_PACKS.map((pack, index) => ({
+  provide: WAVE_CHANNEL_TOKENS[index]!,
+  useFactory: () => new NamedConsoleChannelAdapter(pack.key, pack.label),
+}));
 
 @Module({
   imports: [ReservationModule, WebhookModule, MediaModule],
@@ -29,6 +44,7 @@ import { MediaModule } from '../media/media.module';
     BookingComInboundController,
     ExpediaInboundController,
     DerbySoftInboundController,
+    ChannexInboundController,
   ],
   providers: [
     ChannelService,
@@ -44,6 +60,12 @@ import { MediaModule } from '../media/media.module';
     DerbySoftAdapter,
     Beds24Adapter,
     ChannexAdapter,
+    ...waveChannelProviders,
+    {
+      provide: WAVE_CHANNEL_ADAPTERS,
+      useFactory: (...wave: NamedConsoleChannelAdapter[]) => wave,
+      inject: [...WAVE_CHANNEL_TOKENS],
+    },
   ],
   exports: [ChannelService, AriService, InboundReservationService],
 })

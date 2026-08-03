@@ -127,7 +127,6 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
       queryClient.invalidateQueries({ queryKey: ['booking-engine', 'keys'] });
       toast('success', t('bookingEngine.toasts.keyGenerated'));
     },
-    onError: () => toast('error', t('bookingEngine.toasts.keyGenerationFailed')),
   });
 
   const revokeKey = useMutation({
@@ -136,7 +135,6 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
       queryClient.invalidateQueries({ queryKey: ['booking-engine', 'keys'] });
       toast('success', t('bookingEngine.toasts.keyRevoked'));
     },
-    onError: () => toast('error', t('bookingEngine.toasts.keyRevocationFailed')),
   });
 
   const saveConfig = useMutation({
@@ -156,7 +154,6 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
       queryClient.invalidateQueries({ queryKey: ['booking-engine', 'config'] });
       toast('success', t('bookingEngine.toasts.settingsSaved'));
     },
-    onError: () => toast('error', t('bookingEngine.toasts.settingsSaveFailed')),
   });
 
   const generateKey = () => {

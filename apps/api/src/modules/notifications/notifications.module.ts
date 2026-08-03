@@ -10,6 +10,7 @@ import { InfobipSmsProvider } from './providers/infobip-sms.provider';
 import { VonageSmsProvider } from './providers/vonage-sms.provider';
 import { ConsoleWhatsappProvider } from './providers/console-whatsapp.provider';
 import { TwilioWhatsappProvider } from './providers/twilio-whatsapp.provider';
+import { WhatsappCloudProvider } from './providers/whatsapp-cloud.provider';
 import { TelegramBotProvider } from './providers/telegram-bot.provider';
 import { ConsoleTelegramProvider } from './providers/console-telegram.provider';
 import {
@@ -31,6 +32,7 @@ import {
     ConsoleSmsProvider,
     InfobipSmsProvider,
     VonageSmsProvider,
+    WhatsappCloudProvider,
     TwilioWhatsappProvider,
     ConsoleWhatsappProvider,
     TelegramBotProvider,
@@ -72,11 +74,12 @@ import {
     },
     {
       provide: WHATSAPP_PROVIDERS,
-      inject: [TwilioWhatsappProvider, ConsoleWhatsappProvider],
+      inject: [WhatsappCloudProvider, TwilioWhatsappProvider, ConsoleWhatsappProvider],
       useFactory: (
+        cloud: WhatsappCloudProvider,
         twilio: TwilioWhatsappProvider,
         consoleProvider: ConsoleWhatsappProvider,
-      ) => [twilio, consoleProvider],
+      ) => [cloud, twilio, consoleProvider],
     },
   ],
   exports: [NotificationService],

@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-<img src="https://img.shields.io/badge/Tests-1353%20passing-brightgreen" alt="1353 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+<img src="https://img.shields.io/badge/Tests-1417%20passing-brightgreen" alt="1417 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -63,8 +63,10 @@ inPMS is maintained by inHotel Sàrl as a modified fork of [TelivityAI/haip](htt
 graph TB
     subgraph Clients
         Dashboard["React Dashboard<br/>(Vite + TanStack Query)"]
+        BookingWidget["Booking Widget<br/>(Direct Booking Engine)"]
+        ChatGPT["ChatGPT Gateway<br/>(Connect GPT Actions)"]
         OTAIP["OTAIP Agents<br/>(Hotel Search · Rate Compare · Booking)"]
-        ThirdParty["Third-Party Integrations"]
+        ThirdParty["Third-Party Systems<br/>(Webhooks · Adapters)"]
     end
 
     subgraph inPMS["inPMS PMS (NestJS)"]
@@ -81,24 +83,32 @@ graph TB
             Room["Rooms<br/>Status State Machine"]
             Guest["Guest Profiles<br/>VIP + Preferences"]
             RatePlan["Rate Plans<br/>BAR + Derived + Restrictions"]
-            Payment["Payments<br/>Stripe Processing"]
+            Payment["Payments<br/>Pluggable Gateways"]
             Tax["Tax Engine<br/>Jurisdiction-based"]
             HK["Housekeeping<br/>Tasks + Checklists + Inspection"]
             NA["Night Audit<br/>Automated Day Close"]
             Channel["Channel Manager<br/>ARI Sync + Rate Parity"]
+            BookingEngine["Booking Engine<br/>Public API + Widget"]
+            Groups["Groups & Commercial<br/>Allotment + Rooming Lists"]
+            Accounting["Accounting & Cashier<br/>A/R · Deposits · GL"]
+            Fiscal["Fiscal & Compliance<br/>Invoicing + Guest Reg"]
+            Integrations["Integration Registry<br/>Adapters + Providers"]
+            DoorLocks["Door Locks<br/>Credential Hooks"]
             Reports["Reports<br/>Revenue + Occupancy + KPIs"]
         end
 
-        subgraph AI["AI Agent Framework"]
+        subgraph AI["AI Agent Framework — 12 agents"]
             direction LR
             RManager["Revenue Manager<br/>(Orchestrator)"]
             DemandAgent["Demand<br/>Forecasting"]
             PricingAgent["Dynamic<br/>Pricing"]
             ChannelMix["Channel-Mix<br/>Optimization"]
             Overbooking["Overbooking<br/>Management"]
+            GroupPickup["Group Pickup<br/>Forecasting"]
             AuditAnomaly["Night Audit<br/>Anomaly Detection"]
             HKOptimizer["Housekeeping<br/>Optimization"]
             CancelPredict["Cancellation<br/>Prediction"]
+            ARCollections["A/R Collections<br/>Prioritization"]
             GuestComms["Guest<br/>Communication"]
             ReviewResp["Review<br/>Response"]
         end
@@ -108,16 +118,19 @@ graph TB
 
     subgraph Infrastructure
         PG["PostgreSQL 16<br/>(Multi-tenant)"]
-        Redis["Redis 7<br/>(Cache + Pub/Sub)"]
+        Redis["Redis 7<br/>(Cache + Pub/Sub + Queues)"]
         Keycloak["Keycloak<br/>(Identity Provider)"]
-        Stripe["Stripe<br/>(Payment Processing)"]
-        OTAs["OTA Channels<br/>Booking.com · SiteMinder · 450+"]
+        Payments["Payment Gateways<br/>(Stripe + pluggable PSPs)"]
+        OTAs["OTA Channels<br/>Direct + Aggregators · 450+"]
     end
 
     Dashboard -->|HTTP + WebSocket| REST
     Dashboard -->|Real-time| WS
+    BookingWidget -->|HTTP| BookingEngine
+    ChatGPT -->|REST| Connect
     OTAIP -->|REST| Connect
     ThirdParty -->|REST| REST
+    ThirdParty -->|REST| Integrations
 
     Auth --> Keycloak
     REST --> Auth
@@ -128,7 +141,7 @@ graph TB
     AI --> PG
     AI --> Modules
     Channel --> OTAs
-    Payment --> Stripe
+    Payment --> Payments
     Webhook -->|POST| ThirdParty
     WS -->|Broadcast| Dashboard
 ```
@@ -143,7 +156,8 @@ graph TB
 - **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. Booking.com + Expedia (EQC) direct adapters plus SiteMinder and DerbySoft aggregators for 450+ OTA reach — distributing **both** ARI and descriptive content (photos/descriptions/amenities).
 - **Layered RBAC** — Keycloak JWT authentication **plus inPMS's own local users, roles & permissions**: a code-defined permission catalog, operator-defined custom roles, and guards (`@Roles` + `@RequirePermissions`) on every endpoint.
 - **Polymorphic media** — One image model for properties, room types & rooms; add by URL (zero infra) or upload to S3/MinIO, with one enforced primary per owner.
-- **Compliance as infrastructure** — PCI tokenization (Stripe), GDPR audit trails, jurisdiction-based tax calculation, guest registration per jurisdiction. Not bolted on — built in.
+- **Compliance as infrastructure** — PCI tokenization via pluggable payment gateways, GDPR audit trails, jurisdiction-based tax calculation, fiscal document hooks, guest registration per jurisdiction. Not bolted on — built in.
+- **Integration registry** — channels, payments, messaging, fiscal, door locks, and more as discoverable adapters/providers — not one-off hardwires.
 - **Real-time dashboard** — WebSocket broadcasting per property. Room status changes, new reservations, AI agent decisions — all pushed instantly.
 
 ---
@@ -155,6 +169,10 @@ inPMS includes **12 built-in AI agents** — 5 for revenue management (including
 ```
 analyze() → recommend() → execute() → recordOutcome() → train()
 ```
+
+### Orchestration (HAIP-hosted)
+
+HAIP orchestrates its own agents — there is no generic pipeline engine. **RManager** runs the revenue subgraph (`demand_forecast` → pricing / overbooking / channel_mix / group_pickup → one strategy). Ops and guest agents run on external cron or events. **OTAIP** orchestrates OTAIP agents over the Connect API only (Option B). Graph source of truth: `apps/api/src/modules/agent/agent-graph.ts`. Details: [`docs/agents-orchestration.md`](./docs/agents-orchestration.md).
 
 ### Operating Modes
 
@@ -258,6 +276,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 | 13 | **WhatsApp messaging** | [#205](https://github.com/telivityai/haip/pull/205) | Outbound WhatsApp templates via Twilio (console fallback in demo); marketing uses existing GDPR marketing consent. See **Guest Engagement Agents**. |
 | 14 | **Folio inbound posting** | [#205](https://github.com/telivityai/haip/pull/205) | Property-scoped inbound charges (e.g. phone / minibar) to in-house folios with vendor transaction idempotency. See **Folio & Billing**. |
 | 15 | **Booking deep links** | [#205](https://github.com/telivityai/haip/pull/205) | Direct-booking deep-link helper for marketing / metasearch landings; channel activation notes under `docs/channels/`. See **Direct Booking Engine**. |
+| 16 | **Agent orchestration** | [#262](https://github.com/telivityai/haip/pull/262) | Agent dependency graph (`agent-graph.ts`), RManager lever order + `upstreamResults`, external cron via `scripts/cron/agent-runs.sh`, `GET .../graph` + `orchestration-performance`, Revenue UI graph / RManager runs. See **AI Agents** and [`docs/agents-orchestration.md`](./docs/agents-orchestration.md). |
 
 ### Direct Booking Engine (commission-free)
 - A **public, guest-facing booking API** (`/api/v1/booking-engine/*`) a hotel puts behind its own website — search → quote → book → pay → confirm — capturing direct reservations with **zero OTA commission**.
@@ -411,9 +430,9 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 
 Operator notes for activating existing adapters, metasearch landings on the direct booking engine, and GDS via a channel manager: [`docs/channels/`](./docs/channels/).
 
-### Payments (Stripe)
+### Payments (pluggable gateways)
 - PCI DSS compliant — never stores raw card data
-- Full Stripe integration: PaymentIntents, customer creation, tokenization
+- Pluggable payment gateway adapters — **Stripe** is the default full path (PaymentIntents, customer creation, tokenization); additional PSP adapters are available via the integration registry
 - Authorization, capture, void, and refund workflows
 - Payment recording with method tracking (card, cash, bank transfer)
 - Linked to folio charges
@@ -493,11 +512,11 @@ Operator notes for activating existing adapters, metasearch landings on the dire
 | Real-time | Socket.IO (via NestJS Gateway) | WebSocket broadcasting per property |
 | API Spec | OpenAPI 3.0 (auto-generated) | Swagger UI at `/docs` |
 | Auth | Keycloak (OAuth 2.0 / OIDC) | Identity provider, JWT, RBAC |
-| Payments | Stripe | PCI DSS compliant payment processing |
+| Payments | Pluggable gateways (Stripe default) | PCI DSS compliant tokenization; additional PSP adapters |
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (1353 tests across 188 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
+| Testing | Vitest (1417 tests across 200 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
 
@@ -629,7 +648,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (1353 tests across 188 test files)
+# All tests (1417 tests across 200 test files)
 
 # API tests only
 pnpm --filter @inhotel-io/api test
@@ -709,7 +728,7 @@ inpms/
 │   │   │       ├── health/         # Health check
 │   │   │       ├── housekeeping/   # Tasks, checklists, inspection, dashboard
 │   │   │       ├── night-audit/    # Automated night audit + day close
-│   │   │       ├── payment/        # Stripe payment processing
+│   │   │       ├── payment/        # Pluggable payment gateways (Stripe default)
 │   │   │       ├── property/       # Multi-property configuration
 │   │   │       ├── rate-plan/      # Rates, derivation, restrictions
 │   │   │       ├── reports/        # Revenue, occupancy, financial reports
@@ -745,23 +764,28 @@ inpms/
 
 All endpoints are prefixed with `/api/v1/` and documented via OpenAPI 3.0. Run the API and visit `http://localhost:3000/docs` for the interactive Swagger UI.
 
-### Core Endpoints (~165 total)
+### Core Endpoints (~167 total)
 
 <details>
-<summary><strong>AI Agents</strong> — 11 endpoints</summary>
+<summary><strong>AI Agents</strong> — 16 endpoints</summary>
 
 ```
-GET    /api/v1/agents/:propertyId                         # List all agents with status
-GET    /api/v1/agents/:propertyId/:agentType/config       # Get agent configuration
-PUT    /api/v1/agents/:propertyId/:agentType/config       # Update config (mode, enabled, threshold)
-POST   /api/v1/agents/:propertyId/:agentType/run          # Trigger manual agent run
-GET    /api/v1/agents/:propertyId/:agentType/decisions     # Decision history
-POST   /api/v1/agents/:propertyId/decisions/:id/approve    # Approve recommendation
-POST   /api/v1/agents/:propertyId/decisions/:id/reject     # Reject recommendation
-GET    /api/v1/agents/:propertyId/:agentType/performance   # Performance metrics
-POST   /api/v1/agents/:propertyId/reviews                  # Submit guest review
-GET    /api/v1/agents/:propertyId/reviews                  # List reviews (filter by status/source)
-PATCH  /api/v1/agents/:propertyId/reviews/:id              # Update review response
+GET    /api/v1/agents/:propertyId                              # List all agents with status
+GET    /api/v1/agents/:propertyId/graph                        # Dependency graph (nodes + edges + status)
+GET    /api/v1/agents/:propertyId/orchestration-performance    # All-agent metrics + RManager summary
+GET    /api/v1/agents/:propertyId/:agentType/config            # Get agent configuration
+PUT    /api/v1/agents/:propertyId/:agentType/config            # Update config (mode, enabled, threshold)
+POST   /api/v1/agents/:propertyId/:agentType/run               # Run agent (?triggeredBy=manual|schedule)
+POST   /api/v1/agents/:propertyId/:agentType/train             # Train one agent (writes modelState)
+POST   /api/v1/agents/:propertyId/train-all                    # Train every enabled agent
+GET    /api/v1/agents/:propertyId/:agentType/decisions         # Decision history
+POST   /api/v1/agents/:propertyId/decisions/:id/approve        # Approve recommendation
+POST   /api/v1/agents/:propertyId/decisions/:id/reject         # Reject recommendation
+POST   /api/v1/agents/:propertyId/decisions/:id/explain        # HAIP AI grounded explanation
+GET    /api/v1/agents/:propertyId/:agentType/performance       # Performance metrics
+POST   /api/v1/agents/:propertyId/reviews                      # Submit guest review
+GET    /api/v1/agents/:propertyId/reviews                      # List reviews (filter by status/source)
+PATCH  /api/v1/agents/:propertyId/reviews/:id                  # Update review response
 ```
 </details>
 
@@ -1170,7 +1194,7 @@ inPMS is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (1353 tests, 188 files)
+pnpm test             # Run all tests (1417 tests, 200 files)
 pnpm lint             # ESLint
 ```
 

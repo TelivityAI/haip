@@ -202,7 +202,8 @@ export class DemandForecastAgent implements HaipAgent, OnModuleInit {
   getDefaultConfig(): Record<string, unknown> {
     return {
       forecastHorizonDays: 90,
-      runScheduleCron: '0 6 * * *', // daily at 6am
+      // No independent cron — runs via RManager (manual still allowed).
+      runScheduleCron: '',
     };
   }
 

@@ -49,3 +49,10 @@ Use inPMS accounting code APIs to label transaction types before export if your 
 ## Related events
 
 Accounting-related webhook events (for example `deposit.received`, `cashdrawer.session_closed`) are listed in the shared event catalog referenced from **[Webhooks & events](../webhooks.md)**. CSV export complements events; it does not replace statutory fiscal document flows (`invoice.*`), which use folio fiscal-document APIs in the same webhooks doc.
+
+## Catalog rows (Wave 3 recipes)
+
+These registry slugs point at this CSV export recipe (no hosted OAuth connectors):
+
+`quickbooks-online`, `xero`, `sage-business-cloud`, `zoho-books`, `datev`, `bexio`, `exact-online`.
+

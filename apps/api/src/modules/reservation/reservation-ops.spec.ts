@@ -140,3 +140,68 @@ describe('ReservationService — KB §14.8 deliberate non-feature', () => {
     expect((svc as any).unCancel).toBeUndefined();
   });
 });
+
+/** Nested leftJoin chain ending in where → limit → offset → orderBy for list(). */
+function createListDb(rows: any[]) {
+  const orderBy = vi.fn().mockResolvedValue(rows);
+  const offset = vi.fn().mockReturnValue({ orderBy });
+  const limit = vi.fn().mockReturnValue({ offset });
+  const whereRows = vi.fn().mockReturnValue({ limit });
+  const join = () => ({
+    leftJoin: vi.fn().mockImplementation(join),
+    where: whereRows,
+  });
+  return {
+    select: vi.fn().mockImplementation((shape: any) => {
+      if (shape && 'count' in shape) {
+        return {
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([{ count: rows.length }]),
+          }),
+        };
+      }
+      return {
+        from: vi.fn().mockReturnValue({
+          leftJoin: vi.fn().mockImplementation(join),
+        }),
+      };
+    }),
+    insert: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    transaction: vi.fn(),
+  };
+}
+
+describe('ReservationService — list confirmationNumber', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('includes booking confirmationNumber on each list row', async () => {
+    const row = {
+      reservation: {
+        id: 'res-001',
+        propertyId: 'prop-001',
+        bookingId: 'book-001',
+        status: 'confirmed',
+        arrivalDate: '2026-08-01',
+      },
+      guestFirstName: 'Ada',
+      guestLastName: 'Lovelace',
+      guestVipLevel: null,
+      guestLoyaltyNumber: null,
+      roomNumber: '101',
+      roomTypeName: 'Deluxe',
+      ratePlanName: 'BAR',
+      confirmationNumber: 'HAIP-PARTY-001',
+    };
+    const svc = await createService(createListDb([row]));
+    const result = await svc.list({ propertyId: 'prop-001', limit: 20, page: 1 } as any);
+    expect(result.total).toBe(1);
+    expect(result.data[0]).toMatchObject({
+      id: 'res-001',
+      bookingId: 'book-001',
+      confirmationNumber: 'HAIP-PARTY-001',
+      guestName: 'Ada Lovelace',
+    });
+  });
+});

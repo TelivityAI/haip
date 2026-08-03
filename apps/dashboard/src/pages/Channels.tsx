@@ -58,14 +58,22 @@ const ADAPTER_OPTIONS = [
   { value: 'expedia', label: 'Expedia' },
   { value: 'siteminder', label: 'SiteMinder' },
   { value: 'derbysoft', label: 'DerbySoft' },
+  { value: 'beds24', label: 'Beds24' },
+  { value: 'channex', label: 'Channex' },
+  { value: 'expedia_eqc', label: 'Expedia EQC' },
+  { value: 'myallocator_cloudbeds', label: 'Myallocator/Cloudbeds' },
+  { value: 'atomize', label: 'Atomize' },
+  { value: 'yieldplanet', label: 'YieldPlanet' },
+  { value: 'd_edge', label: 'D-EDGE' },
+  { value: 'cubilis_lighthouse', label: 'Cubilis/Lighthouse' },
+  { value: 'rategain', label: 'RateGain' },
+  { value: 'hotelrunner', label: 'HotelRunner' },
+  { value: 'nextpax', label: 'NextPax' },
+  { value: 'hotelbeds', label: 'Hotelbeds' },
+  { value: 'amadeus_hotel', label: 'Amadeus Hotel APIs' },
   { value: 'mock', label: 'Demo (mock)' },
 ];
 
-function errMsg(e: unknown): string {
-  const anyE = e as { response?: { data?: { message?: string } }; message?: string };
-  const m = anyE?.response?.data?.message ?? anyE?.message;
-  return Array.isArray(m) ? m.join(', ') : (m ?? 'Request failed');
-}
 
 function contentPushErrorMessages(results: unknown[]): string[] {
   const messages: string[] = [];
@@ -128,7 +136,6 @@ function ConnectionList() {
       setHotelId('');
       toast('success', t('channels.connectionCreated'));
     },
-    onError: (e) => toast('error', `${t('channels.couldNotCreateConnection')}: ${errMsg(e)}`),
   });
 
   function onAdapterChange(value: string) {
@@ -303,7 +310,6 @@ function ConnectionDetail() {
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       toast('success', t('channels.mappingsUpdated'));
     },
-    onError: (e) => toast('error', `${t('channels.mappingsUpdateFailed')}: ${errMsg(e)}`),
   });
 
   const syncMutation = useMutation({
@@ -319,7 +325,6 @@ function ConnectionDetail() {
       queryClient.invalidateQueries({ queryKey: ['ari-logs', id] });
       toast('success', t('channels.ariPushSubmitted'));
     },
-    onError: (e) => toast('error', `${t('channels.ariPushFailed')}: ${errMsg(e)}`),
   });
 
   const contentMutation = useMutation({
@@ -337,7 +342,6 @@ function ConnectionDetail() {
         toast('success', t('channels.contentPushSubmitted'));
       }
     },
-    onError: (e) => toast('error', `${t('channels.contentPushFailed')}: ${errMsg(e)}`),
   });
 
   const testMutation = useMutation({
@@ -346,7 +350,6 @@ function ConnectionDetail() {
       const r = res?.data ?? res ?? {};
       toast(r.connected ? 'success' : 'error', r.message ?? (r.connected ? t('channels.connected') : t('channels.connectionTestFailed')));
     },
-    onError: (e) => toast('error', `${t('channels.testFailed')}: ${errMsg(e)}`),
   });
 
   if (!conn) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.loading')}</div>;
@@ -603,7 +606,6 @@ function RateParity() {
       setReason('');
       toast('success', t('channels.overrideSaved'));
     },
-    onError: (e) => toast('error', `${t('channels.overrideSaveFailed')}: ${errMsg(e)}`),
   });
 
   const removeOverrideMutation = useMutation({
@@ -621,7 +623,6 @@ function RateParity() {
       queryClient.invalidateQueries({ queryKey: ['channels', 'rate-parity'] });
       toast('success', t('channels.overrideRemoved'));
     },
-    onError: (e) => toast('error', `${t('channels.overrideRemoveFailed')}: ${errMsg(e)}`),
   });
 
   if (!propertyId) {

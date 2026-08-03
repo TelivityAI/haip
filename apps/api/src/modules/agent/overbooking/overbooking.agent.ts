@@ -223,7 +223,8 @@ export class OverbookingAgent implements HaipAgent, OnModuleInit {
       guaranteedNoShowRate: 0.02,
       nonGuaranteedNoShowRate: 0.10,
       minOccupancyToActivate: 0.85,
-      runScheduleCron: '0 7 * * *', // daily at 7am
+      // No independent cron — runs via RManager (manual still allowed).
+      runScheduleCron: '',
     };
   }
 }

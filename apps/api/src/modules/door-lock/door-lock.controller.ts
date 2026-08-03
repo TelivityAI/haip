@@ -41,7 +41,7 @@ export class DoorLockController {
   }
 
   @Post('credentials/:reservationId/reissue')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('frontdesk.access')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reissue door-lock PIN for a reservation' })

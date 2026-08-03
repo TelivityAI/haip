@@ -33,17 +33,30 @@ export class GuestService {
    * guest" to avoid leaking cross-property existence.
    */
   private async assertGuestAtProperty(guestId: string, propertyId: string): Promise<void> {
-    const hasStayed = await this.db
-      .select({ id: reservations.id })
-      .from(reservations)
-      .where(
-        and(
-          eq(reservations.guestId, guestId),
-          eq(reservations.propertyId, propertyId),
-        ),
-      )
-      .limit(1);
-    if (!hasStayed.length) {
+    // Primary guest on a reservation OR named accompanying occupant.
+    const [asPrimary, asOccupant] = await Promise.all([
+      this.db
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.guestId, guestId),
+            eq(reservations.propertyId, propertyId),
+          ),
+        )
+        .limit(1),
+      this.db
+        .select({ id: reservationGuests.id })
+        .from(reservationGuests)
+        .where(
+          and(
+            eq(reservationGuests.guestId, guestId),
+            eq(reservationGuests.propertyId, propertyId),
+          ),
+        )
+        .limit(1),
+    ]);
+    if (!asPrimary.length && !asOccupant.length) {
       throw new NotFoundException(`Guest ${guestId} not found`);
     }
   }
@@ -132,6 +145,10 @@ export class GuestService {
         idCountry: null,
         idExpiry: null,
         nationality: null,
+        gender: null,
+        profession: null,
+        taxId: null,
+        registrationData: null,
         addressLine1: null,
         addressLine2: null,
         city: null,
@@ -174,14 +191,24 @@ export class GuestService {
     // Scope to guests with ≥1 reservation at this property.
     // Subquery: distinct guest_id from reservations where property_id = $1.
     // Bug 4: also exclude GDPR-erased guests from search results.
+    // Guests linked as reservation primary OR as named accompanying occupants.
     const conditions: any[] = [
       eq(guests.isDeleted, false),
-      inArray(
-        guests.id,
-        this.db
-          .select({ guestId: reservations.guestId })
-          .from(reservations)
-          .where(eq(reservations.propertyId, propertyId)),
+      or(
+        inArray(
+          guests.id,
+          this.db
+            .select({ guestId: reservations.guestId })
+            .from(reservations)
+            .where(eq(reservations.propertyId, propertyId)),
+        ),
+        inArray(
+          guests.id,
+          this.db
+            .select({ guestId: reservationGuests.guestId })
+            .from(reservationGuests)
+            .where(eq(reservationGuests.propertyId, propertyId)),
+        ),
       ),
     ];
 
@@ -193,6 +220,9 @@ export class GuestService {
           ilike(guests.lastName, pattern),
           ilike(guests.email, pattern),
           ilike(guests.phone, pattern),
+          ilike(guests.taxId, pattern),
+          ilike(guests.idNumber, pattern),
+          ilike(guests.loyaltyNumber, pattern),
         ),
       );
     }

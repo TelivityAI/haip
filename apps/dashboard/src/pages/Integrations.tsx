@@ -33,11 +33,6 @@ function statusColor(status: string) {
   }
 }
 
-function errMsg(e: unknown): string {
-  const anyE = e as { response?: { data?: { message?: string } }; message?: string };
-  const m = anyE?.response?.data?.message ?? anyE?.message;
-  return Array.isArray(m) ? m.join(', ') : (m ?? 'Request failed');
-}
 
 export default function Integrations() {
   const { t } = useTranslation();
@@ -75,7 +70,6 @@ export default function Integrations() {
       queryClient.invalidateQueries({ queryKey: ['property-integrations', propertyId] });
       toast('success', t('integrations.saved'));
     },
-    onError: (e) => toast('error', errMsg(e)),
   });
 
   if (!propertyId) {

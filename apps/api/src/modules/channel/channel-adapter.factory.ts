@@ -1,19 +1,19 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject, Optional } from '@nestjs/common';
 import type { ChannelAdapter } from './channel-adapter.interface';
 import { MockChannelAdapter } from './adapters/mock.adapter';
-// Import directly from the adapter files (not the barrel index) to avoid a
-// circular import: barrel re-exports BookingComInboundController, which
-// imports InboundReservationService, which imports ChannelAdapterFactory.
 import { BookingComAdapter } from './adapters/booking-com/booking-com.adapter';
 import { SiteMinderAdapter } from './adapters/siteminder/siteminder.adapter';
 import { ExpediaAdapter } from './adapters/expedia/expedia.adapter';
 import { DerbySoftAdapter } from './adapters/derbysoft/derbysoft.adapter';
 import { Beds24Adapter } from './adapters/beds24/beds24.adapter';
 import { ChannexAdapter } from './adapters/channex/channex.adapter';
+import {
+  WAVE_CHANNEL_ADAPTERS,
+  type NamedConsoleChannelAdapter,
+} from './adapters/wave3-console/named-console-channel.adapter';
 
 /**
  * Factory that maps adapterType strings to ChannelAdapter instances.
- * Adding a real adapter (SiteMinder, Expedia, DerbySoft, Beds24, Channex) = register here.
  */
 @Injectable()
 export class ChannelAdapterFactory {
@@ -27,6 +27,9 @@ export class ChannelAdapterFactory {
     private readonly derbySoftAdapter: DerbySoftAdapter,
     private readonly beds24Adapter: Beds24Adapter,
     private readonly channexAdapter: ChannexAdapter,
+    @Optional()
+    @Inject(WAVE_CHANNEL_ADAPTERS)
+    waveAdapters: NamedConsoleChannelAdapter[] | null = null,
   ) {
     this.adapters.set('mock', this.mockAdapter);
     this.adapters.set('booking_com', this.bookingComAdapter);
@@ -35,6 +38,9 @@ export class ChannelAdapterFactory {
     this.adapters.set('derbysoft', this.derbySoftAdapter);
     this.adapters.set('beds24', this.beds24Adapter);
     this.adapters.set('channex', this.channexAdapter);
+    for (const adapter of waveAdapters ?? []) {
+      this.adapters.set(adapter.adapterType, adapter);
+    }
   }
 
   getAdapter(adapterType: string): ChannelAdapter {

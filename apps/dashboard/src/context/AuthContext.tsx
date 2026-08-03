@@ -10,6 +10,28 @@ import {
 import { keycloak, AUTH_ENABLED } from '../lib/keycloak';
 import { api } from '../lib/api';
 import { reconnectSocket } from '../lib/socket';
+import { useToast } from '../components/ui/Toast';
+import { useTranslation } from 'react-i18next';
+
+interface ApiErrorResponse {
+  config?: {
+    url?: string;
+    method?: string;
+    skipErrorToast?: boolean;
+    isSilentPoll?: boolean;
+  };
+  response?: {
+    status?: number;
+    statusText?: string;
+    data?: {
+      message?: string | string[];
+      label?: string;
+      code?: string;
+    };
+  };
+  message?: string;
+  label?: string;
+}
 
 export interface AuthUser {
   sub: string;
@@ -66,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(AUTH_ENABLED);
+  const { toast } = useToast();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!AUTH_ENABLED) return;
@@ -98,33 +122,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 api.defaults.headers.common['Authorization'] = `Bearer ${keycloak.token}`;
                 reconnectSocket();
               }
-            }).catch(() => {
+            }).catch((err) => {
+              console.error('Token refresh failed:', err);
               keycloak.login();
             });
           }, 4 * 60 * 1000);
         }
         setIsLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('Keycloak initialization failed:', err);
         setIsLoading(false);
       });
 
-    // Intercept 401 responses — redirect to login
+    return () => {
+      if (refreshInterval) clearInterval(refreshInterval);
+    };
+  }, []);
+
+  // Intercept response errors globally: handle 401 login redirects and toast API errors
+  useEffect(() => {
     const interceptor = api.interceptors.response.use(
       (response) => response,
       (error) => {
         if (error.response?.status === 401 && AUTH_ENABLED) {
           keycloak.login();
+          return Promise.reject(error);
         }
+
+        const apiError = error as ApiErrorResponse;
+        const config = apiError.config;
+        if (config?.skipErrorToast || config?.isSilentPoll) {
+          return Promise.reject(error);
+        }
+
+        const url = config?.url || '';
+        if (url.includes('/staff-notifications')) {
+          return Promise.reject(error);
+        }
+
+        const data = apiError.response?.data;
+        const m = data?.message ?? apiError.message;
+        const rawMessage = Array.isArray(m)
+          ? m.join(', ')
+          : (m ?? apiError.response?.statusText ?? 'Request failed');
+
+        console.error('[API Error]', config?.method?.toUpperCase() || 'GET', url, rawMessage);
+
+        const displayMessage = String(t(`errors.${rawMessage}`, { defaultValue: rawMessage }));
+
+        toast('error', displayMessage);
         return Promise.reject(error);
       },
     );
 
     return () => {
-      if (refreshInterval) clearInterval(refreshInterval);
       api.interceptors.response.eject(interceptor);
     };
-  }, []);
+  }, [toast, t]);
 
   const logout = useCallback(() => {
     if (AUTH_ENABLED) {

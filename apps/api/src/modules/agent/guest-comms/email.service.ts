@@ -5,9 +5,9 @@ import { EMAIL_PROVIDERS } from './email-provider.interface';
 export type { EmailMessage, EmailResult } from './email-provider.interface';
 
 /**
- * Email transport service — SendGrid, SMTP, or console fallback.
+ * Email transport service — SendGrid, Mailgun, SES gateway, SMTP, or console fallback.
  *
- * Provider order: SendGrid (when configured), then SMTP, then console (logged only).
+ * Provider order: first configured among SendGrid → Mailgun → SES → SMTP, else console.
  */
 @Injectable()
 export class EmailService {

@@ -32,7 +32,7 @@ export class RatePlanController {
   }
 
   @Post()
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'revenue_manager')
   @ApiOperation({ summary: 'Create new rate plan' })
   @ApiResponse({ status: 201, description: 'Rate plan created' })
   createRatePlan(@Body() dto: CreateRatePlanDto) {
@@ -70,7 +70,7 @@ export class RatePlanController {
   }
 
   @Patch(':id')
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'revenue_manager')
   @ApiOperation({ summary: 'Update rate plan' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Rate plan updated' })
@@ -97,7 +97,7 @@ export class RatePlanController {
   }
 
   @Post(':id/restrictions')
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'revenue_manager')
   @ApiOperation({ summary: 'Create restriction for a rate plan' })
   @ApiResponse({ status: 201, description: 'Restriction created' })
   createRestriction(
@@ -108,7 +108,7 @@ export class RatePlanController {
   }
 
   @Patch(':id/restrictions/:restrictionId')
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'revenue_manager')
   @ApiOperation({ summary: 'Update a rate restriction' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Restriction updated' })
@@ -123,7 +123,7 @@ export class RatePlanController {
   }
 
   @Delete(':id/restrictions/:restrictionId')
-  @Roles('admin')
+  @Roles('admin', 'general_manager', 'revenue_manager')
   @ApiOperation({ summary: 'Delete a rate restriction' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Restriction deleted' })

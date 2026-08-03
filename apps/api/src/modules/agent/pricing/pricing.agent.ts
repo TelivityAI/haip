@@ -223,7 +223,8 @@ export class DynamicPricingAgent implements HaipAgent, OnModuleInit {
       revparTarget: 120,
       weekendPremiumPct: 15,
       pricingHorizonDays: 30,
-      runScheduleCron: '0 */4 * * *', // every 4 hours
+      // No independent cron — runs via RManager (manual still allowed).
+      runScheduleCron: '',
     };
   }
 }

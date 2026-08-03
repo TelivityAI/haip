@@ -44,7 +44,7 @@ export class AccountingController {
   // --- Deposit Ledger (KB 10) ---
 
   @Post('deposits')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Record an advance deposit (held liability)' })
   @ApiResponse({ status: 201, description: 'Deposit recorded' })
   recordDeposit(@Body() dto: RecordDepositDto) {
@@ -71,7 +71,7 @@ export class AccountingController {
   }
 
   @Post('deposits/:id/apply')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Apply a held deposit to a folio (KB 10.3)' })
   @ApiResponse({ status: 200, description: 'Deposit applied' })
   applyDeposit(
@@ -82,7 +82,7 @@ export class AccountingController {
   }
 
   @Post('deposits/:id/refund')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Refund a held refundable deposit (KB 10.4)' })
   @ApiResponse({ status: 200, description: 'Deposit refunded' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -94,7 +94,7 @@ export class AccountingController {
   }
 
   @Post('deposits/:id/forfeit')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Forfeit a held deposit as earned revenue (KB 10.4)' })
   @ApiResponse({ status: 200, description: 'Deposit forfeited' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -108,7 +108,7 @@ export class AccountingController {
   // --- Accounts Receivable (KB 11) ---
 
   @Post('ar/ledgers')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Create an A/R ledger' })
   @ApiResponse({ status: 201, description: 'A/R ledger created' })
   createArLedger(@Body() dto: CreateArLedgerDto) {
@@ -135,7 +135,7 @@ export class AccountingController {
   }
 
   @Patch('ar/ledgers/:id')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Update an A/R ledger' })
   @ApiResponse({ status: 200, description: 'A/R ledger updated' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -148,7 +148,7 @@ export class AccountingController {
   }
 
   @Post('ar/ledgers/:id/close')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Close an A/R ledger (KB 11.2)' })
   @ApiResponse({ status: 200, description: 'A/R ledger closed' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -171,7 +171,7 @@ export class AccountingController {
   }
 
   @Post('ar/transfer')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Transfer an outstanding folio balance into an A/R ledger (KB 11.3)' })
   @ApiResponse({ status: 201, description: 'Balance transferred to A/R' })
   transferToAr(@Body() dto: TransferToArDto) {
@@ -179,7 +179,7 @@ export class AccountingController {
   }
 
   @Post('ar/transactions/:id/reverse')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Reverse an A/R transfer (KB 11.4)' })
   @ApiResponse({ status: 200, description: 'Transfer reversed' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -191,7 +191,7 @@ export class AccountingController {
   }
 
   @Post('ar/ledgers/:id/payments')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Record a payment against an A/R ledger (KB 11.5)' })
   @ApiResponse({ status: 201, description: 'A/R payment recorded' })
   recordArPayment(
@@ -223,7 +223,7 @@ export class AccountingController {
   // --- Custom Accounting / GL Codes (KB 5) ---
 
   @Post('accounting/codes')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Create a custom accounting / GL code' })
   @ApiResponse({ status: 201, description: 'Accounting code created' })
   createAccountingCode(@Body() dto: CreateAccountingCodeDto) {
@@ -250,7 +250,7 @@ export class AccountingController {
   }
 
   @Patch('accounting/codes/:id')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Update an accounting code' })
   @ApiResponse({ status: 200, description: 'Accounting code updated' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -263,7 +263,7 @@ export class AccountingController {
   }
 
   @Post('accounting/codes/:id/archive')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Archive an accounting code (soft delete)' })
   @ApiResponse({ status: 200, description: 'Accounting code archived' })
   @ApiQuery({ name: 'propertyId', type: String })

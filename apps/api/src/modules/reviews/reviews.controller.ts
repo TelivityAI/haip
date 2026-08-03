@@ -10,9 +10,10 @@ export class ReviewsController {
   constructor(private readonly reviewsService: ReviewsService) {}
 
   @Post('pull')
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @ApiOperation({
-    summary: 'Pull guest reviews from an external source (Google or TripAdvisor)',
+    summary:
+      'Pull guest reviews from an external source (Google, TripAdvisor, or Wave 3 reputation packs)',
   })
   pull(@Body() dto: PullReviewsDto) {
     return this.reviewsService.pullReviews(dto.propertyId, dto.source, {

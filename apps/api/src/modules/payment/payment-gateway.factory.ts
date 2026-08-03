@@ -5,6 +5,7 @@ import { AdyenGateway } from './gateways/adyen-gateway';
 import { MollieGateway } from './gateways/mollie-gateway';
 import { SquareGateway } from './gateways/square-gateway';
 import { BraintreeGateway } from './gateways/braintree-gateway';
+import { WiseGateway } from './gateways/wise-gateway';
 import type { PaymentGateway } from './interfaces/payment-gateway.interface';
 
 export const PAYMENT_GATEWAY_PROVIDERS = [
@@ -14,6 +15,7 @@ export const PAYMENT_GATEWAY_PROVIDERS = [
   'mollie',
   'square',
   'braintree',
+  'wise',
 ] as const;
 
 export type PaymentGatewayProvider = (typeof PAYMENT_GATEWAY_PROVIDERS)[number];
@@ -58,6 +60,8 @@ export function createPaymentGateway(configService: ConfigService): PaymentGatew
       return new SquareGateway(configService);
     case 'braintree':
       return new BraintreeGateway(configService);
+    case 'wise':
+      return new WiseGateway(configService);
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;

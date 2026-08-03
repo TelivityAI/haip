@@ -189,7 +189,8 @@ export class ChannelMixAgent implements HaipAgent, OnModuleInit {
     return {
       commissionRates: {},
       stopSellOccupancyThreshold: 0.80,
-      runScheduleCron: '0 */6 * * *', // every 6 hours
+      // No independent cron — runs via RManager (manual still allowed).
+      runScheduleCron: '',
     };
   }
 }

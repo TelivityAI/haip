@@ -176,6 +176,10 @@ async function main() {
       id_expiry timestamptz,
       nationality varchar(2),
       date_of_birth timestamp,
+      gender varchar(20),
+      profession varchar(100),
+      tax_id varchar(50),
+      registration_data jsonb,
       address_line_1 varchar(255),
       address_line_2 varchar(255),
       city varchar(100),
@@ -198,6 +202,10 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE guests ADD COLUMN IF NOT EXISTS gender varchar(20)`,
+    `ALTER TABLE guests ADD COLUMN IF NOT EXISTS profession varchar(100)`,
+    `ALTER TABLE guests ADD COLUMN IF NOT EXISTS tax_id varchar(50)`,
+    `ALTER TABLE guests ADD COLUMN IF NOT EXISTS registration_data jsonb`,
     // rate_plans
     `CREATE TABLE IF NOT EXISTS rate_plans (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -237,6 +245,7 @@ async function main() {
       closed_to_arrival boolean NOT NULL DEFAULT false,
       closed_to_departure boolean NOT NULL DEFAULT false,
       is_closed boolean NOT NULL DEFAULT false,
+      rate_override numeric(12,2),
       day_of_week_overrides jsonb,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
@@ -932,6 +941,31 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // Named occupants per reservation (primary + accompanying). Booking remains
+    // the multi-room wrapper; each reservation is still one physical unit.
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reservation_guest_role') THEN CREATE TYPE reservation_guest_role AS ENUM ('primary','accompanying'); END IF; END $$`,
+    `CREATE TABLE IF NOT EXISTS reservation_guests (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      reservation_id uuid NOT NULL REFERENCES reservations(id),
+      guest_id uuid NOT NULL REFERENCES guests(id),
+      role reservation_guest_role NOT NULL DEFAULT 'accompanying',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS reservation_guests_res_guest_uidx
+      ON reservation_guests (reservation_id, guest_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS reservation_guests_one_primary_uidx
+      ON reservation_guests (reservation_id) WHERE role = 'primary'`,
+    `CREATE INDEX IF NOT EXISTS reservation_guests_property_guest_idx
+      ON reservation_guests (property_id, guest_id)`,
+    // Backfill primary occupant from reservations.guest_id for existing rows.
+    `INSERT INTO reservation_guests (property_id, reservation_id, guest_id, role)
+      SELECT r.property_id, r.id, r.guest_id, 'primary'::reservation_guest_role
+      FROM reservations r
+      WHERE NOT EXISTS (
+        SELECT 1 FROM reservation_guests rg WHERE rg.reservation_id = r.id AND rg.guest_id = r.guest_id
+      )`,
     // media — polymorphic images for property / room types / rooms
     `CREATE TABLE IF NOT EXISTS media (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -986,7 +1020,7 @@ async function main() {
       permission_key varchar(100) NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS role_permissions_role_perm_unique ON role_permissions (role_id, permission_key)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS role_permissions_role_perm_unique ON role_permissions (property_id, role_id, permission_key)`,
     `CREATE TABLE IF NOT EXISTS user_roles (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id uuid NOT NULL REFERENCES properties(id),
@@ -1349,6 +1383,7 @@ async function main() {
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_persons integer`,
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_at timestamptz`,
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_by uuid`,
+    `ALTER TABLE rate_restrictions ADD COLUMN IF NOT EXISTS rate_override numeric(12,2)`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));

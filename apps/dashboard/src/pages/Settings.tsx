@@ -46,9 +46,8 @@ export default function Settings() {
           <button
             key={tabItem.key}
             onClick={() => setTab(tabItem.key)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              tab === tabItem.key ? 'bg-telivity-teal text-white' : 'text-telivity-slate hover:bg-telivity-light-grey'
-            }`}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${tab === tabItem.key ? 'bg-telivity-teal text-white' : 'text-telivity-slate hover:bg-telivity-light-grey'
+              }`}
           >
             <tabItem.icon size={16} />
             {t(tabItem.labelKey)}
@@ -72,6 +71,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [countryCode, setCountryCode] = useState('US');
   const [timezone, setTimezone] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [checkInTime, setCheckInTime] = useState('15:00');
@@ -84,6 +84,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
   const [adrWarnBelow, setAdrWarnBelow] = useState('');
   const [revparWarnBelow, setRevparWarnBelow] = useState('');
   const [guestRegistrationRequired, setGuestRegistrationRequired] = useState(true);
+  const [minorGuardianIdentificationRequired, setMinorGuardianIdentificationRequired] = useState(true);
 
   const { data } = useQuery({
     queryKey: ['properties', propertyId],
@@ -100,6 +101,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
       setAddress(property.addressLine1 ?? property.address ?? '');
       setPhone(property.phone ?? '');
       setEmail(property.email ?? '');
+      setCountryCode(property.countryCode ?? 'US');
       setTimezone(property.timezone ?? '');
       setCurrency(property.currencyCode ?? property.currency ?? 'USD');
       setCheckInTime(property.checkInTime ?? '15:00');
@@ -109,6 +111,10 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
       setStaffPrimaryColor(property.staffPrimaryColor ?? '');
       setStaffAccentColor(property.staffAccentColor ?? '');
       setGuestRegistrationRequired(property.guestRegistrationRequired !== false);
+      setMinorGuardianIdentificationRequired(
+        property.guestRegistrationConfig?.minorGuardianIdentificationRequired ??
+        property.settings?.minorGuardianIdentificationRequired !== false
+      );
       const thr = property.settings?.kpiThresholds ?? {};
       setOccWarnBelow(thr.occupancyRate?.warnBelow != null ? String(thr.occupancyRate.warnBelow) : '');
       setAdrWarnBelow(thr.adr?.warnBelow != null ? String(thr.adr.warnBelow) : '');
@@ -134,6 +140,7 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
         addressLine1: address || undefined,
         phone,
         email,
+        countryCode: countryCode.toUpperCase(),
         timezone,
         currencyCode: currency,
         checkInTime,
@@ -143,6 +150,10 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
         staffPrimaryColor: staffPrimaryColor || undefined,
         staffAccentColor: staffAccentColor || undefined,
         guestRegistrationRequired,
+        guestRegistrationConfig: {
+          ...(property?.guestRegistrationConfig ?? {}),
+          minorGuardianIdentificationRequired,
+        },
         settings: {
           ...(property?.settings ?? {}),
           kpiThresholds,
@@ -166,9 +177,19 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
           <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('settings.email')}</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
         </div>
         <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">País / Country (ISO)</label>
+            <input
+              type="text"
+              maxLength={2}
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value.toUpperCase())}
+              placeholder="US"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal font-medium"
+            />
+          </div>
           <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('settings.timezone')}</label><input type="text" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="America/New_York" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
           <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('settings.currency')}</label><input type="text" value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
-          <div />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('settings.checkInTime')}</label><input type="time" value={checkInTime} onChange={(e) => setCheckInTime(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
@@ -178,15 +199,26 @@ function PropertySettings({ propertyId, queryClient }: { propertyId: string; que
         <div className="border-t border-gray-100 pt-4 mt-2">
           <h3 className="text-sm font-semibold text-telivity-navy mb-3">{t('settings.guestRegistration')}</h3>
           <p className="text-xs text-telivity-mid-grey mb-3">{t('settings.guestRegistrationDescription')}</p>
-          <label className="flex items-center gap-2 text-sm text-telivity-navy">
-            <input
-              type="checkbox"
-              checked={guestRegistrationRequired}
-              onChange={(e) => setGuestRegistrationRequired(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            {t('settings.requireRegistrationCard')}
-          </label>
+          <div className="space-y-2.5">
+            <label className="flex items-center gap-2 text-sm text-telivity-navy cursor-pointer">
+              <input
+                type="checkbox"
+                checked={guestRegistrationRequired}
+                onChange={(e) => setGuestRegistrationRequired(e.target.checked)}
+                className="rounded border-gray-300 text-telivity-teal focus:ring-telivity-teal"
+              />
+              {t('settings.requireRegistrationCard')}
+            </label>
+            <label className="flex items-center gap-2 text-sm text-telivity-navy cursor-pointer">
+              <input
+                type="checkbox"
+                checked={minorGuardianIdentificationRequired}
+                onChange={(e) => setMinorGuardianIdentificationRequired(e.target.checked)}
+                className="rounded border-gray-300 text-telivity-teal focus:ring-telivity-teal"
+              />
+              {t('settings.minorGuardianIdentificationRequired')}
+            </label>
+          </div>
         </div>
 
         <div className="border-t border-gray-100 pt-4 mt-2">

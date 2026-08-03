@@ -19,7 +19,9 @@ export class ReviewsService {
     opts?: { placeId?: string; locationId?: string },
   ): Promise<ReviewPullResult> {
     if (source === 'console') {
-      throw new BadRequestException('Specify google or tripadvisor as the review source');
+      throw new BadRequestException(
+        'Specify a review source (google, tripadvisor, or a Wave 3 reputation pack)',
+      );
     }
 
     const request: ReviewPullRequest = {

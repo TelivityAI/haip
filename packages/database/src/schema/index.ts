@@ -48,8 +48,10 @@ export { vipLevelEnum, guests } from './guest.js';
 export {
   reservationStatusEnum,
   bookingSourceEnum,
+  reservationGuestRoleEnum,
   bookings,
   reservations,
+  reservationGuests,
   reservationNotes,
 } from './reservation.js';
 

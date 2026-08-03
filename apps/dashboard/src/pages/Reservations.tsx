@@ -10,14 +10,18 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table';
-import { CalendarDays, Plus, ChevronLeft, ChevronRight, ArrowUpDown, X, MoreHorizontal, Eye, Pencil, Ban, DoorOpen, LogIn, LogOut } from 'lucide-react';
+import { CalendarDays, Plus, ChevronLeft, ChevronRight, ArrowUpDown, X, MoreHorizontal, Eye, Pencil, Ban, DoorOpen, LogIn, LogOut, Upload, UserX, Trash2, Check } from 'lucide-react';
 import { format, addDays, eachDayOfInterval } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
+import { useToast } from '../components/ui/Toast';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
+import FindGuest from '../components/guests/FindGuest';
+import ReservationPartyPanel from '../components/reservations/ReservationPartyPanel';
+import type { Guest } from '../types/guest';
 
 interface Reservation {
   id: string;
@@ -36,10 +40,65 @@ interface Reservation {
   guest?: { id: string; firstName: string; lastName: string; email?: string };
   adults: number;
   children: number;
-  totalAmount?: number;
+  totalAmount?: number | string;
+  currencyCode?: string;
   source?: string;
   notes?: string;
   createdAt?: string;
+}
+
+
+/** Statuses that a bulk action can still move. */
+const BULK_ELIGIBLE: Record<'check_in' | 'check_out' | 'cancel', string[]> = {
+  check_in: ['confirmed', 'assigned'],
+  check_out: ['checked_in', 'stayover', 'due_out'],
+  cancel: ['pending', 'confirmed', 'assigned'],
+};
+
+/**
+ * Parse the reservation-import textarea. The API takes pre-parsed JSON rows, so
+ * this accepts either a JSON array or one CSV row per line with the columns:
+ * guestId,arrivalDate,departureDate,roomTypeId,ratePlanId,totalAmount,currencyCode,source,adults,children
+ */
+function parseImportRows(text: string): Record<string, unknown>[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith('[')) {
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed)) throw new Error('Expected a JSON array of rows');
+    return parsed;
+  }
+  return trimmed
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [
+        guestId,
+        arrivalDate,
+        departureDate,
+        roomTypeId,
+        ratePlanId,
+        totalAmount,
+        currencyCode,
+        source,
+        adults,
+        children,
+      ] = line.split(',').map((s) => s.trim());
+      const row: Record<string, unknown> = {
+        guestId,
+        arrivalDate,
+        departureDate,
+        roomTypeId,
+        ratePlanId,
+        totalAmount: totalAmount ? moneyString(totalAmount) : undefined,
+        currencyCode: currencyCode || 'USD',
+        source: source || 'direct',
+      };
+      if (adults) row.adults = Number(adults);
+      if (children) row.children = Number(children);
+      return row;
+    });
 }
 
 // ---- Reservation List ----
@@ -59,6 +118,17 @@ function ReservationList() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailRes, setDetailRes] = useState<Reservation | null>(null);
   const [actionMenu, setActionMenu] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  // Bulk actions + import
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<'check_in' | 'check_out' | 'cancel' | ''>('');
+  const [bulkReason, setBulkReason] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importResult, setImportResult] = useState<
+    { created: number; failed: number; results: { index: number; error?: string }[] } | null
+  >(null);
 
   // Create wizard state
   const [createStep, setCreateStep] = useState(0);
@@ -69,10 +139,7 @@ function ReservationList() {
   const [availResults, setAvailResults] = useState<{ roomTypeId: string; roomTypeName: string; ratePlans: { id: string; name: string; rate: number }[] }[]>([]);
   const [selectedRoomType, setSelectedRoomType] = useState('');
   const [selectedRatePlan, setSelectedRatePlan] = useState('');
-  const [guestFirstName, setGuestFirstName] = useState('');
-  const [guestLastName, setGuestLastName] = useState('');
-  const [guestEmail, setGuestEmail] = useState('');
-  const [guestPhone, setGuestPhone] = useState('');
+  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
 
   const params: Record<string, string> = {};
   if (propertyId) params.propertyId = propertyId;
@@ -86,7 +153,10 @@ function ReservationList() {
     enabled: !!propertyId,
   });
 
-  const reservations: Reservation[] = data?.data ?? data ?? [];
+  // Memoised so the `columns` memo below keeps a stable identity between
+  // renders — its cell renderers are the element *type* passed to flexRender,
+  // so a new identity remounts every cell (and drops in-flight interactions).
+  const reservations: Reservation[] = useMemo(() => data?.data ?? data ?? [], [data]);
 
   const searchAvailMutation = useMutation({
     mutationFn: async () => {
@@ -141,18 +211,15 @@ function ReservationList() {
   const createResMutation = useMutation({
     mutationFn: async () => {
       requirePropertyId(propertyId);
-      const guestRes = await api.post('/v1/guests', {
-        firstName: guestFirstName,
-        lastName: guestLastName,
-        email: guestEmail || undefined,
-        phone: guestPhone || undefined,
-      });
-      const guestId = guestRes.data?.id ?? guestRes.data?.data?.id;
+      if (!selectedGuest?.id) {
+        throw new Error('Guest is required');
+      }
+      const guestId = selectedGuest.id;
       const nights = Math.max(
         1,
         Math.round(
           (new Date(createCheckOut).getTime() - new Date(createCheckIn).getTime()) /
-            (1000 * 60 * 60 * 24),
+          (1000 * 60 * 60 * 24),
         ),
       );
       const selectedPlan = availResults
@@ -192,6 +259,61 @@ function ReservationList() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reservations'] }),
   });
 
+  const noShowMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/v1/reservations/${id}/no-show`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      toast('success', t('reservations.noShowMarked'));
+    },
+  });
+
+  // Only reservations whose current status the chosen action can actually move.
+  const eligibleSelected = bulkAction
+    ? reservations.filter((r) => selectedIds.includes(r.id) && BULK_ELIGIBLE[bulkAction].includes(r.status))
+    : [];
+
+  /** Bulk check-in / check-out / cancel — the API allows partial success. */
+  const bulkMutation = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      return api.post(
+        '/v1/reservations/bulk-action',
+        {
+          ids: eligibleSelected.map((r) => r.id),
+          action: bulkAction,
+          ...(bulkAction === 'cancel' && bulkReason.trim() ? { reason: bulkReason.trim() } : {}),
+        },
+        { params: { propertyId } },
+      );
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      const body = res.data?.data ?? res.data ?? {};
+      const succeeded = body.succeeded ?? 0;
+      const failed = body.failed ?? 0;
+      toast(
+        failed > 0 ? 'error' : 'success',
+        t('reservations.bulkResult', { succeeded, failed }),
+      );
+      setSelectedIds([]);
+      setBulkAction('');
+      setBulkReason('');
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      const rows = parseImportRows(importText);
+      if (rows.length === 0) throw new Error('No rows to import');
+      return api.post('/v1/reservations/import', { propertyId, rows });
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      setImportResult(res.data?.data ?? res.data ?? null);
+    },
+  });
+
   function resetCreateForm() {
     setCreateStep(0);
     setCreateCheckIn(format(new Date(), 'yyyy-MM-dd'));
@@ -201,10 +323,8 @@ function ReservationList() {
     setAvailResults([]);
     setSelectedRoomType('');
     setSelectedRatePlan('');
-    setGuestFirstName('');
-    setGuestLastName('');
-    setGuestEmail('');
-    setGuestPhone('');
+    setSelectedGuest(null);
+    setCreateStep(0);
   }
 
   function guestName(r: Reservation) {
@@ -213,17 +333,55 @@ function ReservationList() {
     return '—';
   }
 
+  const pageIds = useMemo(() => reservations.map((r) => r.id), [reservations]);
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every((rid) => selectedIds.includes(rid));
+  const cancelReservation = cancelMutation.mutate;
+  const markNoShow = noShowMutation.mutate;
+
   const columns = useMemo<ColumnDef<Reservation>[]>(() => [
+    {
+      id: 'select',
+      size: 36,
+      // NOTE: no stopPropagation here — React derives a checkbox's onChange from
+      // the click event, so stopping it would swallow the change. The row and
+      // header handlers skip clicks tagged with data-row-select instead.
+      header: () => (
+        <input
+          type="checkbox"
+          data-row-select
+          checked={allOnPageSelected}
+          onChange={(e) => setSelectedIds(e.target.checked ? pageIds : [])}
+          aria-label={t('reservations.selectAll')}
+          className="rounded border-gray-300 text-telivity-teal"
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          data-row-select
+          checked={selectedIds.includes(row.original.id)}
+          onChange={(e) =>
+            setSelectedIds((prev) =>
+              e.target.checked ? [...prev, row.original.id] : prev.filter((rid) => rid !== row.original.id),
+            )
+          }
+          aria-label={t('reservations.selectRow')}
+          className="rounded border-gray-300 text-telivity-teal"
+        />
+      ),
+    },
     { accessorKey: 'confirmationNumber', header: t('reservations.confirmation'), size: 140 },
     { id: 'guest', header: t('reservations.guest'), cell: ({ row }) => guestName(row.original) },
     { accessorKey: 'roomTypeName', header: t('reservations.roomType'), cell: ({ getValue }) => (getValue() as string) ?? '—' },
     { accessorKey: 'roomNumber', header: t('reservations.roomNumber'), cell: ({ getValue }) => (getValue() as string) ?? '—', size: 80 },
     { accessorKey: 'arrivalDate', header: t('reservations.arrival'), size: 110 },
     { accessorKey: 'departureDate', header: t('reservations.departure'), size: 110 },
-    { accessorKey: 'status', header: t('reservations.status'), cell: ({ getValue }) => {
-      const status = getValue() as string;
-      return <StatusBadge status={status} label={t(`reservations.statuses.${status}`, { defaultValue: status })} />;
-    }, size: 120 },
+    {
+      accessorKey: 'status', header: t('reservations.status'), cell: ({ getValue }) => {
+        const status = getValue() as string;
+        return <StatusBadge status={status} label={t(`reservations.statuses.${status}`, { defaultValue: status })} />;
+      }, size: 120
+    },
     { accessorKey: 'totalAmount', header: t('reservations.total'), cell: ({ getValue }) => getValue() != null ? `$${Number(getValue()).toFixed(2)}` : '—', size: 100 },
     { accessorKey: 'source', header: t('reservations.source'), cell: ({ getValue }) => (getValue() as string) ?? 'direct', size: 90 },
     {
@@ -258,8 +416,13 @@ function ReservationList() {
                   <LogOut size={14} /> {t('reservations.checkOut')}
                 </button>
               )}
+              {['confirmed', 'assigned', 'pending'].includes(row.original.status) && (
+                <button onClick={() => { if (confirm(t('reservations.confirmNoShow'))) { markNoShow(row.original.id); } setActionMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-telivity-light-grey flex items-center gap-2">
+                  <UserX size={14} /> {t('reservations.markNoShow')}
+                </button>
+              )}
               {!['cancelled', 'checked_out', 'no_show'].includes(row.original.status) && (
-                <button onClick={() => { if (confirm(t('reservations.confirmCancellation'))) { cancelMutation.mutate(row.original.id); } setActionMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm text-telivity-orange hover:bg-telivity-light-grey flex items-center gap-2">
+                <button onClick={() => { if (confirm(t('reservations.confirmCancellation'))) { cancelReservation(row.original.id); } setActionMenu(null); }} className="w-full text-left px-3 py-1.5 text-sm text-telivity-orange hover:bg-telivity-light-grey flex items-center gap-2">
                   <Ban size={14} /> {t('common.cancel')}
                 </button>
               )}
@@ -268,7 +431,7 @@ function ReservationList() {
         </div>
       ),
     },
-  ], [actionMenu, queryClient, cancelMutation, t]);
+  ], [actionMenu, queryClient, navigate, cancelReservation, markNoShow, selectedIds, allOnPageSelected, pageIds, t]);
 
   const table = useReactTable({
     data: reservations,
@@ -290,7 +453,13 @@ function ReservationList() {
       <div className="flex items-center gap-3 mb-6">
         <CalendarDays size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">{t('reservations.title')}</h1>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex gap-2 flex-wrap">
+          <button onClick={() => navigate('/reservations/unassigned')} className="border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-grey transition-colors">
+            {t('reservations.unassignedQueue')}
+          </button>
+          <button onClick={() => { setImportText(''); setImportResult(null); setImportOpen(true); }} className="flex items-center gap-2 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-grey transition-colors">
+            <Upload size={16} /> {t('reservations.import')}
+          </button>
           <button onClick={() => navigate('/reservations/calendar')} className="border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-grey transition-colors">
             {t('reservations.calendar')}
           </button>
@@ -329,6 +498,48 @@ function ReservationList() {
         )}
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.length > 0 && (
+        <div className="bg-telivity-navy text-white rounded-xl shadow-sm p-3 mb-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-semibold">{t('reservations.selectedCount', { count: selectedIds.length })}</span>
+          <select
+            value={bulkAction}
+            onChange={(e) => setBulkAction(e.target.value as typeof bulkAction)}
+            aria-label={t('reservations.chooseBulkAction')}
+            className="border border-white/30 bg-telivity-navy rounded-lg px-3 py-1.5 text-sm"
+          >
+            <option value="">{t('reservations.chooseBulkAction')}</option>
+            <option value="check_in">{t('reservations.bulkCheckIn')}</option>
+            <option value="check_out">{t('reservations.bulkCheckOut')}</option>
+            <option value="cancel">{t('reservations.bulkCancel')}</option>
+          </select>
+          {bulkAction === 'cancel' && (
+            <input
+              type="text"
+              value={bulkReason}
+              onChange={(e) => setBulkReason(e.target.value)}
+              placeholder={t('reservations.cancellationReason')}
+              className="border border-white/30 bg-telivity-navy rounded-lg px-3 py-1.5 text-sm placeholder-white/50"
+            />
+          )}
+          {bulkAction && (
+            <span className="text-xs text-white/70">
+              {t('reservations.bulkEligible', { eligible: eligibleSelected.length, total: selectedIds.length })}
+            </span>
+          )}
+          <button
+            onClick={() => bulkMutation.mutate()}
+            disabled={!bulkAction || eligibleSelected.length === 0 || bulkMutation.isPending}
+            className="ml-auto flex items-center gap-1 bg-telivity-teal text-white rounded-lg px-4 py-1.5 text-sm font-semibold disabled:opacity-40"
+          >
+            <Check size={14} /> {t('reservations.applyBulk')}
+          </button>
+          <button onClick={() => { setSelectedIds([]); setBulkAction(''); }} className="p-1.5 rounded hover:bg-white/10">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <table className="w-full">
@@ -336,7 +547,14 @@ function ReservationList() {
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id} className="bg-telivity-teal/5 border-b border-gray-100">
                 {hg.headers.map((h) => (
-                  <th key={h.id} className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider cursor-pointer select-none" onClick={h.column.getToggleSortingHandler()}>
+                  <th
+                    key={h.id}
+                    className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase tracking-wider cursor-pointer select-none"
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest('[data-row-select]')) return;
+                      h.column.getToggleSortingHandler()?.(e);
+                    }}
+                  >
                     <span className="flex items-center gap-1">
                       {flexRender(h.column.columnDef.header, h.getContext())}
                       {h.column.getCanSort() && <ArrowUpDown size={12} className="text-telivity-mid-grey" />}
@@ -348,7 +566,14 @@ function ReservationList() {
           </thead>
           <tbody>
             {table.getRowModel().rows.map((row, i) => (
-              <tr key={row.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''} hover:bg-telivity-light-grey/50 transition-colors cursor-pointer`} onClick={() => setDetailRes(row.original)}>
+              <tr
+                key={row.id}
+                className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''} hover:bg-telivity-light-grey/50 transition-colors cursor-pointer`}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest('[data-row-select]')) return;
+                  setDetailRes(row.original);
+                }}
+              >
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id} className="px-4 py-3 text-sm">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -412,6 +637,16 @@ function ReservationList() {
                   <p className="text-sm bg-telivity-light-grey rounded-lg p-3">{detailRes.notes}</p>
                 </div>
               )}
+              <ReservationPartyPanel
+                reservationId={detailRes.id}
+                propertyId={propertyId!}
+                roomTypeId={detailRes.roomTypeId}
+                ratePlanId={detailRes.ratePlanId}
+                totalAmount={
+                  detailRes.totalAmount != null ? String(detailRes.totalAmount) : undefined
+                }
+                currencyCode={detailRes.currencyCode ?? 'USD'}
+              />
               <ReservationOpsNotes reservationId={detailRes.id} propertyId={propertyId!} />
               <ReservationMessageCompose reservationId={detailRes.id} propertyId={propertyId!} />
               <div className="flex gap-2 pt-2">
@@ -428,6 +663,41 @@ function ReservationList() {
           </div>
         </div>
       )}
+
+      {/* Import Reservations Modal */}
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title={t('reservations.importReservations')} wide>
+        <div className="space-y-4">
+          <p className="text-xs text-telivity-mid-grey">{t('reservations.importHint')}</p>
+          <textarea
+            value={importText}
+            onChange={(e) => { setImportText(e.target.value); setImportResult(null); }}
+            rows={8}
+            placeholder={'<guestId>,2026-06-01,2026-06-04,<roomTypeId>,<ratePlanId>,599.00,USD,direct,2,0'}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono"
+          />
+          {importResult && (
+            <div className="rounded-lg border border-gray-200 p-3 text-sm space-y-1 max-h-48 overflow-y-auto">
+              <p className="font-semibold text-telivity-navy">
+                {t('reservations.importResult', { created: importResult.created, failed: importResult.failed })}
+              </p>
+              {importResult.results
+                .filter((r) => r.error)
+                .map((r) => (
+                  <p key={r.index} className="text-xs text-red-600">
+                    {t('reservations.importRowError', { row: r.index + 1, error: r.error })}
+                  </p>
+                ))}
+            </div>
+          )}
+          <button
+            onClick={() => importMutation.mutate()}
+            disabled={!importText.trim() || importMutation.isPending}
+            className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {importMutation.isPending ? t('reservations.importing') : t('reservations.importReservations')}
+          </button>
+        </div>
+      </Modal>
 
       {/* Create Reservation Modal */}
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('reservations.newReservation')} wide>
@@ -490,27 +760,13 @@ function ReservationList() {
         {createStep === 2 && (
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-telivity-navy">{t('reservations.guestDetailsStep')}</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.firstName')} *</label>
-                <input type="text" value={guestFirstName} onChange={(e) => setGuestFirstName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.lastName')} *</label>
-                <input type="text" value={guestLastName} onChange={(e) => setGuestLastName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.email')}</label>
-                <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('common.phone')}</label>
-                <input type="tel" value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-              </div>
-            </div>
+            <FindGuest
+              selectedGuest={selectedGuest}
+              onSelectGuest={setSelectedGuest}
+            />
             <div className="flex gap-3">
               <button onClick={() => setCreateStep(1)} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold">{t('reservations.back')}</button>
-              <button onClick={() => setCreateStep(3)} disabled={!guestFirstName || !guestLastName} className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('reservations.review')}</button>
+              <button onClick={() => setCreateStep(3)} disabled={!selectedGuest} className="flex-1 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('reservations.review')}</button>
             </div>
           </div>
         )}
@@ -519,10 +775,10 @@ function ReservationList() {
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-telivity-navy">{t('reservations.reviewConfirmStep')}</h3>
             <div className="bg-telivity-light-grey rounded-lg p-4 space-y-2 text-sm">
-              <p><span className="text-telivity-mid-grey">{t('reservations.guest')}:</span> {guestFirstName} {guestLastName}</p>
+              <p><span className="text-telivity-mid-grey">{t('reservations.guest')}:</span> {selectedGuest?.firstName} {selectedGuest?.lastName}</p>
               <p><span className="text-telivity-mid-grey">{t('reservations.dates')}:</span> {createCheckIn} → {createCheckOut}</p>
               <p><span className="text-telivity-mid-grey">{t('reservations.occupancy')}:</span> {t('reservations.occupancySummary', { adults: createAdults, children: createChildren })}</p>
-              {guestEmail && <p><span className="text-telivity-mid-grey">{t('common.email')}:</span> {guestEmail}</p>}
+              {selectedGuest?.email && <p><span className="text-telivity-mid-grey">{t('common.email')}:</span> {selectedGuest.email}</p>}
             </div>
             <div className="flex gap-3">
               <button onClick={() => setCreateStep(2)} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold">{t('reservations.back')}</button>
@@ -642,6 +898,152 @@ function AvailabilityCalendar() {
   );
 }
 
+// ---- Unassigned Queue ----
+/**
+ * Assignable-but-unassigned reservations (confirmed/assigned with no room).
+ * The API filters this window with `from` / `to`, not the list endpoint's
+ * arrivalDateFrom / arrivalDateTo.
+ */
+function UnassignedQueue() {
+  const { t } = useTranslation();
+  const { propertyId } = useProperty();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [from, setFrom] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [to, setTo] = useState(format(addDays(new Date(), 7), 'yyyy-MM-dd'));
+  const [assignFor, setAssignFor] = useState<Reservation | null>(null);
+  const [assignRoomId, setAssignRoomId] = useState('');
+
+  const { data } = useQuery({
+    queryKey: ['reservations', 'unassigned', propertyId, from, to],
+    queryFn: () =>
+      api
+        .get('/v1/reservations/unassigned', { params: { propertyId, from, to } })
+        .then((r) => r.data),
+    enabled: !!propertyId,
+  });
+
+  const { data: roomsData } = useQuery({
+    queryKey: ['rooms', propertyId, 'available'],
+    queryFn: () =>
+      api.get('/v1/rooms', { params: { propertyId, status: 'available' } }).then((r) => r.data),
+    enabled: !!propertyId && !!assignFor,
+  });
+
+  const rows: (Reservation & { reasonHint?: string })[] = data?.data ?? (Array.isArray(data) ? data : []);
+  const total = data?.total ?? rows.length;
+  const rooms: { id: string; number: string; roomTypeId?: string }[] = roomsData?.data ?? roomsData ?? [];
+  // Prefer rooms matching the reservation's room type; fall back to all available.
+  const matchingRooms = assignFor?.roomTypeId
+    ? rooms.filter((r) => !r.roomTypeId || r.roomTypeId === assignFor.roomTypeId)
+    : rooms;
+
+  const assignMutation = useMutation({
+    mutationFn: () =>
+      api.patch(`/v1/reservations/${assignFor!.id}/assign-room`, { roomId: assignRoomId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      setAssignFor(null);
+      setAssignRoomId('');
+      toast('success', t('reservations.roomAssigned'));
+    },
+  });
+
+  if (!propertyId) {
+    return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.selectProperty')}</div>;
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={() => navigate('/reservations')} className="p-1.5 rounded hover:bg-telivity-light-grey">
+          <ChevronLeft size={20} />
+        </button>
+        <DoorOpen size={24} className="text-telivity-teal" />
+        <h1 className="text-2xl font-semibold text-telivity-navy">{t('reservations.unassignedQueue')}</h1>
+        <span className="rounded-full bg-telivity-orange/15 text-telivity-orange text-xs font-semibold px-2.5 py-1">
+          {total}
+        </span>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-end">
+        <div>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.from')}</label>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('reservations.to')}</label>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-telivity-teal/5 border-b border-gray-100">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('reservations.confirmation')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('reservations.guest')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('reservations.roomType')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('reservations.arrival')}</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('reservations.status')}</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('reservations.actions')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={r.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
+                <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{r.confirmationNumber}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{r.guestName ?? '—'}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{r.roomTypeName ?? '—'}</td>
+                <td className="px-4 py-3 text-sm text-telivity-slate">{r.arrivalDate}</td>
+                <td className="px-4 py-3">
+                  <StatusBadge status={r.status} label={t(`reservations.statuses.${r.status}`, { defaultValue: r.status })} />
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => { setAssignFor(r); setAssignRoomId(''); }}
+                    className="text-xs font-semibold text-telivity-teal hover:underline"
+                  >
+                    {t('reservations.assignRoom')}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('reservations.noUnassigned')}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={!!assignFor} onClose={() => setAssignFor(null)} title={t('reservations.assignRoom')}>
+        <div className="space-y-4">
+          <p className="text-sm text-telivity-mid-grey">
+            {assignFor?.confirmationNumber} · {assignFor?.roomTypeName ?? '—'}
+          </p>
+          <select value={assignRoomId} onChange={(e) => setAssignRoomId(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            <option value="">{t('reservations.selectRoom')}</option>
+            {matchingRooms.map((room) => (
+              <option key={room.id} value={room.id}>{room.number}</option>
+            ))}
+          </select>
+          {matchingRooms.length === 0 && (
+            <p className="text-xs text-telivity-mid-grey">{t('reservations.noAvailableRooms')}</p>
+          )}
+          <button
+            onClick={() => assignMutation.mutate()}
+            disabled={!assignRoomId || assignMutation.isPending}
+            className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {t('reservations.assign')}
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
 // ---- Router ----
 function ReservationMessageCompose({
   reservationId,
@@ -659,13 +1061,17 @@ function ReservationMessageCompose({
 
   const send = useMutation({
     mutationFn: () =>
-      api.post(`/v1/reservations/${reservationId}/messages`, {
-        propertyId,
-        channel,
-        ...(channel === 'email' ? { subject: subject.trim() } : {}),
-        body: body.trim(),
-        isMarketing,
-      }),
+      api.post(
+        `/v1/reservations/${reservationId}/messages`,
+        {
+          propertyId,
+          channel,
+          ...(channel === 'email' ? { subject: subject.trim() } : {}),
+          body: body.trim(),
+          isMarketing,
+        },
+        { skipErrorToast: true },
+      ),
     onSuccess: (res) => {
       const sent = res.data?.sent ?? res.data?.data?.sent;
       if (channel === 'sms') {
@@ -746,6 +1152,8 @@ function ReservationOpsNotes({
 }) {
   const { t } = useTranslation();
   const [body, setBody] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState('');
   const { data, refetch } = useQuery({
     queryKey: ['reservation-notes', reservationId, propertyId],
     queryFn: () =>
@@ -762,15 +1170,87 @@ function ReservationOpsNotes({
       refetch();
     },
   });
+  // Note mutations live on the static /reservations/notes/:noteId routes.
+  const update = useMutation({
+    mutationFn: (payload: { noteId: string; body?: string; isActive?: boolean }) =>
+      api.patch(
+        `/v1/reservations/notes/${payload.noteId}`,
+        {
+          propertyId,
+          ...(payload.body != null ? { body: payload.body } : {}),
+          ...(payload.isActive != null ? { isActive: payload.isActive } : {}),
+        },
+        { params: { propertyId } },
+      ),
+    onSuccess: () => {
+      setEditingId(null);
+      setEditBody('');
+      refetch();
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (noteId: string) =>
+      api.delete(`/v1/reservations/notes/${noteId}`, { params: { propertyId } }),
+    onSuccess: () => refetch(),
+  });
   const notes = data?.notes ?? data?.data ?? (Array.isArray(data) ? data : []);
 
   return (
     <div className="space-y-2 border-t border-gray-100 pt-4">
       <p className="text-xs font-medium text-telivity-mid-grey">{t('reservations.opsNotes')}</p>
-      <ul className="space-y-1 max-h-32 overflow-y-auto">
+      <ul className="space-y-1 max-h-48 overflow-y-auto">
         {notes.map((n: { id: string; body: string; isActive?: boolean }) => (
-          <li key={n.id} className="text-sm bg-telivity-light-grey rounded-lg p-2">
-            {n.body}
+          <li key={n.id} className={`text-sm bg-telivity-light-grey rounded-lg p-2 ${n.isActive === false ? 'opacity-60' : ''}`}>
+            {editingId === n.id ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editBody}
+                  onChange={(e) => setEditBody(e.target.value)}
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => update.mutate({ noteId: n.id, body: editBody.trim() })}
+                    disabled={!editBody.trim() || update.isPending}
+                    className="text-xs font-semibold text-telivity-teal hover:underline disabled:opacity-50"
+                  >
+                    {t('common.save')}
+                  </button>
+                  <button onClick={() => setEditingId(null)} className="text-xs text-telivity-mid-grey hover:underline">
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start justify-between gap-2">
+                <span className="min-w-0 break-words">{n.body}</span>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => { setEditingId(n.id); setEditBody(n.body); }}
+                    aria-label={t('common.edit')}
+                    className="text-telivity-slate hover:text-telivity-teal"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    onClick={() => update.mutate({ noteId: n.id, isActive: n.isActive === false })}
+                    disabled={update.isPending}
+                    className="text-[10px] text-telivity-mid-grey hover:underline disabled:opacity-50"
+                  >
+                    {n.isActive === false ? t('reservations.reactivateNote') : t('reservations.resolveNote')}
+                  </button>
+                  <button
+                    onClick={() => { if (confirm(t('reservations.confirmDeleteNote'))) remove.mutate(n.id); }}
+                    disabled={remove.isPending}
+                    aria-label={t('common.delete')}
+                    className="text-telivity-slate hover:text-telivity-orange disabled:opacity-50"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            )}
           </li>
         ))}
         {notes.length === 0 && (
@@ -801,6 +1281,7 @@ export default function Reservations() {
     <Routes>
       <Route index element={<ReservationList />} />
       <Route path="calendar" element={<AvailabilityCalendar />} />
+      <Route path="unassigned" element={<UnassignedQueue />} />
     </Routes>
   );
 }

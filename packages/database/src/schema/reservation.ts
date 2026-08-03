@@ -38,7 +38,7 @@ export const bookingSourceEnum = pgEnum('booking_source', [
 
 /**
  * Bookings — container for one or more reservations; identifies the booker.
- * Follows Apaleo/Mews pattern: booking is the wrapper, reservations are per-room.
+ * Booking is the party wrapper; reservations are per-room.
  */
 export const bookings = pgTable('bookings', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -133,6 +133,28 @@ export const reservations = pgTable('reservations', {
 
   /** When true, room moves are blocked unless explicitly overridden. */
   doNotMove: boolean('do_not_move').notNull().default(false),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Named occupants on a reservation (one physical room).
+ * Reservation = one unit; booking = multi-room wrapper.
+ * `reservations.guestId` remains the primary/lead guest for backwards compat
+ * and is kept in sync with the row where role = 'primary'.
+ */
+export const reservationGuestRoleEnum = pgEnum('reservation_guest_role', [
+  'primary',
+  'accompanying',
+]);
+
+export const reservationGuests = pgTable('reservation_guests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  reservationId: uuid('reservation_id').notNull().references(() => reservations.id),
+  guestId: uuid('guest_id').notNull().references(() => guests.id),
+  role: reservationGuestRoleEnum('role').notNull().default('accompanying'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

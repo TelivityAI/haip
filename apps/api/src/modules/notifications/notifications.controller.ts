@@ -12,7 +12,7 @@ export class NotificationsController {
   constructor(private readonly notificationService: NotificationService) {}
 
   @Post('sms')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Send an SMS to a guest via the configured provider' })
   @ApiResponse({ status: 201, description: 'Dispatch result (sent flag + provider + messageId/error)' })
   sendSms(@Body() dto: SendSmsDto) {
@@ -20,7 +20,7 @@ export class NotificationsController {
   }
 
   @Post('whatsapp')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Send a WhatsApp template/body via the configured provider' })
   @ApiResponse({ status: 201, description: 'Dispatch result (sent flag + provider + messageId/error)' })
   sendWhatsApp(@Body() dto: SendWhatsAppDto) {
@@ -40,7 +40,7 @@ export class NotificationsController {
   }
 
   @Post('telegram')
-  @Roles('admin', 'front_desk', 'night_auditor')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'Send a Telegram message to a guest via the configured bot' })
   @ApiResponse({ status: 201, description: 'Dispatch result (sent flag + provider + messageId/error)' })
   sendTelegram(@Body() dto: SendTelegramDto) {

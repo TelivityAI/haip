@@ -174,7 +174,12 @@ describe('GuestService', () => {
       expect(setCall.phone).toBeNull();
       expect(setCall.dateOfBirth).toBeNull();
       expect(setCall.idNumber).toBeNull();
+      expect(setCall.nationality).toBeNull();
       expect(setCall.addressLine1).toBeNull();
+      expect(setCall.taxId).toBeNull();
+      expect(setCall.gender).toBeNull();
+      expect(setCall.profession).toBeNull();
+      expect(setCall.registrationData).toBeNull();
       expect(setCall.isDeleted).toBe(true);
       expect(setCall.deletedAt).toBeInstanceOf(Date);
       // Email is replaced with a non-identifying sentinel
@@ -209,24 +214,23 @@ describe('GuestService', () => {
 
   describe('search', () => {
     it('should return paginated results scoped to property', async () => {
-      // search() issues three select() calls:
-      //   1. subquery (inArray) — `select({guestId}).from(reservations).where(...)`
-      //      — this is NOT awaited directly; drizzle embeds it in SQL. The mock
-      //      just needs .from().where() to be chainable without throwing.
-      //   2. paginated listing — `.from(guests).where().limit().offset().orderBy()`
-      //   3. count — `.from(guests).where()` then awaited via thenable
+      // search() issues four select() calls:
+      //   1–2. inArray subqueries (reservations.guestId + reservation_guests.guestId)
+      //      — NOT awaited directly; drizzle embeds them in SQL.
+      //   3. paginated listing — `.from(guests).where().limit().offset().orderBy()`
+      //   4. count — `.from(guests).where()` then awaited via thenable
       let callCount = 0;
       mockDb.select.mockImplementation(() => {
         callCount++;
-        if (callCount === 1) {
-          // inArray subquery — returns a chainable object (never awaited)
+        if (callCount <= 2) {
+          // inArray subqueries — chainable objects (never awaited)
           return {
             from: vi.fn().mockReturnValue({
               where: vi.fn().mockReturnValue({}),
             }),
           };
         }
-        if (callCount === 2) {
+        if (callCount === 3) {
           // paginated data query
           return {
             from: vi.fn().mockReturnValue({

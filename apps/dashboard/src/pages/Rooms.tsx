@@ -94,7 +94,7 @@ function RoomDetailPanel({
   // would 403: PATCH /rooms/:id allows admin/front_desk/housekeeping_manager,
   // but every media route is admin-only. In the demo (auth off) hasRole
   // returns true so admins see all editing controls.
-  const canManageAmenities = hasRole('admin', 'front_desk', 'housekeeping_manager');
+  const canManageAmenities = hasRole('admin', 'general_manager', 'front_desk', 'housekeeping_manager');
   const canManagePhotos = hasRole('admin');
 
   // Main photo: the room's own primary, falling back to the room type's primary
@@ -116,7 +116,6 @@ function RoomDetailPanel({
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       toast('success', t('rooms.featuresUpdated'));
     },
-    onError: () => toast('error', t('rooms.featuresUpdateFailed')),
   });
 
   const addAmenity = () => {

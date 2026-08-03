@@ -177,18 +177,26 @@ export class AriService {
           const dateStr = d.toISOString().split('T')[0]!;
           const baseRate = new Decimal(ratePlan.baseAmount).toNumber();
 
+          // Find applicable restriction for this date (string-compare ISO dates)
+          const restriction = restrictions.find((r: any) => {
+            const rs = String(r.startDate).slice(0, 10);
+            const re = String(r.endDate).slice(0, 10);
+            return rs <= dateStr && re >= dateStr;
+          });
+
+          const overrideRaw = restriction?.rateOverride;
+          const amount =
+            overrideRaw != null && overrideRaw !== ''
+              ? new Decimal(overrideRaw).toNumber()
+              : baseRate;
+
           rateItems.push({
             channelRoomCode: roomMapping.channelRoomCode,
             channelRateCode: rateMapping.channelRateCode,
             date: dateStr,
-            amount: baseRate,
+            amount,
             currencyCode: ratePlan.currencyCode,
           });
-
-          // Find applicable restriction for this date
-          const restriction = restrictions.find(
-            (r: any) => r.startDate <= dateStr && r.endDate >= dateStr,
-          );
 
           restrictionItems.push({
             channelRoomCode: roomMapping.channelRoomCode,
@@ -393,6 +401,27 @@ export class AriService {
       if (arrivalDate && departureDate) {
         await this.pushAvailability(payload.propertyId, arrivalDate, departureDate);
       }
+    } catch {
+      // Fire-and-forget
+    }
+  }
+
+  /**
+   * Rate / restriction saves in the PMS UI → delta ARI push to active channels.
+   * Required for Channex certification (screenshare must show real UI → API path).
+   */
+  @OnEvent('rate_plan.updated')
+  @OnEvent('rate_restriction.created')
+  @OnEvent('rate_restriction.updated')
+  @OnEvent('rate_restriction.deleted')
+  async handleRateOrRestrictionChanged(payload: WebhookPayload) {
+    if (!payload.propertyId) return;
+    try {
+      const data = payload.data as Record<string, unknown>;
+      const startDate = String(data['startDate'] ?? '');
+      const endDate = String(data['endDate'] ?? startDate);
+      if (!startDate || !endDate) return;
+      await this.pushRates(payload.propertyId, startDate, endDate);
     } catch {
       // Fire-and-forget
     }

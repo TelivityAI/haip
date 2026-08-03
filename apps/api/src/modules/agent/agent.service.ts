@@ -12,12 +12,14 @@ import type {
   AgentDecisionRecord,
   AgentOutcome,
 } from './interfaces/haip-agent.interface';
-
-const VALID_AGENT_TYPES = [
-  'pricing', 'demand_forecast', 'channel_mix', 'overbooking',
-  'night_audit', 'housekeeping', 'cancellation', 'guest_comms', 'review_response',
-  'ar_collections', 'deposit_risk', 'group_pickup', 'revenue_manager',
-];
+import {
+  VALID_AGENT_TYPES,
+  AGENT_GRAPH_EDGES,
+  DEFAULT_SCHEDULE_MATRIX,
+  REVENUE_LEVER_ORDER,
+  isValidAgentType,
+  subgraphFor,
+} from './agent-graph';
 
 @Injectable()
 export class AgentService {
@@ -537,15 +539,132 @@ export class AgentService {
       .orderBy(desc(agentDecisions.createdAt))
       .limit(200);
 
+    return this.summarizePerformance(agentType, decisions);
+  }
+
+  /**
+   * Dependency graph + per-node status for a property (Issue #99).
+   * Always scoped by propertyId.
+   */
+  async getGraph(propertyId: string) {
+    const nodes = [];
+    for (const agentType of VALID_AGENT_TYPES) {
+      const config = await this.getOrCreateConfig(propertyId, agentType);
+      const schedule = DEFAULT_SCHEDULE_MATRIX[agentType];
+      nodes.push({
+        agentType,
+        subgraph: subgraphFor(agentType),
+        isEnabled: config.isEnabled,
+        mode: config.mode,
+        lastRunAt: config.lastRunAt,
+        hasImplementation: this.agents.has(agentType),
+        runScheduleCron: schedule.cron || null,
+        scheduleNotes: schedule.notes,
+      });
+    }
+
+    return {
+      nodes,
+      edges: AGENT_GRAPH_EDGES.map((e) => ({ from: e.from, to: e.to })),
+      revenueLeverOrder: [...REVENUE_LEVER_ORDER],
+    };
+  }
+
+  /** Performance for all agent types + RManager orchestration summary. */
+  async getOrchestrationPerformance(propertyId: string) {
+    const agents = [];
+    for (const agentType of VALID_AGENT_TYPES) {
+      agents.push(await this.getPerformance(propertyId, agentType));
+    }
+
+    const rmDecisions = await this.db
+      .select()
+      .from(agentDecisions)
+      .where(
+        and(
+          eq(agentDecisions.propertyId, propertyId),
+          eq(agentDecisions.agentType, 'revenue_manager' as any),
+        ),
+      )
+      .orderBy(desc(agentDecisions.createdAt))
+      .limit(50);
+
+    const leverParticipation: Record<string, number> = {
+      demand_forecast: 0,
+      pricing: 0,
+      overbooking: 0,
+      channel_mix: 0,
+      group_pickup: 0,
+    };
+    let conflictCounts = 0;
+    let horizonSum = 0;
+    let horizonN = 0;
+
+    for (const d of rmDecisions) {
+      const rec = d.recommendation as any;
+      const levers = rec?.leverSummaries ?? {};
+      for (const key of Object.keys(leverParticipation)) {
+        const summaryKey =
+          key === 'channel_mix'
+            ? 'channelMix'
+            : key === 'group_pickup'
+              ? 'groupPickup'
+              : key === 'overbooking'
+                ? 'overbooking'
+                : null;
+        // demand/pricing are implicit when forecasts/pricing exist on strategy
+        if (key === 'demand_forecast' && (rec?.horizonDays > 0 || rec?.perDate?.length > 0)) {
+          leverParticipation[key]! += 1;
+        } else if (key === 'pricing' && rec?.perDate?.some((x: any) => x.priceAdjustmentPct != null)) {
+          leverParticipation[key]! += 1;
+        } else if (summaryKey && levers[summaryKey]?.available) {
+          leverParticipation[key]! += 1;
+        }
+      }
+      const guardrails = rec?.summary?.guardrails;
+      if (Array.isArray(guardrails)) conflictCounts += guardrails.length;
+      const horizon = rec?.horizonDays ?? d.inputSnapshot?.horizonDays ?? rec?.perDate?.length;
+      if (typeof horizon === 'number' && horizon > 0) {
+        horizonSum += horizon;
+        horizonN += 1;
+      }
+    }
+
+    return {
+      propertyId,
+      agents,
+      revenueManager: {
+        recentRuns: rmDecisions.length,
+        leverParticipation,
+        conflictCounts,
+        averageHorizonDays:
+          horizonN > 0 ? Math.round((horizonSum / horizonN) * 100) / 100 : 0,
+      },
+    };
+  }
+
+  // --- Private ---
+
+  private summarizePerformance(agentType: string, decisions: any[]) {
     const total = decisions.length;
     const withOutcome = decisions.filter((d: any) => d.outcome !== null);
-    const approved = decisions.filter((d: any) => d.status === 'approved' || d.status === 'auto_executed');
+    const approved = decisions.filter(
+      (d: any) => d.status === 'approved' || d.status === 'auto_executed',
+    );
     const rejected = decisions.filter((d: any) => d.status === 'rejected');
-
-    // Calculate average confidence
-    const avgConfidence = total > 0
-      ? decisions.reduce((sum: number, d: any) => sum + parseFloat(d.confidence), 0) / total
-      : 0;
+    const confidences = decisions.map((d: any) => parseFloat(d.confidence)).filter(Number.isFinite);
+    const avgConfidence =
+      confidences.length > 0
+        ? confidences.reduce((sum: number, c: number) => sum + c, 0) / confidences.length
+        : 0;
+    const withAccuracy = withOutcome.filter(
+      (d: any) => typeof d.outcome?.accuracy === 'number',
+    );
+    const avgAccuracy =
+      withAccuracy.length > 0
+        ? withAccuracy.reduce((sum: number, d: any) => sum + d.outcome.accuracy, 0) /
+          withAccuracy.length
+        : null;
 
     return {
       agentType,
@@ -556,10 +675,16 @@ export class AgentService {
       outcomeCount: withOutcome.length,
       averageConfidence: Math.round(avgConfidence * 100) / 100,
       approvalRate: total > 0 ? Math.round((approved.length / total) * 100) : 0,
+      averageOutcomeAccuracy:
+        avgAccuracy != null ? Math.round(avgAccuracy * 100) / 100 : null,
+      confidenceDistribution: {
+        low: confidences.filter((c) => c < 0.5).length,
+        medium: confidences.filter((c) => c >= 0.5 && c < 0.8).length,
+        high: confidences.filter((c) => c >= 0.8).length,
+      },
     };
   }
 
-  // --- Private ---
 
   private getAgentImpl(agentType: string): HaipAgent {
     this.validateAgentType(agentType);
@@ -588,7 +713,7 @@ export class AgentService {
   }
 
   private validateAgentType(agentType: string) {
-    if (!VALID_AGENT_TYPES.includes(agentType)) {
+    if (!isValidAgentType(agentType)) {
       throw new BadRequestException(
         `Invalid agent type: '${agentType}'. Valid: ${VALID_AGENT_TYPES.join(', ')}`,
       );

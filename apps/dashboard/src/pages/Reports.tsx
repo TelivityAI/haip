@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Percent, DollarSign, TrendingUp, Building2, Star } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -27,8 +28,16 @@ export default function Reports() {
   const { t } = useTranslation();
   const { propertyId, isPortfolioMode, properties } = useProperty();
   const queryClient = useQueryClient();
-  const [report, setReport] = useState<ReportType>('financial-summary');
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [searchParams] = useSearchParams();
+  // Deep links (e.g. Accounting → live trial balance) may preselect report/date.
+  const linkedReport = searchParams.get('report') as ReportType | null;
+  const linkedDate = searchParams.get('date');
+  const [report, setReport] = useState<ReportType>(
+    linkedReport && REPORT_OPTIONS.some((o) => o.value === linkedReport)
+      ? linkedReport
+      : 'financial-summary',
+  );
+  const [date, setDate] = useState(linkedDate ?? format(new Date(), 'yyyy-MM-dd'));
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [stayDate, setStayDate] = useState(format(subDays(new Date(), -30), 'yyyy-MM-dd'));

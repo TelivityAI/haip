@@ -5,8 +5,11 @@ import {
   IsBoolean,
   IsObject,
   IsDateString,
+  IsNumber,
   Min,
+  ValidateIf,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateRateRestrictionDto {
@@ -48,6 +51,18 @@ export class CreateRateRestrictionDto {
   @IsOptional()
   @IsBoolean()
   isClosed?: boolean;
+
+  @ApiPropertyOptional({
+    example: 333.0,
+    description: 'Absolute nightly rate for dates in this window (overrides plan base amount on ARI push). Null clears.',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  rateOverride?: number | null;
 
   @ApiPropertyOptional({
     example: { friday: 20, saturday: 30 },

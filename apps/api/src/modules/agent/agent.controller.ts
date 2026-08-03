@@ -25,7 +25,7 @@ import { CreateReviewDto, UpdateReviewResponseDto } from './dto/create-review.dt
 
 @ApiTags('AI Agents')
 @Controller('agents')
-@Roles('admin')
+@Roles('admin', 'general_manager', 'revenue_manager')
 export class AgentController {
   constructor(
     private readonly agentService: AgentService,
@@ -36,6 +36,24 @@ export class AgentController {
   @ApiOperation({ summary: 'List all agents with status for a property' })
   async listAgents(@Param('propertyId', ParseUUIDPipe) propertyId: string) {
     return this.agentService.listAgentStatuses(propertyId);
+  }
+
+  @Get(':propertyId/graph')
+  @ApiOperation({
+    summary: 'Agent dependency graph (12 specialists + RManager) with property status',
+  })
+  async getGraph(@Param('propertyId', ParseUUIDPipe) propertyId: string) {
+    return this.agentService.getGraph(propertyId);
+  }
+
+  @Get(':propertyId/orchestration-performance')
+  @ApiOperation({
+    summary: 'Performance metrics for all agents plus RManager orchestration summary',
+  })
+  async getOrchestrationPerformance(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.agentService.getOrchestrationPerformance(propertyId);
   }
 
   @Get(':propertyId/:agentType/config')
@@ -59,12 +77,21 @@ export class AgentController {
   }
 
   @Post(':propertyId/:agentType/run')
-  @ApiOperation({ summary: 'Trigger a manual agent run' })
+  @ApiOperation({ summary: 'Trigger an agent run (manual or schedule)' })
+  @ApiQuery({
+    name: 'triggeredBy',
+    required: false,
+    enum: ['manual', 'schedule'],
+    description: 'Defaults to manual; use schedule from external cron',
+  })
   async runAgent(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('agentType') agentType: string,
+    @Query('triggeredBy') triggeredBy?: string,
   ) {
-    return this.agentService.runAgent(propertyId, agentType, { triggeredBy: 'manual' });
+    const by =
+      triggeredBy === 'schedule' || triggeredBy === 'manual' ? triggeredBy : 'manual';
+    return this.agentService.runAgent(propertyId, agentType, { triggeredBy: by });
   }
 
   @Post(':propertyId/:agentType/train')
@@ -145,7 +172,7 @@ export class AgentController {
 
   @Post(':propertyId/reviews')
   @ApiOperation({ summary: 'Submit a guest review for AI response drafting' })
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   async createReview(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: CreateReviewDto,
@@ -188,7 +215,7 @@ export class AgentController {
   @ApiOperation({ summary: 'List guest reviews for a property' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'source', required: false })
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   async listReviews(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Query('status') status?: string,
@@ -207,7 +234,7 @@ export class AgentController {
 
   @Patch(':propertyId/reviews/:id')
   @ApiOperation({ summary: 'Update review response (edit, approve, mark posted)' })
-  @Roles('admin', 'front_desk')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   async updateReview(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('id', ParseUUIDPipe) id: string,

@@ -91,7 +91,7 @@
       ],
       "docs": "docs/integrations/channel-beds24-channex.md",
       "smoke": "channel_connection",
-      "note": "Missing credentials → console channel stub (logged, no HTTP).",
+      "note": "Missing credentials \u2192 console channel stub (logged, no HTTP).",
       "maturity": "shipped"
     },
     {
@@ -309,7 +309,7 @@
       "liveEnv": [],
       "docs": "docs/integrations/serbia-fiscal.md",
       "smoke": "fiscal_config",
-      "note": "Console fiscal provider — logs handoff; replace with authority client for production.",
+      "note": "Console fiscal provider \u2014 logs handoff; replace with authority client for production.",
       "maturity": "shipped"
     },
     {
@@ -321,7 +321,7 @@
       "liveEnv": [],
       "docs": "docs/integrations/serbia-fiscal.md",
       "smoke": "guest_reg_config",
-      "note": "Console guest-registration provider — logs handoff.",
+      "note": "Console guest-registration provider \u2014 logs handoff.",
       "maturity": "shipped"
     },
     {
@@ -767,6 +767,717 @@
       "note": "Console adapter: logs handoff only. Live authority/partner client required for production filing.",
       "guestRegistrationProviderKey": "uruguay_rihp",
       "maturity": "adapter"
+    },
+    {
+      "slug": "whatsapp-cloud-api",
+      "title": "WhatsApp Cloud API",
+      "kind": "whatsapp",
+      "env": [],
+      "liveEnv": [
+        "WHATSAPP_CLOUD_TOKEN=EAAB...",
+        "WHATSAPP_CLOUD_PHONE_NUMBER_ID=..."
+      ],
+      "docs": "docs/integrations/whatsapp-cloud.md",
+      "smoke": "messaging_enable",
+      "note": "Without Cloud credentials, WhatsApp falls through to Twilio or console.",
+      "maturity": "shipped"
+    },
+    {
+      "slug": "mailgun",
+      "title": "Mailgun",
+      "kind": "email",
+      "env": [],
+      "liveEnv": [
+        "MAILGUN_API_KEY=...",
+        "MAILGUN_DOMAIN=mg.example.com"
+      ],
+      "docs": "docs/integrations/mailgun-ses.md",
+      "smoke": "email_enable",
+      "note": "Without Mailgun keys, email falls through to SendGrid/SMTP/console.",
+      "maturity": "shipped"
+    },
+    {
+      "slug": "amazon-ses",
+      "title": "Amazon SES",
+      "kind": "email",
+      "env": [],
+      "liveEnv": [
+        "SES_ENDPOINT=http://localhost:4566",
+        "SES_API_KEY=local",
+        "SES_FROM=noreply@example.com"
+      ],
+      "docs": "docs/integrations/mailgun-ses.md",
+      "smoke": "email_enable",
+      "note": "Requires SES_ENDPOINT gateway (honest path; no in-process SigV4).",
+      "maturity": "shipped"
+    },
+    {
+      "slug": "expedia-eqc",
+      "title": "Expedia EQC",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "expedia_eqc",
+      "channelCode": "expedia_eqc"
+    },
+    {
+      "slug": "myallocator-cloudbeds",
+      "title": "Myallocator/Cloudbeds",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "myallocator_cloudbeds",
+      "channelCode": "myallocator_cloudbeds"
+    },
+    {
+      "slug": "atomize",
+      "title": "Atomize",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "atomize",
+      "channelCode": "atomize"
+    },
+    {
+      "slug": "yieldplanet",
+      "title": "YieldPlanet",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "yieldplanet",
+      "channelCode": "yieldplanet"
+    },
+    {
+      "slug": "d-edge",
+      "title": "D-EDGE",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "d_edge",
+      "channelCode": "d_edge"
+    },
+    {
+      "slug": "cubilis-lighthouse",
+      "title": "Cubilis/Lighthouse",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "cubilis_lighthouse",
+      "channelCode": "cubilis_lighthouse"
+    },
+    {
+      "slug": "rategain",
+      "title": "RateGain",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "rategain",
+      "channelCode": "rategain"
+    },
+    {
+      "slug": "hotelrunner",
+      "title": "HotelRunner",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "hotelrunner",
+      "channelCode": "hotelrunner"
+    },
+    {
+      "slug": "nextpax",
+      "title": "NextPax",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "nextpax",
+      "channelCode": "nextpax"
+    },
+    {
+      "slug": "hotelbeds-api-suite",
+      "title": "Hotelbeds API Suite",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "hotelbeds",
+      "channelCode": "hotelbeds"
+    },
+    {
+      "slug": "amadeus-self-service-hotel-apis",
+      "title": "Amadeus Self-Service Hotel APIs",
+      "kind": "channel",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys in connection config"
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "channel_connection",
+      "note": "Console channel adapter \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "adapterType": "amadeus_hotel",
+      "channelCode": "amadeus_hotel"
+    },
+    {
+      "slug": "wise-platform",
+      "title": "Wise Platform",
+      "kind": "payment",
+      "env": [
+        "PAYMENT_GATEWAY=wise"
+      ],
+      "liveEnv": [
+        "PAYMENT_GATEWAY=wise",
+        "WISE_API_TOKEN=...",
+        "WISE_PROFILE_ID=..."
+      ],
+      "docs": "docs/integrations/wave3-channels-wise.md",
+      "smoke": "payment_console",
+      "note": "Console payment gateway (PAYMENT_GATEWAY=wise) until Wise Platform partner client lands.",
+      "maturity": "adapter"
+    },
+    {
+      "slug": "trustyou",
+      "title": "TrustYou",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for TrustYou"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "trustyou"
+    },
+    {
+      "slug": "customer-alliance",
+      "title": "Customer Alliance",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Customer Alliance"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "customer-alliance"
+    },
+    {
+      "slug": "trustpilot",
+      "title": "Trustpilot",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Trustpilot"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "trustpilot"
+    },
+    {
+      "slug": "yotpo",
+      "title": "Yotpo",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Yotpo"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "yotpo"
+    },
+    {
+      "slug": "mara-ai",
+      "title": "MARA AI",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for MARA AI"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "mara-ai"
+    },
+    {
+      "slug": "guest-suite",
+      "title": "Guest Suite",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Guest Suite"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "guest-suite"
+    },
+    {
+      "slug": "facebook-page-ratings",
+      "title": "Facebook Page Ratings",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Facebook Page Ratings"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "facebook-page-ratings"
+    },
+    {
+      "slug": "reviewtrackers",
+      "title": "ReviewTrackers",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for ReviewTrackers"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "reviewtrackers"
+    },
+    {
+      "slug": "foursquare-places",
+      "title": "Foursquare Places",
+      "kind": "reviews",
+      "env": [],
+      "liveEnv": [
+        "Partner API keys for Foursquare Places"
+      ],
+      "docs": "docs/integrations/wave3-reviews.md",
+      "smoke": "registry_enable",
+      "note": "Named console review source \u2014 no vendor HTTP until partner credentials.",
+      "maturity": "adapter",
+      "reviewSource": "foursquare-places"
+    },
+    {
+      "slug": "apache-superset",
+      "title": "Apache Superset",
+      "kind": "bi",
+      "env": [],
+      "liveEnv": [
+        "Read-only Postgres role for BI tool"
+      ],
+      "docs": "docs/integrations/bi-postgres.md",
+      "smoke": "registry_enable",
+      "note": "Read-only Postgres / export recipe \u2014 no embedded BI vendor client.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "looker-studio",
+      "title": "Looker Studio",
+      "kind": "bi",
+      "env": [],
+      "liveEnv": [
+        "Read-only Postgres role for BI tool"
+      ],
+      "docs": "docs/integrations/bi-postgres.md",
+      "smoke": "registry_enable",
+      "note": "Read-only Postgres / export recipe \u2014 no embedded BI vendor client.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "grafana",
+      "title": "Grafana",
+      "kind": "bi",
+      "env": [],
+      "liveEnv": [
+        "Read-only Postgres role for BI tool"
+      ],
+      "docs": "docs/integrations/bi-postgres.md",
+      "smoke": "registry_enable",
+      "note": "Read-only Postgres / export recipe \u2014 no embedded BI vendor client.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "quickbooks-online",
+      "title": "QuickBooks Online",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "xero",
+      "title": "Xero",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "sage-business-cloud",
+      "title": "Sage Business Cloud",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "zoho-books",
+      "title": "Zoho Books",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "datev",
+      "title": "DATEV",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "bexio",
+      "title": "Bexio",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "exact-online",
+      "title": "Exact Online",
+      "kind": "accounting",
+      "env": [],
+      "liveEnv": [
+        "Staff JWT with reports.view",
+        "Map CSV to GL chart of accounts"
+      ],
+      "docs": "docs/integrations/accounting-csv.md",
+      "smoke": "registry_enable",
+      "note": "CSV export recipe \u2014 map columns in your GL; no OAuth connector.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "square-pos",
+      "title": "Square POS",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "toast",
+      "title": "Toast",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "clover",
+      "title": "Clover",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "epos-now",
+      "title": "Epos Now",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "shopify-pos",
+      "title": "Shopify POS",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "loyverse",
+      "title": "Loyverse",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "erply",
+      "title": "Erply",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "marketman",
+      "title": "MarketMan",
+      "kind": "pos",
+      "env": [],
+      "liveEnv": [
+        "Connect API key (property-scoped)",
+        "POS middleware \u2192 POST /folio-inbound/charges"
+      ],
+      "docs": "docs/integrations/folio-inbound-pos.md",
+      "smoke": "registry_enable",
+      "note": "Folio-inbound POS recipe \u2014 middleware posts charges with Connect API key.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "mailchimp",
+      "title": "Mailchimp",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "hubspot-free-crm",
+      "title": "HubSpot Free CRM",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "brevo",
+      "title": "Brevo",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "activecampaign",
+      "title": "ActiveCampaign",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "zendesk",
+      "title": "Zendesk",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "cendyn",
+      "title": "Cendyn",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "keap",
+      "title": "Keap",
+      "kind": "crm",
+      "env": [],
+      "liveEnv": [
+        "Connect subscription callbackUrl",
+        "CRM vendor API keys in middleware"
+      ],
+      "docs": "docs/integrations/crm-webhooks.md",
+      "smoke": "registry_enable",
+      "note": "Connect webhook recipe \u2014 sync guests/events in your middleware.",
+      "maturity": "recipe"
+    },
+    {
+      "slug": "frankfurter-ecb-fx",
+      "title": "Frankfurter/ECB FX",
+      "kind": "fx",
+      "env": [],
+      "liveEnv": [
+        "Scheduler calling Frankfurter HTTP API"
+      ],
+      "docs": "docs/integrations/frankfurter-ecb-fx.md",
+      "smoke": "registry_enable",
+      "note": "External Frankfurter/ECB rates recipe \u2014 convert outside HAIP.",
+      "maturity": "recipe"
     }
   ]
 }
