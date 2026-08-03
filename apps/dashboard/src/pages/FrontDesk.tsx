@@ -9,7 +9,9 @@ import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import FindGuest from '../components/guests/FindGuest';
+import IdSwipeCapture from '../components/guests/IdSwipeCapture';
 import GuestDetailsModal from '../components/front-desk/GuestDetailsModal';
+import type { ParsedIdDocument } from '../lib/id-document-swipe';
 import type { Guest } from '../types/guest';
 
 type Tab = 'arrivals' | 'in-house' | 'departures';
@@ -18,6 +20,7 @@ interface Reservation {
   id: string;
   confirmationNumber: string;
   bookingId?: string;
+  guestId?: string;
   status: string;
   arrivalDate: string;
   departureDate: string;
@@ -479,15 +482,19 @@ export default function FrontDesk() {
       };
     },
     onSuccess: ({ reservationId, confirmationNumber, bookingId, partySize }) => {
+      const guestSnapshot = wiGuest;
       const stub: Reservation = {
         id: reservationId,
         confirmationNumber,
         bookingId,
+        guestId: guestSnapshot?.id,
         status: 'assigned',
         arrivalDate: wiArrivalDate,
         departureDate: wiDepartureDate,
         roomId: wiRoomId,
-        guestName: wiGuest ? `${wiGuest.firstName} ${wiGuest.lastName}`.trim() : '—',
+        guestName: guestSnapshot
+          ? `${guestSnapshot.firstName} ${guestSnapshot.lastName}`.trim()
+          : '—',
       };
       invalidateAll();
       setWalkInOpen(false);
@@ -495,8 +502,7 @@ export default function FrontDesk() {
       if (partySize > 1) {
         setDetailsModal(stub);
       } else {
-        setCheckInModal(stub);
-        resetCheckInForm();
+        void openCheckIn(stub, undefined, guestSnapshot);
       }
     },
     onError: (err: any) => {
@@ -542,7 +548,42 @@ export default function FrontDesk() {
     return r.bookingId || r.confirmationNumber || r.id;
   }
 
-  function openCheckIn(primary: Reservation, partyMembers?: Reservation[]) {
+  function applyGuestToCheckIn(guest: Guest) {
+    if (guest.idType) setIdType(guest.idType);
+    if (guest.idNumber) setIdNumber(guest.idNumber);
+    if (guest.idCountry) setIdCountry(guest.idCountry);
+    if (guest.idExpiry) setIdExpiry(guest.idExpiry);
+    if (guest.nationality) setRegNationality(guest.nationality);
+    const address = [
+      guest.addressLine1,
+      guest.addressLine2,
+      guest.city,
+      guest.stateProvince,
+      guest.postalCode,
+      guest.countryCode,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    if (address) setRegAddress(address);
+  }
+
+  function applyIdDocToCheckIn(doc: ParsedIdDocument) {
+    if (doc.idType) setIdType(doc.idType);
+    if (doc.idNumber) setIdNumber(doc.idNumber);
+    if (doc.idCountry) setIdCountry(doc.idCountry);
+    if (doc.idExpiry) setIdExpiry(doc.idExpiry);
+    if (doc.nationality) setRegNationality(doc.nationality);
+    const address = [doc.addressLine1, doc.city, doc.stateProvince, doc.postalCode]
+      .filter(Boolean)
+      .join(', ');
+    if (address) setRegAddress(address);
+  }
+
+  async function openCheckIn(
+    primary: Reservation,
+    partyMembers?: Reservation[],
+    guestHint?: Guest | null,
+  ) {
     const pool = partyMembers ?? arrList.filter((r) => partyKey(r) === partyKey(primary));
     const ordered = [primary, ...pool.filter((r) => r.id !== primary.id)].slice(
       0,
@@ -553,6 +594,19 @@ export default function FrontDesk() {
     setCheckInIncludeIds(ordered.filter((r) => r.id !== primary.id).map((r) => r.id));
     setCheckInPartyRooms(Object.fromEntries(ordered.map((r) => [r.id, r.roomId ?? ''])));
     setSelectedRoom(primary.roomId ?? '');
+
+    if (guestHint) {
+      applyGuestToCheckIn(guestHint);
+      return;
+    }
+    if (!primary.guestId) return;
+    try {
+      const res = await api.get(`/v1/guests/${primary.guestId}`);
+      const guest = (res.data?.data ?? res.data) as Guest | undefined;
+      if (guest) applyGuestToCheckIn(guest);
+    } catch {
+      /* guest profile optional for check-in open */
+    }
   }
 
   function resetWalkIn() {
@@ -1008,6 +1062,8 @@ export default function FrontDesk() {
             </div>
 
             <div className="max-h-[65vh] overflow-y-auto pr-1 space-y-4 pt-1">
+              <IdSwipeCapture active={!!checkInModal} onParsed={applyIdDocToCheckIn} />
+
               {/* Document Identity Section */}
               <div className="p-4 bg-gray-50/70 rounded-xl border border-gray-100 space-y-3">
                 <h3 className="text-xs font-bold text-telivity-navy uppercase tracking-wider flex items-center gap-1.5">
@@ -1685,8 +1741,7 @@ export default function FrontDesk() {
         }}
         onCheckIn={(r) => {
           setDetailsModal(null);
-          setCheckInModal(r as Reservation);
-          resetCheckInForm();
+          void openCheckIn(r as Reservation);
         }}
         guestLabel={(r) => guestName(r as Reservation)}
       />
