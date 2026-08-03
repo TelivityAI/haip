@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, Split, ArrowRightLeft, Trash2 } from 'lucide-react';
@@ -262,6 +263,12 @@ export default function ReservationPartyPanel({
                     ? t('reservations.primaryGuest')
                     : t('reservations.accompanyingGuest')}
                 </p>
+                <Link
+                  to={`/guests/${o.guestId}`}
+                  className="text-xs font-semibold text-telivity-teal hover:underline"
+                >
+                  {t('frontDesk.viewProfile', { defaultValue: 'View profile' })}
+                </Link>
               </div>
               <div className="flex items-center gap-1">
                 {occupants.length > 1 && otherSiblings.length > 0 && (
