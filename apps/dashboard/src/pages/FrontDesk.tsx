@@ -82,6 +82,28 @@ interface DoorLockCredential {
   status: 'active' | 'revoked';
 }
 
+/** Additional walk-in rooms beyond the primary (same booking / party). */
+interface WalkInExtraRoom {
+  key: string;
+  guest: Guest | null;
+  roomTypeId: string;
+  ratePlanId: string;
+  roomId: string;
+}
+
+function emptyWalkInExtraRoom(defaults?: {
+  roomTypeId?: string;
+  ratePlanId?: string;
+}): WalkInExtraRoom {
+  return {
+    key: crypto.randomUUID(),
+    guest: null,
+    roomTypeId: defaults?.roomTypeId ?? '',
+    ratePlanId: defaults?.ratePlanId ?? '',
+    roomId: '',
+  };
+}
+
 export default function FrontDesk() {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
@@ -122,18 +144,14 @@ export default function FrontDesk() {
   const [overrideDoNotMove, setOverrideDoNotMove] = useState(false);
   const [moveReason, setMoveReason] = useState('');
 
-  // Walk-in form
+  // Walk-in form — primary room + N additional rooms (same booking / party)
   const [wiGuest, setWiGuest] = useState<Guest | null>(null);
   const [wiArrivalDate, setWiArrivalDate] = useState(today);
   const [wiDepartureDate, setWiDepartureDate] = useState(tomorrow);
   const [wiRoomTypeId, setWiRoomTypeId] = useState('');
   const [wiRatePlanId, setWiRatePlanId] = useState('');
   const [wiRoomId, setWiRoomId] = useState('');
-  const [wiSecondRoom, setWiSecondRoom] = useState(false);
-  const [wi2Guest, setWi2Guest] = useState<Guest | null>(null);
-  const [wi2RoomTypeId, setWi2RoomTypeId] = useState('');
-  const [wi2RatePlanId, setWi2RatePlanId] = useState('');
-  const [wi2RoomId, setWi2RoomId] = useState('');
+  const [wiExtraRooms, setWiExtraRooms] = useState<WalkInExtraRoom[]>([]);
   const [wiError, setWiError] = useState('');
 
   const wiNights = useMemo(() => {
@@ -359,19 +377,19 @@ export default function FrontDesk() {
       if (!wiGuest?.id || !wiRoomTypeId || !wiRatePlanId || !wiRoomId || wiNights <= 0) {
         throw new Error(t('frontDesk.walkInRequired'));
       }
-      if (wiSecondRoom) {
-        if (!wi2Guest?.id || !wi2RoomTypeId || !wi2RatePlanId || !wi2RoomId) {
-          throw new Error(t('frontDesk.walkInSecondRequired'));
+      for (let i = 0; i < wiExtraRooms.length; i++) {
+        const extra = wiExtraRooms[i];
+        if (!extra.guest?.id || !extra.roomTypeId || !extra.ratePlanId || !extra.roomId) {
+          throw new Error(t('frontDesk.walkInExtraRequired', { room: i + 2 }));
         }
-        if (wi2RoomId === wiRoomId) {
-          throw new Error(t('frontDesk.walkInDistinctRooms'));
-        }
+      }
+      const allRoomIds = [wiRoomId, ...wiExtraRooms.map((r) => r.roomId)];
+      if (new Set(allRoomIds).size !== allRoomIds.length) {
+        throw new Error(t('frontDesk.walkInDistinctRooms'));
       }
       const plans: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
       const plan = plans.find((p) => p.id === wiRatePlanId);
-      const plan2 = plans.find((p) => p.id === wi2RatePlanId);
       const nightly = Number(plan?.baseAmount ?? 0);
-      const nightly2 = Number(plan2?.baseAmount ?? 0);
       const guestId = wiGuest.id;
       const resCreate = await api.post(
         '/v1/reservations',
@@ -406,21 +424,23 @@ export default function FrontDesk() {
         { params: { propertyId }, skipErrorToast: true },
       );
 
-      if (wiSecondRoom && wi2Guest) {
+      for (const extra of wiExtraRooms) {
+        const planExtra = plans.find((p) => p.id === extra.ratePlanId);
+        const nightlyExtra = Number(planExtra?.baseAmount ?? 0);
         await api.post(
           `/v1/reservations/${reservationId}/guests`,
-          { guestId: wi2Guest.id },
+          { guestId: extra.guest!.id },
           { params: { propertyId }, skipErrorToast: true },
         );
         await api.post(
           `/v1/reservations/${reservationId}/split`,
           {
-            guestIds: [wi2Guest.id],
-            roomTypeId: wi2RoomTypeId,
-            ratePlanId: wi2RatePlanId,
-            totalAmount: moneyString(nightly2 * wiNights),
-            currencyCode: plan2?.currencyCode ?? 'USD',
-            roomId: wi2RoomId,
+            guestIds: [extra.guest!.id],
+            roomTypeId: extra.roomTypeId,
+            ratePlanId: extra.ratePlanId,
+            totalAmount: moneyString(nightlyExtra * wiNights),
+            currencyCode: planExtra?.currencyCode ?? 'USD',
+            roomId: extra.roomId,
             adults: 1,
           },
           { params: { propertyId }, skipErrorToast: true },
@@ -431,7 +451,7 @@ export default function FrontDesk() {
         reservationId: reservationId as string,
         confirmationNumber: confirmationNumber as string,
         bookingId: bookingId as string | undefined,
-        partySize: wiSecondRoom ? 2 : 1,
+        partySize: 1 + wiExtraRooms.length,
       };
     },
     onSuccess: ({ reservationId, confirmationNumber, bookingId, partySize }) => {
@@ -499,12 +519,16 @@ export default function FrontDesk() {
     setWiRoomTypeId('');
     setWiRatePlanId('');
     setWiRoomId('');
-    setWiSecondRoom(false);
-    setWi2Guest(null);
-    setWi2RoomTypeId('');
-    setWi2RatePlanId('');
-    setWi2RoomId('');
+    setWiExtraRooms([]);
     setWiError('');
+  }
+
+  function updateExtraRoom(key: string, patch: Partial<WalkInExtraRoom>) {
+    setWiExtraRooms((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+
+  function removeExtraRoom(key: string) {
+    setWiExtraRooms((prev) => prev.filter((r) => r.key !== key));
   }
 
   const guestName = (r: Reservation) =>
@@ -550,13 +574,27 @@ export default function FrontDesk() {
   const walkInRooms = wiRoomTypeId
     ? roomList.filter((r) => !r.roomTypeId || r.roomTypeId === wiRoomTypeId)
     : roomList;
-  const walkInRooms2 = (wi2RoomTypeId
-    ? roomList.filter((r) => !r.roomTypeId || r.roomTypeId === wi2RoomTypeId)
-    : roomList
-  ).filter((r) => r.id !== wiRoomId);
-  const filteredPlans2 = wi2RoomTypeId
-    ? rpList.filter((p) => p.roomTypeId === wi2RoomTypeId && p.isActive !== false)
-    : rpList;
+  const takenRoomIds = (exceptKey?: string) => {
+    const ids = new Set<string>();
+    if (wiRoomId) ids.add(wiRoomId);
+    for (const extra of wiExtraRooms) {
+      if (exceptKey && extra.key === exceptKey) continue;
+      if (extra.roomId) ids.add(extra.roomId);
+    }
+    return ids;
+  };
+  const roomsForExtra = (extra: WalkInExtraRoom) => {
+    const taken = takenRoomIds(extra.key);
+    return roomList.filter(
+      (r) =>
+        !taken.has(r.id) &&
+        (!extra.roomTypeId || !r.roomTypeId || r.roomTypeId === extra.roomTypeId),
+    );
+  };
+  const plansForRoomType = (roomTypeId: string) =>
+    roomTypeId
+      ? rpList.filter((p) => p.roomTypeId === roomTypeId && p.isActive !== false)
+      : rpList;
 
   const currentList = tab === 'arrivals' ? arrList : tab === 'in-house' ? ihList : depList;
   const partyGroups = useMemo(() => groupByBooking(currentList), [currentList]);
@@ -1312,118 +1350,124 @@ export default function FrontDesk() {
                 <select
                   value={wiRoomId}
                   onChange={(e) => {
-                    setWiRoomId(e.target.value);
-                    if (wi2RoomId === e.target.value) setWi2RoomId('');
+                    const next = e.target.value;
+                    setWiRoomId(next);
+                    setWiExtraRooms((prev) =>
+                      prev.map((r) => (r.roomId === next ? { ...r, roomId: '' } : r)),
+                    );
                   }}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
                 >
                   <option value="">{t('frontDesk.selectRoom')}</option>
-                  {walkInRooms.map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
-                    </option>
-                  ))}
+                  {walkInRooms
+                    .filter((room) => !takenRoomIds().has(room.id) || room.id === wiRoomId)
+                    .map((room) => (
+                      <option key={room.id} value={room.id}>
+                        {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
           </div>
 
-          {!wiSecondRoom ? (
-            <button
-              type="button"
-              onClick={() => {
-                setWiSecondRoom(true);
-                setWi2RoomTypeId(wiRoomTypeId);
-                setWi2RatePlanId(wiRatePlanId);
-              }}
-              className="text-sm font-semibold text-telivity-teal hover:underline"
-            >
-              {t('frontDesk.addSecondRoom')}
-            </button>
-          ) : (
-            <div className="space-y-3 border-t border-gray-100 pt-4">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-telivity-mid-grey">
-                  {t('frontDesk.room')} 2
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWiSecondRoom(false);
-                    setWi2Guest(null);
-                    setWi2RoomTypeId('');
-                    setWi2RatePlanId('');
-                    setWi2RoomId('');
-                  }}
-                  className="text-xs text-telivity-mid-grey hover:text-telivity-orange"
-                >
-                  {t('common.remove')}
-                </button>
-              </div>
-              <FindGuest
-                label={t('frontDesk.secondGuest')}
-                selectedGuest={wi2Guest}
-                onSelectGuest={setWi2Guest}
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-                    {t('frontDesk.roomType')}
-                  </label>
-                  <select
-                    value={wi2RoomTypeId}
-                    onChange={(e) => {
-                      setWi2RoomTypeId(e.target.value);
-                      setWi2RatePlanId('');
-                      setWi2RoomId('');
-                    }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+          {wiExtraRooms.map((extra, idx) => {
+            const plans = plansForRoomType(extra.roomTypeId);
+            const rooms = roomsForExtra(extra);
+            return (
+              <div key={extra.key} className="space-y-3 border-t border-gray-100 pt-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-telivity-mid-grey">
+                    {t('frontDesk.room')} {idx + 2}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => removeExtraRoom(extra.key)}
+                    className="text-xs text-telivity-mid-grey hover:text-telivity-orange"
                   >
-                    <option value="">{t('frontDesk.selectRoomType')}</option>
-                    {rtList.map((rt) => (
-                      <option key={rt.id} value={rt.id}>
-                        {rt.name}
-                      </option>
-                    ))}
-                  </select>
+                    {t('common.remove')}
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-                    {t('frontDesk.ratePlan')}
-                  </label>
-                  <select
-                    value={wi2RatePlanId}
-                    onChange={(e) => setWi2RatePlanId(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="">{t('frontDesk.selectRatePlan')}</option>
-                    {filteredPlans2.map((rp) => (
-                      <option key={rp.id} value={rp.id}>
-                        {rp.name} — {moneyString(rp.baseAmount)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
-                    {t('frontDesk.assignRoom')}
-                  </label>
-                  <select
-                    value={wi2RoomId}
-                    onChange={(e) => setWi2RoomId(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="">{t('frontDesk.selectRoom')}</option>
-                    {walkInRooms2.map((room) => (
-                      <option key={room.id} value={room.id}>
-                        {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
-                      </option>
-                    ))}
-                  </select>
+                <FindGuest
+                  label={t('frontDesk.partyGuest', { room: idx + 2 })}
+                  selectedGuest={extra.guest}
+                  onSelectGuest={(guest) => updateExtraRoom(extra.key, { guest })}
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                      {t('frontDesk.roomType')}
+                    </label>
+                    <select
+                      value={extra.roomTypeId}
+                      onChange={(e) =>
+                        updateExtraRoom(extra.key, {
+                          roomTypeId: e.target.value,
+                          ratePlanId: '',
+                          roomId: '',
+                        })
+                      }
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">{t('frontDesk.selectRoomType')}</option>
+                      {rtList.map((rt) => (
+                        <option key={rt.id} value={rt.id}>
+                          {rt.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                      {t('frontDesk.ratePlan')}
+                    </label>
+                    <select
+                      value={extra.ratePlanId}
+                      onChange={(e) => updateExtraRoom(extra.key, { ratePlanId: e.target.value })}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">{t('frontDesk.selectRatePlan')}</option>
+                      {plans.map((rp) => (
+                        <option key={rp.id} value={rp.id}>
+                          {rp.name} — {moneyString(rp.baseAmount)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
+                      {t('frontDesk.assignRoom')}
+                    </label>
+                    <select
+                      value={extra.roomId}
+                      onChange={(e) => updateExtraRoom(extra.key, { roomId: e.target.value })}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">{t('frontDesk.selectRoom')}</option>
+                      {rooms.map((room) => (
+                        <option key={room.id} value={room.id}>
+                          {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() =>
+              setWiExtraRooms((prev) => [
+                ...prev,
+                emptyWalkInExtraRoom({ roomTypeId: wiRoomTypeId, ratePlanId: wiRatePlanId }),
+              ])
+            }
+            className="text-sm font-semibold text-telivity-teal hover:underline"
+          >
+            {t('frontDesk.addAnotherRoom')}
+          </button>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1456,6 +1500,9 @@ export default function FrontDesk() {
               checkOut: wiDepartureDate,
               count: Math.max(wiNights, 0),
             })}
+            {wiExtraRooms.length > 0
+              ? ` · ${t('frontDesk.partyRooms', { count: 1 + wiExtraRooms.length })}`
+              : ''}
           </p>
           {wiError && <p className="text-sm text-telivity-orange">{wiError}</p>}
           <div className="flex gap-3 pt-1">
@@ -1472,7 +1519,9 @@ export default function FrontDesk() {
             >
               {walkInMutation.isPending
                 ? t('common.processing')
-                : t('frontDesk.createWalkIn')}
+                : wiExtraRooms.length > 0
+                  ? t('frontDesk.createWalkInParty', { count: 1 + wiExtraRooms.length })
+                  : t('frontDesk.createWalkIn')}
             </button>
           </div>
         </div>
