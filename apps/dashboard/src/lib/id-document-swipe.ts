@@ -277,7 +277,7 @@ export function looksLikeIdSwipe(raw: string): boolean {
 }
 
 export function parseIdDocumentSwipe(raw: string): ParsedIdDocument | null {
-  const cleaned = raw.replace(/\u0000/g, '').trim();
+  const cleaned = raw.split('\0').join('').trim();
   if (!cleaned) return null;
 
   return parseAamva(cleaned) || parseMrz(cleaned) || parseMagstripe(cleaned);
