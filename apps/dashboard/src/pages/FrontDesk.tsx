@@ -82,6 +82,9 @@ interface DoorLockCredential {
   status: 'active' | 'revoked';
 }
 
+/** Desk party size limit for walk-in create and party check-in. */
+const MAX_FRONT_DESK_PARTY_ROOMS = 4;
+
 /** Additional walk-in rooms beyond the primary (same booking / party). */
 interface WalkInExtraRoom {
   key: string;
@@ -138,6 +141,8 @@ export default function FrontDesk() {
   const [destinationState, setDestinationState] = useState('');
   const [destinationCountry, setDestinationCountry] = useState('');
   const [showFnrhTravel, setShowFnrhTravel] = useState(false);
+  const [checkInIncludeIds, setCheckInIncludeIds] = useState<string[]>([]);
+  const [checkInPartyRooms, setCheckInPartyRooms] = useState<Record<string, string>>({});
 
   // Move form
   const [moveRoomId, setMoveRoomId] = useState('');
@@ -289,6 +294,7 @@ export default function FrontDesk() {
       idExpiry?: string;
       registrationSigned?: boolean;
       registrationData?: Record<string, string>;
+      party?: Array<{ reservationId: string; roomId?: string }>;
     }) => {
       if (data.status === 'confirmed') {
         const roomToAssign = data.roomId || data.preAssignedRoomId;
@@ -299,7 +305,7 @@ export default function FrontDesk() {
           params: { propertyId },
         });
       }
-      return api.patch(
+      await api.patch(
         `/v1/reservations/${data.id}/check-in`,
         {
           roomId: data.roomId || undefined,
@@ -312,6 +318,20 @@ export default function FrontDesk() {
         },
         { params: { propertyId } },
       );
+      const party = (data.party ?? []).slice(0, MAX_FRONT_DESK_PARTY_ROOMS - 1);
+      if (party.length > 0) {
+        requirePropertyId(propertyId);
+        await api.post(
+          '/v1/reservations/group-check-in',
+          {
+            reservations: party.map((p) => ({
+              reservationId: p.reservationId,
+              roomId: p.roomId,
+            })),
+          },
+          { params: { propertyId } },
+        );
+      }
     },
     onSuccess: () => {
       invalidateAll();
@@ -338,9 +358,10 @@ export default function FrontDesk() {
   const groupCheckInMutation = useMutation({
     mutationFn: (reservationIds: string[]) => {
       requirePropertyId(propertyId);
+      const capped = reservationIds.slice(0, MAX_FRONT_DESK_PARTY_ROOMS);
       return api.post(
         '/v1/reservations/group-check-in',
-        { reservations: reservationIds.map((reservationId) => ({ reservationId })) },
+        { reservations: capped.map((reservationId) => ({ reservationId })) },
         { params: { propertyId } },
       );
     },
@@ -376,6 +397,9 @@ export default function FrontDesk() {
       setWiError('');
       if (!wiGuest?.id || !wiRoomTypeId || !wiRatePlanId || !wiRoomId || wiNights <= 0) {
         throw new Error(t('frontDesk.walkInRequired'));
+      }
+      if (1 + wiExtraRooms.length > MAX_FRONT_DESK_PARTY_ROOMS) {
+        throw new Error(t('frontDesk.partyRoomLimit', { count: MAX_FRONT_DESK_PARTY_ROOMS }));
       }
       for (let i = 0; i < wiExtraRooms.length; i++) {
         const extra = wiExtraRooms[i];
@@ -510,6 +534,25 @@ export default function FrontDesk() {
     setDestinationState('');
     setDestinationCountry('');
     setShowFnrhTravel(false);
+    setCheckInIncludeIds([]);
+    setCheckInPartyRooms({});
+  }
+
+  function partyKey(r: Reservation) {
+    return r.bookingId || r.confirmationNumber || r.id;
+  }
+
+  function openCheckIn(primary: Reservation, partyMembers?: Reservation[]) {
+    const pool = partyMembers ?? arrList.filter((r) => partyKey(r) === partyKey(primary));
+    const ordered = [primary, ...pool.filter((r) => r.id !== primary.id)].slice(
+      0,
+      MAX_FRONT_DESK_PARTY_ROOMS,
+    );
+    resetCheckInForm();
+    setCheckInModal(primary);
+    setCheckInIncludeIds(ordered.filter((r) => r.id !== primary.id).map((r) => r.id));
+    setCheckInPartyRooms(Object.fromEntries(ordered.map((r) => [r.id, r.roomId ?? ''])));
+    setSelectedRoom(primary.roomId ?? '');
   }
 
   function resetWalkIn() {
@@ -678,11 +721,20 @@ export default function FrontDesk() {
                 <th className="px-4 py-3 text-left">
                   <input
                     type="checkbox"
-                    checked={selectedForGroup.length === arrList.length && arrList.length > 0}
+                    checked={
+                      selectedForGroup.length > 0 &&
+                      selectedForGroup.length ===
+                        Math.min(arrList.length, MAX_FRONT_DESK_PARTY_ROOMS)
+                    }
                     onChange={(e) =>
-                      setSelectedForGroup(e.target.checked ? arrList.map((r) => r.id) : [])
+                      setSelectedForGroup(
+                        e.target.checked
+                          ? arrList.slice(0, MAX_FRONT_DESK_PARTY_ROOMS).map((r) => r.id)
+                          : [],
+                      )
                     }
                     className="rounded border-gray-300"
+                    title={t('frontDesk.partyRoomLimit', { count: MAX_FRONT_DESK_PARTY_ROOMS })}
                   />
                 </th>
               )}
@@ -730,7 +782,6 @@ export default function FrontDesk() {
           </thead>
           <tbody>
             {partyGroups.map((group) => {
-              const partyIds = group.members.map((m) => m.id);
               const showPartyHeader = group.members.length > 1;
               return (
                 <Fragment key={group.key}>
@@ -749,16 +800,20 @@ export default function FrontDesk() {
                           </span>
                           <span className="text-xs text-telivity-mid-grey">
                             {t('frontDesk.partyRooms', { count: group.members.length })}
+                            {group.members.length > MAX_FRONT_DESK_PARTY_ROOMS
+                              ? ` · ${t('frontDesk.partyRoomLimit', { count: MAX_FRONT_DESK_PARTY_ROOMS })}`
+                              : ''}
                           </span>
                           {tab === 'arrivals' && (
                             <button
                               type="button"
-                              onClick={() => groupCheckInMutation.mutate(partyIds)}
-                              disabled={groupCheckInMutation.isPending}
-                              className="ml-auto inline-flex items-center gap-1.5 bg-telivity-deep-blue text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-deep-blue/90 disabled:opacity-50"
+                              onClick={() => openCheckIn(group.members[0], group.members)}
+                              className="ml-auto inline-flex items-center gap-1.5 bg-telivity-deep-blue text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-deep-blue/90"
                             >
                               <UsersRound size={12} />
-                              {t('frontDesk.partyCheckIn', { count: group.members.length })}
+                              {t('frontDesk.partyCheckIn', {
+                                count: Math.min(group.members.length, MAX_FRONT_DESK_PARTY_ROOMS),
+                              })}
                             </button>
                           )}
                         </div>
@@ -775,13 +830,14 @@ export default function FrontDesk() {
                           <input
                             type="checkbox"
                             checked={selectedForGroup.includes(r.id)}
-                            onChange={(e) =>
-                              setSelectedForGroup(
-                                e.target.checked
-                                  ? [...selectedForGroup, r.id]
-                                  : selectedForGroup.filter((id) => id !== r.id),
-                              )
-                            }
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                if (selectedForGroup.length >= MAX_FRONT_DESK_PARTY_ROOMS) return;
+                                setSelectedForGroup([...selectedForGroup, r.id]);
+                              } else {
+                                setSelectedForGroup(selectedForGroup.filter((id) => id !== r.id));
+                              }
+                            }}
                             className="rounded border-gray-300"
                           />
                         </td>
@@ -848,10 +904,7 @@ export default function FrontDesk() {
                           )}
                           {tab === 'arrivals' && (
                             <button
-                              onClick={() => {
-                                setCheckInModal(r);
-                                resetCheckInForm();
-                              }}
+                              onClick={() => openCheckIn(r)}
                               className="bg-telivity-teal text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-telivity-light-teal transition-colors"
                             >
                               {t('frontDesk.checkIn')}
@@ -1159,6 +1212,77 @@ export default function FrontDesk() {
               </div>
             </div>
 
+            {(() => {
+              const mates = arrList.filter(
+                (r) => r.id !== checkInModal.id && partyKey(r) === partyKey(checkInModal),
+              );
+              if (mates.length === 0) return null;
+              const visible = mates.slice(0, MAX_FRONT_DESK_PARTY_ROOMS - 1);
+              return (
+                <div className="p-4 bg-gray-50/70 rounded-xl border border-gray-100 space-y-2">
+                  <h3 className="text-xs font-bold text-telivity-navy uppercase tracking-wider">
+                    {t('frontDesk.partyRoomsSection', { count: MAX_FRONT_DESK_PARTY_ROOMS })}
+                  </h3>
+                  <p className="text-xs text-telivity-mid-grey">{t('frontDesk.partyRoomsHint')}</p>
+                  {visible.map((mate) => {
+                    const included = checkInIncludeIds.includes(mate.id);
+                    return (
+                      <div
+                        key={mate.id}
+                        className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3"
+                      >
+                        <label className="flex items-center gap-2 text-sm text-telivity-navy min-w-[10rem]">
+                          <input
+                            type="checkbox"
+                            checked={included}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                if (checkInIncludeIds.length >= MAX_FRONT_DESK_PARTY_ROOMS - 1) return;
+                                setCheckInIncludeIds([...checkInIncludeIds, mate.id]);
+                              } else {
+                                setCheckInIncludeIds(
+                                  checkInIncludeIds.filter((id) => id !== mate.id),
+                                );
+                              }
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                          {guestName(mate)}
+                        </label>
+                        <select
+                          value={checkInPartyRooms[mate.id] ?? ''}
+                          disabled={!included}
+                          onChange={(e) =>
+                            setCheckInPartyRooms((prev) => ({
+                              ...prev,
+                              [mate.id]: e.target.value,
+                            }))
+                          }
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50"
+                        >
+                          <option value="">
+                            {mate.roomNumber
+                              ? t('frontDesk.preAssignedRoom', { room: mate.roomNumber })
+                              : t('frontDesk.usePreAssignedRoom')}
+                          </option>
+                          {roomList.map((room) => (
+                            <option key={room.id} value={room.id}>
+                              {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                  {mates.length > visible.length && (
+                    <p className="text-xs text-telivity-orange">
+                      {t('frontDesk.partyRoomOverflow', { count: MAX_FRONT_DESK_PARTY_ROOMS })}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setCheckInModal(null)}
@@ -1190,6 +1314,10 @@ export default function FrontDesk() {
                       destinationState,
                       destinationCountry,
                     },
+                    party: checkInIncludeIds.map((reservationId) => ({
+                      reservationId,
+                      roomId: checkInPartyRooms[reservationId] || undefined,
+                    })),
                   })
                 }
                 disabled={
@@ -1199,7 +1327,11 @@ export default function FrontDesk() {
               >
                 {checkInMutation.isPending
                   ? t('frontDesk.checkingIn')
-                  : t('frontDesk.confirmCheckIn')}
+                  : checkInIncludeIds.length > 0
+                    ? t('frontDesk.confirmCheckInParty', {
+                        count: 1 + checkInIncludeIds.length,
+                      })
+                    : t('frontDesk.confirmCheckIn')}
               </button>
             </div>
             {checkInMutation.isError && (
@@ -1456,18 +1588,24 @@ export default function FrontDesk() {
             );
           })}
 
-          <button
-            type="button"
-            onClick={() =>
-              setWiExtraRooms((prev) => [
-                ...prev,
-                emptyWalkInExtraRoom({ roomTypeId: wiRoomTypeId, ratePlanId: wiRatePlanId }),
-              ])
-            }
-            className="text-sm font-semibold text-telivity-teal hover:underline"
-          >
-            {t('frontDesk.addAnotherRoom')}
-          </button>
+          {1 + wiExtraRooms.length < MAX_FRONT_DESK_PARTY_ROOMS ? (
+            <button
+              type="button"
+              onClick={() =>
+                setWiExtraRooms((prev) => [
+                  ...prev,
+                  emptyWalkInExtraRoom({ roomTypeId: wiRoomTypeId, ratePlanId: wiRatePlanId }),
+                ])
+              }
+              className="text-sm font-semibold text-telivity-teal hover:underline"
+            >
+              {t('frontDesk.addAnotherRoom')}
+            </button>
+          ) : (
+            <p className="text-xs text-telivity-mid-grey">
+              {t('frontDesk.partyRoomLimit', { count: MAX_FRONT_DESK_PARTY_ROOMS })}
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

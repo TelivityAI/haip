@@ -597,7 +597,13 @@
     "earlyCheckIn": "Early check-in",
     "party": "Party",
     "partyRooms": "{{count}} rooms",
-    "partyCheckIn": "Check in party ({{count}})"
+    "partyCheckIn": "Check in party ({{count}})",
+    "partyRoomLimit": "Maximum {{count}} rooms per desk party",
+    "partyRoomsSection": "Party rooms (max {{count}})",
+    "partyRoomsHint": "Include other rooms on this booking in the same check-in.",
+    "partyRoomOverflow": "Only {{count}} rooms can be checked in together. Check in the rest separately.",
+    "confirmCheckInParty": "Confirm Check-In ({{count}} rooms)",
+    "preAssignedRoom": "Pre-assigned {{room}}"
   },
   "groups": {
     "allotmentBlocks": "Allotment Blocks",

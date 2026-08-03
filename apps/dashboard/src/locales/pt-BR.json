@@ -561,7 +561,13 @@
     "earlyCheckIn": "Check-in antecipado",
     "party": "Grupo",
     "partyRooms": "{{count}} quartos",
-    "partyCheckIn": "Check-in do grupo ({{count}})"
+    "partyCheckIn": "Check-in do grupo ({{count}})",
+    "partyRoomLimit": "Máximo de {{count}} quartos por grupo na recepção",
+    "partyRoomsSection": "Quartos do grupo (máx. {{count}})",
+    "partyRoomsHint": "Inclua outros quartos desta reserva no mesmo check-in.",
+    "partyRoomOverflow": "Só {{count}} quartos podem fazer check-in juntos. Faça o restante separadamente.",
+    "confirmCheckInParty": "Confirmar check-in ({{count}} quartos)",
+    "preAssignedRoom": "Pré-atribuído {{room}}"
   },
   "groups": {
     "allotmentBlocks": "Bloqueios de Contingente",
