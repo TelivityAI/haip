@@ -440,7 +440,8 @@ export class ReportsService {
     const dailyRoomsSold = await this.db
       .select({
         date: sql<string>`d.d::date`,
-        count: sql<number>`count(distinct r.id)::int`,
+        // Must use the drizzle table ref — alias "r" is not in the generated FROM.
+        count: sql<number>`count(distinct ${reservations.id})::int`,
       })
       .from(sql`generate_series(${startDate}::date, ${endDate}::date, '1 day'::interval) as d(d)`)
       .leftJoin(
@@ -894,7 +895,8 @@ export class ReportsService {
     const dailyOnBooks = await this.db
       .select({
         date: sql<string>`d.d::date`,
-        count: sql<number>`count(distinct r.id)::int`,
+        // Must use the drizzle table ref — alias "r" is not in the generated FROM.
+        count: sql<number>`count(distinct ${reservations.id})::int`,
       })
       .from(sql`generate_series(${startDate}::date, ${endDate}::date, '1 day'::interval) as d(d)`)
       .leftJoin(
