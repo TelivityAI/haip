@@ -10,6 +10,7 @@ dist/
 .env
 .env.local
 .env.production
+.env.harden
 .env.*.local
 
 # IDE
