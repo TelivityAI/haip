@@ -1,0 +1,18 @@
+{
+  "name": "@telivityhaip/harden-cli",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "haip-harden": "./harden.mjs"
+  },
+  "scripts": {
+    "harden": "node harden.mjs",
+    "harden:local": "node harden.mjs local",
+    "harden:live": "node harden.mjs live"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
