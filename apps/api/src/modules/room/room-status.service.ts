@@ -20,7 +20,9 @@ type RoomStatus =
   | 'out_of_service';
 
 const VALID_TRANSITIONS: Record<RoomStatus, RoomStatus[]> = {
-  vacant_clean: ['occupied', 'out_of_order', 'out_of_service'],
+  // KB 5.2 chain: vacant_clean → vacant_dirty is the documented "clean room
+  // found dirty" path — the desk must be able to send a room back to HK.
+  vacant_clean: ['occupied', 'vacant_dirty', 'out_of_order', 'out_of_service'],
   vacant_dirty: ['clean', 'out_of_order'],
   clean: ['inspected', 'vacant_clean', 'out_of_order'],
   inspected: ['guest_ready', 'out_of_order'],
