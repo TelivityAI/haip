@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote, UserRound } from 'lucide-react';
+import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote, UserRound, Plus, X } from 'lucide-react';
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
@@ -103,6 +103,9 @@ interface WalkInExtraRoom {
   roomTypeId: string;
   ratePlanId: string;
   roomId: string;
+  additionalGuests: Guest[];
+  /** Staff override to exceed the room type's configured maxOccupancy. */
+  overrideOccupancy: boolean;
 }
 
 function emptyWalkInExtraRoom(defaults?: {
@@ -115,6 +118,8 @@ function emptyWalkInExtraRoom(defaults?: {
     roomTypeId: defaults?.roomTypeId ?? '',
     ratePlanId: defaults?.ratePlanId ?? '',
     roomId: '',
+    additionalGuests: [],
+    overrideOccupancy: false,
   };
 }
 
@@ -167,8 +172,20 @@ export default function FrontDesk() {
   const [wiRoomTypeId, setWiRoomTypeId] = useState('');
   const [wiRatePlanId, setWiRatePlanId] = useState('');
   const [wiRoomId, setWiRoomId] = useState('');
+  const [wiAdditionalGuests, setWiAdditionalGuests] = useState<Guest[]>([]);
+  const [wiOverrideOccupancy, setWiOverrideOccupancy] = useState(false);
   const [wiExtraRooms, setWiExtraRooms] = useState<WalkInExtraRoom[]>([]);
   const [wiError, setWiError] = useState('');
+
+  // Every guest already picked anywhere in the walk-in party, so pickers can't select the same person twice.
+  const wiSelectedGuestIds = useMemo(
+    () => [
+      wiGuest?.id,
+      ...wiAdditionalGuests.map((g) => g.id),
+      ...wiExtraRooms.flatMap((extra) => [extra.guest?.id, ...extra.additionalGuests.map((g) => g.id)]),
+    ].filter((id): id is string => !!id),
+    [wiGuest, wiAdditionalGuests, wiExtraRooms],
+  );
 
   const wiNights = useMemo(() => {
     try {
@@ -422,6 +439,36 @@ export default function FrontDesk() {
       if (new Set(allRoomIds).size !== allRoomIds.length) {
         throw new Error(t('frontDesk.walkInDistinctRooms'));
       }
+
+      const primaryAdditionalIds = wiAdditionalGuests.map((g) => g.id);
+      const extraAdditionalIds = wiExtraRooms.map((extra) =>
+        extra.additionalGuests.map((g) => g.id),
+      );
+
+      // Every named occupant must be a distinct guest, across all rooms.
+      const allGuestIds = [
+        wiGuest.id,
+        ...primaryAdditionalIds,
+        ...wiExtraRooms.flatMap((extra, i) => [extra.guest!.id, ...extraAdditionalIds[i]]),
+      ];
+      if (new Set(allGuestIds).size !== allGuestIds.length) {
+        throw new Error(t('frontDesk.walkInDuplicateGuest'));
+      }
+
+      // Exceeding a room type's configured maxOccupancy requires an explicit
+      // staff override (e.g. extra bed/crib for a family) rather than a hard block.
+      const primaryMax = maxOccupancyFor(wiRoomTypeId);
+      if (primaryMax != null && 1 + primaryAdditionalIds.length > primaryMax && !wiOverrideOccupancy) {
+        throw new Error(t('frontDesk.walkInOccupancyExceeded', { room: 1, count: primaryMax }));
+      }
+      for (let i = 0; i < wiExtraRooms.length; i++) {
+        const extra = wiExtraRooms[i];
+        const max = maxOccupancyFor(extra.roomTypeId);
+        if (max != null && 1 + extraAdditionalIds[i].length > max && !extra.overrideOccupancy) {
+          throw new Error(t('frontDesk.walkInOccupancyExceeded', { room: i + 2, count: max }));
+        }
+      }
+
       const plans: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
       const plan = plans.find((p) => p.id === wiRatePlanId);
       const nightly = Number(plan?.baseAmount ?? 0);
@@ -435,7 +482,7 @@ export default function FrontDesk() {
           ratePlanId: wiRatePlanId,
           arrivalDate: wiArrivalDate,
           departureDate: wiDepartureDate,
-          adults: 1,
+          adults: 1 + primaryAdditionalIds.length,
           source: 'walk_in',
           totalAmount: moneyString(nightly * wiNights),
           currencyCode: plan?.currencyCode ?? 'USD',
@@ -459,24 +506,38 @@ export default function FrontDesk() {
         { params: { propertyId }, skipErrorToast: true },
       );
 
-      for (const extra of wiExtraRooms) {
-        const planExtra = plans.find((p) => p.id === extra.ratePlanId);
-        const nightlyExtra = Number(planExtra?.baseAmount ?? 0);
+      for (const additionalGuestId of primaryAdditionalIds) {
         await api.post(
           `/v1/reservations/${reservationId}/guests`,
-          { guestId: extra.guest!.id },
+          { guestId: additionalGuestId, overrideMaxOccupancy: wiOverrideOccupancy },
           { params: { propertyId }, skipErrorToast: true },
         );
+      }
+
+      for (let i = 0; i < wiExtraRooms.length; i++) {
+        const extra = wiExtraRooms[i];
+        const planExtra = plans.find((p) => p.id === extra.ratePlanId);
+        const nightlyExtra = Number(planExtra?.baseAmount ?? 0);
+        const extraGuestIds = [extra.guest!.id, ...extraAdditionalIds[i]];
+        // Occupants must be attached to the source reservation before they
+        // can be moved together onto the new sibling room via split.
+        for (const guestId of extraGuestIds) {
+          await api.post(
+            `/v1/reservations/${reservationId}/guests`,
+            { guestId, overrideMaxOccupancy: extra.overrideOccupancy },
+            { params: { propertyId }, skipErrorToast: true },
+          );
+        }
         await api.post(
           `/v1/reservations/${reservationId}/split`,
           {
-            guestIds: [extra.guest!.id],
+            guestIds: extraGuestIds,
             roomTypeId: extra.roomTypeId,
             ratePlanId: extra.ratePlanId,
             totalAmount: moneyString(nightlyExtra * wiNights),
             currencyCode: planExtra?.currencyCode ?? 'USD',
             roomId: extra.roomId,
-            adults: 1,
+            adults: extraGuestIds.length,
           },
           { params: { propertyId }, skipErrorToast: true },
         );
@@ -624,8 +685,11 @@ export default function FrontDesk() {
     setWiRoomTypeId('');
     setWiRatePlanId('');
     setWiRoomId('');
+    setWiAdditionalGuests([]);
+    setWiOverrideOccupancy(false);
     setWiExtraRooms([]);
     setWiError('');
+    walkInMutation.reset();
   }
 
   function updateExtraRoom(key: string, patch: Partial<WalkInExtraRoom>) {
@@ -673,6 +737,8 @@ export default function FrontDesk() {
 
   const rtList: any[] = Array.isArray(roomTypes) ? roomTypes : roomTypes?.data ?? [];
   const rpList: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
+  const maxOccupancyFor = (roomTypeId: string): number | undefined =>
+    rtList.find((rt) => rt.id === roomTypeId)?.maxOccupancy ?? undefined;
   const filteredPlans = wiRoomTypeId
     ? rpList.filter((p) => p.roomTypeId === wiRoomTypeId && p.isActive !== false)
     : rpList;
@@ -1495,8 +1561,8 @@ export default function FrontDesk() {
         title={t('frontDesk.walkInTitle')}
         wide
       >
-        <div className="space-y-5">
-          <div className="space-y-3">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gray-100 bg-gray-50/40 p-4 space-y-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-telivity-mid-grey">
               {t('frontDesk.room')} 1
             </p>
@@ -1504,6 +1570,8 @@ export default function FrontDesk() {
               label={t('reservations.guest')}
               selectedGuest={wiGuest}
               onSelectGuest={setWiGuest}
+              excludeGuestIds={wiSelectedGuestIds}
+              error={walkInMutation.isError && !wiGuest}
             />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -1557,7 +1625,11 @@ export default function FrontDesk() {
                       prev.map((r) => (r.roomId === next ? { ...r, roomId: '' } : r)),
                     );
                   }}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  className={`w-full border rounded-lg px-3 py-2 text-sm ${
+                    walkInMutation.isError && !wiRoomId
+                      ? 'border-telivity-orange ring-1 ring-telivity-orange'
+                      : 'border-gray-200'
+                  }`}
                 >
                   <option value="">{t('frontDesk.selectRoom')}</option>
                   {walkInRooms
@@ -1570,13 +1642,25 @@ export default function FrontDesk() {
                 </select>
               </div>
             </div>
+            <AdditionalGuestsSection
+              guests={wiAdditionalGuests}
+              max={maxOccupancyFor(wiRoomTypeId)}
+              overrideChecked={wiOverrideOccupancy}
+              onOverrideChange={setWiOverrideOccupancy}
+              onChange={setWiAdditionalGuests}
+              excludeGuestIds={wiSelectedGuestIds}
+              t={t}
+            />
           </div>
 
           {wiExtraRooms.map((extra, idx) => {
             const plans = plansForRoomType(extra.roomTypeId);
             const rooms = roomsForExtra(extra);
             return (
-              <div key={extra.key} className="space-y-3 border-t border-gray-100 pt-4">
+              <div
+                key={extra.key}
+                className="rounded-xl border border-gray-100 bg-gray-50/40 p-4 space-y-3"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-telivity-mid-grey">
                     {t('frontDesk.room')} {idx + 2}
@@ -1584,8 +1668,9 @@ export default function FrontDesk() {
                   <button
                     type="button"
                     onClick={() => removeExtraRoom(extra.key)}
-                    className="text-xs text-telivity-mid-grey hover:text-telivity-orange"
+                    className="inline-flex items-center gap-1 text-xs text-telivity-mid-grey hover:text-telivity-orange"
                   >
+                    <X size={12} />
                     {t('common.remove')}
                   </button>
                 </div>
@@ -1593,6 +1678,8 @@ export default function FrontDesk() {
                   label={t('frontDesk.partyGuest', { room: idx + 2 })}
                   selectedGuest={extra.guest}
                   onSelectGuest={(guest) => updateExtraRoom(extra.key, { guest })}
+                  excludeGuestIds={wiSelectedGuestIds}
+                  error={walkInMutation.isError && !extra.guest}
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
@@ -1642,7 +1729,11 @@ export default function FrontDesk() {
                     <select
                       value={extra.roomId}
                       onChange={(e) => updateExtraRoom(extra.key, { roomId: e.target.value })}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                      className={`w-full border rounded-lg px-3 py-2 text-sm ${
+                        walkInMutation.isError && !extra.roomId
+                          ? 'border-telivity-orange ring-1 ring-telivity-orange'
+                          : 'border-gray-200'
+                      }`}
                     >
                       <option value="">{t('frontDesk.selectRoom')}</option>
                       {rooms.map((room) => (
@@ -1653,6 +1744,15 @@ export default function FrontDesk() {
                     </select>
                   </div>
                 </div>
+                <AdditionalGuestsSection
+                  guests={extra.additionalGuests}
+                  max={maxOccupancyFor(extra.roomTypeId)}
+                  overrideChecked={extra.overrideOccupancy}
+                  onOverrideChange={(checked) => updateExtraRoom(extra.key, { overrideOccupancy: checked })}
+                  onChange={(guests) => updateExtraRoom(extra.key, { additionalGuests: guests })}
+                  excludeGuestIds={wiSelectedGuestIds}
+                  t={t}
+                />
               </div>
             );
           })}
@@ -1666,8 +1766,9 @@ export default function FrontDesk() {
                   emptyWalkInExtraRoom({ roomTypeId: wiRoomTypeId, ratePlanId: wiRatePlanId }),
                 ])
               }
-              className="text-sm font-semibold text-telivity-teal hover:underline"
+              className="w-full flex items-center justify-center gap-1.5 border-2 border-dashed border-telivity-teal/40 text-telivity-teal rounded-xl py-2.5 text-sm font-semibold hover:bg-telivity-teal/5 hover:border-telivity-teal/60 transition-colors"
             >
+              <Plus size={16} />
               {t('frontDesk.addAnotherRoom')}
             </button>
           ) : (
@@ -1859,4 +1960,75 @@ function formatLabel(s: string, t: (key: string, options?: Record<string, unknow
   return t(`dashboard.roomStatuses.${s}`, {
     defaultValue: s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
   });
+}
+
+/** Pickers for extra occupants sharing one room (up to the room type's max occupancy). */
+function AdditionalGuestsSection({
+  guests,
+  max,
+  overrideChecked,
+  onOverrideChange,
+  onChange,
+  excludeGuestIds,
+  t,
+}: {
+  guests: Guest[];
+  max?: number;
+  overrideChecked: boolean;
+  onOverrideChange: (checked: boolean) => void;
+  onChange: (guests: Guest[]) => void;
+  excludeGuestIds?: string[];
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const currentCount = 1 + guests.length;
+  const overCapacity = max != null && currentCount > max;
+  return (
+    <div className="space-y-2 pt-2 mt-1 pl-3 border-l-2 border-gray-200">
+      <div className="flex items-center justify-between">
+        <label className="block text-[11px] font-medium text-telivity-mid-grey uppercase tracking-wide">
+          {t('frontDesk.accompanyingGuests')}
+        </label>
+        {max != null && (
+          <span className="text-[11px] text-telivity-mid-grey">
+            {currentCount}/{max}
+          </span>
+        )}
+      </div>
+      {guests.map((guest, i) => (
+        <FindGuest
+          key={guest.id}
+          selectedGuest={guest}
+          excludeGuestIds={excludeGuestIds}
+          onSelectGuest={(next) =>
+            // Clearing a picker (next === null) drops it from the list — no separate remove button.
+            onChange(
+              next
+                ? guests.map((g, idx) => (idx === i ? next : g))
+                : guests.filter((_, idx) => idx !== i),
+            )
+          }
+        />
+      ))}
+      <FindGuest
+        key="add-slot"
+        selectedGuest={null}
+        placeholder={t('frontDesk.addAccompanyingGuest')}
+        excludeGuestIds={excludeGuestIds}
+        onSelectGuest={(guest) => {
+          if (guest) onChange([...guests, guest]);
+        }}
+      />
+      {overCapacity && (
+        <label className="flex items-start gap-2 text-xs text-telivity-orange bg-telivity-orange/5 border border-telivity-orange/20 rounded-lg px-3 py-2">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={overrideChecked}
+            onChange={(e) => onOverrideChange(e.target.checked)}
+          />
+          <span>{t('frontDesk.overrideMaxOccupancy', { count: max })}</span>
+        </label>
+      )}
+    </div>
+  );
 }

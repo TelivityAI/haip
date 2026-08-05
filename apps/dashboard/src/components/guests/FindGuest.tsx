@@ -13,6 +13,10 @@ export interface FindGuestProps {
   onSelectGuest: (guest: Guest | null) => void;
   placeholder?: string;
   label?: string;
+  /** Guest IDs already picked elsewhere in the same form — hidden from search results. */
+  excludeGuestIds?: string[];
+  /** Flags this picker as missing a required selection (e.g. after a failed submit). */
+  error?: boolean;
 }
 
 export default function FindGuest({
@@ -20,6 +24,8 @@ export default function FindGuest({
   onSelectGuest,
   placeholder,
   label,
+  excludeGuestIds,
+  error,
 }: FindGuestProps) {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
@@ -65,7 +71,9 @@ export default function FindGuest({
     enabled: !!propertyId && dropdownOpen,
   });
 
-  const guests: Guest[] = data?.data ?? data ?? [];
+  const guests: Guest[] = (data?.data ?? data ?? []).filter(
+    (g: Guest) => !excludeGuestIds?.includes(g.id),
+  );
 
   return (
     <div className="w-full relative" ref={containerRef}>
@@ -126,7 +134,9 @@ export default function FindGuest({
               }}
               onFocus={() => setDropdownOpen(true)}
               placeholder={placeholder || t('guests.searchOrRegister')}
-              className="w-full border border-gray-200 rounded-lg pl-9 pr-24 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
+              className={`w-full border rounded-lg pl-9 pr-24 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white ${
+                error ? 'border-telivity-orange ring-1 ring-telivity-orange' : 'border-gray-200'
+              }`}
             />
             <button
               type="button"

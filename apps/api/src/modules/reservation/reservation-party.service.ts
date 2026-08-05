@@ -116,7 +116,9 @@ export class ReservationPartyService {
     await this.assertNotOnSibling(reservation.bookingId, propertyId, dto.guestId);
 
     const occupants = await this.loadOccupants(reservationId, propertyId);
-    await this.assertWithinMaxOccupancy(reservation.roomTypeId, propertyId, occupants.length + 1);
+    if (!dto.overrideMaxOccupancy) {
+      await this.assertWithinMaxOccupancy(reservation.roomTypeId, propertyId, occupants.length + 1);
+    }
 
     const [row] = await this.db
       .insert(reservationGuests)
