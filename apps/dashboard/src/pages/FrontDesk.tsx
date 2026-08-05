@@ -267,7 +267,7 @@ export default function FrontDesk() {
 
   const { data: roomTypes } = useQuery({
     queryKey: ['room-types', propertyId],
-    queryFn: () => api.get('/v1/room-types', { params: { propertyId } }).then((r) => r.data),
+    queryFn: () => api.get('/v1/rooms/types', { params: { propertyId } }).then((r) => r.data),
     enabled: !!propertyId && walkInOpen,
   });
 
