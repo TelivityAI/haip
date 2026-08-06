@@ -1129,9 +1129,6 @@ export default function FrontDesk() {
                     </p>
                   </div>
                 </div>
-                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-semibold">
-                  FNRH Ativa
-                </span>
               </div>
             </div>
 
@@ -1229,14 +1226,14 @@ export default function FrontDesk() {
               <div className="border border-teal-100 rounded-xl p-4 bg-teal-50/20 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold text-telivity-teal uppercase tracking-wider flex items-center gap-1.5">
-                    FNRH — Detalhes da Viagem & Procedência
+                    {t('frontDesk.fnrhStayDetails')}
                   </h3>
                   <button
                     type="button"
                     onClick={() => setShowFnrhTravel(!showFnrhTravel)}
                     className="text-xs text-telivity-teal font-semibold hover:underline"
                   >
-                    {showFnrhTravel ? 'Recolher −' : 'Expandir +'}
+                    {showFnrhTravel ? t('frontDesk.fnrhCollapse') : t('frontDesk.fnrhExpand')}
                   </button>
                 </div>
 
