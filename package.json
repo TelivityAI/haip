@@ -23,6 +23,9 @@
     "db:studio": "pnpm --filter @telivityhaip/database run db:studio",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
+    "harden:local": "node ops/harden/cli/harden.mjs local",
+    "harden:live": "node ops/harden/cli/harden.mjs live",
+    "harden": "node ops/harden/cli/harden.mjs all",
     "clean": "pnpm -r run clean && rm -rf node_modules",
     "integrations:demo": "bash integrations/demos/run.sh"
   },
