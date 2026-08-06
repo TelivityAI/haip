@@ -217,6 +217,9 @@ export class ReservationPartyService {
 
     await this.assertSamePropertyFk(roomTypes, dto.roomTypeId, propertyId, 'room type');
     await this.assertSamePropertyFk(ratePlans, dto.ratePlanId, propertyId, 'rate plan');
+    if (!dto.overrideMaxOccupancy) {
+      await this.assertWithinMaxOccupancy(dto.roomTypeId, propertyId, moving.length);
+    }
     await this.ratePlanService.assertSellable(
       propertyId,
       dto.ratePlanId,

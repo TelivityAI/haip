@@ -1486,6 +1486,7 @@
     "roomGuests": "Room guests",
     "addGuest": "Add guest",
     "addGuestHint": "Attach another named guest to this room. Create a guest profile first if they are new.",
+    "overrideMaxOccupancy": "Allow more than the room's max occupancy (extra bed/crib)",
     "guestAdded": "Guest added to room",
     "guestRemoved": "Guest removed from room",
     "removeGuest": "Remove guest",

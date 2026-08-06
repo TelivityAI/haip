@@ -519,12 +519,15 @@ export default function FrontDesk() {
         const planExtra = plans.find((p) => p.id === extra.ratePlanId);
         const nightlyExtra = Number(planExtra?.baseAmount ?? 0);
         const extraGuestIds = [extra.guest!.id, ...extraAdditionalIds[i]];
-        // Occupants must be attached to the source reservation before they
-        // can be moved together onto the new sibling room via split.
+        // Occupants must be attached to the source (primary) reservation before they
+        // can be moved together onto the new sibling room via split. This is a transient
+        // attach against the primary room's type/cap, not the final layout, so it must
+        // always bypass the primary's max-occupancy check — extra.overrideOccupancy only
+        // reflects the staff's intent for the destination room and must not gate this step.
         for (const guestId of extraGuestIds) {
           await api.post(
             `/v1/reservations/${reservationId}/guests`,
-            { guestId, overrideMaxOccupancy: extra.overrideOccupancy },
+            { guestId, overrideMaxOccupancy: true },
             { params: { propertyId }, skipErrorToast: true },
           );
         }
@@ -538,6 +541,7 @@ export default function FrontDesk() {
             currencyCode: planExtra?.currencyCode ?? 'USD',
             roomId: extra.roomId,
             adults: extraGuestIds.length,
+            overrideMaxOccupancy: extra.overrideOccupancy,
           },
           { params: { propertyId }, skipErrorToast: true },
         );

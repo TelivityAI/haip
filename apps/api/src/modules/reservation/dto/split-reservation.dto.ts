@@ -7,6 +7,7 @@ import {
   Min,
   IsString,
   MaxLength,
+  IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsMoneyString } from '../../../common/validation/is-money-string.validator';
@@ -58,4 +59,12 @@ export class SplitReservationDto {
   @IsInt()
   @Min(0)
   children?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Explicit staff override to exceed the destination room type\'s configured maxOccupancy (e.g. extra bed/crib for a family)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  overrideMaxOccupancy?: boolean;
 }

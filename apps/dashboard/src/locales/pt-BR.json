@@ -1358,6 +1358,7 @@
     "roomGuests": "Hóspedes do quarto",
     "addGuest": "Adicionar hóspede",
     "addGuestHint": "Vincule outro hóspede nomeado a este quarto. Crie o perfil antes se for novo.",
+    "overrideMaxOccupancy": "Permitir mais que a ocupação máxima do quarto (cama extra/berço)",
     "guestAdded": "Hóspede adicionado ao quarto",
     "guestRemoved": "Hóspede removido do quarto",
     "removeGuest": "Remover hóspede",
