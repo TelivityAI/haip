@@ -408,11 +408,13 @@ export class ReservationPartyService {
     if (targetOccupants.some((o) => o.guestId === guestId)) {
       throw new ConflictException('Guest is already on the target reservation');
     }
-    await this.assertWithinMaxOccupancy(
-      target.roomTypeId,
-      propertyId,
-      targetOccupants.length + 1,
-    );
+    if (!dto.overrideMaxOccupancy) {
+      await this.assertWithinMaxOccupancy(
+        target.roomTypeId,
+        propertyId,
+        targetOccupants.length + 1,
+      );
+    }
 
     const makePrimary = dto.makePrimary === true || targetOccupants.length === 0;
 

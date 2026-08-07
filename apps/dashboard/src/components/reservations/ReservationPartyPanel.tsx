@@ -80,6 +80,7 @@ export default function ReservationPartyPanel({
   );
   const [splitOverrideOccupancy, setSplitOverrideOccupancy] = useState(false);
   const [moveTargetId, setMoveTargetId] = useState('');
+  const [moveOverrideOccupancy, setMoveOverrideOccupancy] = useState(false);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['reservation-guests', reservationId] });
@@ -195,7 +196,10 @@ export default function ReservationPartyPanel({
       if (!moveGuestId || !moveTargetId) throw new Error('target required');
       return api.post(
         `/v1/reservations/${reservationId}/guests/${moveGuestId}/move`,
-        { targetReservationId: moveTargetId },
+        {
+          targetReservationId: moveTargetId,
+          overrideMaxOccupancy: moveOverrideOccupancy,
+        },
         { params: { propertyId } },
       );
     },
@@ -203,6 +207,7 @@ export default function ReservationPartyPanel({
       toast('success', t('reservations.guestMoved'));
       setMoveGuestId(null);
       setMoveTargetId('');
+      setMoveOverrideOccupancy(false);
       invalidate();
     },
   });
@@ -496,6 +501,7 @@ export default function ReservationPartyPanel({
         onClose={() => {
           setMoveGuestId(null);
           setMoveTargetId('');
+          setMoveOverrideOccupancy(false);
         }}
         title={t('reservations.moveGuest')}
       >
@@ -519,6 +525,14 @@ export default function ReservationPartyPanel({
               ))}
             </select>
           </div>
+          <label className="flex items-center gap-2 text-xs text-telivity-slate">
+            <input
+              type="checkbox"
+              checked={moveOverrideOccupancy}
+              onChange={(e) => setMoveOverrideOccupancy(e.target.checked)}
+            />
+            {t('reservations.overrideMaxOccupancy')}
+          </label>
           <button
             type="button"
             disabled={!moveTargetId || moveMutation.isPending}

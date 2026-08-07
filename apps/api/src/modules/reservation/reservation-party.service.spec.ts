@@ -580,6 +580,123 @@ describe('ReservationPartyService', () => {
         svc.moveGuest(RES_A, PROPERTY, GUEST_ACC, { targetReservationId: RES_B }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it('rejects when the target room type max occupancy is exceeded and no override is given', async () => {
+      const target = {
+        ...sourceReservation,
+        id: RES_B,
+        guestId: 'guest-other',
+        adults: 1,
+      };
+      mockSelectSequence([
+        [sourceReservation], // source
+        [target], // target
+        [
+          {
+            id: 'rg-1',
+            propertyId: PROPERTY,
+            reservationId: RES_A,
+            guestId: GUEST_PRIMARY,
+            role: 'primary',
+            firstName: 'Pat',
+            lastName: 'Primary',
+            email: null,
+          },
+          {
+            id: 'rg-2',
+            propertyId: PROPERTY,
+            reservationId: RES_A,
+            guestId: GUEST_ACC,
+            role: 'accompanying',
+            firstName: 'Ann',
+            lastName: 'Acc',
+            email: null,
+          },
+        ], // source occupants
+        [
+          {
+            id: 'rg-3',
+            propertyId: PROPERTY,
+            reservationId: RES_B,
+            guestId: 'guest-other',
+            role: 'primary',
+            firstName: 'Other',
+            lastName: 'Guest',
+            email: null,
+          },
+        ], // target occupants (already 1)
+        [{ maxOccupancy: 1 }], // target cap — moving in a 2nd guest exceeds it
+      ]);
+
+      await expect(
+        svc.moveGuest(RES_A, PROPERTY, GUEST_ACC, { targetReservationId: RES_B }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('skips the target max occupancy check when overrideMaxOccupancy is true', async () => {
+      const target = {
+        ...sourceReservation,
+        id: RES_B,
+        guestId: 'guest-other',
+        adults: 1,
+      };
+      mockSelectSequence([
+        [sourceReservation], // source
+        [target], // target
+        [
+          {
+            id: 'rg-1',
+            propertyId: PROPERTY,
+            reservationId: RES_A,
+            guestId: GUEST_PRIMARY,
+            role: 'primary',
+            firstName: 'Pat',
+            lastName: 'Primary',
+            email: null,
+          },
+          {
+            id: 'rg-2',
+            propertyId: PROPERTY,
+            reservationId: RES_A,
+            guestId: GUEST_ACC,
+            role: 'accompanying',
+            firstName: 'Ann',
+            lastName: 'Acc',
+            email: null,
+          },
+        ], // source occupants
+        [
+          {
+            id: 'rg-3',
+            propertyId: PROPERTY,
+            reservationId: RES_B,
+            guestId: 'guest-other',
+            role: 'primary',
+            firstName: 'Other',
+            lastName: 'Guest',
+            email: null,
+          },
+        ], // target occupants
+        // No room type cap lookup — assertWithinMaxOccupancy is skipped entirely.
+      ]);
+
+      db.transaction.mockImplementation(async (cb: any) => {
+        const tx = {
+          update: vi.fn().mockReturnValue({
+            set: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        };
+        return cb(tx);
+      });
+
+      const result = await svc.moveGuest(RES_A, PROPERTY, GUEST_ACC, {
+        targetReservationId: RES_B,
+        overrideMaxOccupancy: true,
+      });
+      expect(result.toReservationId).toBe(RES_B);
+    });
   });
 
   describe('listGuests', () => {
