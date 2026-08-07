@@ -1,7 +1,16 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsInt, IsOptional, Min } from 'class-validator';
+import { IsDateString, IsInt, IsOptional, IsUUID, Min } from 'class-validator';
 
 export class EffectiveRateQueryDto {
+  // The controller also binds propertyId via @Query('propertyId'), but the
+  // global ValidationPipe validates the WHOLE query object against this DTO —
+  // without this field every call 400s with "property propertyId should not
+  // exist" (forbidNonWhitelisted). Day Zero P0.
+  @ApiPropertyOptional({ description: 'Property ID (also bound by the controller)' })
+  @IsOptional()
+  @IsUUID()
+  propertyId?: string;
+
   @ApiPropertyOptional({ description: 'Length of stay in nights (alternative to checkIn/checkOut)' })
   @IsOptional()
   @IsInt()
