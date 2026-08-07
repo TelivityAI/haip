@@ -17,4 +17,12 @@ export class MoveReservationGuestDto {
   @IsOptional()
   @IsBoolean()
   makePrimary?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "Explicit staff override to exceed the target room type's configured maxOccupancy (e.g. extra bed/crib for a family)",
+  })
+  @IsOptional()
+  @IsBoolean()
+  overrideMaxOccupancy?: boolean;
 }

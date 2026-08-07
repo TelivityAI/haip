@@ -116,7 +116,9 @@ export class ReservationPartyService {
     await this.assertNotOnSibling(reservation.bookingId, propertyId, dto.guestId);
 
     const occupants = await this.loadOccupants(reservationId, propertyId);
-    await this.assertWithinMaxOccupancy(reservation.roomTypeId, propertyId, occupants.length + 1);
+    if (!dto.overrideMaxOccupancy) {
+      await this.assertWithinMaxOccupancy(reservation.roomTypeId, propertyId, occupants.length + 1);
+    }
 
     const [row] = await this.db
       .insert(reservationGuests)
@@ -215,6 +217,9 @@ export class ReservationPartyService {
 
     await this.assertSamePropertyFk(roomTypes, dto.roomTypeId, propertyId, 'room type');
     await this.assertSamePropertyFk(ratePlans, dto.ratePlanId, propertyId, 'rate plan');
+    if (!dto.overrideMaxOccupancy) {
+      await this.assertWithinMaxOccupancy(dto.roomTypeId, propertyId, moving.length);
+    }
     await this.ratePlanService.assertSellable(
       propertyId,
       dto.ratePlanId,
@@ -403,11 +408,13 @@ export class ReservationPartyService {
     if (targetOccupants.some((o) => o.guestId === guestId)) {
       throw new ConflictException('Guest is already on the target reservation');
     }
-    await this.assertWithinMaxOccupancy(
-      target.roomTypeId,
-      propertyId,
-      targetOccupants.length + 1,
-    );
+    if (!dto.overrideMaxOccupancy) {
+      await this.assertWithinMaxOccupancy(
+        target.roomTypeId,
+        propertyId,
+        targetOccupants.length + 1,
+      );
+    }
 
     const makePrimary = dto.makePrimary === true || targetOccupants.length === 0;
 
