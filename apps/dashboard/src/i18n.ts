@@ -4,7 +4,11 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import en from './locales/en.json';
 import de from './locales/de.json';
 import es from './locales/es.json';
+import fr from './locales/fr.json';
+import hr from './locales/hr.json';
+import it from './locales/it.json';
 import ptBR from './locales/pt-BR.json';
+import srLatn from './locales/sr-Latn.json';
 
 /**
  * i18n foundation for the dashboard.
@@ -25,11 +29,15 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'de', label: 'Deutsch' },
   { code: 'es', label: 'Español' },
+  { code: 'fr', label: 'Français' },
+  { code: 'hr', label: 'Hrvatski' },
+  { code: 'it', label: 'Italiano' },
   { code: 'pt-BR', label: 'Português (Brasil)' },
+  { code: 'sr-Latn', label: 'Srpski' },
 ] as const;
 
-// Include `pt` so navigator `pt-BR` resolves via nonExplicitSupportedLngs (not shown in switcher).
-const SUPPORTED_LOCALES = [...SUPPORTED_LANGUAGES.map((l) => l.code), 'pt'] as const;
+// Include `pt` / `sr` so navigator locales resolve via nonExplicitSupportedLngs (not shown in switcher).
+const SUPPORTED_LOCALES = [...SUPPORTED_LANGUAGES.map((l) => l.code), 'pt', 'sr'] as const;
 
 // Migrate legacy locale code saved before pt-BR was registered correctly.
 if (typeof window !== 'undefined' && typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function' && localStorage.getItem('haip.lang') === 'ptBR') {
@@ -44,8 +52,13 @@ i18n
       en: { translation: en },
       de: { translation: de },
       es: { translation: es },
+      fr: { translation: fr },
+      hr: { translation: hr },
+      it: { translation: it },
       pt: { translation: ptBR },
       'pt-BR': { translation: ptBR },
+      sr: { translation: srLatn },
+      'sr-Latn': { translation: srLatn },
     },
     fallbackLng: 'en',
     supportedLngs: [...SUPPORTED_LOCALES],
