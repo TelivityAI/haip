@@ -27,6 +27,7 @@ import {
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { MediaModule } from '../media/media.module';
+import { ReviewsModule } from '../reviews/reviews.module';
 
 const WAVE_CHANNEL_TOKENS = WAVE_CHANNEL_CONSOLE_PACKS.map(
   (pack) => `WAVE_CHANNEL_${pack.key.toUpperCase()}`,
@@ -38,7 +39,7 @@ const waveChannelProviders = WAVE_CHANNEL_CONSOLE_PACKS.map((pack, index) => ({
 }));
 
 @Module({
-  imports: [ReservationModule, WebhookModule, MediaModule],
+  imports: [ReservationModule, WebhookModule, MediaModule, ReviewsModule],
   controllers: [
     ChannelController,
     BookingComInboundController,

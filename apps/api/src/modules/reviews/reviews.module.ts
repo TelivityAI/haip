@@ -8,7 +8,9 @@ import {
   WAVE_REVIEW_CONSOLE_PACKS,
 } from './providers/named-console-reviews.provider';
 import { ReviewsService } from './reviews.service';
+import { ReviewsIngestService } from './reviews-ingest.service';
 import { ReviewsController } from './reviews.controller';
+import { WebhookModule } from '../webhook/webhook.module';
 
 const WAVE_REVIEW_TOKENS = WAVE_REVIEW_CONSOLE_PACKS.map(
   (pack) => Symbol(`WAVE_REVIEW_${pack.key}`),
@@ -20,6 +22,7 @@ const waveReviewProviders = WAVE_REVIEW_CONSOLE_PACKS.map((pack, index) => ({
 }));
 
 @Module({
+  imports: [WebhookModule],
   controllers: [ReviewsController],
   providers: [
     GoogleReviewsProvider,
@@ -41,8 +44,9 @@ const waveReviewProviders = WAVE_REVIEW_CONSOLE_PACKS.map((pack, index) => ({
         ...wave: NamedConsoleReviewsProvider[]
       ) => [google, tripadvisor, ...wave, consoleProvider],
     },
+    ReviewsIngestService,
     ReviewsService,
   ],
-  exports: [ReviewsService],
+  exports: [ReviewsService, ReviewsIngestService],
 })
 export class ReviewsModule {}

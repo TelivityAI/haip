@@ -13,6 +13,7 @@ import { CancellationPredictorAgent } from './cancellation/cancellation-predicto
 import { GuestCommunicationAgent } from './guest-comms/guest-communication.agent';
 import { GuestCommsListener } from './guest-comms/guest-comms.listener';
 import { ReviewResponseAgent } from './review-response/review-response.agent';
+import { ReviewIngestListener } from './review-response/review-ingest.listener';
 import { ArCollectionsAgent } from './ar-collections/ar-collections.agent';
 import { GroupPickupAgent } from './group-pickup/group-pickup.agent';
 import { RevenueManagerAgent } from './revenue-manager/revenue-manager.agent';
@@ -33,6 +34,7 @@ import { EmailModule } from './guest-comms/email.module';
     GuestCommunicationAgent,
     GuestCommsListener,
     ReviewResponseAgent,
+    ReviewIngestListener,
     ArCollectionsAgent,
     GroupPickupAgent,
     RevenueManagerAgent,

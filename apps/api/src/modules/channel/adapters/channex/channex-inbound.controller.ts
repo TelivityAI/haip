@@ -7,13 +7,16 @@ import { InboundReservationService } from '../../inbound-reservation.service';
 import { ChannelService } from '../../channel.service';
 import { getInboundAuth, type InboundHmacAuth } from '../inbound-auth.util';
 import { mapChannexRevisionToHaip } from './channex.mapper';
+import { mapChannexReviewToIngest } from './channex-review.mapper';
+import { ReviewsIngestService } from '../../../reviews/reviews-ingest.service';
 
 /**
  * Inbound webhook receiver for Channex booking events.
  *
  * Register in Channex (staging or prod):
- *   callback_url: https://<haip-host>/api/v1/channels/inbound/channex/bookings
- *   event_mask: booking  (or booking_new;booking_modification;booking_cancellation)
+ *   Bookings callback_url: https://<haip-host>/api/v1/channels/inbound/channex/bookings
+ *   Reviews callback_url: https://<haip-host>/api/v1/channels/inbound/channex/reviews
+ *   event_mask: booking (bookings) or review (reviews)
  *   headers: { "X-Channex-Webhook-Secret": "<shared-secret>" }
  *   send_data: true  (preferred) — payload includes revision/booking attributes
  *   send_data: false — notification only; HAIP pulls booking_revisions/feed
@@ -32,6 +35,7 @@ export class ChannexInboundController {
     private readonly inboundReservationService: InboundReservationService,
     private readonly channelService: ChannelService,
     private readonly configService: ConfigService,
+    private readonly reviewsIngestService: ReviewsIngestService,
   ) {}
 
   private get authEnabled(): boolean {
@@ -111,6 +115,85 @@ export class ChannexInboundController {
       this.logger.error(`Channex inbound error: ${error.message}`, error.stack);
       return res.status(500).json({ error: 'Internal processing error' });
     }
+  }
+
+  @Post('reviews')
+  @ApiOperation({ summary: 'Receive inbound review webhook from Channex' })
+  @ApiExcludeEndpoint()
+  async receiveReview(
+    @Req() req: any,
+    @Res() res: any,
+    @Headers('x-channex-webhook-secret') secretHeader?: string,
+  ) {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const propertyId = this.extractPropertyId(body);
+      if (!propertyId) {
+        this.logger.warn('Channex review webhook missing property_id');
+        return res.status(400).json({ error: 'property_id required' });
+      }
+
+      const connections = await this.channelService.findByAdapterType('channex');
+      const connection = connections.find((c: any) => {
+        const cfg = (c.config ?? {}) as Record<string, unknown>;
+        return (
+          String(cfg['propertyId'] ?? '') === propertyId ||
+          String(cfg['hotelId'] ?? '') === propertyId
+        );
+      });
+
+      if (!connection) {
+        this.logger.error(`Channex review webhook: no connection matches property_id=${propertyId}`);
+        return res.status(404).json({ error: 'No matching Channex connection' });
+      }
+
+      if (!this.isAuthorizedFor(connection, secretHeader)) {
+        this.logger.warn(`Channex review webhook unauthorized for connection ${connection.id}`);
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const haipPropertyId = connection.propertyId as string;
+      const reviewPayload = this.extractReviewPayload(body);
+      if (!reviewPayload) {
+        this.logger.warn(
+          `Channex review webhook: no review payload for property_id=${propertyId} — acking`,
+        );
+        return res.status(200).json({ ok: true, ack: 'no_review_payload' });
+      }
+
+      const mapped = mapChannexReviewToIngest(reviewPayload);
+      if (!mapped) {
+        return res.status(200).json({ ok: true, ack: 'unmappable_review' });
+      }
+
+      const result = await this.reviewsIngestService.ingest(haipPropertyId, [mapped]);
+      return res.status(200).json({
+        ok: true,
+        imported: result.imported,
+        updated: result.updated,
+      });
+    } catch (error: any) {
+      this.logger.error(`Channex review inbound error: ${error.message}`, error.stack);
+      return res.status(500).json({ error: 'Internal processing error' });
+    }
+  }
+
+  private extractReviewPayload(body: Record<string, unknown>): Record<string, unknown> | null {
+    const event = body['event'];
+    if (event !== 'review') return null;
+
+    const payload = body['payload'];
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return payload as Record<string, unknown>;
+    }
+
+    const data = body['data'];
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      const row = data as Record<string, unknown>;
+      if (row['id'] || row['ota_review_id']) return row;
+    }
+
+    return null;
   }
 
   private extractPropertyId(body: Record<string, unknown>): string | undefined {

@@ -634,6 +634,12 @@ async function main() {
       review_text text NOT NULL,
       stay_date varchar(10),
       reservation_id uuid REFERENCES reservations(id),
+      external_id varchar(255),
+      external_url text,
+      provider_place_id varchar(255),
+      provider_location_id varchar(255),
+      provider_channel_id varchar(255),
+      last_synced_at timestamptz,
       response_status review_response_status NOT NULL DEFAULT 'pending',
       response_text text,
       responded_at timestamptz,
@@ -1386,6 +1392,13 @@ async function main() {
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_at timestamptz`,
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_by uuid`,
     `ALTER TABLE rate_restrictions ADD COLUMN IF NOT EXISTS rate_override numeric(12,2)`,
+    `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS external_id varchar(255)`,
+    `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS external_url text`,
+    `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS provider_place_id varchar(255)`,
+    `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS provider_location_id varchar(255)`,
+    `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS provider_channel_id varchar(255)`,
+    `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS last_synced_at timestamptz`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS guest_reviews_property_source_external_unique ON guest_reviews (property_id, source, external_id)`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));

@@ -39,6 +39,7 @@ export interface ExternalReviewItem {
   reviewText: string;
   stayDate?: string;
   source: ReviewPullSourceName;
+  externalUrl?: string;
 }
 
 export interface ReviewPullResult {
@@ -46,6 +47,12 @@ export interface ReviewPullResult {
   provider: string;
   reviews: ExternalReviewItem[];
   error?: string;
+  /** Reviews newly inserted into guest_reviews during this pull */
+  imported?: number;
+  /** Existing rows updated (re-sync) */
+  updated?: number;
+  /** New review row ids eligible for auto-draft */
+  newReviewIds?: string[];
 }
 
 export interface ReviewPullRequest {
