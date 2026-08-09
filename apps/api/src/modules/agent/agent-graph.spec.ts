@@ -56,4 +56,8 @@ describe('agent-graph', () => {
     expect(isValidAgentType('pricing')).toBe(true);
     expect(isValidAgentType('not_an_agent')).toBe(false);
   });
+
+  it('guest_comms has daily cron for pre-arrival and win-back', () => {
+    expect(DEFAULT_SCHEDULE_MATRIX.guest_comms.cron).toBe('0 7 * * *');
+  });
 });
