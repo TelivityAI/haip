@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { RatePlanService } from './rate-plan.service';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
@@ -24,6 +25,7 @@ export class RatePlanController {
   constructor(private readonly ratePlanService: RatePlanService) {}
 
   @Get()
+  @RequirePermissions('rateplans.read')
   @ApiOperation({ summary: 'Get all rate plans for a property' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'List of rate plans' })
@@ -40,6 +42,7 @@ export class RatePlanController {
   }
 
   @Get(':id')
+  @RequirePermissions('rateplans.read')
   @ApiOperation({ summary: 'Get rate plan by ID' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Rate plan found' })
@@ -52,6 +55,7 @@ export class RatePlanController {
   }
 
   @Get(':id/effective-rate')
+  @RequirePermissions('rateplans.read')
   @ApiOperation({
     summary: 'Calculate effective rate (derived chain + LOS + occupancy adjustments)',
   })
@@ -86,6 +90,7 @@ export class RatePlanController {
   // --- Restrictions sub-resource ---
 
   @Get(':id/restrictions')
+  @RequirePermissions('rateplans.read')
   @ApiOperation({ summary: 'Get restrictions for a rate plan' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'List of restrictions' })
