@@ -30,9 +30,21 @@ export class PaymentService {
   ) {}
 
   async recordPayment(dto: CreatePaymentDto) {
-    if (CARD_METHODS.includes(dto.method)) {
+    // Manual settle path: cash, bank_transfer, pix, city_ledger, other, and
+    // offline POS credit/debit (card machine not connected to a gateway).
+    // VCC and any card tender that already has a gateway token must go through
+    // authorize — never mix tokenized gateway cards into record-only rows.
+    if (dto.method === 'vcc') {
       throw new BadRequestException(
-        `Card payments must use the authorize flow. Use POST /payments/authorize instead.`,
+        `VCC payments must use the authorize flow. Use POST /payments/authorize instead.`,
+      );
+    }
+    if (
+      CARD_METHODS.includes(dto.method) &&
+      (dto.gatewayPaymentToken || dto.gatewayProvider)
+    ) {
+      throw new BadRequestException(
+        `Card payments with a gateway token must use the authorize flow. Use POST /payments/authorize instead.`,
       );
     }
 
@@ -431,12 +443,14 @@ export class PaymentService {
    * and (if an override is supplied) rejects an illegal op:
    *
    *  - `authorized` (uncaptured gateway hold)            → VOID
-   *  - `cash` within 24h void window                     → VOID (no gateway call)
-   *  - captured/settled/partially_refunded card payment  → REFUND only
-   *  - otherwise (cash past window, record-only tenders)  → ADJUST
+   *  - `cash` / `pix` within 24h void window             → VOID (no gateway call)
+   *  - captured/settled/partially_refunded gateway card  → REFUND only
+   *  - otherwise (cash/pix past window, offline POS,
+   *    bank_transfer, and other record-only tenders)     → ADJUST
    *    (negative payment child row on the folio, same ledger model as refunds)
    *
    * [ASSUMPTION KB 14.1] cash void window = 24h / same business day.
+   * PIX uses the same window — it is digital cash recorded at the desk.
    */
   async correctPayment(
     id: string,
@@ -446,10 +460,12 @@ export class PaymentService {
     const payment = await this.findById(id, propertyId);
 
     const CASH_VOID_WINDOW_MS = 24 * 60 * 60 * 1000;
-    const isCard = CARD_METHODS.includes(payment.method);
+    const isGatewayCard =
+      CARD_METHODS.includes(payment.method) && !!payment.gatewayTransactionId;
     const ageMs = Date.now() - new Date(payment.createdAt).getTime();
     const cashWithinWindow =
-      payment.method === 'cash' && ageMs <= CASH_VOID_WINDOW_MS;
+      (payment.method === 'cash' || payment.method === 'pix') &&
+      ageMs <= CASH_VOID_WINDOW_MS;
 
     // Determine the single legal op from state.
     let legalOp: 'void' | 'refund' | 'adjust';
@@ -458,7 +474,7 @@ export class PaymentService {
     } else if (cashWithinWindow) {
       legalOp = 'void';
     } else if (
-      isCard &&
+      isGatewayCard &&
       ['captured', 'settled', 'partially_refunded'].includes(payment.status)
     ) {
       legalOp = 'refund';
@@ -469,7 +485,7 @@ export class PaymentService {
     if (opOverride && opOverride !== legalOp) {
       if (
         opOverride === 'void' &&
-        isCard &&
+        isGatewayCard &&
         ['captured', 'settled', 'partially_refunded'].includes(payment.status)
       ) {
         throw new BadRequestException(
@@ -484,10 +500,10 @@ export class PaymentService {
     const op = opOverride ?? legalOp;
 
     if (op === 'void') {
-      // Gateway-backed void uses the two-phase voidPayment. Cash has no gateway:
-      // transition the row to 'voided' directly (no gateway call).
+      // Gateway-backed void uses the two-phase voidPayment. Cash/PIX/offline
+      // POS have no gateway: transition the row to 'voided' directly.
       let result: any;
-      if (payment.status === 'authorized' && isCard) {
+      if (payment.status === 'authorized' && isGatewayCard) {
         result = await this.voidPayment(id, propertyId);
       } else {
         const [voided] = await this.db

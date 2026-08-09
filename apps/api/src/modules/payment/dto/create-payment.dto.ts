@@ -20,8 +20,30 @@ export class CreatePaymentDto {
   @IsNotEmpty()
   propertyId!: string;
 
-  @ApiProperty({ enum: ['credit_card', 'debit_card', 'cash', 'bank_transfer', 'city_ledger', 'vcc', 'other'] })
-  @IsEnum(['credit_card', 'debit_card', 'cash', 'bank_transfer', 'city_ledger', 'vcc', 'other'])
+  @ApiProperty({
+    enum: [
+      'credit_card',
+      'debit_card',
+      'cash',
+      'bank_transfer',
+      'pix',
+      'city_ledger',
+      'vcc',
+      'other',
+    ],
+    description:
+      'Manual settle tender. Use credit_card/debit_card here for offline card machines (no gateway). Gateway cards must use POST /payments/authorize. pix = Brazil PIX paid direct to the property.',
+  })
+  @IsEnum([
+    'credit_card',
+    'debit_card',
+    'cash',
+    'bank_transfer',
+    'pix',
+    'city_ledger',
+    'vcc',
+    'other',
+  ])
   method!: string;
 
   @ApiProperty({ example: '150.00' })

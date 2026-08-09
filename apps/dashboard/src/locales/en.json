@@ -459,7 +459,8 @@
       "bank_transfer": "Bank Transfer",
       "cash": "Cash",
       "credit_card": "Credit Card",
-      "debit_card": "Debit Card"
+      "debit_card": "Debit Card",
+      "pix": "PIX"
     },
     "paymentStatuses": {
       "captured": "Captured",
@@ -919,7 +920,8 @@
       "cash": "Cash",
       "creditCard": "Credit Card",
       "debitCard": "Debit Card",
-      "other": "Other"
+      "other": "Other",
+      "pix": "PIX"
     },
     "post": "Post",
     "postCharge": "Post Charge",

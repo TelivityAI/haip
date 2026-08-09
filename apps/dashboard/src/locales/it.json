@@ -459,7 +459,8 @@
       "bank_transfer": "Bonifico bancario",
       "cash": "Contanti",
       "credit_card": "Carta di credito",
-      "debit_card": "Carta di debito"
+      "debit_card": "Carta di debito",
+      "pix": "PIX"
     },
     "paymentStatuses": {
       "captured": "Incassato",
@@ -919,7 +920,8 @@
       "cash": "Contanti",
       "creditCard": "Carta di credito",
       "debitCard": "Carta di debito",
-      "other": "Altro"
+      "other": "Altro",
+      "pix": "PIX"
     },
     "post": "Registra",
     "postCharge": "Registra addebito",

@@ -416,6 +416,7 @@ function HouseAccountDetail() {
         <div className="space-y-4">
           <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
             <option value="cash">{t('houseAccounts.paymentMethods.cash')}</option>
+            <option value="pix">{t('houseAccounts.paymentMethods.pix')}</option>
             <option value="credit_card">{t('houseAccounts.paymentMethods.creditCard')}</option>
             <option value="debit_card">{t('houseAccounts.paymentMethods.debitCard')}</option>
             <option value="bank_transfer">{t('houseAccounts.paymentMethods.bankTransfer')}</option>

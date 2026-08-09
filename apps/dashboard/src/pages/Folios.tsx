@@ -838,7 +838,11 @@ function FolioDetail() {
           <div>
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('folios.method')}</label>
             <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
-              <option value="cash">{t('folios.paymentMethods.cash')}</option><option value="credit_card">{t('folios.paymentMethods.credit_card')}</option><option value="debit_card">{t('folios.paymentMethods.debit_card')}</option><option value="bank_transfer">{t('folios.paymentMethods.bank_transfer')}</option>
+              <option value="cash">{t('folios.paymentMethods.cash')}</option>
+              <option value="pix">{t('folios.paymentMethods.pix')}</option>
+              <option value="credit_card">{t('folios.paymentMethods.credit_card')}</option>
+              <option value="debit_card">{t('folios.paymentMethods.debit_card')}</option>
+              <option value="bank_transfer">{t('folios.paymentMethods.bank_transfer')}</option>
             </select>
           </div>
           <div>

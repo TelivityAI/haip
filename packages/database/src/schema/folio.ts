@@ -125,6 +125,7 @@ export const paymentMethodEnum = pgEnum('payment_method', [
   'debit_card',
   'cash',
   'bank_transfer',
+  'pix',            // Brazil PIX paid direct to property (manual settle, like bank_transfer)
   'city_ledger',    // Transfer to A/R
   'vcc',            // Virtual Credit Card from OTA (KB 6.2)
   'other',

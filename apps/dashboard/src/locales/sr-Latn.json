@@ -459,7 +459,8 @@
       "bank_transfer": "Bankovni prenos",
       "cash": "Gotovina",
       "credit_card": "Kreditna kartica",
-      "debit_card": "Debitna kartica"
+      "debit_card": "Debitna kartica",
+      "pix": "PIX"
     },
     "paymentStatuses": {
       "captured": "Naplaćeno",
@@ -919,7 +920,8 @@
       "cash": "Gotovina",
       "creditCard": "Kreditna kartica",
       "debitCard": "Debitna kartica",
-      "other": "Ostalo"
+      "other": "Ostalo",
+      "pix": "PIX"
     },
     "post": "Knjiži",
     "postCharge": "Knjiži trošak",

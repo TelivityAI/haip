@@ -93,7 +93,8 @@
     "refundFailed": "Erstattung fehlgeschlagen",
     "refundSuccess": "Zahlung erstattet",
     "reverse": "Stornieren",
-    "reverseFailed": "Stornierung fehlgeschlagen"
+    "reverseFailed": "Stornierung fehlgeschlagen",
+    "paymentMethods": {}
   },
   "groups": {
     "allotmentBlocks": "Kontingentblöcke",
@@ -165,7 +166,8 @@
       "cash": "Bar",
       "creditCard": "Kreditkarte",
       "debitCard": "Debitkarte",
-      "other": "Sonstiges"
+      "other": "Sonstiges",
+      "pix": "PIX"
     },
     "post": "Buchen",
     "postCharge": "Gebühr buchen",
