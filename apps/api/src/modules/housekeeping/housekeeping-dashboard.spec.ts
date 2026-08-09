@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { HousekeepingService } from './housekeeping.service';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
@@ -153,6 +154,20 @@ describe('HousekeepingService — Dashboard & Analytics', () => {
     expect(result.housekeeperSummary[0].avgTurnTimeMinutes).toBe(25);
   });
 
+  it('should default serviceDate to today when omitted', async () => {
+    const db = createDashboardDb();
+    const svc = await createService(db);
+    const today = new Date().toISOString().split('T')[0]!;
+    const result = await svc.getDashboard('prop-001');
+    expect(result.date).toBe(today);
+  });
+
+  it('should reject invalid serviceDate with 400', async () => {
+    const db = createDashboardDb();
+    const svc = await createService(db);
+    await expect(svc.getDashboard('prop-001', 'not-a-date')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('should return analytics with period metrics', async () => {
     const analyticsDb = createDashboardDb();
     // Override for analytics queries
@@ -205,6 +220,52 @@ describe('HousekeepingService — Dashboard & Analytics', () => {
     expect(result.period.end).toBe('2026-04-06');
     expect(result.metrics.avgTurnTimeMinutes).toBe(27.5);
     expect(result.metrics.totalTasksCompleted).toBe(25);
+  });
+
+  it('should default analytics period when dates omitted', async () => {
+    const analyticsDb = createDashboardDb();
+    analyticsDb.select = vi.fn().mockImplementation(() => ({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          groupBy: vi.fn().mockReturnValue({
+            then: (resolve: any) => resolve([]),
+          }),
+          then: (resolve: any) => resolve([{
+            avgTurnTimeMinutes: 0,
+            medianTurnTimeMinutes: 0,
+            totalTasksCompleted: 0,
+            maintenanceIssueCount: 0,
+            inspectedCount: 0,
+          }]),
+        }),
+        leftJoin: vi.fn().mockReturnValue({
+          leftJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              groupBy: vi.fn().mockReturnValue({
+                then: (resolve: any) => resolve([]),
+              }),
+            }),
+          }),
+          where: vi.fn().mockReturnValue({
+            groupBy: vi.fn().mockReturnValue({
+              then: (resolve: any) => resolve([]),
+            }),
+          }),
+        }),
+      }),
+    }));
+    const svc = await createService(analyticsDb);
+    const today = new Date().toISOString().split('T')[0]!;
+    const result = await svc.getAnalytics('prop-001');
+    expect(result.period.end).toBe(today);
+    expect(result.metrics.totalTasksCompleted).toBe(0);
+  });
+
+  it('should reject invalid analytics dates with 400', async () => {
+    const db = createDashboardDb();
+    const svc = await createService(db);
+    await expect(svc.getAnalytics('prop-001', 'bad', '2026-04-06')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.getAnalytics('prop-001', '2026-04-10', '2026-04-06')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('should generate stayover tasks for occupied rooms', async () => {

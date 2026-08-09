@@ -612,7 +612,10 @@ export class HousekeepingService {
     return { items, isVip };
   }
 
-  async getDashboard(propertyId: string, serviceDate: string) {
+  async getDashboard(propertyId: string, serviceDate?: string) {
+    const resolvedDate = await this.resolveServiceDate(propertyId, serviceDate);
+    const { dayStart, dayEnd } = this.serviceDateDayRange(resolvedDate);
+
     // Room summary
     const roomSummaryRaw = await this.roomStatusService.getPropertyRoomSummary(propertyId);
     const roomSummary: Record<string, number> = {
@@ -642,7 +645,8 @@ export class HousekeepingService {
       .where(
         and(
           eq(housekeepingTasks.propertyId, propertyId),
-          eq(housekeepingTasks.serviceDate, new Date(serviceDate)),
+          gte(housekeepingTasks.serviceDate, dayStart),
+          lt(housekeepingTasks.serviceDate, dayEnd),
         ),
       )
       .groupBy(housekeepingTasks.status);
@@ -669,7 +673,8 @@ export class HousekeepingService {
       .where(
         and(
           eq(housekeepingTasks.propertyId, propertyId),
-          eq(housekeepingTasks.serviceDate, new Date(serviceDate)),
+          gte(housekeepingTasks.serviceDate, dayStart),
+          lt(housekeepingTasks.serviceDate, dayEnd),
           sql`${housekeepingTasks.assignedTo} is not null`,
         ),
       )
@@ -691,14 +696,15 @@ export class HousekeepingService {
       .where(
         and(
           eq(housekeepingTasks.propertyId, propertyId),
-          eq(housekeepingTasks.serviceDate, new Date(serviceDate)),
+          gte(housekeepingTasks.serviceDate, dayStart),
+          lt(housekeepingTasks.serviceDate, dayEnd),
           sql`(${housekeepingTasks.priority} >= 5 or ${housekeepingTasks.maintenanceRequired} = true)`,
         ),
       )
       .orderBy(desc(housekeepingTasks.priority));
 
     return {
-      date: serviceDate,
+      date: resolvedDate,
       roomSummary,
       taskSummary,
       housekeeperSummary: housekeeperSummary.map((h: any) => ({
@@ -717,16 +723,20 @@ export class HousekeepingService {
     };
   }
 
-  async getAnalytics(propertyId: string, startDate: string, endDate: string) {
+  async getAnalytics(propertyId: string, startDate?: string, endDate?: string) {
+    const period = await this.resolveAnalyticsPeriod(propertyId, startDate, endDate);
+    const { dayStart } = this.serviceDateDayRange(period.start);
+    const { dayEnd } = this.serviceDateDayRange(period.end);
+
     const baseWhere = and(
       eq(housekeepingTasks.propertyId, propertyId),
-      sql`${housekeepingTasks.serviceDate} >= ${startDate}`,
-      sql`${housekeepingTasks.serviceDate} <= ${endDate}`,
+      gte(housekeepingTasks.serviceDate, dayStart),
+      lt(housekeepingTasks.serviceDate, dayEnd),
       sql`${housekeepingTasks.status} in ('completed', 'inspected')`,
     );
 
     // Overall metrics
-    const [metrics] = await this.db
+    const metrics = (await this.db
       .select({
         avgTurnTimeMinutes: sql<number>`avg(extract(epoch from (${housekeepingTasks.completedAt} - ${housekeepingTasks.startedAt})) / 60)`,
         medianTurnTimeMinutes: sql<number>`percentile_cont(0.5) within group (order by extract(epoch from (${housekeepingTasks.completedAt} - ${housekeepingTasks.startedAt})) / 60)`,
@@ -735,7 +745,13 @@ export class HousekeepingService {
         inspectedCount: sql<number>`count(*) filter (where ${housekeepingTasks.status} = 'inspected')::int`,
       })
       .from(housekeepingTasks)
-      .where(baseWhere);
+      .where(baseWhere))[0] ?? {
+      avgTurnTimeMinutes: 0,
+      medianTurnTimeMinutes: 0,
+      totalTasksCompleted: 0,
+      maintenanceIssueCount: 0,
+      inspectedCount: 0,
+    };
 
     // Tasks by type
     const tasksByTypeRaw = await this.db
@@ -786,7 +802,7 @@ export class HousekeepingService {
     const housekeeperCount = byHousekeeper.length || 1;
 
     return {
-      period: { start: startDate, end: endDate },
+      period: { start: period.start, end: period.end },
       metrics: {
         avgTurnTimeMinutes: metrics.avgTurnTimeMinutes ? Number(metrics.avgTurnTimeMinutes) : 0,
         medianTurnTimeMinutes: metrics.medianTurnTimeMinutes ? Number(metrics.medianTurnTimeMinutes) : 0,
@@ -917,6 +933,58 @@ export class HousekeepingService {
       priority: 0,
       serviceDate: today,
     });
+  }
+
+  private static readonly BUSINESS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  private isValidBusinessDate(date: string): boolean {
+    if (!HousekeepingService.BUSINESS_DATE_RE.test(date)) return false;
+    const [y, m, d] = date.split('-').map(Number);
+    const dt = new Date(Date.UTC(y!, m! - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m! - 1 && dt.getUTCDate() === d;
+  }
+
+  private serviceDateDayRange(dateStr: string): { dayStart: Date; dayEnd: Date } {
+    const dayStart = new Date(dateStr + 'T00:00:00');
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    return { dayStart, dayEnd };
+  }
+
+  private addDays(dateStr: string, days: number): string {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0]!;
+  }
+
+  private async resolveServiceDate(propertyId: string, serviceDate?: string): Promise<string> {
+    if (!serviceDate) {
+      return this.getPropertyBusinessDate(propertyId);
+    }
+    if (!this.isValidBusinessDate(serviceDate)) {
+      throw new BadRequestException('serviceDate must be a valid date (YYYY-MM-DD)');
+    }
+    return serviceDate;
+  }
+
+  private async resolveAnalyticsPeriod(
+    propertyId: string,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<{ start: string; end: string }> {
+    const today = await this.getPropertyBusinessDate(propertyId);
+    const end = endDate ?? today;
+    if (!this.isValidBusinessDate(end)) {
+      throw new BadRequestException('endDate must be a valid date (YYYY-MM-DD)');
+    }
+    const start = startDate ?? this.addDays(end, -30);
+    if (!this.isValidBusinessDate(start)) {
+      throw new BadRequestException('startDate must be a valid date (YYYY-MM-DD)');
+    }
+    if (start > end) {
+      throw new BadRequestException('startDate must be on or before endDate');
+    }
+    return { start, end };
   }
 
   /**

@@ -36,10 +36,10 @@ export class HousekeepingController {
   @RequirePermissions('housekeeping.read')
   @ApiOperation({ summary: 'Get housekeeping dashboard' })
   @ApiQuery({ name: 'propertyId', type: String })
-  @ApiQuery({ name: 'serviceDate', type: String })
+  @ApiQuery({ name: 'serviceDate', type: String, required: false, description: 'Service date (YYYY-MM-DD); defaults to today in property timezone' })
   getDashboard(
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
-    @Query('serviceDate') serviceDate: string,
+    @Query('serviceDate') serviceDate?: string,
   ) {
     return this.housekeepingService.getDashboard(propertyId, serviceDate);
   }
@@ -59,12 +59,12 @@ export class HousekeepingController {
   @RequirePermissions('housekeeping.read')
   @ApiOperation({ summary: 'Get housekeeping analytics' })
   @ApiQuery({ name: 'propertyId', type: String })
-  @ApiQuery({ name: 'startDate', type: String })
-  @ApiQuery({ name: 'endDate', type: String })
+  @ApiQuery({ name: 'startDate', type: String, required: false, description: 'Period start (YYYY-MM-DD); defaults to 30 days before endDate' })
+  @ApiQuery({ name: 'endDate', type: String, required: false, description: 'Period end (YYYY-MM-DD); defaults to today in property timezone' })
   getAnalytics(
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
     return this.housekeepingService.getAnalytics(propertyId, startDate, endDate);
   }
