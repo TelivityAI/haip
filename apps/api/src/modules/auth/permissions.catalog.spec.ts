@@ -60,6 +60,10 @@ describe('permissions catalog', () => {
     expect(ROLE_DEFAULT_PERMISSIONS.reservations).not.toContain('cashier.access');
   });
 
+  it('accounting cannot view rate plans (sidebar hides /rate-plans)', () => {
+    expect(ROLE_DEFAULT_PERMISSIONS.accounting).not.toContain('rateplans.read');
+  });
+
   it('every navKey-bearing permission has a unique route', () => {
     const navKeys = PERMISSIONS.filter((p) => p.navKey).map((p) => p.navKey);
     expect(new Set(navKeys).size).toBe(navKeys.length);
