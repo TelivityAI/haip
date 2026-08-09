@@ -51,6 +51,7 @@ Role: `admin`
 | `0 8 * * *` | `housekeeping` | Daily ops window |
 | `0 */6 * * *` | `cancellation` | Every 6 hours |
 | `0 23 * * *` | `night_audit` | Before night-audit close |
+| `0 * * * *` | Review ingest | `POST /reviews/ingest?propertyId=<uuid>` per property |
 | Events | `guest_comms`, `review_response` | Reservation lifecycle / review ingest |
 | Manual | Any specialist + RManager | Dashboard **Run Now** or `triggeredBy=manual` |
 
@@ -104,3 +105,16 @@ GET /health
 ```
 
 Use for load balancer / uptime monitoring.
+
+## Review ingest (scheduled pull)
+
+Pull configured review sources (Google Places, TripAdvisor) into `guest_reviews` with dedupe. Run hourly per property when integrations are enabled.
+
+```
+POST /reviews/ingest?propertyId=<uuid>
+Authorization: Bearer <token>
+```
+
+Role: `admin`, `general_manager`, or `night_auditor`
+
+Channex OTA reviews can also arrive via `POST /channels/inbound/channex/reviews` (event `review`) without polling.

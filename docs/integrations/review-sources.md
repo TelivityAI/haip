@@ -51,6 +51,9 @@ Response shape:
 {
   "pulled": true,
   "provider": "google",
+  "imported": 2,
+  "updated": 0,
+  "newReviewIds": ["…"],
   "reviews": [
     {
       "externalId": "google-…",
@@ -63,7 +66,7 @@ Response shape:
 }
 ```
 
-Import into `guest_reviews` (dedupe by `externalId`) can be added in a follow-up; this wave exposes pull-only stubs aligned with existing review sources in the database enum (`google`, `tripadvisor`).
+Pull results are persisted into `guest_reviews` with dedupe on `(propertyId, source, externalId)`. Re-sync updates `lastSyncedAt` without duplicating rows. New reviews trigger the `review_response` agent automatically.
 
 Wave 3 reputation consoles (TrustYou, Trustpilot, and related packs) use the same pull endpoint with additional `source` values — see [wave3-reviews.md](./wave3-reviews.md).
 

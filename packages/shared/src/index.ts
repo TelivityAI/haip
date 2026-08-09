@@ -81,6 +81,7 @@ export const WEBHOOK_EVENTS = {
   // Guest engagement events
   'guest.communication_drafted': 'guest.communication_drafted',
   'guest.communication_sent': 'guest.communication_sent',
+  'guest.review.ingested': 'guest.review.ingested',
   'guest.review_response_drafted': 'guest.review_response_drafted',
 
   // Deposit ledger events (KB 10)
