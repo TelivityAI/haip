@@ -286,6 +286,7 @@ export function generateEmailDraft(
   property: PropertyContext,
   config: CommunicationConfig,
   previousEmailTypes: EmailType[] = [],
+  options?: { daysSinceDeparture?: number },
 ): EmailDraft | null {
   // GDPR: check opt-out
   if (!guest.gdprConsentMarketing && emailType !== 'confirmation') {
@@ -324,7 +325,9 @@ export function generateEmailDraft(
     property_address: [property.addressLine1, property.city].filter(Boolean).join(', '),
     property_website: property.website ?? '',
     days_until: String(daysUntilArrival),
-    days_since: '90', // default for win_back
+    days_since: String(
+      options?.daysSinceDeparture ?? config.winBackDays ?? 90,
+    ),
     special_requests_line: reservation.specialRequests
       ? `Special requests: ${reservation.specialRequests}`
       : '',
@@ -406,4 +409,41 @@ export function getDefaultCommunicationConfig(): CommunicationConfig {
     upsellEnabled: true,
     localTips: [],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling helpers (pre-arrival cron, post-stay delay, win-back)
+// ---------------------------------------------------------------------------
+
+const MS_PER_DAY = 86_400_000;
+const MS_PER_HOUR = 3_600_000;
+
+/** Whole calendar days between a YYYY-MM-DD date and now (UTC date boundary). */
+export function daysSinceDate(dateStr: string, now: Date = new Date()): number {
+  const then = new Date(`${dateStr}T00:00:00.000Z`);
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return Math.floor((today.getTime() - then.getTime()) / MS_PER_DAY);
+}
+
+/** True when post-stay email may be drafted (delay elapsed since checkout). */
+export function isPostStayReady(
+  checkedOutAt: Date | string | null | undefined,
+  departureDate: string,
+  delayHours: number,
+  now: Date = new Date(),
+): boolean {
+  const checkoutAt = checkedOutAt
+    ? new Date(checkedOutAt)
+    : new Date(`${departureDate}T23:59:59.000Z`);
+  const elapsedMs = now.getTime() - checkoutAt.getTime();
+  return elapsedMs >= delayHours * MS_PER_HOUR;
+}
+
+/** True when win-back is due (daily cron matches winBackDays after departure). */
+export function isWinBackDue(
+  departureDate: string,
+  winBackDays: number,
+  now: Date = new Date(),
+): boolean {
+  return daysSinceDate(departureDate, now) === winBackDays;
 }

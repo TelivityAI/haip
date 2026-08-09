@@ -4,6 +4,9 @@ import {
   generateEmailDraft,
   getEmailTypeForEvent,
   getDefaultCommunicationConfig,
+  daysSinceDate,
+  isPostStayReady,
+  isWinBackDue,
   type GuestContext,
   type ReservationContext,
   type PropertyContext,
@@ -263,6 +266,48 @@ describe('generateEmailDraft', () => {
     );
     expect(draft!.emailType).toBe('win_back');
     expect(draft!.bodyText).toContain('Telivity Grand Hotel');
+  });
+
+  it('uses actual days since departure in win_back repeat template', () => {
+    const draft = generateEmailDraft(
+      'win_back',
+      makeGuest({ isRepeatGuest: true, pastStayCount: 2 }),
+      makeReservation(),
+      makeProperty(),
+      makeConfig(),
+      [],
+      { daysSinceDeparture: 120 },
+    );
+    expect(draft!.bodyText).toContain('120 days');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scheduling helpers
+// ---------------------------------------------------------------------------
+
+describe('scheduling helpers', () => {
+  it('daysSinceDate counts calendar days', () => {
+    const now = new Date('2026-04-15T12:00:00.000Z');
+    expect(daysSinceDate('2026-04-10', now)).toBe(5);
+  });
+
+  it('isPostStayReady waits for postStayDelayHours after checkout', () => {
+    const now = new Date('2026-04-15T20:00:00.000Z');
+    const checkedOutAt = new Date('2026-04-15T10:00:00.000Z');
+    expect(isPostStayReady(checkedOutAt, '2026-04-15', 24, now)).toBe(false);
+    expect(isPostStayReady(checkedOutAt, '2026-04-15', 8, now)).toBe(true);
+  });
+
+  it('isPostStayReady falls back to departure date when checkedOutAt missing', () => {
+    const now = new Date('2026-04-17T12:00:00.000Z');
+    expect(isPostStayReady(null, '2026-04-15', 24, now)).toBe(true);
+  });
+
+  it('isWinBackDue matches winBackDays after departure', () => {
+    const now = new Date('2026-07-14T08:00:00.000Z');
+    expect(isWinBackDue('2026-04-15', 90, now)).toBe(true);
+    expect(isWinBackDue('2026-04-16', 90, now)).toBe(false);
   });
 });
 

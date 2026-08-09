@@ -7,8 +7,9 @@ import type { WebhookPayload } from '../../webhook/webhook.service';
  * Drafts guest-lifecycle emails when reservation events fire.
  *
  * Maps reservation.created → confirmation, checked_in → welcome,
- * checked_out → post_stay (see getEmailTypeForEvent). Pre-arrival / day-of
- * still come from scheduled `POST /agents/:propertyId/guest_comms/run`.
+ * checked_out → post_stay after `postStayDelayHours` (see getEmailTypeForEvent).
+ * Pre-arrival / day-of / delayed post-stay / win-back come from scheduled
+ * `POST /agents/:propertyId/guest_comms/run`.
  *
  * Never throws — a draft failure must not break reservation state changes.
  */

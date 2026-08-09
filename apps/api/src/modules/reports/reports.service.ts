@@ -15,6 +15,7 @@ import {
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { reportPaymentSumWhere } from '../payment/payment-ledger';
+import { resolveReportDate } from './resolve-report-date';
 
 @Injectable()
 export class ReportsService {
@@ -116,7 +117,9 @@ export class ReportsService {
   /**
    * Occupancy Report — room occupancy metrics for a date (KB 5.9).
    */
-  async getOccupancy(propertyId: string, date: string) {
+  async getOccupancy(propertyId: string, date?: string) {
+    const reportDate = resolveReportDate(date);
+
     // Property total rooms
     const [property] = await this.db
       .select({ totalRooms: properties.totalRooms })
@@ -153,7 +156,7 @@ export class ReportsService {
       .where(
         and(
           eq(reservations.propertyId, propertyId),
-          sql`${reservations.checkedInAt}::date = ${date}`,
+          sql`${reservations.checkedInAt}::date = ${reportDate}`,
         ),
       );
 
@@ -164,7 +167,7 @@ export class ReportsService {
       .where(
         and(
           eq(reservations.propertyId, propertyId),
-          sql`${reservations.checkedOutAt}::date = ${date}`,
+          sql`${reservations.checkedOutAt}::date = ${reportDate}`,
         ),
       );
 
@@ -176,7 +179,7 @@ export class ReportsService {
         and(
           eq(reservations.propertyId, propertyId),
           sql`${reservations.status} in ('stayover', 'checked_in', 'due_out')`,
-          lte(reservations.arrivalDate, date),
+          lte(reservations.arrivalDate, reportDate),
         ),
       );
 
@@ -188,7 +191,7 @@ export class ReportsService {
         and(
           eq(reservations.propertyId, propertyId),
           eq(reservations.status, 'no_show' as any),
-          eq(reservations.arrivalDate, date),
+          eq(reservations.arrivalDate, reportDate),
         ),
       );
 
@@ -200,12 +203,12 @@ export class ReportsService {
         and(
           eq(reservations.propertyId, propertyId),
           eq(reservations.status, 'cancelled' as any),
-          sql`${reservations.cancelledAt}::date = ${date}`,
+          sql`${reservations.cancelledAt}::date = ${reportDate}`,
         ),
       );
 
     return {
-      date,
+      date: reportDate,
       totalRooms,
       outOfOrder,
       outOfService,

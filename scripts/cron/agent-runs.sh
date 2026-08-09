@@ -13,7 +13,7 @@ source "${SCRIPT_DIR}/_common.sh"
 AGENT_TYPE="${1:-${HAIP_AGENT_TYPE:-}}"
 if [ -z "${AGENT_TYPE}" ]; then
   echo "Usage: $0 <agentType>   (or set HAIP_AGENT_TYPE)" >&2
-  echo "Typical: revenue_manager | housekeeping | cancellation | ar_collections | night_audit" >&2
+  echo "Typical: revenue_manager | housekeeping | cancellation | ar_collections | night_audit | guest_comms" >&2
   exit 1
 fi
 

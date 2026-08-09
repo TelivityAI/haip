@@ -10,6 +10,8 @@ import { ReportsService } from './reports.service';
 import { PortfolioPropertyResolver } from './portfolio-property-resolver';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
+import { ReportQueryDto } from './dto/report-query.dto';
+import { resolveReportDate } from './resolve-report-date';
 
 @ApiTags('reports')
 @Controller('reports')
@@ -63,12 +65,16 @@ export class ReportsController {
   @Get('/occupancy')
   @ApiOperation({ summary: 'Occupancy report' })
   @ApiQuery({ name: 'propertyId', required: true })
-  @ApiQuery({ name: 'date', required: true })
-  async getOccupancy(
-    @Query('propertyId', ParseUUIDPipe) propertyId: string,
-    @Query('date') date: string,
-  ) {
-    return this.reportsService.getOccupancy(propertyId, date);
+  @ApiQuery({
+    name: 'date',
+    required: false,
+    description: 'Report date (YYYY-MM-DD). Defaults to today when omitted.',
+  })
+  async getOccupancy(@Query() query: ReportQueryDto) {
+    return this.reportsService.getOccupancy(
+      query.propertyId,
+      resolveReportDate(query.date),
+    );
   }
 
   @Get('/financial-summary')

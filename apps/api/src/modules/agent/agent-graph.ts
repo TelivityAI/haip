@@ -142,8 +142,8 @@ export const DEFAULT_SCHEDULE_MATRIX: Record<
     notes: 'Before night audit close',
   },
   guest_comms: {
-    cron: '',
-    notes: 'Event-driven (reservation lifecycle) + manual',
+    cron: '0 7 * * *',
+    notes: 'Daily pre-arrival, day-of, delayed post-stay, win-back; lifecycle events for confirmation/welcome',
   },
   review_response: {
     cron: '',
