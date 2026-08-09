@@ -459,7 +459,8 @@
       "bank_transfer": "Virement bancaire",
       "cash": "Espèces",
       "credit_card": "Carte de crédit",
-      "debit_card": "Carte de débit"
+      "debit_card": "Carte de débit",
+      "pix": "PIX"
     },
     "paymentStatuses": {
       "captured": "Encaissé",
@@ -919,7 +920,8 @@
       "cash": "Espèces",
       "creditCard": "Carte de crédit",
       "debitCard": "Carte de débit",
-      "other": "Autre"
+      "other": "Autre",
+      "pix": "PIX"
     },
     "post": "Imputer",
     "postCharge": "Imputer un débit",

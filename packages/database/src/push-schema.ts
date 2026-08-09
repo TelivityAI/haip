@@ -25,7 +25,9 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'folio_type') THEN CREATE TYPE folio_type AS ENUM ('guest','master','city_ledger'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'folio_status') THEN CREATE TYPE folio_status AS ENUM ('open','settled','closed'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'charge_type') THEN CREATE TYPE charge_type AS ENUM ('room','tax','food_beverage','minibar','phone','laundry','parking','spa','incidental','fee','adjustment','package'); END IF; END $$`,
-    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_method') THEN CREATE TYPE payment_method AS ENUM ('credit_card','debit_card','cash','bank_transfer','city_ledger','vcc','other'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_method') THEN CREATE TYPE payment_method AS ENUM ('credit_card','debit_card','cash','bank_transfer','pix','city_ledger','vcc','other'); END IF; END $$`,
+    // Idempotent add: append pix for DBs that already had payment_method without it
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'payment_method' AND e.enumlabel = 'pix') THEN ALTER TYPE payment_method ADD VALUE 'pix'; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_status') THEN CREATE TYPE payment_status AS ENUM ('pending','authorized','captured','settled','refunded','partially_refunded','failed','voided'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'housekeeping_task_status') THEN CREATE TYPE housekeeping_task_status AS ENUM ('pending','assigned','in_progress','completed','inspected','skipped'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'housekeeping_task_type') THEN CREATE TYPE housekeeping_task_type AS ENUM ('checkout','stayover','deep_clean','inspection','turndown','maintenance'); END IF; END $$`,

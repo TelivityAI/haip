@@ -120,12 +120,58 @@ describe('PaymentService', () => {
       );
     });
 
-    it('should reject credit_card method', async () => {
+    it('should record offline POS credit_card without a gateway', async () => {
+      const result = await service.recordPayment({
+        folioId: 'folio-001',
+        propertyId: 'prop-001',
+        method: 'credit_card',
+        amount: '150.00',
+        currencyCode: 'BRL',
+      });
+
+      expect(result).toEqual(mockPayment);
+      expect(mockFolioService.recalculateBalance).toHaveBeenCalledWith('folio-001', 'prop-001');
+    });
+
+    it('should record pix as a manual settle tender', async () => {
+      const result = await service.recordPayment({
+        folioId: 'folio-001',
+        propertyId: 'prop-001',
+        method: 'pix',
+        amount: '200.00',
+        currencyCode: 'BRL',
+      });
+
+      expect(result).toEqual(mockPayment);
+      expect(mockWebhookService.emit).toHaveBeenCalledWith(
+        'payment.received',
+        'payment',
+        mockPayment.id,
+        expect.objectContaining({ status: 'captured' }),
+        'prop-001',
+      );
+    });
+
+    it('should reject credit_card when a gateway token is supplied', async () => {
       await expect(
         service.recordPayment({
           folioId: 'folio-001',
           propertyId: 'prop-001',
           method: 'credit_card',
+          amount: '150.00',
+          currencyCode: 'USD',
+          gatewayProvider: 'stripe',
+          gatewayPaymentToken: 'pm_test_123',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject vcc on the record path', async () => {
+      await expect(
+        service.recordPayment({
+          folioId: 'folio-001',
+          propertyId: 'prop-001',
+          method: 'vcc',
           amount: '150.00',
           currencyCode: 'USD',
         }),

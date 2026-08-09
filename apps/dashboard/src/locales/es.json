@@ -459,7 +459,8 @@
       "bank_transfer": "Transferencia bancaria",
       "cash": "Efectivo",
       "credit_card": "Tarjeta de crédito",
-      "debit_card": "Tarjeta de débito"
+      "debit_card": "Tarjeta de débito",
+      "pix": "PIX"
     },
     "paymentStatuses": {
       "captured": "Capturado",
@@ -919,7 +920,8 @@
       "cash": "Efectivo",
       "creditCard": "Tarjeta de crédito",
       "debitCard": "Tarjeta de débito",
-      "other": "Otro"
+      "other": "Otro",
+      "pix": "PIX"
     },
     "post": "Registrar",
     "postCharge": "Registrar cargo",

@@ -13,6 +13,7 @@ const PAYMENT_METHODS = [
   'debit_card',
   'cash',
   'bank_transfer',
+  'pix',
   'city_ledger',
   'vcc',
   'other',

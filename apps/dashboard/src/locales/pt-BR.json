@@ -411,7 +411,8 @@
       "bank_transfer": "Transferência Bancária",
       "cash": "Dinheiro",
       "credit_card": "Cartão de Crédito",
-      "debit_card": "Cartão de Débito"
+      "debit_card": "Cartão de Débito",
+      "pix": "PIX"
     },
     "paymentStatuses": {
       "captured": "Recebido",
@@ -844,7 +845,8 @@
       "cash": "Dinheiro",
       "creditCard": "Cartão de crédito",
       "debitCard": "Cartão de débito",
-      "other": "Outro"
+      "other": "Outro",
+      "pix": "PIX"
     },
     "post": "Lançar",
     "postCharge": "Lançar cobrança",
