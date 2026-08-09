@@ -64,6 +64,7 @@ describe('Unauthenticated access to financial module routes', () => {
     '/api/v1/reports',
     '/api/v1/reports/daily-revenue',
     '/api/v1/deposits',
+    '/api/v1/rate-plans?propertyId=aaaaaaaa-0000-4000-a000-000000000001',
   ];
 
   for (const path of protectedGets) {

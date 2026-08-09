@@ -70,6 +70,7 @@ export class FolioController {
   }
 
   @Get()
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
   @ApiOperation({ summary: 'List folios with filters' })
   @ApiResponse({ status: 200, description: 'Paginated list of folios' })
   listFolios(@Query() dto: ListFoliosDto) {
