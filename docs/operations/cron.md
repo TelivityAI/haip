@@ -51,8 +51,9 @@ Role: `admin`
 | `0 8 * * *` | `housekeeping` | Daily ops window |
 | `0 */6 * * *` | `cancellation` | Every 6 hours |
 | `0 23 * * *` | `night_audit` | Before night-audit close |
+| `0 7 * * *` | `guest_comms` | Pre-arrival, day-of, delayed post-stay, win-back |
 | `0 * * * *` | Review ingest | `POST /reviews/ingest?propertyId=<uuid>` per property |
-| Events | `guest_comms`, `review_response` | Reservation lifecycle / review ingest |
+| Events | `guest_comms`, `review_response` | Reservation lifecycle (confirmation, welcome) / review ingest |
 | Manual | Any specialist + RManager | Dashboard **Run Now** or `triggeredBy=manual` |
 
 **Do not** independently cron `demand_forecast`, `pricing`, `overbooking`, `channel_mix`, or `group_pickup` — they run via RManager and would double-fire. See [`docs/agents-orchestration.md`](../agents-orchestration.md).

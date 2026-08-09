@@ -26,6 +26,8 @@ import {
   generateEmailDraft,
   getEmailTypeForEvent,
   getDefaultCommunicationConfig,
+  isPostStayReady,
+  daysSinceDate,
   type EmailType,
   type GuestContext,
   type ReservationContext,
@@ -68,6 +70,9 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
 
     // Get target reservations
     let targetReservations: any[];
+    let postStayReservations: any[] = [];
+    let winBackReservations: any[] = [];
+
     if (reservationId) {
       // Single reservation from event trigger
       targetReservations = await this.db
@@ -80,8 +85,13 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
           ),
         );
     } else {
-      // Manual/scheduled run: get active reservations needing communication
+      // Scheduled/manual run: upcoming arrivals + delayed post-stay + win-back
       const today = new Date().toISOString().split('T')[0]!;
+      const winBackDays = commConfig.winBackDays ?? 90;
+      const winBackCutoff = new Date();
+      winBackCutoff.setUTCDate(winBackCutoff.getUTCDate() - winBackDays);
+      const winBackDate = winBackCutoff.toISOString().split('T')[0]!;
+
       targetReservations = await this.db
         .select()
         .from(reservations)
@@ -92,31 +102,54 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
             not(inArray(reservations.status, ['cancelled', 'no_show'] as any)),
           ),
         );
+
+      const checkedOut = await this.db
+        .select()
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.propertyId, propertyId),
+            eq(reservations.status, 'checked_out' as any),
+          ),
+        );
+
+      postStayReservations = checkedOut.filter((r: any) =>
+        isPostStayReady(
+          r.checkedOutAt,
+          r.departureDate,
+          commConfig.postStayDelayHours ?? 24,
+        ),
+      );
+
+      winBackReservations = checkedOut.filter((r: any) =>
+        r.departureDate === winBackDate,
+      );
     }
 
     // Get guest data
-    const guestIds = [...new Set(targetReservations.map((r: any) => r.guestId).filter(Boolean))];
+    const allReservations = [...targetReservations, ...postStayReservations, ...winBackReservations];
+    const guestIds = [...new Set(allReservations.map((r: any) => r.guestId).filter(Boolean))];
     const guestData: any[] = guestIds.length > 0
       ? await this.db.select().from(guests).where(inArray(guests.id, guestIds as any))
       : [];
     const guestMap = new Map(guestData.map((g: any) => [g.id, g]));
 
     // Get booking data for confirmation numbers
-    const bookingIds = [...new Set(targetReservations.map((r: any) => r.bookingId).filter(Boolean))];
+    const bookingIds = [...new Set(allReservations.map((r: any) => r.bookingId).filter(Boolean))];
     const bookingData: any[] = bookingIds.length > 0
       ? await this.db.select().from(bookings).where(inArray(bookings.id, bookingIds as any))
       : [];
     const bookingMap = new Map(bookingData.map((b: any) => [b.id, b]));
 
     // Get room type names
-    const rtIds = [...new Set(targetReservations.map((r: any) => r.roomTypeId).filter(Boolean))];
+    const rtIds = [...new Set(allReservations.map((r: any) => r.roomTypeId).filter(Boolean))];
     const rtData: any[] = rtIds.length > 0
       ? await this.db.select().from(roomTypes).where(inArray(roomTypes.id, rtIds as any))
       : [];
     const rtMap = new Map(rtData.map((rt: any) => [rt.id, rt]));
 
     // Get rate plan names
-    const rpIds = [...new Set(targetReservations.map((r: any) => r.ratePlanId).filter(Boolean))];
+    const rpIds = [...new Set(allReservations.map((r: any) => r.ratePlanId).filter(Boolean))];
     const rpData: any[] = rpIds.length > 0
       ? await this.db.select().from(ratePlans).where(inArray(ratePlans.id, rpIds as any))
       : [];
@@ -166,6 +199,8 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
         property,
         commConfig,
         targetReservations,
+        postStayReservations,
+        winBackReservations,
         guestMap: Object.fromEntries(guestMap),
         bookingMap: Object.fromEntries(bookingMap),
         rtMap: Object.fromEntries(rtMap),
@@ -182,6 +217,8 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
       property,
       commConfig,
       targetReservations,
+      postStayReservations = [],
+      winBackReservations = [],
       guestMap,
       bookingMap,
       rtMap,
@@ -190,101 +227,147 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
       pastStayCounts,
     } = analysis.signals as any;
 
-    if (!property || targetReservations.length === 0) return [];
+    if (!property) return [];
 
-    const decisions: AgentDecisionInput[] = [];
     const enabledTypes: EmailType[] = commConfig.enabledTypes ?? ['confirmation', 'pre_arrival', 'post_stay'];
+    const decisions: AgentDecisionInput[] = [];
 
-    for (const res of targetReservations) {
-      const guest = guestMap[res.guestId];
-      if (!guest || !guest.email) continue;
+    const batches: Array<{ reservations: any[]; scheduledTypes: EmailType[] }> = [];
 
-      const booking = bookingMap[res.bookingId];
-      const roomType = rtMap[res.roomTypeId];
-      const ratePlan = rpMap[res.ratePlanId];
-      const previousTypes: EmailType[] = sentMap[res.id] ?? [];
-      const pastStays: number = pastStayCounts[res.guestId] ?? 0;
-
-      // Determine which email types to generate
-      const typesToGenerate: EmailType[] = [];
-      if (triggeredType) {
-        // Event-driven: single type
-        if (enabledTypes.includes(triggeredType)) {
-          typesToGenerate.push(triggeredType);
-        }
-      } else {
-        // Scheduled/manual: check all enabled types for pre_arrival
-        const daysUntil = Math.ceil(
-          (new Date(res.arrivalDate).getTime() - Date.now()) / 86400000,
-        );
-        if (enabledTypes.includes('pre_arrival') && daysUntil <= (commConfig.preArrivalDaysBefore ?? 3) && daysUntil > 0) {
-          typesToGenerate.push('pre_arrival');
-        }
-        if (enabledTypes.includes('day_of') && daysUntil === 0) {
-          typesToGenerate.push('day_of');
-        }
+    if (triggeredType) {
+      batches.push({ reservations: targetReservations, scheduledTypes: [] });
+    } else {
+      batches.push({ reservations: targetReservations, scheduledTypes: ['pre_arrival', 'day_of'] });
+      if (enabledTypes.includes('post_stay')) {
+        batches.push({ reservations: postStayReservations, scheduledTypes: ['post_stay'] });
       }
+      if (enabledTypes.includes('win_back')) {
+        batches.push({ reservations: winBackReservations, scheduledTypes: ['win_back'] });
+      }
+    }
 
-      const guestCtx: GuestContext = {
-        firstName: guest.firstName,
-        lastName: guest.lastName,
-        email: guest.email,
-        vipLevel: guest.vipLevel ?? 'none',
-        isRepeatGuest: pastStays > 0,
-        pastStayCount: pastStays,
-        gdprConsentMarketing: guest.gdprConsentMarketing ?? false,
-        preferences: guest.preferences,
-      };
+    for (const { reservations, scheduledTypes } of batches) {
+      for (const res of reservations) {
+        const guest = guestMap[res.guestId];
+        if (!guest || !guest.email) continue;
 
-      const resCtx: ReservationContext = {
-        id: res.id,
-        arrivalDate: res.arrivalDate,
-        departureDate: res.departureDate,
-        nights: res.nights,
-        roomTypeName: roomType?.name ?? 'Standard Room',
-        ratePlanName: ratePlan?.name ?? 'Standard Rate',
-        totalAmount: res.totalAmount ?? '0.00',
-        currencyCode: res.currencyCode ?? 'USD',
-        specialRequests: res.specialRequests,
-        confirmationNumber: booking?.confirmationNumber ?? res.id.slice(0, 8),
-      };
+        const booking = bookingMap[res.bookingId];
+        const roomType = rtMap[res.roomTypeId];
+        const ratePlan = rpMap[res.ratePlanId];
+        const previousTypes: EmailType[] = sentMap[res.id] ?? [];
+        const pastStays: number = pastStayCounts[res.guestId] ?? 0;
 
-      const propCtx: PropertyContext = {
-        name: property.name,
-        checkInTime: property.checkInTime ?? '15:00',
-        checkOutTime: property.checkOutTime ?? '11:00',
-        phone: property.phone,
-        email: property.email,
-        website: property.website,
-        addressLine1: property.addressLine1,
-        city: property.city,
-      };
+        const typesToGenerate: EmailType[] = [];
+        if (triggeredType) {
+          if (!enabledTypes.includes(triggeredType)) continue;
+          if (
+            triggeredType === 'post_stay' &&
+            !isPostStayReady(
+              res.checkedOutAt,
+              res.departureDate,
+              commConfig.postStayDelayHours ?? 24,
+            )
+          ) {
+            continue;
+          }
+          typesToGenerate.push(triggeredType);
+        } else {
+          if (scheduledTypes.includes('pre_arrival')) {
+            const daysUntil = Math.ceil(
+              (new Date(res.arrivalDate).getTime() - Date.now()) / 86_400_000,
+            );
+            if (
+              enabledTypes.includes('pre_arrival') &&
+              daysUntil <= (commConfig.preArrivalDaysBefore ?? 3) &&
+              daysUntil > 0
+            ) {
+              typesToGenerate.push('pre_arrival');
+            }
+            if (enabledTypes.includes('day_of') && daysUntil === 0) {
+              typesToGenerate.push('day_of');
+            }
+          }
+          if (scheduledTypes.includes('post_stay') && enabledTypes.includes('post_stay')) {
+            typesToGenerate.push('post_stay');
+          }
+          if (scheduledTypes.includes('win_back') && enabledTypes.includes('win_back')) {
+            typesToGenerate.push('win_back');
+          }
+        }
 
-      for (const type of typesToGenerate) {
-        const draft = generateEmailDraft(type, guestCtx, resCtx, propCtx, commConfig, previousTypes);
-        if (!draft) continue;
+        if (typesToGenerate.length === 0) continue;
 
-        decisions.push({
-          decisionType: 'guest_communication',
-          recommendation: {
-            reservationId: res.id,
-            guestId: res.guestId,
-            emailType: draft.emailType,
-            to: draft.to,
-            subject: draft.subject,
-            bodyHtml: draft.bodyHtml,
-            bodyText: draft.bodyText,
-            personalizationTokens: draft.personalizationTokens,
-          },
-          confidence: 0.90, // template-based = high confidence
-          inputSnapshot: {
-            reservationId: res.id,
-            guestName: `${guest.firstName} ${guest.lastName}`,
-            emailType: draft.emailType,
-            isRepeatGuest: guestCtx.isRepeatGuest,
-            analyzedAt: analysis.timestamp.toISOString(),
-          },
-        });
+        const guestCtx: GuestContext = {
+          firstName: guest.firstName,
+          lastName: guest.lastName,
+          email: guest.email,
+          vipLevel: guest.vipLevel ?? 'none',
+          isRepeatGuest: pastStays > 0,
+          pastStayCount: pastStays,
+          gdprConsentMarketing: guest.gdprConsentMarketing ?? false,
+          preferences: guest.preferences,
+        };
+
+        const resCtx: ReservationContext = {
+          id: res.id,
+          arrivalDate: res.arrivalDate,
+          departureDate: res.departureDate,
+          nights: res.nights,
+          roomTypeName: roomType?.name ?? 'Standard Room',
+          ratePlanName: ratePlan?.name ?? 'Standard Rate',
+          totalAmount: res.totalAmount ?? '0.00',
+          currencyCode: res.currencyCode ?? 'USD',
+          specialRequests: res.specialRequests,
+          confirmationNumber: booking?.confirmationNumber ?? res.id.slice(0, 8),
+        };
+
+        const propCtx: PropertyContext = {
+          name: property.name,
+          checkInTime: property.checkInTime ?? '15:00',
+          checkOutTime: property.checkOutTime ?? '11:00',
+          phone: property.phone,
+          email: property.email,
+          website: property.website,
+          addressLine1: property.addressLine1,
+          city: property.city,
+        };
+
+        const daysSinceDeparture = daysSinceDate(res.departureDate);
+
+        for (const type of typesToGenerate) {
+          const draft = generateEmailDraft(
+            type,
+            guestCtx,
+            resCtx,
+            propCtx,
+            commConfig,
+            previousTypes,
+            type === 'win_back' ? { daysSinceDeparture } : undefined,
+          );
+          if (!draft) continue;
+
+          decisions.push({
+            decisionType: 'guest_communication',
+            recommendation: {
+              reservationId: res.id,
+              guestId: res.guestId,
+              emailType: draft.emailType,
+              to: draft.to,
+              subject: draft.subject,
+              bodyHtml: draft.bodyHtml,
+              bodyText: draft.bodyText,
+              personalizationTokens: draft.personalizationTokens,
+            },
+            confidence: 0.90,
+            inputSnapshot: {
+              reservationId: res.id,
+              guestName: `${guest.firstName} ${guest.lastName}`,
+              emailType: draft.emailType,
+              isRepeatGuest: guestCtx.isRepeatGuest,
+              analyzedAt: analysis.timestamp.toISOString(),
+            },
+          });
+        }
       }
     }
 
@@ -297,7 +380,7 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
     if (!this.emailService.isConfigured()) {
       return {
         success: true,
-        changes: [{ entity: 'email', action: 'drafted', detail: `Email drafted for ${rec.to} (SMTP not configured)` }],
+        changes: [{ entity: 'email', action: 'drafted', detail: `Email drafted for ${rec.to} (email provider not configured)` }],
       };
     }
 
