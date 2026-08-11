@@ -52,6 +52,7 @@ import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { IcalModule } from './modules/ical/ical.module';
 import { FiscalModule } from './modules/fiscal/fiscal.module';
+import { MigrationModule } from './modules/migration/migration.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -106,6 +107,7 @@ const imports: any[] = [
   IntegrationsModule,
   IcalModule,
   FiscalModule,
+  MigrationModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or

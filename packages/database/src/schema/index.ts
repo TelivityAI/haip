@@ -261,3 +261,6 @@ export {
   icalFeeds,
   icalBlocks,
 } from './ical.js';
+
+// Automated PMS migration — encrypted source credentials vault
+export { migrationSourceCredentials } from './migration.js';
