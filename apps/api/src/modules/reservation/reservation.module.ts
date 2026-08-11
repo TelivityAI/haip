@@ -16,6 +16,7 @@ import { AccountingModule } from '../accounting/accounting.module';
 import { PolicyModule } from '../policy/policy.module';
 import { RatePlanModule } from '../rate-plan/rate-plan.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MigrationLegacyIdMapModule } from '../migration/migration-legacy-id-map.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     RatePlanModule,
     NotificationsModule,
     EmailModule,
+    MigrationLegacyIdMapModule,
   ],
   controllers: [ReservationController],
   providers: [
@@ -39,6 +41,11 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ReservationMessagingService,
     ReservationImportService,
   ],
-  exports: [ReservationService, ReservationPartyService, AvailabilityService],
+  exports: [
+    ReservationService,
+    ReservationPartyService,
+    AvailabilityService,
+    ReservationImportService,
+  ],
 })
 export class ReservationModule {}

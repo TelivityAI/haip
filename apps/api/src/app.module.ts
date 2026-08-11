@@ -36,6 +36,7 @@ import { GroupsModule } from './modules/groups/groups.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
 import { ImportModule } from './modules/import/import.module';
+import { MigrationModule } from './modules/migration/migration.module';
 import { AccountingExportModule } from './modules/accounting-export/accounting-export.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
@@ -52,7 +53,6 @@ import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { IcalModule } from './modules/ical/ical.module';
 import { FiscalModule } from './modules/fiscal/fiscal.module';
-import { MigrationModule } from './modules/migration/migration.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -91,6 +91,7 @@ const imports: any[] = [
   AdminModule,
   BookingEngineModule,
   ImportModule,
+  MigrationModule,
   AccountingExportModule,
   NotificationsModule,
   ReviewsModule,
@@ -107,7 +108,6 @@ const imports: any[] = [
   IntegrationsModule,
   IcalModule,
   FiscalModule,
-  MigrationModule,
 ];
 
 // Serve the bundled dashboard as static files. Enabled in production, or

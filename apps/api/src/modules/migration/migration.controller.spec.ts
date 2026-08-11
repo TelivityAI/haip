@@ -3,6 +3,25 @@ import { PERMISSIONS_KEY } from '../auth/permissions.decorator';
 import { MigrationController } from './migration.controller';
 
 describe('MigrationController authorization', () => {
+  it('requires settings.manage on job routes', () => {
+    const createJobPerms = Reflect.getMetadata(
+      PERMISSIONS_KEY,
+      MigrationController.prototype.createJob,
+    );
+    const getJobPerms = Reflect.getMetadata(
+      PERMISSIONS_KEY,
+      MigrationController.prototype.getJob,
+    );
+    const resumeJobPerms = Reflect.getMetadata(
+      PERMISSIONS_KEY,
+      MigrationController.prototype.resumeJob,
+    );
+
+    expect(createJobPerms).toEqual(['settings.manage']);
+    expect(getJobPerms).toEqual(['settings.manage']);
+    expect(resumeJobPerms).toEqual(['settings.manage']);
+  });
+
   it('requires settings.manage on credential routes', () => {
     const listPerms = Reflect.getMetadata(
       PERMISSIONS_KEY,
