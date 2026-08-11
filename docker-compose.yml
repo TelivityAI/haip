@@ -53,7 +53,7 @@ services:
     volumes:
       - ./keycloak/haip-realm.json:/opt/keycloak/data/import/haip-realm.json:ro
     ports:
-      - '8080:8080'
+      - '127.0.0.1:8080:8080'
     depends_on:
       postgres:
         condition: service_healthy
