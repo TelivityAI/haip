@@ -13,6 +13,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import * as schema from './schema/index.js';
+import { postgresOptionsFromEnv } from './postgres-options.js';
 
 /**
  * Fixed publishable booking-engine key for the demo property. The raw value is
@@ -60,7 +61,7 @@ function ts(d: number, hh = 0, mm = 0): Date {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const client = postgres(DATABASE_URL);
+  const client = postgres(DATABASE_URL, postgresOptionsFromEnv());
   const db = drizzle(client, { schema });
 
   // Idempotency check
