@@ -262,8 +262,9 @@ export {
   icalBlocks,
 } from './ical.js';
 
-// PMS migration engine (durable batch import + legacy id map)
+// Automated PMS migration — encrypted source credentials + durable batch import
 export {
+  migrationSourceCredentials,
   migrationJobStatusEnum,
   migrationRowStatusEnum,
   migrationLegacyIdMap,
