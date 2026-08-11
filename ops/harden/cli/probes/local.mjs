@@ -93,6 +93,34 @@ export async function runLocalFileProbes() {
     });
   }
 
+  // Datastores must not be published on all interfaces. Docker's published ports
+  // bypass host firewalls — ufw and firewalld rules sit behind Docker's own chain —
+  // so `- '5432:5432'` on a public host is an internet-reachable Postgres carrying
+  // this file's default credentials, even with a firewall correctly configured.
+  const baseCompose = path.join(root, 'docker-compose.yml');
+  if (fs.existsSync(baseCompose)) {
+    const composeText = fs.readFileSync(baseCompose, 'utf8');
+    const exposed = [];
+    for (const [svc, port] of [
+      ['postgres', 5432],
+      ['redis', 6379],
+      ['minio', 9000],
+    ]) {
+      // matches '5432:5432' but not '127.0.0.1:5432:5432'
+      if (new RegExp(`^\\s*-\\s*['"]${port}:${port}['"]`, 'm').test(composeText)) {
+        exposed.push(`${svc}:${port}`);
+      }
+    }
+    results.push({
+      id: 'compose:datastores-loopback',
+      ok: exposed.length === 0,
+      detail:
+        exposed.length === 0
+          ? 'datastore ports are bound to loopback or unpublished'
+          : `published on all interfaces: ${exposed.join(', ')} — bind to 127.0.0.1`,
+    });
+  }
+
   // Vignette pack present
   const vignetteDir = path.join(root, 'ops/harden/vignettes');
   let vignetteCount = 0;
