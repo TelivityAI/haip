@@ -93,10 +93,11 @@ export async function runLocalFileProbes() {
     });
   }
 
-  // Datastores must not be published on all interfaces. Docker's published ports
-  // bypass host firewalls — ufw and firewalld rules sit behind Docker's own chain —
-  // so `- '5432:5432'` on a public host is an internet-reachable Postgres carrying
-  // this file's default credentials, even with a firewall correctly configured.
+  // Datastores and Keycloak must not be published on all interfaces. Docker's
+  // published ports bypass host firewalls — ufw and firewalld rules sit behind
+  // Docker's own chain — so `- '5432:5432'` / `- '8080:8080'` on a public host is
+  // internet-reachable with this file's default credentials, even with a firewall
+  // correctly configured. Flagged by Charles Pizzato in #300 for Keycloak.
   const baseCompose = path.join(root, 'docker-compose.yml');
   if (fs.existsSync(baseCompose)) {
     const composeText = fs.readFileSync(baseCompose, 'utf8');
@@ -106,6 +107,7 @@ export async function runLocalFileProbes() {
       ['redis', 6379],
       ['minio', 9000],
       ['minio', 9001],
+      ['keycloak', 8080],
     ]) {
       // matches '5432:5432' but not '127.0.0.1:5432:5432'
       if (new RegExp(`^\\s*-\\s*['"]${port}:${port}['"]`, 'm').test(composeText)) {
@@ -117,7 +119,7 @@ export async function runLocalFileProbes() {
       ok: exposed.length === 0,
       detail:
         exposed.length === 0
-          ? 'datastore ports are bound to loopback or unpublished'
+          ? 'datastore and Keycloak ports are bound to loopback or unpublished'
           : `published on all interfaces: ${exposed.join(', ')} — bind to 127.0.0.1`,
     });
   }
