@@ -36,6 +36,7 @@ import { GroupsModule } from './modules/groups/groups.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
 import { ImportModule } from './modules/import/import.module';
+import { MigrationModule } from './modules/migration/migration.module';
 import { AccountingExportModule } from './modules/accounting-export/accounting-export.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
@@ -90,6 +91,7 @@ const imports: any[] = [
   AdminModule,
   BookingEngineModule,
   ImportModule,
+  MigrationModule,
   AccountingExportModule,
   NotificationsModule,
   ReviewsModule,

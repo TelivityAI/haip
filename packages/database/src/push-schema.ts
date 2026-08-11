@@ -84,6 +84,9 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cancellation_penalty_type') THEN CREATE TYPE cancellation_penalty_type AS ENUM ('none','first_night','percentage','full'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cancellation_deposit_handling') THEN CREATE TYPE cancellation_deposit_handling AS ENUM ('refund_if_refundable','always_forfeit','always_refund'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'door_lock_credential_status') THEN CREATE TYPE door_lock_credential_status AS ENUM ('active','revoked'); END IF; END $$`,
+    // PMS migration (TEL-67/70)
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'migration_job_status') THEN CREATE TYPE migration_job_status AS ENUM ('pending','running','completed','completed_with_errors','failed','cancelled'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'migration_entity') THEN CREATE TYPE migration_entity AS ENUM ('guests','room-types','rooms','rate-plans','reservations','folio-balances'); END IF; END $$`,
   ];
 
   for (const e of enums) {
@@ -1356,6 +1359,74 @@ async function main() {
   await db.execute(sql.raw(`
     CREATE INDEX IF NOT EXISTS ical_blocks_feed_dates_idx
       ON ical_blocks (feed_id, start_date, end_date)`));
+
+  // PMS migration — durable jobs, legacy id map, source credentials (TEL-67/70)
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS migration_jobs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      project_ref varchar(120) NOT NULL,
+      entity migration_entity NOT NULL,
+      status migration_job_status NOT NULL DEFAULT 'pending',
+      rows jsonb NOT NULL,
+      total_rows integer NOT NULL,
+      processed_rows integer NOT NULL DEFAULT 0,
+      created_count integer NOT NULL DEFAULT 0,
+      skipped_count integer NOT NULL DEFAULT 0,
+      failed_count integer NOT NULL DEFAULT 0,
+      errors jsonb NOT NULL DEFAULT '[]'::jsonb,
+      dry_run varchar(5) NOT NULL DEFAULT 'false',
+      attempts integer NOT NULL DEFAULT 0,
+      last_error text,
+      started_at timestamptz,
+      completed_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`));
+
+  await db.execute(sql.raw(`
+    CREATE INDEX IF NOT EXISTS migration_jobs_property_status_idx
+      ON migration_jobs (property_id, status)`));
+
+  await db.execute(sql.raw(`
+    CREATE INDEX IF NOT EXISTS migration_jobs_project_ref_idx
+      ON migration_jobs (property_id, project_ref)`));
+
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS migration_legacy_id_map (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      project_ref varchar(120) NOT NULL,
+      entity migration_entity NOT NULL,
+      legacy_id varchar(255) NOT NULL,
+      haip_id uuid NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`));
+
+  await db.execute(sql.raw(`
+    CREATE UNIQUE INDEX IF NOT EXISTS migration_legacy_id_map_unique
+      ON migration_legacy_id_map (property_id, project_ref, entity, legacy_id)`));
+
+  await db.execute(sql.raw(`
+    CREATE INDEX IF NOT EXISTS migration_legacy_id_map_lookup_idx
+      ON migration_legacy_id_map (property_id, project_ref, entity, haip_id)`));
+
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS migration_source_credentials (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      source_pms varchar(60) NOT NULL,
+      ciphertext text NOT NULL,
+      key_id varchar(40) NOT NULL,
+      created_by varchar(255),
+      rotated_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`));
+
+  await db.execute(sql.raw(`
+    CREATE UNIQUE INDEX IF NOT EXISTS migration_source_credentials_unique
+      ON migration_source_credentials (property_id, source_pms)`));
 
   // Idempotent column additions for pre-existing databases
   const alters = [

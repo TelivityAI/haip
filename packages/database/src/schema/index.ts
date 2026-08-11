@@ -261,3 +261,12 @@ export {
   icalFeeds,
   icalBlocks,
 } from './ical.js';
+
+// PMS migration — durable jobs, legacy id map, source credentials (TEL-67/70)
+export {
+  migrationJobStatusEnum,
+  migrationEntityEnum,
+  migrationJobs,
+  migrationLegacyIdMap,
+  migrationSourceCredentials,
+} from './migration.js';
