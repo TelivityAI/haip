@@ -105,6 +105,7 @@ export async function runLocalFileProbes() {
       ['postgres', 5432],
       ['redis', 6379],
       ['minio', 9000],
+      ['minio', 9001],
     ]) {
       // matches '5432:5432' but not '127.0.0.1:5432:5432'
       if (new RegExp(`^\\s*-\\s*['"]${port}:${port}['"]`, 'm').test(composeText)) {
