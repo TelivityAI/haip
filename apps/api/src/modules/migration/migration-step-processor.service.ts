@@ -170,7 +170,7 @@ export class MigrationStepProcessorService implements OnModuleInit, OnModuleDest
 
     for (let i = cursor; i < rows.length; i++) {
       const row = rows[i]!;
-      const legacyId = row.legacyId?.trim() || undefined;
+      const legacyId = row['legacyId']?.trim() || undefined;
 
       if (legacyId) {
         const existing = await this.legacyIdMap.lookup(
@@ -184,6 +184,7 @@ export class MigrationStepProcessorService implements OnModuleInit, OnModuleDest
           processed++;
           succeeded++;
           cursor = i + 1;
+          await this.persistCheckpoint(job, cursor, processed, succeeded, failed);
           continue;
         }
       }
@@ -216,17 +217,27 @@ export class MigrationStepProcessorService implements OnModuleInit, OnModuleDest
       processed++;
       cursor = i + 1;
 
-      await this.db
-        .update(migrationJobs)
-        .set({
-          checkpointCursor: cursor,
-          processedRows: processed,
-          succeededRows: succeeded,
-          failedRows: failed,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(migrationJobs.id, job.id), eq(migrationJobs.propertyId, job.propertyId)));
+      await this.persistCheckpoint(job, cursor, processed, succeeded, failed);
     }
+  }
+
+  private async persistCheckpoint(
+    job: { id: string; propertyId: string },
+    cursor: number,
+    processed: number,
+    succeeded: number,
+    failed: number,
+  ) {
+    await this.db
+      .update(migrationJobs)
+      .set({
+        checkpointCursor: cursor,
+        processedRows: processed,
+        succeededRows: succeeded,
+        failedRows: failed,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(migrationJobs.id, job.id), eq(migrationJobs.propertyId, job.propertyId)));
   }
 
   private async processReservationRows(job: any) {
