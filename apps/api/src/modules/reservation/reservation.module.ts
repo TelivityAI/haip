@@ -41,6 +41,11 @@ import { MigrationLegacyIdMapModule } from '../migration/migration-legacy-id-map
     ReservationMessagingService,
     ReservationImportService,
   ],
-  exports: [ReservationService, ReservationPartyService, AvailabilityService],
+  exports: [
+    ReservationService,
+    ReservationPartyService,
+    AvailabilityService,
+    ReservationImportService,
+  ],
 })
 export class ReservationModule {}
