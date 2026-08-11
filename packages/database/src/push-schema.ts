@@ -12,7 +12,15 @@ const DATABASE_URL =
   process.env['DATABASE_URL'] ?? 'postgresql://haip:haip@localhost:5432/haip';
 
 async function main() {
-  const client = postgres(DATABASE_URL);
+  const client = postgres(DATABASE_URL, {
+    // Same pooler rules as apps/api database.module.ts: named prepared statements
+    // break under transaction pooling, and DATABASE_SSL=no-verify turns on TLS
+    // without chain verification for poolers using a private certificate.
+    prepare: process.env['DATABASE_POOLER_MODE'] !== 'transaction',
+    ...(process.env['DATABASE_SSL'] === 'no-verify'
+      ? { ssl: { rejectUnauthorized: false } }
+      : {}),
+  });
   const db = drizzle(client, { schema });
 
   // Create enums
