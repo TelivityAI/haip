@@ -7,20 +7,13 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { sql } from 'drizzle-orm';
 import * as schema from './schema/index.js';
 import { INTEGRATION_REGISTRY_SEED } from './schema/integration-registry-seed.js';
+import { postgresOptionsFromEnv } from './postgres-options.js';
 
 const DATABASE_URL =
   process.env['DATABASE_URL'] ?? 'postgresql://haip:haip@localhost:5432/haip';
 
 async function main() {
-  const client = postgres(DATABASE_URL, {
-    // Same pooler rules as apps/api database.module.ts: named prepared statements
-    // break under transaction pooling, and DATABASE_SSL=no-verify turns on TLS
-    // without chain verification for poolers using a private certificate.
-    prepare: process.env['DATABASE_POOLER_MODE'] !== 'transaction',
-    ...(process.env['DATABASE_SSL'] === 'no-verify'
-      ? { ssl: { rejectUnauthorized: false } }
-      : {}),
-  });
+  const client = postgres(DATABASE_URL, postgresOptionsFromEnv());
   const db = drizzle(client, { schema });
 
   // Create enums

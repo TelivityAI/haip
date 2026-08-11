@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '@telivityhaip/database';
+import { postgresOptionsFromEnv } from '@telivityhaip/database';
 
 export const DRIZZLE = Symbol('DRIZZLE');
 
@@ -17,21 +18,13 @@ export const DRIZZLE = Symbol('DRIZZLE');
           'DATABASE_URL',
           'postgresql://haip:haip@localhost:5432/haip',
         );
-        // Transaction-pooling poolers (pgbouncer, RDS Proxy, Supabase pooler) cannot
-        // support postgres.js's default named prepared statements: the statement is
-        // prepared on one backend connection and executed on another. Setting
-        // DATABASE_POOLER_MODE=transaction disables them; direct connections keep the
-        // default, where prepared statements are a real win.
-        const prepare =
-          config.get<string>('DATABASE_POOLER_MODE', '') !== 'transaction';
-        // DATABASE_SSL=no-verify: TLS on, chain unverified — for poolers that
-        // terminate TLS with a private or self-signed certificate. sslmode in the
-        // connection URL is not honoured consistently across postgres.js versions,
-        // so this is explicit rather than a URL parameter.
-        const sslEnv = config.get<string>('DATABASE_SSL', '');
-        const ssl =
-          sslEnv === 'no-verify' ? { rejectUnauthorized: false } : undefined;
-        const client = postgres(url, { prepare, ...(ssl ? { ssl } : {}) });
+        const client = postgres(
+          url,
+          postgresOptionsFromEnv({
+            DATABASE_POOLER_MODE: config.get<string>('DATABASE_POOLER_MODE'),
+            DATABASE_SSL: config.get<string>('DATABASE_SSL'),
+          }),
+        );
         return drizzle(client, { schema });
       },
     },
