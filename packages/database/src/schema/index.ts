@@ -261,3 +261,12 @@ export {
   icalFeeds,
   icalBlocks,
 } from './ical.js';
+
+// PMS migration engine (durable batch import + legacy id map)
+export {
+  migrationJobStatusEnum,
+  migrationRowStatusEnum,
+  migrationLegacyIdMap,
+  migrationJobs,
+  migrationRowResults,
+} from './migration.js';

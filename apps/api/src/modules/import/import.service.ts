@@ -1,7 +1,12 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
+import { folios, reservations } from '@telivityhaip/database';
+import { DRIZZLE } from '../../database/database.module';
 import { GuestService } from '../guest/guest.service';
 import { RoomService } from '../room/room.service';
 import { RatePlanService } from '../rate-plan/rate-plan.service';
+import { FolioService } from '../folio/folio.service';
+import type { MigrationLegacyIdMapService } from '../migration/migration-legacy-id-map.service';
 import { parseCsv, applyMapping } from './csv.util';
 
 /**
@@ -32,6 +37,15 @@ export interface ImportResult {
   results: RowResult[];
 }
 
+export interface ImportRunOptions {
+  csv?: string;
+  rows?: Record<string, string>[];
+  mapping?: Record<string, string>;
+  dryRun?: boolean;
+  projectId?: string;
+  legacyIdMap?: Pick<MigrationLegacyIdMapService, 'lookup'>;
+}
+
 interface Importer {
   /** Canonical columns that must be present and non-empty on every row. */
   required: string[];
@@ -52,6 +66,8 @@ export class ImportService {
     private readonly guestService: GuestService,
     private readonly roomService: RoomService,
     private readonly ratePlanService: RatePlanService,
+    private readonly folioService: FolioService,
+    @Inject(DRIZZLE) private readonly db: any,
   ) {
     this.importers = {
       guests: {
@@ -98,6 +114,50 @@ export class ImportService {
         }),
         create: (dto) => this.ratePlanService.create(dto),
       },
+      rooms: {
+        required: ['roomTypeId', 'number'],
+        columns: [
+          'legacyId',
+          'legacyRoomTypeId',
+          'roomTypeId',
+          'number',
+          'floor',
+          'building',
+          'isAccessible',
+          'isConnecting',
+        ],
+        build: (row, propertyId) => ({
+          propertyId,
+          roomTypeId: row.roomTypeId,
+          number: row.number,
+          floor: orUndefined(row.floor),
+          building: orUndefined(row.building),
+          isAccessible: parseOptionalBool(row.isAccessible),
+          isConnecting: parseOptionalBool(row.isConnecting),
+        }),
+        create: (dto) => this.roomService.createRoom(dto),
+      },
+      'open-folio-balances': {
+        required: ['reservationId', 'balanceAmount', 'currencyCode'],
+        columns: [
+          'legacyId',
+          'legacyReservationId',
+          'reservationId',
+          'balanceAmount',
+          'currencyCode',
+          'description',
+          'serviceDate',
+        ],
+        build: (row, propertyId) => ({
+          propertyId,
+          reservationId: row.reservationId,
+          balanceAmount: row.balanceAmount,
+          currencyCode: row.currencyCode,
+          description: orUndefined(row.description) ?? 'Opening balance (migration)',
+          serviceDate: orUndefined(row.serviceDate) ?? new Date().toISOString().split('T')[0]!,
+        }),
+        create: (dto) => this.postOpeningBalance(dto),
+      },
     };
   }
 
@@ -119,7 +179,7 @@ export class ImportService {
   async run(
     propertyId: string,
     entity: string,
-    input: { csv?: string; rows?: Record<string, string>[]; mapping?: Record<string, string>; dryRun?: boolean },
+    input: ImportRunOptions,
   ): Promise<ImportResult> {
     const imp = this.requireImporter(entity);
     const dryRun = input.dryRun ?? false;
@@ -133,6 +193,7 @@ export class ImportService {
     for (let i = 0; i < rawRows.length; i++) {
       const mapped = applyMapping(rawRows[i]!, input.mapping);
       try {
+        await this.resolveLegacyRefs(mapped, propertyId, input);
         // Validate required columns.
         for (const col of imp.required) {
           if (!mapped[col] || mapped[col]!.trim() === '') {
@@ -161,6 +222,91 @@ export class ImportService {
     };
   }
 
+  private async resolveLegacyRefs(
+    row: Record<string, string>,
+    propertyId: string,
+    input: ImportRunOptions,
+  ) {
+    if (!input.projectId || !input.legacyIdMap) return;
+
+    const pairs: Array<{ legacyField: string; targetField: string; entity: string }> = [
+      { legacyField: 'legacyRoomTypeId', targetField: 'roomTypeId', entity: 'room-types' },
+      { legacyField: 'legacyReservationId', targetField: 'reservationId', entity: 'reservations' },
+    ];
+
+    for (const { legacyField, targetField, entity } of pairs) {
+      const legacyValue = row[legacyField]?.trim();
+      if (!legacyValue || row[targetField]?.trim()) continue;
+      const haipId = await input.legacyIdMap.lookup(propertyId, input.projectId, entity, legacyValue);
+      if (!haipId) {
+        throw new BadRequestException(
+          `No HAIP id mapped for ${entity} legacy id "${legacyValue}" in project ${input.projectId}`,
+        );
+      }
+      row[targetField] = haipId;
+    }
+  }
+
+  private async postOpeningBalance(dto: {
+    propertyId: string;
+    reservationId: string;
+    balanceAmount: string;
+    currencyCode: string;
+    description: string;
+    serviceDate: string;
+  }) {
+    const [reservation] = await this.db
+      .select()
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.id, dto.reservationId),
+          eq(reservations.propertyId, dto.propertyId),
+        ),
+      );
+    if (!reservation) {
+      throw new BadRequestException(`Reservation ${dto.reservationId} not found in this property`);
+    }
+
+    let folio = await this.findOpenGuestFolio(dto.reservationId, dto.propertyId);
+    if (!folio) {
+      folio = await this.folioService.createAutoFolio({
+        id: reservation.id,
+        propertyId: reservation.propertyId,
+        bookingId: reservation.bookingId,
+        guestId: reservation.guestId,
+        currencyCode: dto.currencyCode,
+      });
+    }
+
+    const charge = await this.folioService.postCharge(folio.id, {
+      propertyId: dto.propertyId,
+      type: 'adjustment',
+      description: dto.description,
+      amount: dto.balanceAmount,
+      currencyCode: dto.currencyCode,
+      serviceDate: dto.serviceDate,
+      skipTaxCalculation: true,
+    });
+
+    return { id: charge.id };
+  }
+
+  private async findOpenGuestFolio(reservationId: string, propertyId: string) {
+    const [folio] = await this.db
+      .select()
+      .from(folios)
+      .where(
+        and(
+          eq(folios.reservationId, reservationId),
+          eq(folios.propertyId, propertyId),
+          eq(folios.type, 'guest'),
+          eq(folios.status, 'open'),
+        ),
+      );
+    return folio ?? null;
+  }
+
   private requireImporter(entity: string): Importer {
     const imp = this.importers[entity];
     if (!imp) {
@@ -182,4 +328,12 @@ function toInt(v: string, field: string): number {
     throw new BadRequestException(`Field "${field}" must be an integer (got "${v}")`);
   }
   return n;
+}
+
+function parseOptionalBool(v: string | undefined): boolean | undefined {
+  if (!v || v.trim() === '') return undefined;
+  const lower = v.trim().toLowerCase();
+  if (['true', '1', 'yes'].includes(lower)) return true;
+  if (['false', '0', 'no'].includes(lower)) return false;
+  throw new BadRequestException(`Field must be a boolean (got "${v}")`);
 }

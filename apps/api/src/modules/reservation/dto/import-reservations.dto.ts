@@ -5,6 +5,7 @@ import {
   IsString,
   IsOptional,
   IsInt,
+  IsBoolean,
   Min,
   MaxLength,
   IsEnum,
@@ -18,14 +19,20 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
  * One reservation row to import. Mirrors the fields ReservationService.create
  * needs (minus propertyId, which is supplied once at the endpoint level).
  *
- * NOTE: actual CSV-file parsing / multipart upload is out of scope. The endpoint
- * accepts a pre-parsed JSON array; a thin CSV parser can map columns to these
- * fields and POST the result.
+ * Either HAIP UUIDs or legacy PMS ids (resolved via migration_legacy_id_map
+ * when projectId is supplied) may be provided for guest, room type, and rate plan.
  */
 export class CreateReservationRow {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsUUID()
-  guestId!: string;
+  guestId?: string;
+
+  @ApiPropertyOptional({ description: 'Legacy PMS guest id (resolved via migration id map)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  legacyGuestId?: string;
 
   @ApiProperty({ example: '2026-06-01' })
   @IsDateString()
@@ -35,13 +42,27 @@ export class CreateReservationRow {
   @IsDateString()
   departureDate!: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsUUID()
-  roomTypeId!: string;
+  roomTypeId?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Legacy PMS room type id (resolved via migration id map)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  legacyRoomTypeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsUUID()
-  ratePlanId!: string;
+  ratePlanId?: string;
+
+  @ApiPropertyOptional({ description: 'Legacy PMS rate plan id (resolved via migration id map)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  legacyRatePlanId?: string;
 
   @ApiProperty({ example: '799.96' })
   @IsString()
@@ -83,12 +104,31 @@ export class CreateReservationRow {
   @IsOptional()
   @IsString()
   externalConfirmation?: string;
+
+  @ApiPropertyOptional({
+    description: 'Legacy PMS reservation id — used for idempotency dedupe (project + entity + legacy_id)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  legacyId?: string;
 }
 
 export class ImportReservationsDto {
   @ApiProperty({ description: 'Property to import into' })
   @IsUUID()
   propertyId!: string;
+
+  @ApiPropertyOptional({ description: 'Migration project id for legacy id resolution and dedupe' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  projectId?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
 
   @ApiProperty({ description: 'Pre-parsed reservation rows', type: [CreateReservationRow] })
   @IsArray()
