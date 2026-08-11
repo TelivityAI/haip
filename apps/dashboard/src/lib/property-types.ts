@@ -5,6 +5,8 @@ export interface PropertySummary {
   id: string;
   name: string;
   code: string;
+  /** ISO 4217 from the property record — drives every money render in the UI. */
+  currencyCode?: string | null;
   organizationId?: string | null;
   staffDisplayName?: string | null;
   staffLogoMediaId?: string | null;

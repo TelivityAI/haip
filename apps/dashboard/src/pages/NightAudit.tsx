@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatMoney } from '../lib/money';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Moon, Play, Brain, AlertTriangle, Info, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
@@ -38,9 +39,9 @@ function auditCount(value: string | number | undefined): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-function formatAuditRevenue(a: AuditResult, empty = '$0.00'): string {
+function formatAuditRevenue(a: AuditResult, currencyCode: string, empty = '—'): string {
   const rev = auditRevenue(a);
-  return rev != null ? `$${rev.toFixed(2)}` : empty;
+  return rev != null ? formatMoney(rev, currencyCode) : empty;
 }
 
 const SEVERITY_ICONS = { critical: XCircle, warning: AlertTriangle, info: Info };
@@ -88,7 +89,7 @@ function AnomalySection({ propertyId }: { propertyId: string }) {
 
 export default function NightAudit() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const queryClient = useQueryClient();
   const [auditDate, setAuditDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [lastResult, setLastResult] = useState<AuditResult | null>(null);
@@ -153,7 +154,7 @@ export default function NightAudit() {
           <div className="mt-4 grid grid-cols-3 gap-4">
             <KpiCard title="Room Charges" value={auditCount(lastResult.roomChargesPosted)} icon={Moon} />
             <KpiCard title="No-Shows" value={auditCount(lastResult.noShowsProcessed)} icon={Moon} />
-            <KpiCard title="Revenue" value={formatAuditRevenue(lastResult)} icon={Moon} />
+            <KpiCard title="Revenue" value={formatAuditRevenue(lastResult, currencyCode)} icon={Moon} />
           </div>
         )}
 
@@ -201,7 +202,7 @@ export default function NightAudit() {
                 <td className="px-4 py-3 text-sm text-telivity-slate">{a.completedAt ? format(new Date(a.completedAt), 'HH:mm:ss') : '—'}</td>
                 <td className="px-4 py-3 text-sm text-right">{auditCount(a.roomChargesPosted)}</td>
                 <td className="px-4 py-3 text-sm text-right">{auditCount(a.noShowsProcessed)}</td>
-                <td className="px-4 py-3 text-sm text-right font-medium">{formatAuditRevenue(a, '—')}</td>
+                <td className="px-4 py-3 text-sm text-right font-medium">{formatAuditRevenue(a, currencyCode)}</td>
               </tr>
             ))}
             {audits.length === 0 && (

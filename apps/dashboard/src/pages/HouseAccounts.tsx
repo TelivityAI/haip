@@ -29,7 +29,7 @@ interface Product {
 
 function HouseAccountList() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<'accounts' | 'products'>('accounts');
@@ -64,7 +64,7 @@ function HouseAccountList() {
   const createMutation = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
-      return api.post('/v1/house-accounts', { propertyId, name, kind, currencyCode: 'USD' });
+      return api.post('/v1/house-accounts', { propertyId, name, kind, currencyCode });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['house-accounts'] });
@@ -80,7 +80,7 @@ function HouseAccountList() {
         propertyId,
         name: productName,
         price: moneyString(productPrice),
-        currencyCode: 'USD',
+        currencyCode,
         category: productCategory || undefined,
       });
     },

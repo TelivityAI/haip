@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { formatMoney } from '../lib/money';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -44,7 +45,7 @@ interface ActivityEvent {
 
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
-  const { propertyId, setPropertyId, isPortfolioMode, properties } = useProperty();
+  const { propertyId, setPropertyId, isPortfolioMode, properties, currencyCode } = useProperty();
   const navigate = useNavigate();
   const now = new Date();
   const dateLocale = getDateLocale(i18n.resolvedLanguage);
@@ -163,19 +164,19 @@ export default function Dashboard() {
           />
           <KpiCard
             title={t('dashboard.portfolio.adr')}
-            value={kpis.adr != null ? `$${Number(kpis.adr).toFixed(2)}` : '—'}
+            value={kpis.adr != null ? formatMoney(kpis.adr, currencyCode) : '—'}
             subtitle={t('dashboard.portfolio.weightedAverage')}
             icon={DollarSign}
           />
           <KpiCard
             title={t('dashboard.portfolio.revpar')}
-            value={kpis.revpar != null ? `$${Number(kpis.revpar).toFixed(2)}` : '—'}
+            value={kpis.revpar != null ? formatMoney(kpis.revpar, currencyCode) : '—'}
             subtitle={t('dashboard.portfolio.acrossAllProperties')}
             icon={TrendingUp}
           />
           <KpiCard
             title={t('dashboard.portfolio.totalRevenueToday')}
-            value={kpis.totalRevenue != null ? `$${Number(kpis.totalRevenue).toFixed(2)}` : '—'}
+            value={kpis.totalRevenue != null ? formatMoney(kpis.totalRevenue, currencyCode) : '—'}
             subtitle={t('dashboard.portfolio.arrivalsAndDepartures', { arrivals: occ.arrivals ?? 0, departures: occ.departures ?? 0 })}
             icon={BedDouble}
           />
@@ -189,7 +190,7 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, t('dashboard.portfolio.revenue')]} />
+                <Tooltip formatter={(v: number) => [formatMoney(v, currencyCode), t('dashboard.portfolio.revenue')]} />
                 <Bar dataKey="revenue" fill="#06bdb4" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -276,7 +277,7 @@ export default function Dashboard() {
         />
         <KpiCard
           title={t('dashboard.adr')}
-          value={kpis.adr != null ? `$${Number(kpis.adr).toFixed(2)}` : '—'}
+          value={kpis.adr != null ? formatMoney(kpis.adr, currencyCode) : '—'}
           subtitle={t('dashboard.averageDailyRate')}
           icon={DollarSign}
           numericValue={kpis.adr != null ? Number(kpis.adr) : undefined}
@@ -284,7 +285,7 @@ export default function Dashboard() {
         />
         <KpiCard
           title={t('dashboard.revpar')}
-          value={kpis.revpar != null ? `$${Number(kpis.revpar).toFixed(2)}` : '—'}
+          value={kpis.revpar != null ? formatMoney(kpis.revpar, currencyCode) : '—'}
           subtitle={t('dashboard.revenuePerAvailableRoom')}
           icon={TrendingUp}
           numericValue={kpis.revpar != null ? Number(kpis.revpar) : undefined}
@@ -292,7 +293,7 @@ export default function Dashboard() {
         />
         <KpiCard
           title={t('dashboard.revenueToday')}
-          value={kpis.totalRevenue != null ? `$${Number(kpis.totalRevenue).toFixed(2)}` : '—'}
+          value={kpis.totalRevenue != null ? formatMoney(kpis.totalRevenue, currencyCode) : '—'}
           subtitle={t('dashboard.revenueBreakdown')}
           icon={BedDouble}
           numericValue={kpis.totalRevenue != null ? Number(kpis.totalRevenue) : undefined}

@@ -25,7 +25,7 @@ interface CommercialProfile {
 
 function CommercialList() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -197,7 +197,7 @@ function CommercialList() {
 function CommercialDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
-  const { propertyId } = useProperty();
+  const { propertyId , currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [arOpen, setArOpen] = useState(false);
@@ -223,7 +223,7 @@ function CommercialDetail() {
         propertyId,
         name: profile!.name,
         paymentTermsDays: profile?.paymentTermsDays,
-        currencyCode: 'USD',
+        currencyCode,
         groupProfileId: id,
         description: `Direct bill — ${profile!.name}`,
       });

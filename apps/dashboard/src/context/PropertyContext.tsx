@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { useSearchParams } from 'react-router-dom';
 import { api, setPropertyId as setApiPropertyId } from '../lib/api';
 import { joinPropertyRoom, leavePropertyRoom } from '../lib/socket';
+import { DEFAULT_CURRENCY } from '../lib/money';
 import {
   PORTFOLIO_MODE_ID,
   type PropertySummary,
@@ -10,6 +11,8 @@ import {
 
 interface PropertyContextValue {
   propertyId: string | null;
+  /** Active property's ISO 4217 code; falls back to USD before properties load. */
+  currencyCode: string;
   setPropertyId: (id: string) => void;
   isPortfolioMode: boolean;
   properties: PropertySummary[];
@@ -20,6 +23,7 @@ interface PropertyContextValue {
 
 const PropertyContext = createContext<PropertyContextValue>({
   propertyId: null,
+  currencyCode: DEFAULT_CURRENCY,
   setPropertyId: () => {},
   isPortfolioMode: false,
   properties: [],
@@ -39,6 +43,12 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
   const [propertiesError, setPropertiesError] = useState<string | null>(null);
 
   const isPortfolioMode = propertyId === PORTFOLIO_MODE_ID;
+  // Portfolio mode spans properties that may not share a currency, so it has no
+  // single answer — fall back rather than assert one property's code over others.
+  const currencyCode =
+    (!isPortfolioMode &&
+      properties.find((p) => p.id === propertyId)?.currencyCode) ||
+    DEFAULT_CURRENCY;
 
   function setPropertyId(id: string) {
     setPropertyIdState(id);
@@ -91,6 +101,7 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
     <PropertyContext.Provider
       value={{
         propertyId,
+        currencyCode,
         setPropertyId,
         isPortfolioMode,
         properties,

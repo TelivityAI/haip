@@ -64,7 +64,7 @@ const AGING_LABELS: Record<keyof AgingBuckets, string> = {
 
 function AccountingHome() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const queryClient = useQueryClient();
   const today = format(new Date(), 'yyyy-MM-dd');
   const [depositOpen, setDepositOpen] = useState(false);
@@ -149,7 +149,7 @@ function AccountingHome() {
       return api.post('/v1/deposits', {
         propertyId,
         amount: moneyString(depositAmount),
-        currencyCode: 'USD',
+        currencyCode,
       });
     },
     onSuccess: () => {
@@ -215,7 +215,7 @@ function AccountingHome() {
         propertyId,
         name: ledgerName,
         paymentTermsDays: ledgerTerms || undefined,
-        currencyCode: 'USD',
+        currencyCode,
       });
     },
     onSuccess: () => {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { formatMoney } from '../lib/money';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Percent, DollarSign, TrendingUp, Building2, Star } from 'lucide-react';
@@ -26,7 +27,7 @@ const DEMO_FAVORITES_KEY = 'haip.reportFavorites';
 
 export default function Reports() {
   const { t } = useTranslation();
-  const { propertyId, isPortfolioMode, properties } = useProperty();
+  const { propertyId, isPortfolioMode, properties, currencyCode } = useProperty();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   // Deep links (e.g. Accounting → live trial balance) may preselect report/date.
@@ -255,8 +256,8 @@ export default function Reports() {
       {report === 'financial-summary' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KpiCard title="ADR" value={kpis.adr != null ? `$${Number(kpis.adr).toFixed(2)}` : '—'} icon={DollarSign} />
-            <KpiCard title="RevPAR" value={kpis.revpar != null ? `$${Number(kpis.revpar).toFixed(2)}` : '—'} icon={TrendingUp} />
+            <KpiCard title="ADR" value={kpis.adr != null ? formatMoney(kpis.adr, currencyCode) : '—'} icon={DollarSign} />
+            <KpiCard title="RevPAR" value={kpis.revpar != null ? formatMoney(kpis.revpar, currencyCode) : '—'} icon={TrendingUp} />
             <KpiCard title="Occupancy" value={formatOccupancyPercent(kpis.occupancyRate)} icon={Percent} />
           </div>
           {isPortfolioMode && Array.isArray(reportData.byProperty) && (
@@ -354,9 +355,9 @@ export default function Reports() {
       {report === 'daily-revenue' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KpiCard title="Room Revenue" value={revenue.room != null ? `$${Number(revenue.room).toFixed(2)}` : '—'} icon={DollarSign} />
-            <KpiCard title="Other Revenue" value={revenue.other != null ? `$${Number(revenue.other).toFixed(2)}` : '—'} icon={DollarSign} />
-            <KpiCard title="Total Revenue" value={revenue.total != null ? `$${Number(revenue.total).toFixed(2)}` : '—'} icon={DollarSign} />
+            <KpiCard title="Room Revenue" value={revenue.room != null ? formatMoney(revenue.room, currencyCode) : '—'} icon={DollarSign} />
+            <KpiCard title="Other Revenue" value={revenue.other != null ? formatMoney(revenue.other, currencyCode) : '—'} icon={DollarSign} />
+            <KpiCard title="Total Revenue" value={revenue.total != null ? formatMoney(revenue.total, currencyCode) : '—'} icon={DollarSign} />
           </div>
           {payments && Object.keys(payments).length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-5">
