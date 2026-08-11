@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '@telivityhaip/database';
+import { postgresOptionsFromEnv } from '@telivityhaip/database';
 
 export const DRIZZLE = Symbol('DRIZZLE');
 
@@ -17,7 +18,13 @@ export const DRIZZLE = Symbol('DRIZZLE');
           'DATABASE_URL',
           'postgresql://haip:haip@localhost:5432/haip',
         );
-        const client = postgres(url);
+        const client = postgres(
+          url,
+          postgresOptionsFromEnv({
+            DATABASE_POOLER_MODE: config.get<string>('DATABASE_POOLER_MODE'),
+            DATABASE_SSL: config.get<string>('DATABASE_SSL'),
+          }),
+        );
         return drizzle(client, { schema });
       },
     },

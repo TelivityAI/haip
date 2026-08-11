@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: haip
       POSTGRES_DB: haip
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./keycloak/init-keycloak-db.sh:/docker-entrypoint-initdb.d/init-keycloak-db.sh:ro
@@ -23,7 +23,7 @@ services:
     image: redis:7-alpine
     container_name: haip-redis
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
     volumes:
       - redis-data:/data
     healthcheck:
@@ -200,8 +200,8 @@ services:
       MINIO_ROOT_USER: haip
       MINIO_ROOT_PASSWORD: haip_secret
     ports:
-      - '9000:9000' # S3 API
-      - '9001:9001' # Web console
+      - '127.0.0.1:9000:9000' # S3 API
+      - '127.0.0.1:9001:9001' # Web console
     volumes:
       - minio-data:/data
 

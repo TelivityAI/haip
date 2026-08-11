@@ -7,12 +7,13 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { sql } from 'drizzle-orm';
 import * as schema from './schema/index.js';
 import { INTEGRATION_REGISTRY_SEED } from './schema/integration-registry-seed.js';
+import { postgresOptionsFromEnv } from './postgres-options.js';
 
 const DATABASE_URL =
   process.env['DATABASE_URL'] ?? 'postgresql://haip:haip@localhost:5432/haip';
 
 async function main() {
-  const client = postgres(DATABASE_URL);
+  const client = postgres(DATABASE_URL, postgresOptionsFromEnv());
   const db = drizzle(client, { schema });
 
   // Create enums

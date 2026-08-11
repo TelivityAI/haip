@@ -48,7 +48,13 @@ describe('credential-encryption', () => {
   it('fails closed when ciphertext is tampered', () => {
     const keyRing = loadMigrationCredentialKeyRingFromEnv(env());
     const blob = encryptCredentialPlaintext('sensitive', keyRing, env());
-    const tampered = { ...blob, ciphertext: blob.ciphertext.replace(/a/g, 'b') };
+    // Deterministic tamper: change the first hex DIGIT to a different value.
+    // Two dead ends this avoids, both no-ops that decode to identical bytes:
+    //   - replace(/a/g,'b') does nothing when the ciphertext contains no 'a'
+    //   - flipping to uppercase 'A' does nothing when the digit was 'a' ('A'==='a' as hex)
+    // '0'<->'1' are distinct nibble values, both valid hex, so the bytes always change.
+    const first = blob.ciphertext[0];
+    const tampered = { ...blob, ciphertext: (first === '0' ? '1' : '0') + blob.ciphertext.slice(1) };
     expect(() => decryptCredentialPlaintext(tampered, keyRing)).toThrow(CredentialEncryptionError);
   });
 
