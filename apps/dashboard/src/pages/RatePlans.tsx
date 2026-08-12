@@ -567,7 +567,7 @@ function RatePlanDetail() {
           {effectiveRate != null && (
             <div className="mt-4 bg-telivity-light-grey rounded-lg p-4 text-center">
               <p className="text-xs text-telivity-mid-grey">{t('ratePlans.effectiveRateFor', { date: testDate || '—' })}</p>
-              <p className="text-2xl font-semibold text-telivity-navy">${Number(effectiveRate).toFixed(2)}</p>
+              <p className="text-2xl font-semibold text-telivity-navy">{formatMoney(effectiveRate)}</p>
             </div>
           )}
         </div>

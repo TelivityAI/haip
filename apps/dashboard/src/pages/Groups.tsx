@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UsersRound, Plus, ChevronLeft, FileText, Receipt, Pencil, Link2 } from 'lucide-react';
@@ -682,7 +683,7 @@ function GroupDetail() {
         {folio ? (
           <div className="space-y-2 text-sm">
             <p><span className="text-telivity-mid-grey">Folio ID:</span> {folio.id ?? folio.folioId ?? '—'}</p>
-            <p><span className="text-telivity-mid-grey">Balance:</span> ${Number(folio.balance ?? folio.totalBalance ?? 0).toFixed(2)}</p>
+            <p><span className="text-telivity-mid-grey">Balance:</span> {formatMoney(folio.balance ?? folio.totalBalance ?? 0)}</p>
             <p><span className="text-telivity-mid-grey">Status:</span> {folio.status ?? '—'}</p>
           </div>
         ) : (

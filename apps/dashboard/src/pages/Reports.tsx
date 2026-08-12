@@ -278,10 +278,10 @@ export default function Reports() {
                     {(reportData.byProperty as Array<{ propertyId: string; totalRevenue: number; occupancyRate: number; adr: number; revpar: number }>).map((row) => (
                       <tr key={row.propertyId} className="border-b border-gray-50">
                         <td className="py-2">{propertyNameMap.get(row.propertyId) ?? row.propertyId}</td>
-                        <td className="py-2">${Number(row.totalRevenue).toFixed(2)}</td>
+                        <td className="py-2">{formatMoney(row.totalRevenue)}</td>
                         <td className="py-2">{formatOccupancyPercent(row.occupancyRate)}</td>
-                        <td className="py-2">${Number(row.adr).toFixed(2)}</td>
-                        <td className="py-2">${Number(row.revpar).toFixed(2)}</td>
+                        <td className="py-2">{formatMoney(row.adr)}</td>
+                        <td className="py-2">{formatMoney(row.revpar)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -296,7 +296,7 @@ export default function Reports() {
                 {Object.entries(reportData.revenueByType as Record<string, number>).map(([k, v]) => (
                   <div key={k} className="flex justify-between py-1 border-b border-gray-50">
                     <span className="text-sm text-telivity-slate capitalize">{k.replace(/_/g, ' ')}</span>
-                    <span className="text-sm font-medium">${Number(v).toFixed(2)}</span>
+                    <span className="text-sm font-medium">{formatMoney(v)}</span>
                   </div>
                 ))}
               </div>
@@ -416,11 +416,11 @@ export default function Reports() {
                   return (
                     <tr key={key} className="border-b border-gray-50">
                       <td className="py-2 font-medium text-telivity-navy">{t(`reports.${labelKey}`)}</td>
-                      <td className="py-2 text-right">${Number(row.opening).toFixed(2)}</td>
-                      <td className="py-2 text-right">${Number(row.netActivity).toFixed(2)}</td>
-                      <td className="py-2 text-right">${Number(row.transfersIn).toFixed(2)}</td>
-                      <td className="py-2 text-right">${Number(row.transfersOut).toFixed(2)}</td>
-                      <td className="py-2 text-right font-medium">${Number(row.closing).toFixed(2)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.opening)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.netActivity)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.transfersIn)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.transfersOut)}</td>
+                      <td className="py-2 text-right font-medium">{formatMoney(row.closing)}</td>
                     </tr>
                   );
                 })}
@@ -431,7 +431,7 @@ export default function Reports() {
             <div className="bg-white rounded-xl shadow-sm p-5">
               <div className="flex justify-between text-sm">
                 <span className="text-telivity-slate">{t('reports.trialBalanceInterLedger')}</span>
-                <span className="font-medium text-telivity-navy">${Number(reportData.interLedgerTransfers).toFixed(2)}</span>
+                <span className="font-medium text-telivity-navy">{formatMoney(reportData.interLedgerTransfers)}</span>
               </div>
             </div>
           )}

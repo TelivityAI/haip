@@ -16,6 +16,25 @@
 export const DEFAULT_CURRENCY = 'USD';
 
 /**
+ * The active property's currency, pushed here by PropertyContext.
+ *
+ * Same pattern the API client already uses for propertyId (`setPropertyId` in
+ * lib/api.ts): a module-level value the context keeps current. It means a money
+ * render does not need the currency threaded into every component that happens
+ * to display an amount — dozens of call sites across the dashboard, many inside
+ * helpers that cannot call a hook at all.
+ */
+let activeCurrency = DEFAULT_CURRENCY;
+
+export function setActiveCurrency(code?: string | null) {
+  activeCurrency = (code || DEFAULT_CURRENCY).toUpperCase();
+}
+
+export function getActiveCurrency() {
+  return activeCurrency;
+}
+
+/**
  * Format a money value for display.
  *
  * @param amount        number or numeric string (the API returns money as strings)
@@ -31,7 +50,7 @@ export function formatMoney(
   const value = typeof amount === 'string' ? Number(amount) : amount;
   if (!Number.isFinite(value)) return '—';
 
-  const code = (currencyCode || DEFAULT_CURRENCY).toUpperCase();
+  const code = (currencyCode || activeCurrency).toUpperCase();
   try {
     return new Intl.NumberFormat(locale, {
       style: 'currency',
@@ -56,7 +75,7 @@ export function formatMoneyPlain(
   const value = typeof amount === 'string' ? Number(amount) : amount;
   if (!Number.isFinite(value)) return '—';
 
-  const code = (currencyCode || DEFAULT_CURRENCY).toUpperCase();
+  const code = (currencyCode || activeCurrency).toUpperCase();
   try {
     const digits = new Intl.NumberFormat(locale, {
       style: 'currency',

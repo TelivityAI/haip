@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatMoney } from '../lib/money';
 import { useTranslation } from 'react-i18next';
 import { Routes, Route, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -132,7 +133,7 @@ function FolioList() {
                 <td className="px-4 py-3 text-sm text-telivity-slate">{f.guestName ?? '—'}</td>
                 <td className="px-4 py-3"><StatusBadge status={f.type === 'guest' ? 'info' : 'warning'} label={t(`folios.${f.type}`, { defaultValue: f.type })} /></td>
                 <td className="px-4 py-3"><StatusBadge status={f.status === 'open' ? 'pending' : f.status === 'settled' ? 'success' : 'completed'} label={t(`folios.${f.status}`, { defaultValue: f.status })} /></td>
-                <td className="px-4 py-3 text-sm font-medium text-right">${Number(f.balance ?? 0).toFixed(2)}</td>
+                <td className="px-4 py-3 text-sm font-medium text-right">{formatMoney(f.balance ?? 0)}</td>
               </tr>
             ))}
             {folios.length === 0 && (
@@ -398,7 +399,7 @@ function SplitFolioPanel({
                 <option value="">{t('folios.selectCharge')}</option>
                 {movableCharges.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.serviceDate} · {c.description} · ${Number(c.amount).toFixed(2)}
+                    {c.serviceDate} · {c.description} · {formatMoney(c.amount)}
                   </option>
                 ))}
               </select>
@@ -648,7 +649,7 @@ function FolioDetail() {
         <StatusBadge status={folio.status === 'open' ? 'pending' : 'success'} label={t(`folios.${folio.status}`, { defaultValue: folio.status })} />
         <div className="ml-auto text-right">
           <p className="text-xs text-telivity-mid-grey">{t('folios.balance')}</p>
-          <p className="text-2xl font-semibold text-telivity-navy">${Number(folio.balance ?? 0).toFixed(2)}</p>
+          <p className="text-2xl font-semibold text-telivity-navy">{formatMoney(folio.balance ?? 0)}</p>
         </div>
       </div>
 
@@ -679,7 +680,7 @@ function FolioDetail() {
                   <td className="py-2 text-sm text-telivity-slate">{c.serviceDate}</td>
                   <td className="py-2 text-sm text-telivity-navy">{c.description} {c.isLocked && <Lock size={12} className="inline text-telivity-mid-grey" />}</td>
                   <td className="py-2 text-sm text-telivity-slate">{t(`folios.chargeTypes.${c.type}`, { defaultValue: c.type })}</td>
-                  <td className="py-2 text-sm text-right font-medium">${Number(c.amount).toFixed(2)}</td>
+                  <td className="py-2 text-sm text-right font-medium">{formatMoney(c.amount)}</td>
                   <td className="py-2 text-right">
                     {!c.isReversal && !reversedIds.has(c.id) && !c.isLocked && folio.status === 'open' && (
                       <button onClick={() => { if (confirm('Reverse this charge?')) reverseMutation.mutate(c.id); }} className="text-telivity-orange text-xs hover:underline">
@@ -727,7 +728,7 @@ function FolioDetail() {
               return (
                 <div key={p.id} className="flex items-start justify-between py-2 border-b border-gray-50 last:border-0 gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-telivity-navy">${Number(p.amount).toFixed(2)}</p>
+                    <p className="text-sm font-medium text-telivity-navy">{formatMoney(p.amount)}</p>
                     <p className="text-xs text-telivity-mid-grey">{t(`folios.paymentMethods.${p.method}`, { defaultValue: p.method })} &middot; {p.createdAt?.split('T')[0]}</p>
                     <div className="flex flex-wrap gap-2 mt-1">
                       {canCapture && (
@@ -885,7 +886,7 @@ function FolioDetail() {
       <Modal open={!!refundTarget} onClose={() => setRefundTarget(null)} title={t('folios.refund')}>
         <div className="space-y-4">
           <p className="text-sm text-telivity-mid-grey">
-            {t('folios.refundHint', { amount: Number(refundTarget?.amount ?? 0).toFixed(2) })}
+            {t('folios.refundHint', { amount: formatMoney(refundTarget?.amount ?? 0) })}
           </p>
           <div>
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('folios.refundAmountOptional')}</label>
@@ -894,7 +895,7 @@ function FolioDetail() {
               step="0.01"
               value={refundAmount}
               onChange={(e) => setRefundAmount(e.target.value)}
-              placeholder={Number(refundTarget?.amount ?? 0).toFixed(2)}
+              placeholder={formatMoney(refundTarget?.amount ?? 0)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
             />
           </div>
@@ -938,7 +939,7 @@ function FolioDetail() {
       <Modal open={arTransferOpen} onClose={() => setArTransferOpen(false)} title={t('folios.transferToAr')}>
         <div className="space-y-4">
           <p className="text-sm text-telivity-mid-grey">
-            {t('folios.transferToArHint', { balance: Number(folio.balance ?? 0).toFixed(2) })}
+            {t('folios.transferToArHint', { balance: formatMoney(folio.balance ?? 0) })}
           </p>
           <select
             value={arLedgerId}

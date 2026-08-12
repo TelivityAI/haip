@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { formatMoney } from '../../lib/money';
 import { useQuery } from '@tanstack/react-query';
 import { addDays, format } from 'date-fns';
 import { api } from '../../lib/api';
@@ -165,8 +166,8 @@ export default function RatePlanCalendar({ ratePlanId, propertyId, baseAmount }:
               {days.map((day, i) => (
                 <tr key={day.date} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
                   <td className="px-3 py-2 text-sm text-telivity-slate">{day.date}</td>
-                  <td className="px-3 py-2 text-sm text-right text-telivity-mid-grey">${day.baseRate.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-sm text-right font-medium text-telivity-navy">${day.effectiveRate.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-sm text-right text-telivity-mid-grey">{formatMoney(day.baseRate)}</td>
+                  <td className="px-3 py-2 text-sm text-right font-medium text-telivity-navy">{formatMoney(day.effectiveRate)}</td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-1">
                       {day.badges.length === 0 ? (

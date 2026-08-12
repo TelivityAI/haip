@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
+import { formatMoney } from '../lib/money';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote, UserRound, Plus, X } from 'lucide-react';
@@ -1010,7 +1011,7 @@ export default function FrontDesk() {
                       </td>
                       {(tab === 'in-house' || tab === 'departures') && (
                         <td className="px-4 py-3 text-sm text-right font-medium">
-                          ${Number(r.balance ?? 0).toFixed(2)}
+                          {formatMoney(r.balance ?? 0)}
                         </td>
                       )}
                       <td className="px-4 py-3 text-right">
@@ -1925,7 +1926,7 @@ export default function FrontDesk() {
             <div className="bg-telivity-light-grey rounded-lg p-4">
               <p className="text-xs text-telivity-mid-grey">{t('frontDesk.outstandingBalance')}</p>
               <p className="text-xl font-semibold text-telivity-navy">
-                ${Number(checkOutModal.balance ?? 0).toFixed(2)}
+                {formatMoney(checkOutModal.balance ?? 0)}
               </p>
             </div>
             <div className="flex gap-3 pt-2">

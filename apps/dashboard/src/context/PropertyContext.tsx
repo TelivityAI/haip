@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { useSearchParams } from 'react-router-dom';
 import { api, setPropertyId as setApiPropertyId } from '../lib/api';
 import { joinPropertyRoom, leavePropertyRoom } from '../lib/socket';
-import { DEFAULT_CURRENCY } from '../lib/money';
+import { DEFAULT_CURRENCY, setActiveCurrency } from '../lib/money';
 import {
   PORTFOLIO_MODE_ID,
   type PropertySummary,
@@ -84,6 +84,12 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
       .finally(() => setPropertiesLoading(false));
     // Bootstrap once; propertyId auto-select handled inside the effect.
   }, []);
+
+  // Keep the money formatter's default in step with the active property, the
+  // same way setApiPropertyId keeps the API client in step above.
+  useEffect(() => {
+    setActiveCurrency(currencyCode);
+  }, [currencyCode]);
 
   useEffect(() => {
     if (isPortfolioMode) {

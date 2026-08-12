@@ -222,9 +222,9 @@ export default function Dashboard() {
                       </button>
                     </td>
                     <td className="py-2.5">{formatOccupancyPercent(row.occupancyRate)}</td>
-                    <td className="py-2.5">${Number(row.adr).toFixed(2)}</td>
-                    <td className="py-2.5">${Number(row.revpar).toFixed(2)}</td>
-                    <td className="py-2.5">${Number(row.totalRevenue).toFixed(2)}</td>
+                    <td className="py-2.5">{formatMoney(row.adr)}</td>
+                    <td className="py-2.5">{formatMoney(row.revpar)}</td>
+                    <td className="py-2.5">{formatMoney(row.totalRevenue)}</td>
                   </tr>
                 ))}
               </tbody>

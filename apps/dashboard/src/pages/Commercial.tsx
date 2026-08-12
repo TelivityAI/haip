@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Briefcase, Plus, ChevronLeft } from 'lucide-react';
@@ -281,7 +282,7 @@ function CommercialDetail() {
             {arLedgers.map((l) => (
               <li key={l.id} className="flex justify-between border-b border-gray-50 py-1">
                 <span>{l.name}</span>
-                <span className="font-medium">${Number(l.balance ?? 0).toFixed(2)}</span>
+                <span className="font-medium">{formatMoney(l.balance ?? 0)}</span>
               </li>
             ))}
             {arLedgers.length === 0 && (

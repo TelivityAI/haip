@@ -743,7 +743,7 @@ function ReservationList() {
                       {(rt.ratePlans ?? []).map((rp) => (
                         <label key={rp.id} className="flex items-center gap-2 text-sm cursor-pointer">
                           <input type="radio" name="ratePlan" value={rp.id} checked={selectedRatePlan === rp.id} onChange={() => { setSelectedRoomType(rt.roomTypeId); setSelectedRatePlan(rp.id); }} className="text-telivity-teal" />
-                          {rp.name} — ${rp.rate?.toFixed(2) ?? '—'}/night
+                          {rp.name} — {formatMoney(rp.rate)}/night
                         </label>
                       ))}
                     </div>
