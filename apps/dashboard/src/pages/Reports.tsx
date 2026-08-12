@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { formatMoney } from '../lib/money';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Percent, DollarSign, TrendingUp, Building2, Star } from 'lucide-react';
@@ -26,7 +27,7 @@ const DEMO_FAVORITES_KEY = 'haip.reportFavorites';
 
 export default function Reports() {
   const { t } = useTranslation();
-  const { propertyId, isPortfolioMode, properties } = useProperty();
+  const { propertyId, isPortfolioMode, properties, currencyCode } = useProperty();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   // Deep links (e.g. Accounting → live trial balance) may preselect report/date.
@@ -255,8 +256,8 @@ export default function Reports() {
       {report === 'financial-summary' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KpiCard title="ADR" value={kpis.adr != null ? `$${Number(kpis.adr).toFixed(2)}` : '—'} icon={DollarSign} />
-            <KpiCard title="RevPAR" value={kpis.revpar != null ? `$${Number(kpis.revpar).toFixed(2)}` : '—'} icon={TrendingUp} />
+            <KpiCard title="ADR" value={kpis.adr != null ? formatMoney(kpis.adr, currencyCode) : '—'} icon={DollarSign} />
+            <KpiCard title="RevPAR" value={kpis.revpar != null ? formatMoney(kpis.revpar, currencyCode) : '—'} icon={TrendingUp} />
             <KpiCard title="Occupancy" value={formatOccupancyPercent(kpis.occupancyRate)} icon={Percent} />
           </div>
           {isPortfolioMode && Array.isArray(reportData.byProperty) && (
@@ -277,10 +278,10 @@ export default function Reports() {
                     {(reportData.byProperty as Array<{ propertyId: string; totalRevenue: number; occupancyRate: number; adr: number; revpar: number }>).map((row) => (
                       <tr key={row.propertyId} className="border-b border-gray-50">
                         <td className="py-2">{propertyNameMap.get(row.propertyId) ?? row.propertyId}</td>
-                        <td className="py-2">${Number(row.totalRevenue).toFixed(2)}</td>
+                        <td className="py-2">{formatMoney(row.totalRevenue)}</td>
                         <td className="py-2">{formatOccupancyPercent(row.occupancyRate)}</td>
-                        <td className="py-2">${Number(row.adr).toFixed(2)}</td>
-                        <td className="py-2">${Number(row.revpar).toFixed(2)}</td>
+                        <td className="py-2">{formatMoney(row.adr)}</td>
+                        <td className="py-2">{formatMoney(row.revpar)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -295,7 +296,7 @@ export default function Reports() {
                 {Object.entries(reportData.revenueByType as Record<string, number>).map(([k, v]) => (
                   <div key={k} className="flex justify-between py-1 border-b border-gray-50">
                     <span className="text-sm text-telivity-slate capitalize">{k.replace(/_/g, ' ')}</span>
-                    <span className="text-sm font-medium">${Number(v).toFixed(2)}</span>
+                    <span className="text-sm font-medium">{formatMoney(v)}</span>
                   </div>
                 ))}
               </div>
@@ -354,9 +355,9 @@ export default function Reports() {
       {report === 'daily-revenue' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KpiCard title="Room Revenue" value={revenue.room != null ? `$${Number(revenue.room).toFixed(2)}` : '—'} icon={DollarSign} />
-            <KpiCard title="Other Revenue" value={revenue.other != null ? `$${Number(revenue.other).toFixed(2)}` : '—'} icon={DollarSign} />
-            <KpiCard title="Total Revenue" value={revenue.total != null ? `$${Number(revenue.total).toFixed(2)}` : '—'} icon={DollarSign} />
+            <KpiCard title="Room Revenue" value={revenue.room != null ? formatMoney(revenue.room, currencyCode) : '—'} icon={DollarSign} />
+            <KpiCard title="Other Revenue" value={revenue.other != null ? formatMoney(revenue.other, currencyCode) : '—'} icon={DollarSign} />
+            <KpiCard title="Total Revenue" value={revenue.total != null ? formatMoney(revenue.total, currencyCode) : '—'} icon={DollarSign} />
           </div>
           {payments && Object.keys(payments).length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-5">
@@ -415,11 +416,11 @@ export default function Reports() {
                   return (
                     <tr key={key} className="border-b border-gray-50">
                       <td className="py-2 font-medium text-telivity-navy">{t(`reports.${labelKey}`)}</td>
-                      <td className="py-2 text-right">${Number(row.opening).toFixed(2)}</td>
-                      <td className="py-2 text-right">${Number(row.netActivity).toFixed(2)}</td>
-                      <td className="py-2 text-right">${Number(row.transfersIn).toFixed(2)}</td>
-                      <td className="py-2 text-right">${Number(row.transfersOut).toFixed(2)}</td>
-                      <td className="py-2 text-right font-medium">${Number(row.closing).toFixed(2)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.opening)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.netActivity)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.transfersIn)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.transfersOut)}</td>
+                      <td className="py-2 text-right font-medium">{formatMoney(row.closing)}</td>
                     </tr>
                   );
                 })}
@@ -430,7 +431,7 @@ export default function Reports() {
             <div className="bg-white rounded-xl shadow-sm p-5">
               <div className="flex justify-between text-sm">
                 <span className="text-telivity-slate">{t('reports.trialBalanceInterLedger')}</span>
-                <span className="font-medium text-telivity-navy">${Number(reportData.interLedgerTransfers).toFixed(2)}</span>
+                <span className="font-medium text-telivity-navy">{formatMoney(reportData.interLedgerTransfers)}</span>
               </div>
             </div>
           )}

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -104,7 +105,7 @@ function parseImportRows(text: string): Record<string, unknown>[] {
 // ---- Reservation List ----
 function ReservationList() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -238,7 +239,7 @@ function ReservationList() {
         adults: createAdults,
         children: createChildren,
         totalAmount,
-        currencyCode: 'USD',
+        currencyCode,
         source: 'direct',
       });
     },
@@ -382,7 +383,7 @@ function ReservationList() {
         return <StatusBadge status={status} label={t(`reservations.statuses.${status}`, { defaultValue: status })} />;
       }, size: 120
     },
-    { accessorKey: 'totalAmount', header: t('reservations.total'), cell: ({ getValue }) => getValue() != null ? `$${Number(getValue()).toFixed(2)}` : '—', size: 100 },
+    { accessorKey: 'totalAmount', header: t('reservations.total'), cell: ({ getValue }) => getValue() != null ? formatMoney(getValue() as string | number, currencyCode) : '—', size: 100 },
     { accessorKey: 'source', header: t('reservations.source'), cell: ({ getValue }) => (getValue() as string) ?? 'direct', size: 90 },
     {
       id: 'actions',
@@ -628,7 +629,7 @@ function ReservationList() {
                 <Detail label={t('reservations.room')} value={detailRes.roomNumber ?? t('reservations.unassigned')} />
                 <Detail label={t('reservations.adults')} value={String(detailRes.adults)} />
                 <Detail label={t('reservations.children')} value={String(detailRes.children ?? 0)} />
-                <Detail label={t('reservations.total')} value={detailRes.totalAmount != null ? `$${Number(detailRes.totalAmount).toFixed(2)}` : '—'} />
+                <Detail label={t('reservations.total')} value={detailRes.totalAmount != null ? formatMoney(detailRes.totalAmount, currencyCode) : '—'} />
                 <Detail label={t('reservations.ratePlan')} value={detailRes.ratePlanName ?? '—'} />
               </div>
               {detailRes.notes && (
@@ -742,7 +743,7 @@ function ReservationList() {
                       {(rt.ratePlans ?? []).map((rp) => (
                         <label key={rp.id} className="flex items-center gap-2 text-sm cursor-pointer">
                           <input type="radio" name="ratePlan" value={rp.id} checked={selectedRatePlan === rp.id} onChange={() => { setSelectedRoomType(rt.roomTypeId); setSelectedRatePlan(rp.id); }} className="text-telivity-teal" />
-                          {rp.name} — ${rp.rate?.toFixed(2) ?? '—'}/night
+                          {rp.name} — {formatMoney(rp.rate)}/night
                         </label>
                       ))}
                     </div>

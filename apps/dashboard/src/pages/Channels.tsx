@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Radio, Plus, ChevronLeft, RefreshCw, Zap, Image as ImageIcon, Trash2 } from 'lucide-react';
@@ -93,10 +94,6 @@ function contentPushErrorMessages(results: unknown[]): string[] {
     }
   }
   return messages;
-}
-
-function formatMoney(amount: number): string {
-  return `$${Number(amount).toFixed(2)}`;
 }
 
 // ---- Connection List ----
@@ -540,7 +537,7 @@ function ConnectionDetail() {
 // ---- Rate Parity ----
 function RateParity() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -663,7 +660,7 @@ function RateParity() {
                 {parity.map((row) => (
                   <tr key={row.ratePlanId} className="border-b border-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{row.ratePlanName}</td>
-                    <td className="px-4 py-3 text-sm text-right text-telivity-slate">{formatMoney(row.baseAmount)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-telivity-slate">{formatMoney(row.baseAmount, currencyCode)}</td>
                     {channelColumns.map((col) => {
                       const ch = row.channels.find((c) => c.channelConnectionId === col.channelConnectionId);
                       if (!ch) {
@@ -671,7 +668,7 @@ function RateParity() {
                       }
                       return (
                         <td key={col.channelConnectionId} className="px-4 py-3 text-right">
-                          <div className="text-sm text-telivity-slate">{formatMoney(ch.effectiveRate)}</div>
+                          <div className="text-sm text-telivity-slate">{formatMoney(ch.effectiveRate, currencyCode)}</div>
                           <div className="flex items-center justify-end gap-1 mt-0.5">
                             <StatusBadge
                               status={ch.isParity ? 'success' : 'warning'}
@@ -683,7 +680,7 @@ function RateParity() {
                           </div>
                           {!ch.isParity && (
                             <div className="text-[10px] text-amber-600 mt-0.5">
-                              {t('channels.variance')}: {formatMoney(ch.variance)}
+                              {t('channels.variance')}: {formatMoney(ch.variance, currencyCode)}
                             </div>
                           )}
                         </td>

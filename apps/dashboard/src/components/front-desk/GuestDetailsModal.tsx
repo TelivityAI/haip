@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { formatMoney } from '../../lib/money';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ArrowRightLeft, StickyNote, LogIn, LogOut } from 'lucide-react';
@@ -229,7 +230,7 @@ export default function GuestDetailsModal({
               {t('frontDesk.accountSummary')}
             </p>
             <p className="text-sm text-telivity-navy font-semibold">
-              {t('frontDesk.balance')}: ${Number(balance).toFixed(2)}
+              {t('frontDesk.balance')}: {formatMoney(balance)}
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -247,7 +248,7 @@ export default function GuestDetailsModal({
                     <li key={c.id} className="flex justify-between gap-2 text-sm">
                       <span className="text-telivity-slate truncate">{c.description || '—'}</span>
                       <span className="font-medium text-telivity-navy shrink-0">
-                        ${Number(c.amount).toFixed(2)}
+                        {formatMoney(c.amount)}
                       </span>
                     </li>
                   ))}
@@ -268,7 +269,7 @@ export default function GuestDetailsModal({
                     <li key={p.id} className="flex justify-between gap-2 text-sm">
                       <span className="text-telivity-slate truncate">{p.method || '—'}</span>
                       <span className="font-medium text-telivity-navy shrink-0">
-                        ${Number(p.amount).toFixed(2)}
+                        {formatMoney(p.amount)}
                       </span>
                     </li>
                   ))}

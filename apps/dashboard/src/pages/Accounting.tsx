@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatMoney } from '../lib/money';
 import { Routes, Route, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Calculator, Plus, Download, BarChart3, Pencil, Archive } from 'lucide-react';
@@ -64,7 +65,7 @@ const AGING_LABELS: Record<keyof AgingBuckets, string> = {
 
 function AccountingHome() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const queryClient = useQueryClient();
   const today = format(new Date(), 'yyyy-MM-dd');
   const [depositOpen, setDepositOpen] = useState(false);
@@ -149,7 +150,7 @@ function AccountingHome() {
       return api.post('/v1/deposits', {
         propertyId,
         amount: moneyString(depositAmount),
-        currencyCode: 'USD',
+        currencyCode,
       });
     },
     onSuccess: () => {
@@ -215,7 +216,7 @@ function AccountingHome() {
         propertyId,
         name: ledgerName,
         paymentTermsDays: ledgerTerms || undefined,
-        currencyCode: 'USD',
+        currencyCode,
       });
     },
     onSuccess: () => {
@@ -340,12 +341,12 @@ function AccountingHome() {
         {(Object.keys(AGING_LABELS) as (keyof AgingBuckets)[]).map((key) => (
           <div key={key} className="flex justify-between border-b border-gray-50 py-1">
             <span>{AGING_LABELS[key]}</span>
-            <span className="font-medium">${Number(report.buckets[key] ?? 0).toFixed(2)}</span>
+            <span className="font-medium">{formatMoney(report.buckets[key] ?? 0)}</span>
           </div>
         ))}
         <div className="flex justify-between pt-2 font-semibold">
           <span>{t('accounting.total')}</span>
-          <span>${Number(report.total ?? 0).toFixed(2)}</span>
+          <span>{formatMoney(report.total ?? 0)}</span>
         </div>
       </div>
     ) : (
@@ -396,7 +397,7 @@ function AccountingHome() {
           <ul className="space-y-2 text-sm">
             {deposits.slice(0, 8).map((d) => (
               <li key={d.id} className="flex justify-between items-center border-b border-gray-50 py-1">
-                <span>${Number(d.amount).toFixed(2)}</span>
+                <span>{formatMoney(d.amount)}</span>
                 <span className="text-telivity-mid-grey">{d.status}</span>
                 {d.status === 'held' && (
                   <button
@@ -492,7 +493,7 @@ function AccountingHome() {
                     <span className="ml-2 text-xs text-telivity-mid-grey">({t('accounting.closed')})</span>
                   )}
                 </span>
-                <span className="font-medium shrink-0">${Number(l.balance ?? 0).toFixed(2)}</span>
+                <span className="font-medium shrink-0">{formatMoney(l.balance ?? 0)}</span>
                 <div className="flex flex-wrap gap-2 justify-end">
                   <button onClick={() => { setSelectedLedger(l); setArActionOpen('payment'); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.payment')}</button>
                   <button onClick={async () => { setSelectedLedger(l); setArActionOpen('aging'); await refetchAging(); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.aging')}</button>
@@ -554,7 +555,7 @@ function AccountingHome() {
         </div>
       </Modal>
 
-      <Modal open={depositActionOpen} onClose={() => setDepositActionOpen(false)} title={t('accounting.depositActions', { amount: Number(selectedDeposit?.amount ?? 0).toFixed(2) })}>
+      <Modal open={depositActionOpen} onClose={() => setDepositActionOpen(false)} title={t('accounting.depositActions', { amount: formatMoney(selectedDeposit?.amount ?? 0) })}>
         <div className="space-y-4">
           <input type="text" value={applyFolioId} onChange={(e) => setApplyFolioId(e.target.value)} placeholder={t('accounting.folioIdPlaceholder')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-xs" />
           <button onClick={() => applyDeposit.mutate()} disabled={applyDeposit.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.applyToFolio')}</button>
@@ -596,7 +597,7 @@ function AccountingHome() {
               <option value="">{t('accounting.selectTransaction')}</option>
               {reversible.map((tx) => (
                 <option key={tx.id} value={tx.id}>
-                  ${Number(tx.amount).toFixed(2)} · {tx.createdAt?.split('T')[0] ?? tx.id.slice(0, 8)}
+                  {formatMoney(tx.amount)} · {tx.createdAt?.split('T')[0] ?? tx.id.slice(0, 8)}
                 </option>
               ))}
             </select>

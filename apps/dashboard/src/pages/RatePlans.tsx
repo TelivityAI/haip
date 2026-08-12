@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BadgeDollarSign, Plus, ChevronLeft, Pencil, Trash2 } from 'lucide-react';
@@ -89,7 +90,7 @@ function buildRestrictionBody(form: RestrictionForm) {
 // ---- Rate Plan List ----
 function RatePlanList() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -127,7 +128,7 @@ function RatePlanList() {
         type,
         baseAmount: moneyString(baseAmount || '0'),
         roomTypeId,
-        currencyCode: 'USD',
+        currencyCode,
       };
       if (type === 'derived') {
         payload.parentRatePlanId = parentRatePlanId;
@@ -184,7 +185,7 @@ function RatePlanList() {
                 <td className="px-4 py-3 text-sm text-telivity-slate">{p.code}</td>
                 <td className="px-4 py-3"><StatusBadge status={p.type === 'bar' ? 'info' : p.type === 'derived' ? 'warning' : 'success'} label={p.type} /></td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{p.roomTypeName ?? '—'}</td>
-                <td className="px-4 py-3 text-sm text-right font-medium">{p.baseAmount != null ? `$${Number(p.baseAmount).toFixed(2)}` : '—'}</td>
+                <td className="px-4 py-3 text-sm text-right font-medium">{p.baseAmount != null ? formatMoney(p.baseAmount, currencyCode) : '—'}</td>
                 <td className="px-4 py-3"><StatusBadge status={p.isActive !== false ? 'success' : 'completed'} label={p.isActive !== false ? t('common.active') : t('common.inactive')} /></td>
               </tr>
             ))}
@@ -483,7 +484,7 @@ function RestrictionsPanel({ ratePlanId }: { ratePlanId: string }) {
 // ---- Rate Plan Detail ----
 function RatePlanDetail() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId , currencyCode } = useProperty();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [testDate, setTestDate] = useState('');
@@ -537,7 +538,7 @@ function RatePlanDetail() {
           <h2 className="text-sm font-semibold text-telivity-navy">{t('ratePlans.details')}</h2>
           <div className="grid grid-cols-2 gap-3">
             <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.code')}</p><p className="text-sm font-medium">{plan.code}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.baseAmount')}</p><p className="text-sm font-medium">{plan.baseAmount != null ? `$${Number(plan.baseAmount).toFixed(2)}` : '—'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.baseAmount')}</p><p className="text-sm font-medium">{plan.baseAmount != null ? formatMoney(plan.baseAmount, currencyCode) : '—'}</p></div>
             <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.roomType')}</p><p className="text-sm font-medium">{plan.roomTypeName ?? '—'}</p></div>
             <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.currency')}</p><p className="text-sm font-medium">{plan.currency ?? plan.currencyCode ?? 'USD'}</p></div>
             {plan.type === 'derived' && (
@@ -566,7 +567,7 @@ function RatePlanDetail() {
           {effectiveRate != null && (
             <div className="mt-4 bg-telivity-light-grey rounded-lg p-4 text-center">
               <p className="text-xs text-telivity-mid-grey">{t('ratePlans.effectiveRateFor', { date: testDate || '—' })}</p>
-              <p className="text-2xl font-semibold text-telivity-navy">${Number(effectiveRate).toFixed(2)}</p>
+              <p className="text-2xl font-semibold text-telivity-navy">{formatMoney(effectiveRate)}</p>
             </div>
           )}
         </div>
