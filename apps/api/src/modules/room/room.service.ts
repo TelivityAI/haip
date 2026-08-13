@@ -83,6 +83,18 @@ export class RoomService {
   }
 
   async updateRoom(id: string, propertyId: string, dto: UpdateRoomDto) {
+    // FK ownership: a roomTypeId in the update is client-supplied — verify it
+    // belongs to THIS property before writing, or an update could re-point a
+    // room at another tenant's type (same rule as inbound-reservation mapping).
+    if (dto.roomTypeId) {
+      const [type] = await this.db
+        .select({ id: roomTypes.id })
+        .from(roomTypes)
+        .where(and(eq(roomTypes.id, dto.roomTypeId), eq(roomTypes.propertyId, propertyId)));
+      if (!type) {
+        throw new NotFoundException(`Room type ${dto.roomTypeId} not found for this property`);
+      }
+    }
     const [room] = await this.db
       .update(rooms)
       .set({ ...dto, updatedAt: new Date() })
