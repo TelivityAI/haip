@@ -53,14 +53,14 @@ export class IcalController {
   }
 
   @Get('feeds')
-  @Roles('admin')
+  @Roles('admin', 'revenue_manager')
   @ApiOperation({ summary: 'List iCal feeds for a property' })
   listFeeds(@Query() dto: ListIcalFeedsDto) {
     return this.icalService.list(dto);
   }
 
   @Get('feeds/:id')
-  @Roles('admin')
+  @Roles('admin', 'revenue_manager')
   @ApiOperation({ summary: 'Get an iCal feed' })
   @ApiQuery({ name: 'propertyId', required: true })
   getFeed(
@@ -94,7 +94,7 @@ export class IcalController {
   }
 
   @Post('feeds/:id/sync')
-  @Roles('admin')
+  @Roles('admin', 'revenue_manager')
   @ApiOperation({ summary: 'Fetch an import feed and replace its busy blocks' })
   @ApiQuery({ name: 'propertyId', required: true })
   syncFeed(
