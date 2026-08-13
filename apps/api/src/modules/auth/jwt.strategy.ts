@@ -19,7 +19,7 @@ import type { AuthUser } from './current-user.decorator';
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  private readonly expectedAudience: string;
+  private readonly allowedAzp: string[];
 
   constructor(configService: ConfigService) {
     const keycloakUrl = configService.get<string>('KEYCLOAK_URL', 'http://localhost:8080');
@@ -43,7 +43,16 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       }),
     });
 
-    this.expectedAudience = audience;
+    // Additional realm clients allowed to CALL this API (service accounts
+    // integrating over the public API). `azp` is immutably the client that
+    // obtained the token, so a second client can never satisfy a single-value
+    // equality no matter what mappers it carries -- while `aud` stays the
+    // single audience above, which any caller can add via an audience mapper.
+    // Unset, behaviour is exactly as before: only the primary client passes.
+    this.allowedAzp = (configService.get<string>('KEYCLOAK_ALLOWED_AZP') || audience)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
   }
 
   /**
@@ -53,7 +62,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
    * Returns the user object attached to req.user.
    */
   validate(payload: any): AuthUser {
-    if (payload.azp && payload.azp !== this.expectedAudience) {
+    if (payload.azp && !this.allowedAzp.includes(payload.azp)) {
       throw new UnauthorizedException('Invalid token audience (azp mismatch)');
     }
     return {
