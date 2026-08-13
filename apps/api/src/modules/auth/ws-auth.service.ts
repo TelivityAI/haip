@@ -15,6 +15,7 @@ export class WsAuthService {
   private readonly logger = new Logger(WsAuthService.name);
   private readonly issuer: string;
   private readonly expectedAudience: string;
+  private readonly allowedAzp: string[];
   private readonly jwks: JwksClient;
 
   constructor(configService: ConfigService) {
@@ -24,6 +25,12 @@ export class WsAuthService {
     this.expectedAudience =
       configService.get<string>('KEYCLOAK_AUDIENCE') ||
       configService.get<string>('KEYCLOAK_CLIENT_ID', 'haip-api');
+    // Same allow-list as JwtStrategy -- the two verifiers must agree on who
+    // may call, or a caller works over HTTP and dies on the socket.
+    this.allowedAzp = (configService.get<string>('KEYCLOAK_ALLOWED_AZP') || this.expectedAudience)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     this.jwks = jwksClient({
       jwksUri: `${this.issuer}/protocol/openid-connect/certs`,
       cache: true,
@@ -65,7 +72,7 @@ export class WsAuthService {
       );
     });
 
-    if (payload.azp && payload.azp !== this.expectedAudience) {
+    if (payload.azp && !this.allowedAzp.includes(payload.azp)) {
       throw new Error('Invalid token audience (azp mismatch)');
     }
 
