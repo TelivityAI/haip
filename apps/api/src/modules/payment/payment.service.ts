@@ -39,12 +39,26 @@ export class PaymentService {
         `VCC payments must use the authorize flow. Use POST /payments/authorize instead.`,
       );
     }
-    if (
-      CARD_METHODS.includes(dto.method) &&
-      (dto.gatewayPaymentToken || dto.gatewayProvider)
-    ) {
+    // A TOKEN is a chargeable instrument: presenting one here is an attempt to
+    // take money through the settle path, and must still go via authorize.
+    // A TRANSACTION ID is the opposite — evidence that a charge already
+    // happened somewhere else (a payment link the guest paid, a terminal, the
+    // provider's own dashboard). Recording that after the fact is the only way
+    // an out-of-band payment can ever be reconciled against a settlement
+    // report, and refusing it forced those payments to be logged with no
+    // reference to the provider at all.
+    if (CARD_METHODS.includes(dto.method) && dto.gatewayPaymentToken) {
       throw new BadRequestException(
         `Card payments with a gateway token must use the authorize flow. Use POST /payments/authorize instead.`,
+      );
+    }
+    if (
+      CARD_METHODS.includes(dto.method) &&
+      dto.gatewayProvider &&
+      !dto.gatewayTransactionId
+    ) {
+      throw new BadRequestException(
+        `A card payment naming a gateway must either carry gatewayTransactionId (a payment already taken there) or use POST /payments/authorize to take one.`,
       );
     }
 
@@ -53,12 +67,23 @@ export class PaymentService {
       throw new BadRequestException('Cannot record payment on a folio that is not open');
     }
 
+    // processedAt is WHEN THE MONEY MOVED, which is not always now. Historical imports
+    // and out-of-band gateway receipts record payments that already happened, and
+    // stamping those with the import time makes the ledger disagree with the
+    // settlement report it is supposed to reconcile against. Note the spread below
+    // would otherwise carry dto.processedAt through as a STRING and then be silently
+    // overwritten by the hardcoded new Date() — resolve it explicitly instead.
+    const processedAt = dto.processedAt ? new Date(dto.processedAt) : new Date();
+    if (processedAt.getTime() > Date.now()) {
+      throw new BadRequestException('processedAt cannot be in the future');
+    }
+
     const [payment] = await this.db
       .insert(payments)
       .values({
         ...dto,
         status: 'captured',
-        processedAt: new Date(),
+        processedAt,
       })
       .returning();
 

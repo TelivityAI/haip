@@ -166,6 +166,101 @@ describe('PaymentService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('should record an out-of-band gateway payment with its transaction id', async () => {
+      // The guest paid a payment link; the money is already at the provider.
+      // There is nothing to authorize, and without the transaction id the
+      // payment can never be matched to a settlement report.
+      await service.recordPayment({
+        folioId: 'folio-001',
+        propertyId: 'prop-001',
+        method: 'credit_card',
+        amount: '150.00',
+        currencyCode: 'USD',
+        gatewayProvider: 'square',
+        gatewayTransactionId: 'sqpmt_abc123',
+      });
+
+      // insert() returns one shared chain object in this mock, so the values()
+      // call it received is what actually reached the database.
+      const chain = (mockDb.insert as any).mock.results[0].value;
+      expect(chain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          gatewayProvider: 'square',
+          gatewayTransactionId: 'sqpmt_abc123',
+          status: 'captured',
+        }),
+      );
+    });
+
+    it('should record a historical payment at the date the money actually moved', async () => {
+      // A migration or an out-of-band receipt records money that moved in the PAST.
+      // Stamping it with the import time makes the ledger disagree with the
+      // settlement report it exists to be reconciled against.
+      await service.recordPayment({
+        folioId: 'folio-001',
+        propertyId: 'prop-001',
+        method: 'credit_card',
+        amount: '150.00',
+        currencyCode: 'USD',
+        gatewayProvider: 'square',
+        gatewayTransactionId: 'sqpmt_abc123',
+        processedAt: '2026-08-03T00:37:33.000Z',
+      });
+
+      const chain = (mockDb.insert as any).mock.results[0].value;
+      expect(chain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processedAt: new Date('2026-08-03T00:37:33.000Z'),
+        }),
+      );
+    });
+
+    it('should still stamp now when processedAt is omitted', async () => {
+      // The negative control for the test above: if the field were ignored
+      // entirely, that test could pass while this one silently proved nothing.
+      const before = Date.now();
+      await service.recordPayment({
+        folioId: 'folio-001',
+        propertyId: 'prop-001',
+        method: 'cash',
+        amount: '150.00',
+        currencyCode: 'USD',
+      });
+
+      const chain = (mockDb.insert as any).mock.results[0].value;
+      const written = chain.values.mock.calls[0][0].processedAt as Date;
+      expect(written.getTime()).toBeGreaterThanOrEqual(before);
+      expect(written.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('should reject a processedAt in the future', async () => {
+      await expect(
+        service.recordPayment({
+          folioId: 'folio-001',
+          propertyId: 'prop-001',
+          method: 'cash',
+          amount: '150.00',
+          currencyCode: 'USD',
+          processedAt: new Date(Date.now() + 86_400_000).toISOString(),
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject a card payment naming a gateway with no transaction id', async () => {
+      // No token and no receipt: this is an attempt to take a card payment
+      // through the settle path, which is what the authorize flow is for.
+      await expect(
+        service.recordPayment({
+          folioId: 'folio-001',
+          propertyId: 'prop-001',
+          method: 'credit_card',
+          amount: '150.00',
+          currencyCode: 'USD',
+          gatewayProvider: 'square',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('should reject vcc on the record path', async () => {
       await expect(
         service.recordPayment({
