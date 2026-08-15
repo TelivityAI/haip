@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { formatMoney } from '../lib/money';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -23,6 +22,7 @@ import { getDateLocale } from '../lib/date-locale';
 import { useProperty } from '../context/PropertyContext';
 import { getSocket } from '../lib/socket';
 import KpiCard from '../components/ui/KpiCard';
+import { formatMoney } from '../lib/money';
 import { useTranslation } from 'react-i18next';
 
 const ROOM_STATUS_COLORS: Record<string, string> = {
@@ -222,9 +222,9 @@ export default function Dashboard() {
                       </button>
                     </td>
                     <td className="py-2.5">{formatOccupancyPercent(row.occupancyRate)}</td>
-                    <td className="py-2.5">{formatMoney(row.adr)}</td>
-                    <td className="py-2.5">{formatMoney(row.revpar)}</td>
-                    <td className="py-2.5">{formatMoney(row.totalRevenue)}</td>
+                    <td className="py-2.5">{formatMoney(row.adr, currencyCode)}</td>
+                    <td className="py-2.5">{formatMoney(row.revpar, currencyCode)}</td>
+                    <td className="py-2.5">{formatMoney(row.totalRevenue, currencyCode)}</td>
                   </tr>
                 ))}
               </tbody>

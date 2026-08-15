@@ -7,8 +7,13 @@ import { ToastProvider } from '../components/ui/Toast';
 import Channels, { SyncLogsTable } from './Channels';
 
 // Mock the property context so pages have a propertyId without PropertyProvider.
+// currencyCode is part of that contract: a real property always has one, and
+// this mock omitting it was only survivable while the app invented a default
+// when it was missing. It no longer does — an absent code renders an
+// unsymbolled number — so a fixture without a currency was asserting the
+// invention rather than the formatting.
 vi.mock('../context/PropertyContext', () => ({
-  useProperty: () => ({ propertyId: 'prop-1' }),
+  useProperty: () => ({ propertyId: 'prop-1', currencyCode: 'USD' }),
 }));
 
 // Mock the API client.

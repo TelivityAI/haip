@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UsersRound, Plus, ChevronLeft, FileText, Receipt, Pencil, Link2 } from 'lucide-react';
@@ -9,6 +8,7 @@ import { requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
+import { formatMoney } from '../lib/money';
 import { useTranslation } from 'react-i18next';
 
 interface GroupProfile {
@@ -270,7 +270,7 @@ function BlockFormFields({
 
 function GroupList() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -392,7 +392,7 @@ function GroupList() {
 function GroupDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [blockOpen, setBlockOpen] = useState(false);
@@ -683,7 +683,7 @@ function GroupDetail() {
         {folio ? (
           <div className="space-y-2 text-sm">
             <p><span className="text-telivity-mid-grey">Folio ID:</span> {folio.id ?? folio.folioId ?? '—'}</p>
-            <p><span className="text-telivity-mid-grey">Balance:</span> {formatMoney(folio.balance ?? folio.totalBalance ?? 0)}</p>
+            <p><span className="text-telivity-mid-grey">Balance:</span> {formatMoney(folio.balance ?? folio.totalBalance ?? 0, currencyCode)}</p>
             <p><span className="text-telivity-mid-grey">Status:</span> {folio.status ?? '—'}</p>
           </div>
         ) : (
@@ -703,7 +703,7 @@ function GroupDetail() {
 function BlockDetail() {
   const { t } = useTranslation();
   const { id: profileId, blockId } = useParams<{ id: string; blockId: string }>();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [roomingOpen, setRoomingOpen] = useState(false);

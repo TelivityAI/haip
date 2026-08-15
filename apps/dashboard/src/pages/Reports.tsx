@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { formatMoney } from '../lib/money';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Percent, DollarSign, TrendingUp, Building2, Star } from 'lucide-react';
@@ -9,6 +8,7 @@ import { api } from '../lib/api';
 import { formatOccupancyPercent } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import KpiCard from '../components/ui/KpiCard';
+import { formatMoney } from '../lib/money';
 import { useTranslation } from 'react-i18next';
 
 type ReportType = 'financial-summary' | 'occupancy' | 'daily-revenue' | 'occupancy-trend' | 'trial-balance' | 'pickup' | 'booking-pace';
@@ -278,10 +278,10 @@ export default function Reports() {
                     {(reportData.byProperty as Array<{ propertyId: string; totalRevenue: number; occupancyRate: number; adr: number; revpar: number }>).map((row) => (
                       <tr key={row.propertyId} className="border-b border-gray-50">
                         <td className="py-2">{propertyNameMap.get(row.propertyId) ?? row.propertyId}</td>
-                        <td className="py-2">{formatMoney(row.totalRevenue)}</td>
+                        <td className="py-2">{formatMoney(row.totalRevenue, currencyCode)}</td>
                         <td className="py-2">{formatOccupancyPercent(row.occupancyRate)}</td>
-                        <td className="py-2">{formatMoney(row.adr)}</td>
-                        <td className="py-2">{formatMoney(row.revpar)}</td>
+                        <td className="py-2">{formatMoney(row.adr, currencyCode)}</td>
+                        <td className="py-2">{formatMoney(row.revpar, currencyCode)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -296,7 +296,7 @@ export default function Reports() {
                 {Object.entries(reportData.revenueByType as Record<string, number>).map(([k, v]) => (
                   <div key={k} className="flex justify-between py-1 border-b border-gray-50">
                     <span className="text-sm text-telivity-slate capitalize">{k.replace(/_/g, ' ')}</span>
-                    <span className="text-sm font-medium">{formatMoney(v)}</span>
+                    <span className="text-sm font-medium">{formatMoney(v, currencyCode)}</span>
                   </div>
                 ))}
               </div>
@@ -416,11 +416,11 @@ export default function Reports() {
                   return (
                     <tr key={key} className="border-b border-gray-50">
                       <td className="py-2 font-medium text-telivity-navy">{t(`reports.${labelKey}`)}</td>
-                      <td className="py-2 text-right">{formatMoney(row.opening)}</td>
-                      <td className="py-2 text-right">{formatMoney(row.netActivity)}</td>
-                      <td className="py-2 text-right">{formatMoney(row.transfersIn)}</td>
-                      <td className="py-2 text-right">{formatMoney(row.transfersOut)}</td>
-                      <td className="py-2 text-right font-medium">{formatMoney(row.closing)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.opening, currencyCode)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.netActivity, currencyCode)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.transfersIn, currencyCode)}</td>
+                      <td className="py-2 text-right">{formatMoney(row.transfersOut, currencyCode)}</td>
+                      <td className="py-2 text-right font-medium">{formatMoney(row.closing, currencyCode)}</td>
                     </tr>
                   );
                 })}
@@ -431,7 +431,7 @@ export default function Reports() {
             <div className="bg-white rounded-xl shadow-sm p-5">
               <div className="flex justify-between text-sm">
                 <span className="text-telivity-slate">{t('reports.trialBalanceInterLedger')}</span>
-                <span className="font-medium text-telivity-navy">{formatMoney(reportData.interLedgerTransfers)}</span>
+                <span className="font-medium text-telivity-navy">{formatMoney(reportData.interLedgerTransfers, currencyCode)}</span>
               </div>
             </div>
           )}

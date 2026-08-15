@@ -39,7 +39,11 @@ function auditCount(value: string | number | undefined): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-function formatAuditRevenue(a: AuditResult, currencyCode: string, empty = '—'): string {
+// currencyCode may be null (portfolio mode, or a property with no code).
+// This only DISPLAYS, and formatMoney renders an unsymbolled number when it
+// is absent, so the honest thing is to pass it through rather than guard a
+// read path or invent a code here.
+function formatAuditRevenue(a: AuditResult, currencyCode: string | null, empty = '—'): string {
   const rev = auditRevenue(a);
   return rev != null ? formatMoney(rev, currencyCode) : empty;
 }

@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Briefcase, Plus, ChevronLeft } from 'lucide-react';
 import { api } from '../lib/api';
-import { requirePropertyId } from '../lib/api-helpers';
+import { requirePropertyId, requireCurrency } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import Modal from '../components/ui/Modal';
+import { formatMoney } from '../lib/money';
 import { useTranslation } from 'react-i18next';
 
 /** Standing commercial account types (KB 14.3) — excludes event allotment-only. */
@@ -220,6 +220,7 @@ function CommercialDetail() {
   const createAr = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
       return api.post('/v1/ar/ledgers', {
         propertyId,
         name: profile!.name,
@@ -282,7 +283,7 @@ function CommercialDetail() {
             {arLedgers.map((l) => (
               <li key={l.id} className="flex justify-between border-b border-gray-50 py-1">
                 <span>{l.name}</span>
-                <span className="font-medium">{formatMoney(l.balance ?? 0)}</span>
+                <span className="font-medium">{formatMoney(l.balance ?? 0, currencyCode)}</span>
               </li>
             ))}
             {arLedgers.length === 0 && (

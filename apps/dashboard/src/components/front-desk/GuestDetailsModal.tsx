@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { formatMoney } from '../../lib/money';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ArrowRightLeft, StickyNote, LogIn, LogOut } from 'lucide-react';
@@ -7,6 +6,7 @@ import { api } from '../../lib/api';
 import Modal from '../ui/Modal';
 import StatusBadge from '../ui/StatusBadge';
 import ReservationPartyPanel from '../reservations/ReservationPartyPanel';
+import { formatMoney } from '../../lib/money';
 
 export interface GuestDetailsReservation {
   id: string;
@@ -72,6 +72,7 @@ export default function GuestDetailsModal({
   open,
   reservation,
   propertyId,
+  currencyCode,
   doorPin,
   onClose,
   onNotes,
@@ -82,6 +83,9 @@ export default function GuestDetailsModal({
 }: {
   open: boolean;
   reservation: GuestDetailsReservation | null;
+  /** The property's currency. Null renders unsymbolled rather than guessing —
+   *  this modal shows a real folio balance and must not invent a currency. */
+  currencyCode: string | null;
   propertyId: string;
   doorPin?: string | null;
   onClose: () => void;
@@ -230,7 +234,7 @@ export default function GuestDetailsModal({
               {t('frontDesk.accountSummary')}
             </p>
             <p className="text-sm text-telivity-navy font-semibold">
-              {t('frontDesk.balance')}: {formatMoney(balance)}
+              {t('frontDesk.balance')}: {formatMoney(balance, currencyCode)}
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -248,7 +252,7 @@ export default function GuestDetailsModal({
                     <li key={c.id} className="flex justify-between gap-2 text-sm">
                       <span className="text-telivity-slate truncate">{c.description || '—'}</span>
                       <span className="font-medium text-telivity-navy shrink-0">
-                        {formatMoney(c.amount)}
+                        {formatMoney(c.amount, currencyCode)}
                       </span>
                     </li>
                   ))}
@@ -269,7 +273,7 @@ export default function GuestDetailsModal({
                     <li key={p.id} className="flex justify-between gap-2 text-sm">
                       <span className="text-telivity-slate truncate">{p.method || '—'}</span>
                       <span className="font-medium text-telivity-navy shrink-0">
-                        {formatMoney(p.amount)}
+                        {formatMoney(p.amount, currencyCode)}
                       </span>
                     </li>
                   ))}

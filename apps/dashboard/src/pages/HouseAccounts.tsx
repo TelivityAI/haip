@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Building2, Plus, ChevronLeft, Package, Pencil } from 'lucide-react';
 import { api } from '../lib/api';
-import { moneyString, requirePropertyId } from '../lib/api-helpers';
+import { moneyString, requirePropertyId, requireCurrency } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
+import { formatMoney } from '../lib/money';
 import { useTranslation } from 'react-i18next';
 
 interface HouseAccount {
@@ -77,6 +77,7 @@ function HouseAccountList() {
   const createProduct = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
       return api.post('/v1/products', {
         propertyId,
         name: productName,
@@ -175,7 +176,7 @@ function HouseAccountList() {
                   <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{a.name}</td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{t(`houseAccounts.kinds.${a.kind}`, { defaultValue: a.kind })}</td>
                   <td className="px-4 py-3"><StatusBadge status={a.status === 'open' ? 'success' : 'completed'} label={a.status} /></td>
-                  <td className="px-4 py-3 text-sm text-right font-medium">{formatMoney(a.balance ?? 0)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-medium">{formatMoney(a.balance ?? 0, currencyCode)}</td>
                 </tr>
               ))}
               {accounts.length === 0 && (
@@ -201,7 +202,7 @@ function HouseAccountList() {
                 <tr key={p.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
                   <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{p.name}</td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{p.category ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm text-right">{formatMoney(p.price)} {p.currencyCode}</td>
+                  <td className="px-4 py-3 text-sm text-right">{formatMoney(p.price, currencyCode)} {p.currencyCode}</td>
                   <td className="px-4 py-3"><StatusBadge status={p.isActive !== false ? 'success' : 'completed'} label={p.isActive !== false ? t('common.active') : t('common.inactive')} /></td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <button
@@ -325,6 +326,7 @@ function HouseAccountDetail() {
   const postCharge = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
       return api.post(`/v1/house-accounts/${id}/charges`, {
         propertyId,
         description: chargeDesc,
@@ -343,6 +345,7 @@ function HouseAccountDetail() {
   const postPayment = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
       return api.post(`/v1/house-accounts/${id}/payments`, {
         propertyId,
         method: paymentMethod,
@@ -390,7 +393,7 @@ function HouseAccountDetail() {
         <StatusBadge status={account.status === 'open' ? 'success' : 'completed'} label={account.status} />
         <div className="ml-auto text-right">
           <p className="text-xs text-telivity-mid-grey">{t('houseAccounts.balance')}</p>
-          <p className="text-xl font-semibold">{formatMoney(account.balance ?? 0)}</p>
+          <p className="text-xl font-semibold">{formatMoney(account.balance ?? 0, currencyCode)}</p>
         </div>
       </div>
 
@@ -433,7 +436,7 @@ function HouseAccountDetail() {
           <select value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
             <option value="">{t('houseAccounts.selectProduct')}</option>
             {products.filter((p) => p.isActive !== false).map((p) => (
-              <option key={p.id} value={p.id}>{p.name} — {formatMoney(p.price)}</option>
+              <option key={p.id} value={p.id}>{p.name} — {formatMoney(p.price, currencyCode)}</option>
             ))}
           </select>
           <input type="number" min="1" value={sellQty} onChange={(e) => setSellQty(e.target.value)} placeholder={t('houseAccounts.quantity')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />

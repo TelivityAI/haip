@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BadgeDollarSign, Plus, ChevronLeft, Pencil, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
-import { moneyString, requirePropertyId } from '../lib/api-helpers';
+import { moneyString, requirePropertyId, requireCurrency } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import { useTranslation } from 'react-i18next';
 import RatePlanCalendar from '../components/rates/RatePlanCalendar';
+import { formatMoney } from '../lib/money';
 
 interface RatePlan {
   id: string;
@@ -121,6 +121,7 @@ function RatePlanList() {
   const createMutation = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
       const payload: Record<string, unknown> = {
         propertyId,
         name,
@@ -567,7 +568,7 @@ function RatePlanDetail() {
           {effectiveRate != null && (
             <div className="mt-4 bg-telivity-light-grey rounded-lg p-4 text-center">
               <p className="text-xs text-telivity-mid-grey">{t('ratePlans.effectiveRateFor', { date: testDate || '—' })}</p>
-              <p className="text-2xl font-semibold text-telivity-navy">{formatMoney(effectiveRate)}</p>
+              <p className="text-2xl font-semibold text-telivity-navy">{formatMoney(effectiveRate, currencyCode)}</p>
             </div>
           )}
         </div>
