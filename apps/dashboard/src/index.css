@@ -1,3 +1,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  .bi-enter {
+    animation: bi-fade-up 0.45s ease-out both;
+  }
+
+  .bi-hero {
+    animation: bi-fade-up 0.35s ease-out both;
+  }
+}
+
+@keyframes bi-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

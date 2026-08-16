@@ -38,10 +38,15 @@ export default {
           '0%, 100%': { opacity: '0.4' },
           '50%': { opacity: '0.7' },
         },
+        'bi-fade-up': {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'slide-in': 'slide-in 0.2s ease-out',
         'skeleton': 'pulse-skeleton 1.5s ease-in-out infinite',
+        'bi-enter': 'bi-fade-up 0.45s ease-out both',
       },
     },
   },
