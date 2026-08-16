@@ -820,7 +820,16 @@ function AvailabilityCalendar() {
   const { data: resData } = useQuery({
     queryKey: ['reservations', 'calendar', propertyId, format(startDate, 'yyyy-MM-dd')],
     queryFn: () => api.get('/v1/reservations', {
-      params: { propertyId, arrivalDateFrom: format(startDate, 'yyyy-MM-dd'), arrivalDateTo: format(addDays(startDate, 13), 'yyyy-MM-dd') },
+      // OVERLAP, not arrival-within. Filtering on arrivalDateFrom asks "who
+      // arrives during this fortnight", which silently omits every guest who
+      // arrived before it and is still in the hotel — the people most likely to
+      // be looked up on a tape chart. A stay overlaps the window when it
+      // arrives before the window ends AND departs after it starts.
+      params: {
+        propertyId,
+        arrivalDateTo: format(addDays(startDate, 13), 'yyyy-MM-dd'),
+        departureDateFrom: format(startDate, 'yyyy-MM-dd'),
+      },
     }).then((r) => r.data),
     enabled: !!propertyId,
   });
