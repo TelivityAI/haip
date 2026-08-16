@@ -116,7 +116,7 @@ export class IcalController {
   }
 
   @Get('feeds/:id/blocks')
-  @Roles('admin')
+  @Roles('admin', 'revenue_manager')
   @ApiOperation({ summary: 'List imported busy blocks for a feed' })
   @ApiQuery({ name: 'propertyId', required: true })
   listBlocks(
