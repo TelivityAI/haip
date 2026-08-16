@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsUUID,
   IsEnum,
+  IsDateString,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -68,6 +69,20 @@ export class CreatePaymentDto {
   @MaxLength(255)
   gatewayPaymentToken?: string;
 
+  @ApiPropertyOptional({
+    example: 'sqpmt_01H...',
+    description:
+      "The gateway's own id for a payment taken OUT OF BAND — a link the guest paid, " +
+      'a terminal, or a charge made in the provider dashboard. The column already ' +
+      'exists but only the authorize/capture path could populate it, so a payment ' +
+      'recorded after the fact carried no reference back to the provider and could ' +
+      'not be reconciled against a settlement report.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  gatewayTransactionId?: string;
+
   @ApiPropertyOptional({ example: '4242', description: 'Last 4 digits only' })
   @IsOptional()
   @IsString()
@@ -84,4 +99,16 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-08-03T00:37:33Z',
+    description:
+      'When the money actually moved. Omit for payments taken now — the server stamps ' +
+      'the current time. Supply it only when recording a payment that ALREADY happened ' +
+      'elsewhere, such as a historical import or an out-of-band gateway receipt. Must ' +
+      'not be in the future.',
+  })
+  @IsOptional()
+  @IsDateString()
+  processedAt?: string;
 }
