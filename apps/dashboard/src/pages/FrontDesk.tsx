@@ -1,5 +1,4 @@
 import { Fragment, useMemo, useState } from 'react';
-import { formatMoney } from '../lib/money';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote, UserRound, Plus, X } from 'lucide-react';
@@ -14,6 +13,7 @@ import IdSwipeCapture from '../components/guests/IdSwipeCapture';
 import GuestDetailsModal from '../components/front-desk/GuestDetailsModal';
 import type { ParsedIdDocument } from '../lib/id-document-swipe';
 import type { Guest } from '../types/guest';
+import { formatMoney } from '../lib/money';
 
 type Tab = 'arrivals' | 'in-house' | 'departures';
 
@@ -126,7 +126,7 @@ function emptyWalkInExtraRoom(defaults?: {
 
 export default function FrontDesk() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const queryClient = useQueryClient();
   const today = format(new Date(), 'yyyy-MM-dd');
   const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
@@ -1011,7 +1011,7 @@ export default function FrontDesk() {
                       </td>
                       {(tab === 'in-house' || tab === 'departures') && (
                         <td className="px-4 py-3 text-sm text-right font-medium">
-                          {formatMoney(r.balance ?? 0)}
+                          {formatMoney(r.balance ?? 0, currencyCode)}
                         </td>
                       )}
                       <td className="px-4 py-3 text-right">
@@ -1838,6 +1838,7 @@ export default function FrontDesk() {
       </Modal>
 
       <GuestDetailsModal
+        currencyCode={currencyCode}
         open={!!detailsModal}
         reservation={detailsModal}
         propertyId={propertyId}
@@ -1926,7 +1927,7 @@ export default function FrontDesk() {
             <div className="bg-telivity-light-grey rounded-lg p-4">
               <p className="text-xs text-telivity-mid-grey">{t('frontDesk.outstandingBalance')}</p>
               <p className="text-xl font-semibold text-telivity-navy">
-                {formatMoney(checkOutModal.balance ?? 0)}
+                {formatMoney(checkOutModal.balance ?? 0, currencyCode)}
               </p>
             </div>
             <div className="flex gap-3 pt-2">

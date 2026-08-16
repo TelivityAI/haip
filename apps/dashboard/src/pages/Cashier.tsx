@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Banknote, Plus, ChevronLeft, FileText } from 'lucide-react';
@@ -8,6 +7,7 @@ import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
+import { formatMoney } from '../lib/money';
 import { useTranslation } from 'react-i18next';
 
 interface CashDrawer {
@@ -27,7 +27,7 @@ interface CashSession {
 
 function CashierHome() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -86,7 +86,7 @@ function CashierHome() {
             {drawers.map((d, i) => (
               <tr key={d.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
                 <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{d.name}</td>
-                <td className="px-4 py-3 text-sm text-right">{formatMoney(d.startingFloat ?? 0)}</td>
+                <td className="px-4 py-3 text-sm text-right">{formatMoney(d.startingFloat ?? 0, currencyCode)}</td>
                 <td className="px-4 py-3 text-right">
                   <button onClick={() => navigate(`/cashier/sessions/${d.id}`)} className="text-xs font-semibold text-telivity-teal hover:underline">{t('cashier.openSession')}</button>
                 </td>
@@ -119,7 +119,7 @@ function CashierHome() {
 function CashierSession() {
   const { t } = useTranslation();
   const { drawerId } = useParams<{ drawerId: string }>();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -223,7 +223,7 @@ function CashierSession() {
         <div className="bg-white rounded-xl shadow-sm p-6 max-w-md space-y-4">
           {drawer?.startingFloat != null && (
             <p className="text-sm text-telivity-mid-grey">
-              {t('cashier.startingFloat')}: {formatMoney(drawer.startingFloat)}
+              {t('cashier.startingFloat')}: {formatMoney(drawer.startingFloat, currencyCode)}
             </p>
           )}
           <div>
@@ -265,7 +265,7 @@ function CashierSession() {
 function SessionReport() {
   const { t } = useTranslation();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
 
   const { data } = useQuery({
@@ -292,10 +292,10 @@ function SessionReport() {
       ) : (
         <div className="space-y-4">
           <div className="bg-white rounded-xl shadow-sm p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.openingFloat')}</p><p className="font-semibold">{formatMoney(session?.openingFloat ?? 0)}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.expected')}</p><p className="font-semibold">{formatMoney(report.expectedBalance ?? 0)}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.counted')}</p><p className="font-semibold">{formatMoney(session?.countedBalance)}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.variance')}</p><p className="font-semibold">{formatMoney(session?.variance ?? 0)}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.openingFloat')}</p><p className="font-semibold">${session?.openingFloat ?? '0.00'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.expected')}</p><p className="font-semibold">${report.expectedBalance ?? '0.00'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.counted')}</p><p className="font-semibold">${session?.countedBalance ?? '—'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.variance')}</p><p className="font-semibold">${session?.variance ?? '0.00'}</p></div>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -315,7 +315,7 @@ function SessionReport() {
                   <tr key={type} className="border-b border-gray-50">
                     <td className="px-4 py-3 text-sm capitalize">{type.replace('_', ' ')}</td>
                     <td className="px-4 py-3 text-sm text-right">{row.count}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatMoney(row.total)}</td>
+                    <td className="px-4 py-3 text-sm text-right">{formatMoney(row.total, currencyCode)}</td>
                   </tr>
                 ))}
               </tbody>

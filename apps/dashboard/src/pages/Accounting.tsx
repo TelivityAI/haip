@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { formatMoney } from '../lib/money';
 import { Routes, Route, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Calculator, Plus, Download, BarChart3, Pencil, Archive } from 'lucide-react';
 import { format } from 'date-fns';
 import { api } from '../lib/api';
-import { moneyString, requirePropertyId } from '../lib/api-helpers';
+import { moneyString, requirePropertyId, requireCurrency } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import Modal from '../components/ui/Modal';
+import { formatMoney } from '../lib/money';
 import { useTranslation } from 'react-i18next';
 
 interface Deposit {
@@ -147,6 +147,7 @@ function AccountingHome() {
   const recordDeposit = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
       return api.post('/v1/deposits', {
         propertyId,
         amount: moneyString(depositAmount),
@@ -212,6 +213,7 @@ function AccountingHome() {
   const createLedger = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
       return api.post('/v1/ar/ledgers', {
         propertyId,
         name: ledgerName,
@@ -341,12 +343,12 @@ function AccountingHome() {
         {(Object.keys(AGING_LABELS) as (keyof AgingBuckets)[]).map((key) => (
           <div key={key} className="flex justify-between border-b border-gray-50 py-1">
             <span>{AGING_LABELS[key]}</span>
-            <span className="font-medium">{formatMoney(report.buckets[key] ?? 0)}</span>
+            <span className="font-medium">{formatMoney(report.buckets[key] ?? 0, currencyCode)}</span>
           </div>
         ))}
         <div className="flex justify-between pt-2 font-semibold">
           <span>{t('accounting.total')}</span>
-          <span>{formatMoney(report.total ?? 0)}</span>
+          <span>{formatMoney(report.total ?? 0, currencyCode)}</span>
         </div>
       </div>
     ) : (
@@ -397,7 +399,7 @@ function AccountingHome() {
           <ul className="space-y-2 text-sm">
             {deposits.slice(0, 8).map((d) => (
               <li key={d.id} className="flex justify-between items-center border-b border-gray-50 py-1">
-                <span>{formatMoney(d.amount)}</span>
+                <span>{formatMoney(d.amount, currencyCode)}</span>
                 <span className="text-telivity-mid-grey">{d.status}</span>
                 {d.status === 'held' && (
                   <button
@@ -493,7 +495,7 @@ function AccountingHome() {
                     <span className="ml-2 text-xs text-telivity-mid-grey">({t('accounting.closed')})</span>
                   )}
                 </span>
-                <span className="font-medium shrink-0">{formatMoney(l.balance ?? 0)}</span>
+                <span className="font-medium shrink-0">{formatMoney(l.balance ?? 0, currencyCode)}</span>
                 <div className="flex flex-wrap gap-2 justify-end">
                   <button onClick={() => { setSelectedLedger(l); setArActionOpen('payment'); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.payment')}</button>
                   <button onClick={async () => { setSelectedLedger(l); setArActionOpen('aging'); await refetchAging(); }} className="text-xs text-telivity-teal hover:underline">{t('accounting.aging')}</button>
@@ -555,7 +557,7 @@ function AccountingHome() {
         </div>
       </Modal>
 
-      <Modal open={depositActionOpen} onClose={() => setDepositActionOpen(false)} title={t('accounting.depositActions', { amount: formatMoney(selectedDeposit?.amount ?? 0) })}>
+      <Modal open={depositActionOpen} onClose={() => setDepositActionOpen(false)} title={t('accounting.depositActions', { amount: Number(selectedDeposit?.amount ?? 0).toFixed(2) })}>
         <div className="space-y-4">
           <input type="text" value={applyFolioId} onChange={(e) => setApplyFolioId(e.target.value)} placeholder={t('accounting.folioIdPlaceholder')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-xs" />
           <button onClick={() => applyDeposit.mutate()} disabled={applyDeposit.isPending} className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('accounting.applyToFolio')}</button>
@@ -597,7 +599,7 @@ function AccountingHome() {
               <option value="">{t('accounting.selectTransaction')}</option>
               {reversible.map((tx) => (
                 <option key={tx.id} value={tx.id}>
-                  {formatMoney(tx.amount)} · {tx.createdAt?.split('T')[0] ?? tx.id.slice(0, 8)}
+                  {formatMoney(tx.amount, currencyCode)} · {tx.createdAt?.split('T')[0] ?? tx.id.slice(0, 8)}
                 </option>
               ))}
             </select>

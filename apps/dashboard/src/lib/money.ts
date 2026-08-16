@@ -12,27 +12,21 @@
  * number of fraction digits for every ISO 4217 code, so it does the work here.
  */
 
-/** Fallback when a record carries no currency and no property is selected. */
-export const DEFAULT_CURRENCY = 'USD';
-
 /**
- * The active property's currency, pushed here by PropertyContext.
+ * THERE IS NO DEFAULT CURRENCY, deliberately.
  *
- * Same pattern the API client already uses for propertyId (`setPropertyId` in
- * lib/api.ts): a module-level value the context keeps current. It means a money
- * render does not need the currency threaded into every component that happens
- * to display an amount — dozens of call sites across the dashboard, many inside
- * helpers that cannot call a hook at all.
+ * This file used to export DEFAULT_CURRENCY = 'USD' and fall back to it
+ * whenever a record carried no code — which reintroduced, one line below the
+ * comment explaining why it is wrong, exactly the bug it was written to fix.
+ * A property trading in JPY renders a real ¥151,110 balance as a dollar figure
+ * with two decimal places when the code is missing: a materially wrong number,
+ * on a live ledger, in whichever party's disfavour the reader happens to guess.
+ *
+ * A symbol we invented is worse than no symbol at all, because it looks
+ * authoritative. So an absent currency now renders the number PLAINLY — grouped
+ * but unsymbolled — which is honest about what we know and visibly odd enough
+ * that someone asks, rather than quietly wrong.
  */
-let activeCurrency = DEFAULT_CURRENCY;
-
-export function setActiveCurrency(code?: string | null) {
-  activeCurrency = (code || DEFAULT_CURRENCY).toUpperCase();
-}
-
-export function getActiveCurrency() {
-  return activeCurrency;
-}
 
 /**
  * Format a money value for display.
@@ -50,7 +44,11 @@ export function formatMoney(
   const value = typeof amount === 'string' ? Number(amount) : amount;
   if (!Number.isFinite(value)) return '—';
 
-  const code = (currencyCode || activeCurrency).toUpperCase();
+  const code = (currencyCode || '').trim().toUpperCase();
+  if (!code) {
+    // No code, no symbol. Never guess one.
+    return value.toLocaleString(locale);
+  }
   try {
     return new Intl.NumberFormat(locale, {
       style: 'currency',
@@ -75,7 +73,8 @@ export function formatMoneyPlain(
   const value = typeof amount === 'string' ? Number(amount) : amount;
   if (!Number.isFinite(value)) return '—';
 
-  const code = (currencyCode || activeCurrency).toUpperCase();
+  const code = (currencyCode || '').trim().toUpperCase();
+  if (!code) return value.toLocaleString(locale);
   try {
     const digits = new Intl.NumberFormat(locale, {
       style: 'currency',

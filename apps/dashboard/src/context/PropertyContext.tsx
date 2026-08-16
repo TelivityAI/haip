@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { useSearchParams } from 'react-router-dom';
 import { api, setPropertyId as setApiPropertyId } from '../lib/api';
 import { joinPropertyRoom, leavePropertyRoom } from '../lib/socket';
-import { DEFAULT_CURRENCY, setActiveCurrency } from '../lib/money';
 import {
   PORTFOLIO_MODE_ID,
   type PropertySummary,
@@ -11,8 +10,9 @@ import {
 
 interface PropertyContextValue {
   propertyId: string | null;
-  /** Active property's ISO 4217 code; falls back to USD before properties load. */
-  currencyCode: string;
+  /** null when unknown — portfolio mode, or a property with no code. Never a
+   *  substituted default: see lib/money.ts. */
+  currencyCode: string | null;
   setPropertyId: (id: string) => void;
   isPortfolioMode: boolean;
   properties: PropertySummary[];
@@ -23,7 +23,7 @@ interface PropertyContextValue {
 
 const PropertyContext = createContext<PropertyContextValue>({
   propertyId: null,
-  currencyCode: DEFAULT_CURRENCY,
+  currencyCode: null,
   setPropertyId: () => {},
   isPortfolioMode: false,
   properties: [],
@@ -44,11 +44,14 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
 
   const isPortfolioMode = propertyId === PORTFOLIO_MODE_ID;
   // Portfolio mode spans properties that may not share a currency, so it has no
-  // single answer — fall back rather than assert one property's code over others.
+  // single answer — and NULL is that answer. Substituting one property's code,
+  // or a house default, prints a currency nobody chose next to real money.
+  // formatMoney renders an unsymbolled number when the code is null, which is
+  // the honest rendering of "we do not know".
   const currencyCode =
     (!isPortfolioMode &&
       properties.find((p) => p.id === propertyId)?.currencyCode) ||
-    DEFAULT_CURRENCY;
+    null;
 
   function setPropertyId(id: string) {
     setPropertyIdState(id);
@@ -84,12 +87,6 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
       .finally(() => setPropertiesLoading(false));
     // Bootstrap once; propertyId auto-select handled inside the effect.
   }, []);
-
-  // Keep the money formatter's default in step with the active property, the
-  // same way setApiPropertyId keeps the API client in step above.
-  useEffect(() => {
-    setActiveCurrency(currencyCode);
-  }, [currencyCode]);
 
   useEffect(() => {
     if (isPortfolioMode) {
