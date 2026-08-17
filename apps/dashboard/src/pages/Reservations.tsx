@@ -73,7 +73,7 @@ function parseImportRows(text: string): Record<string, unknown>[] {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => {
+    .map((line, index) => {
       const [
         guestId,
         arrivalDate,
@@ -86,6 +86,12 @@ function parseImportRows(text: string): Record<string, unknown>[] {
         adults,
         children,
       ] = line.split(',').map((s) => s.trim());
+      if (!currencyCode) {
+        // Was `currencyCode || 'USD'`. A missing column is not a USD booking —
+        // it is a row we cannot price, and importing it as dollars against a
+        // property trading in anything else writes a wrong number to a ledger.
+        throw new Error(`Row ${index + 1}: currencyCode is required`);
+      }
       const row: Record<string, unknown> = {
         guestId,
         arrivalDate,
@@ -93,7 +99,7 @@ function parseImportRows(text: string): Record<string, unknown>[] {
         roomTypeId,
         ratePlanId,
         totalAmount: totalAmount ? moneyString(totalAmount) : undefined,
-        currencyCode: currencyCode || 'USD',
+        currencyCode,
         source: source || 'direct',
       };
       if (adults) row.adults = Number(adults);
@@ -646,7 +652,7 @@ function ReservationList() {
                 totalAmount={
                   detailRes.totalAmount != null ? String(detailRes.totalAmount) : undefined
                 }
-                currencyCode={detailRes.currencyCode ?? 'USD'}
+                currencyCode={detailRes.currencyCode ?? null}
               />
               <ReservationOpsNotes reservationId={detailRes.id} propertyId={propertyId!} />
               <ReservationMessageCompose reservationId={detailRes.id} propertyId={propertyId!} />

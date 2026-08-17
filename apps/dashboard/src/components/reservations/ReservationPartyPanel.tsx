@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, Split, ArrowRightLeft, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { moneyString, requirePropertyId } from '../../lib/api-helpers';
+import { moneyString, requirePropertyId, requireCurrency } from '../../lib/api-helpers';
 import { useToast } from '../ui/Toast';
 import FindGuest from '../guests/FindGuest';
 import type { Guest } from '../../types/guest';
@@ -54,14 +54,14 @@ export default function ReservationPartyPanel({
   roomTypeId,
   ratePlanId,
   totalAmount,
-  currencyCode = 'USD',
+  currencyCode,
 }: {
   reservationId: string;
   propertyId: string;
   roomTypeId?: string;
   ratePlanId?: string;
   totalAmount?: string;
-  currencyCode?: string;
+  currencyCode?: string | null;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -166,6 +166,7 @@ export default function ReservationPartyPanel({
   const splitMutation = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
       return api.post(
         `/v1/reservations/${reservationId}/split`,
         {

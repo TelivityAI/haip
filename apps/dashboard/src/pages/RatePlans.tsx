@@ -541,7 +541,7 @@ function RatePlanDetail() {
             <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.code')}</p><p className="text-sm font-medium">{plan.code}</p></div>
             <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.baseAmount')}</p><p className="text-sm font-medium">{plan.baseAmount != null ? formatMoney(plan.baseAmount, currencyCode) : '—'}</p></div>
             <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.roomType')}</p><p className="text-sm font-medium">{plan.roomTypeName ?? '—'}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.currency')}</p><p className="text-sm font-medium">{plan.currency ?? plan.currencyCode ?? 'USD'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.currency')}</p><p className="text-sm font-medium">{plan.currency ?? plan.currencyCode ?? '—'}</p></div>
             {plan.type === 'derived' && (
               <>
                 <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.parentRatePlan')}</p><p className="text-sm font-medium font-mono">{plan.parentRatePlanId ?? '—'}</p></div>

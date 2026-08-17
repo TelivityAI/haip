@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote, UserRound, Plus, X } from 'lucide-react';
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { api } from '../lib/api';
-import { moneyString, requirePropertyId } from '../lib/api-helpers';
+import { moneyString, requirePropertyId, requireCurrency } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
@@ -472,6 +472,7 @@ export default function FrontDesk() {
 
       const plans: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
       const plan = plans.find((p) => p.id === wiRatePlanId);
+      requireCurrency(plan?.currencyCode ?? null);
       const nightly = Number(plan?.baseAmount ?? 0);
       const guestId = wiGuest.id;
       const resCreate = await api.post(
@@ -486,7 +487,7 @@ export default function FrontDesk() {
           adults: 1 + primaryAdditionalIds.length,
           source: 'walk_in',
           totalAmount: moneyString(nightly * wiNights),
-          currencyCode: plan?.currencyCode ?? 'USD',
+          currencyCode: plan?.currencyCode,
         },
         { skipErrorToast: true },
       );
@@ -518,6 +519,7 @@ export default function FrontDesk() {
       for (let i = 0; i < wiExtraRooms.length; i++) {
         const extra = wiExtraRooms[i];
         const planExtra = plans.find((p) => p.id === extra.ratePlanId);
+        requireCurrency(planExtra?.currencyCode ?? null);
         const nightlyExtra = Number(planExtra?.baseAmount ?? 0);
         const extraGuestIds = [extra.guest!.id, ...extraAdditionalIds[i]];
         // Occupants must be attached to the source (primary) reservation before they
@@ -539,7 +541,7 @@ export default function FrontDesk() {
             roomTypeId: extra.roomTypeId,
             ratePlanId: extra.ratePlanId,
             totalAmount: moneyString(nightlyExtra * wiNights),
-            currencyCode: planExtra?.currencyCode ?? 'USD',
+            currencyCode: planExtra?.currencyCode,
             roomId: extra.roomId,
             adults: extraGuestIds.length,
             overrideMaxOccupancy: extra.overrideOccupancy,
