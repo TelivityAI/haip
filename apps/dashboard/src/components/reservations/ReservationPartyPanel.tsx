@@ -166,7 +166,7 @@ export default function ReservationPartyPanel({
   const splitMutation = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
-      requireCurrency(currencyCode);
+      requireCurrency(currencyCode ?? null);
       return api.post(
         `/v1/reservations/${reservationId}/split`,
         {
