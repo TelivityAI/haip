@@ -243,14 +243,17 @@ function SplitFolioPanel({
   });
 
   const createSplitFolio = useMutation({
-    mutationFn: () =>
-      api.post('/v1/folios', {
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      requireCurrency(folio.currencyCode ?? null);
+      return api.post('/v1/folios', {
         propertyId,
         reservationId,
         guestId: folio.guestId,
         type: 'guest',
-        currencyCode: folio.currencyCode ?? 'USD',
-      }),
+        currencyCode: folio.currencyCode,
+      });
+    },
     onSuccess: () => {
       refetchSiblings();
       setSplitOpen(false);
@@ -497,7 +500,7 @@ function FolioDetail() {
   const folio: Folio | null = folioData?.data ?? folioData ?? null;
   const charges: Charge[] = chargesData?.data ?? chargesData ?? [];
   const payments: Payment[] = paymentsData?.data ?? paymentsData ?? [];
-  const currencyCode = folio?.currencyCode ?? 'USD';
+  const currencyCode = folio?.currencyCode ?? null;
 
   const reversedIds = new Set(
     charges.filter((c) => c.isReversal && c.originalChargeId).map((c) => c.originalChargeId!),

@@ -65,6 +65,7 @@ function HouseAccountList() {
   const createMutation = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
       return api.post('/v1/house-accounts', { propertyId, name, kind, currencyCode });
     },
     onSuccess: () => {
@@ -321,7 +322,7 @@ function HouseAccountDetail() {
 
   const account: HouseAccount | null = data?.data ?? data ?? null;
   const products: Product[] = productsData?.data ?? productsData ?? [];
-  const currencyCode = account?.currencyCode ?? 'USD';
+  const currencyCode = account?.currencyCode ?? null;
 
   const postCharge = useMutation({
     mutationFn: () => {

@@ -279,10 +279,11 @@ function AccountingHome() {
   const recordArPayment = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      requireCurrency(selectedLedger?.currencyCode ?? null);
       return api.post(`/v1/ar/ledgers/${selectedLedger!.id}/payments`, {
         propertyId,
         amount: moneyString(arPaymentAmount),
-        currencyCode: selectedLedger?.currencyCode ?? 'USD',
+        currencyCode: selectedLedger?.currencyCode,
       });
     },
     onSuccess: () => {

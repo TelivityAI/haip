@@ -225,6 +225,7 @@ export default function GuestDetailsModal({
             roomTypeId={reservation.roomTypeId}
             ratePlanId={reservation.ratePlanId}
             totalAmount={reservation.totalAmount}
+            currencyCode={currencyCode}
           />
         </div>
 
