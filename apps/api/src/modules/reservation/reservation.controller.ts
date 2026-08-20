@@ -37,6 +37,7 @@ import { ComposeMessageDto } from './dto/compose-message.dto';
 import { AddReservationGuestDto } from './dto/add-reservation-guest.dto';
 import { SplitReservationDto } from './dto/split-reservation.dto';
 import { MoveReservationGuestDto } from './dto/move-reservation-guest.dto';
+import { resolvePropertyId } from '../../common/property-id';
 
 @ApiTags('reservations')
 @Controller('reservations')
@@ -381,13 +382,24 @@ export class ReservationController {
 
   @Post(':id/notes')
   @Roles('admin', 'general_manager', 'front_desk', 'reservations')
-  @ApiOperation({ summary: 'Add a note to a reservation' })
+  @ApiOperation({
+    summary: 'Add a note to a reservation',
+    description:
+      'propertyId may be sent in the JSON body (preferred) or as ?propertyId= when omitted from the body. If both are sent they must match.',
+  })
+  @ApiQuery({
+    name: 'propertyId',
+    required: false,
+    description: 'Alias when body omits propertyId',
+  })
   @ApiResponse({ status: 201, description: 'Note created' })
   createNote(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateNoteDto,
+    @Query('propertyId', new ParseUUIDPipe({ optional: true })) queryPropertyId?: string,
   ) {
-    return this.notesService.createNote(dto.propertyId, id, dto);
+    const propertyId = resolvePropertyId({ body: dto.propertyId, query: queryPropertyId });
+    return this.notesService.createNote(propertyId, id, dto);
   }
 
   @Get(':id/notes')
