@@ -20,7 +20,7 @@ export class RoomService {
 
   // --- Room Types ---
 
-  async createRoomType(dto: CreateRoomTypeDto) {
+  async createRoomType(dto: CreateRoomTypeDto & { propertyId: string }) {
     const [roomType] = await this.db
       .insert(roomTypes)
       .values(dto)

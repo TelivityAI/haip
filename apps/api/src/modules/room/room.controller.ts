@@ -24,6 +24,7 @@ import {
   DismissDiscrepancyDto,
   EnsureDiscrepancyCaseDto,
 } from './dto/resolve-discrepancy.dto';
+import { resolvePropertyId } from '../../common/property-id';
 
 @ApiTags('rooms', 'room-types')
 @Controller('rooms')
@@ -46,10 +47,23 @@ export class RoomController {
 
   @Post('types')
   @Roles('admin', 'general_manager', 'front_desk', 'housekeeping_manager')
-  @ApiOperation({ summary: 'Create new room type' })
+  @ApiOperation({
+    summary: 'Create new room type',
+    description:
+      'propertyId may be sent in the JSON body (preferred) or as ?propertyId= when omitted from the body. If both are sent they must match.',
+  })
+  @ApiQuery({
+    name: 'propertyId',
+    required: false,
+    description: 'Alias when body omits propertyId',
+  })
   @ApiResponse({ status: 201, description: 'Room type created' })
-  createRoomType(@Body() dto: CreateRoomTypeDto) {
-    return this.roomService.createRoomType(dto);
+  createRoomType(
+    @Body() dto: CreateRoomTypeDto,
+    @Query('propertyId', new ParseUUIDPipe({ optional: true })) queryPropertyId?: string,
+  ) {
+    dto.propertyId = resolvePropertyId({ body: dto.propertyId, query: queryPropertyId });
+    return this.roomService.createRoomType(dto as CreateRoomTypeDto & { propertyId: string });
   }
 
   @Get('types/:id')
