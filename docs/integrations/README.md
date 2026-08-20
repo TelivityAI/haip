@@ -8,6 +8,8 @@ For the full integration catalog, see **[Integration catalog](../INTEGRATIONS.md
 
 For event delivery (signatures, payloads, retries, subscriptions), start with **[Webhooks & events](../webhooks.md)**.
 
+Staff REST request/response conventions (propertyId locations, envelopes, pagination, cancel aliases, external confirmation): **[API conventions](../api-conventions.md)**.
+
 ## Recipes
 
 | Recipe | What it covers |
