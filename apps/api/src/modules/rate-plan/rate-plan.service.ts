@@ -41,10 +41,15 @@ export class RatePlanService {
   ) {}
 
   /**
-   * Enforce rate-plan restrictions for a stay [checkIn, checkOut). Throws 400 if
-   * the plan is not sellable: stop-sell (closed), closed-to-arrival on the
-   * check-in date, closed-to-departure on the check-out date, or a min/max
-   * length-of-stay violation.
+   * Enforce rate-plan sellability for a stay [checkIn, checkOut). Throws 400 if
+   * the plan is inactive, the stay is outside validFrom/validTo, or a restriction
+   * blocks it: stop-sell (closed), closed-to-arrival on the check-in date,
+   * closed-to-departure on the check-out date, or a min/max length-of-stay
+   * violation.
+   *
+   * validTo is the inclusive last consumed night. Checkout is exclusive, so a
+   * stay departing the day after validTo is still sellable; a stay that consumes
+   * any night after validTo is not.
    *
    * The BOOK path MUST call this. SEARCH only *surfaces* restrictions (it doesn't
    * hard-block CTA/CTD), so without this guard a direct create-reservation call —
@@ -61,6 +66,26 @@ export class RatePlanService {
     );
     if (!(nights > 0)) {
       throw new BadRequestException('Check-out must be after check-in');
+    }
+
+    // Plan lookup is scoped by both ids — never infer propertyId from the row.
+    const [plan] = await this.db
+      .select()
+      .from(ratePlans)
+      .where(and(eq(ratePlans.id, ratePlanId), eq(ratePlans.propertyId, propertyId)));
+    if (!plan) {
+      throw new NotFoundException(`Rate plan ${ratePlanId} not found`);
+    }
+    if (plan.isActive === false) {
+      throw new BadRequestException('Rate plan is inactive');
+    }
+
+    const lastConsumedNight = this.addDaysIso(checkOut, -1);
+    if (
+      (plan.validFrom && checkIn < plan.validFrom) ||
+      (plan.validTo && lastConsumedNight > plan.validTo)
+    ) {
+      throw new BadRequestException('Rate plan is not valid for the complete stay');
     }
 
     // Restrictions overlapping the stay (scoped by property — multi-tenancy).
