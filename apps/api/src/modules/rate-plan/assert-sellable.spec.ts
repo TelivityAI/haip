@@ -4,14 +4,38 @@ import { RatePlanService } from './rate-plan.service';
 const PROPERTY = '11111111-1111-1111-1111-111111111111';
 const RATE_PLAN = '22222222-2222-2222-2222-222222222222';
 const CHECK_IN = '2026-07-10';
-const CHECK_OUT = '2026-07-12'; // 2 nights
+const CHECK_OUT = '2026-07-12'; // 2 nights: July 10 and July 11
+const LAST_NIGHT = '2026-07-11';
 
-/** db whose select().from().where() resolves to the given restriction rows. */
-function svcWith(restrictions: any[]): RatePlanService {
-  const db = {
-    select: () => ({ from: () => ({ where: () => Promise.resolve(restrictions) }) }),
+const DEFAULT_PLAN = {
+  id: RATE_PLAN,
+  propertyId: PROPERTY,
+  isActive: true,
+  validFrom: null,
+  validTo: null,
+};
+
+/**
+ * db whose select().from().where() returns the property-scoped plan or
+ * restriction rows according to the queried table.
+ */
+function dbFor(plan: any | null, restrictions: any[]) {
+  return {
+    select: () => ({
+      from: (table: { startDate?: unknown }) => ({
+        where: () =>
+          Promise.resolve(table.startDate !== undefined ? restrictions : plan ? [plan] : []),
+      }),
+    }),
   };
-  return new RatePlanService(db as any);
+}
+
+function svcWith(restrictions: any[]): RatePlanService {
+  return new RatePlanService(dbFor(DEFAULT_PLAN, restrictions) as any);
+}
+
+function svcWithPlan(plan: any, restrictions: any[] = []): RatePlanService {
+  return new RatePlanService(dbFor(plan, restrictions) as any);
 }
 
 const span = { startDate: '2026-07-01', endDate: '2026-07-31' };
@@ -75,5 +99,83 @@ describe('RatePlanService.assertSellable', () => {
         CHECK_OUT,
       ),
     ).resolves.toBeUndefined();
+  });
+
+  it('rejects an inactive rate plan', async () => {
+    await expect(
+      svcWithPlan({
+        id: RATE_PLAN,
+        propertyId: PROPERTY,
+        isActive: false,
+        validFrom: null,
+        validTo: null,
+      }).assertSellable(PROPERTY, RATE_PLAN, CHECK_IN, CHECK_OUT),
+    ).rejects.toThrow(/inactive/);
+  });
+
+  it('rejects a stay that arrives before the rate plan valid-from date', async () => {
+    await expect(
+      svcWithPlan({
+        id: RATE_PLAN,
+        propertyId: PROPERTY,
+        isActive: true,
+        validFrom: '2026-07-11',
+        validTo: null,
+      }).assertSellable(PROPERTY, RATE_PLAN, CHECK_IN, CHECK_OUT),
+    ).rejects.toThrow(/not valid for the complete stay/);
+  });
+
+  it('accepts a stay that arrives on the rate plan valid-from date', async () => {
+    await expect(
+      svcWithPlan({
+        id: RATE_PLAN,
+        propertyId: PROPERTY,
+        isActive: true,
+        validFrom: CHECK_IN,
+        validTo: null,
+      }).assertSellable(PROPERTY, RATE_PLAN, CHECK_IN, CHECK_OUT),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects a stay that consumes a night after the rate plan valid-to date', async () => {
+    await expect(
+      svcWithPlan({
+        id: RATE_PLAN,
+        propertyId: PROPERTY,
+        isActive: true,
+        validFrom: null,
+        validTo: CHECK_IN,
+      }).assertSellable(PROPERTY, RATE_PLAN, CHECK_IN, CHECK_OUT),
+    ).rejects.toThrow(/not valid for the complete stay/);
+  });
+
+  it('accepts a stay whose last consumed night equals the inclusive valid-to date', async () => {
+    await expect(
+      svcWithPlan({
+        id: RATE_PLAN,
+        propertyId: PROPERTY,
+        isActive: true,
+        validFrom: null,
+        validTo: LAST_NIGHT,
+      }).assertSellable(PROPERTY, RATE_PLAN, CHECK_IN, CHECK_OUT),
+    ).resolves.toBeUndefined();
+  });
+
+  it('accepts a stay that departs on valid-to (departure date is exclusive)', async () => {
+    await expect(
+      svcWithPlan({
+        id: RATE_PLAN,
+        propertyId: PROPERTY,
+        isActive: true,
+        validFrom: null,
+        validTo: CHECK_OUT,
+      }).assertSellable(PROPERTY, RATE_PLAN, CHECK_IN, CHECK_OUT),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects when the rate plan is not found at the caller-supplied property', async () => {
+    await expect(
+      svcWithPlan(null).assertSellable(PROPERTY, RATE_PLAN, CHECK_IN, CHECK_OUT),
+    ).rejects.toThrow(/not found/);
   });
 });
