@@ -300,7 +300,11 @@ export class ReservationController {
 
   @Patch(':id/cancel')
   @Roles('admin', 'general_manager', 'front_desk', 'reservations')
-  @ApiOperation({ summary: 'Cancel reservation with optional reason' })
+  @ApiOperation({
+    summary: 'Cancel reservation with optional reason',
+    description:
+      'Optional body field: `cancellationReason` (preferred) or `reason` (alias matching Connect/bulk). Empty body is allowed.',
+  })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation cancelled' })
   cancelReservation(

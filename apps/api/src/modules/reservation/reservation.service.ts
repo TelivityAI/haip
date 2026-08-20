@@ -24,7 +24,7 @@ import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ModifyReservationDto } from './dto/modify-reservation.dto';
 import { AssignRoomDto } from './dto/assign-room.dto';
 import { MoveRoomDto } from './dto/move-room.dto';
-import { CancelReservationDto } from './dto/cancel-reservation.dto';
+import { CancelReservationDto, resolveCancellationReason } from './dto/cancel-reservation.dto';
 import { ListReservationsDto } from './dto/list-reservations.dto';
 import { CheckInDto } from './dto/check-in.dto';
 import { PreRegisterDto } from './dto/pre-register.dto';
@@ -319,6 +319,7 @@ export class ReservationService {
   async cancel(id: string, propertyId: string, dto: CancelReservationDto) {
     const reservation = await this.findByIdRaw(id, propertyId);
     assertTransition(reservation.status as ReservationStatus, 'cancelled');
+    const cancellationReason = resolveCancellationReason(dto);
 
     // Bug 2: conditional claim prevents double-cancel races. Allowed from
     // any pre-check-in state per the state machine.
@@ -329,7 +330,7 @@ export class ReservationService {
       {
         status: 'cancelled',
         cancelledAt: new Date(),
-        cancellationReason: dto.cancellationReason,
+        cancellationReason,
         updatedAt: new Date(),
       },
       'cancelled',
@@ -368,7 +369,7 @@ export class ReservationService {
         arrivalDate: updated.arrivalDate,
         departureDate: updated.departureDate,
         roomTypeId: updated.roomTypeId,
-        cancellationReason: dto.cancellationReason,
+        cancellationReason,
         penaltyAmount: settlement?.penaltyAmount ?? null,
         withinFreeWindow: settlement?.withinFreeWindow ?? null,
       },
