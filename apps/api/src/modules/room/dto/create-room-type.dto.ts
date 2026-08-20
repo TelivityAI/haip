@@ -12,9 +12,13 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateRoomTypeDto {
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description:
+      'Property id. Required in the body, or pass ?propertyId= as a query alias when omitted from the body.',
+  })
+  @IsOptional()
   @IsUUID()
-  propertyId!: string;
+  propertyId?: string;
 
   @ApiProperty({ example: 'Standard King' })
   @IsString()

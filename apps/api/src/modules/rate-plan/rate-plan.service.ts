@@ -132,15 +132,16 @@ export class RatePlanService {
 
   // --- Rate Plans ---
 
-  async create(dto: CreateRatePlanDto) {
+  async create(dto: CreateRatePlanDto & { propertyId: string }) {
     // FK ownership (security audit follow-on): roomTypeId is required on the
     // DTO. Without scoping to dto.propertyId, a caller at property A could
     // create a rate plan pointing at property B's room type. The existing
     // derived-parent check below already scopes parentRatePlanId.
+    const propertyId = dto.propertyId;
     const [rt] = await this.db
       .select({ id: roomTypes.id })
       .from(roomTypes)
-      .where(and(eq(roomTypes.id, dto.roomTypeId), eq(roomTypes.propertyId, dto.propertyId)));
+      .where(and(eq(roomTypes.id, dto.roomTypeId), eq(roomTypes.propertyId, propertyId)));
     if (!rt) {
       throw new BadRequestException(`room type ${dto.roomTypeId} not found in this property`);
     }
@@ -151,7 +152,7 @@ export class RatePlanService {
         .where(
           and(
             eq(cancellationPolicies.id, dto.cancellationPolicyId),
-            eq(cancellationPolicies.propertyId, dto.propertyId),
+            eq(cancellationPolicies.propertyId, propertyId),
           ),
         );
       if (!policy) {
@@ -167,7 +168,7 @@ export class RatePlanService {
         .where(
           and(
             eq(groupProfiles.id, dto.groupProfileId),
-            eq(groupProfiles.propertyId, dto.propertyId),
+            eq(groupProfiles.propertyId, propertyId),
           ),
         );
       if (!gp) {
@@ -189,7 +190,7 @@ export class RatePlanService {
         .where(
           and(
             eq(ratePlans.id, dto.parentRatePlanId),
-            eq(ratePlans.propertyId, dto.propertyId),
+            eq(ratePlans.propertyId, propertyId),
           ),
         );
       if (!parent) {
