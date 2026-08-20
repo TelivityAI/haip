@@ -19,9 +19,13 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LosAdjustmentDto, OccupancyBandDto } from './rate-adjustment.dto';
 
 export class CreateRatePlanDto {
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description:
+      'Property id. Required in the body, or pass ?propertyId= as a query alias when omitted from the body.',
+  })
+  @IsOptional()
   @IsUUID()
-  propertyId!: string;
+  propertyId?: string;
 
   @ApiProperty()
   @IsUUID()

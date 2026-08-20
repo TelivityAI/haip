@@ -18,6 +18,7 @@ import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
 import { CreateRateRestrictionDto } from './dto/create-rate-restriction.dto';
 import { UpdateRateRestrictionDto } from './dto/update-rate-restriction.dto';
 import { EffectiveRateQueryDto } from './dto/effective-rate-query.dto';
+import { resolvePropertyId } from '../../common/property-id';
 
 @ApiTags('rate-plans')
 @Controller('rate-plans')
@@ -35,10 +36,23 @@ export class RatePlanController {
 
   @Post()
   @Roles('admin', 'general_manager', 'revenue_manager')
-  @ApiOperation({ summary: 'Create new rate plan' })
+  @ApiOperation({
+    summary: 'Create new rate plan',
+    description:
+      'propertyId may be sent in the JSON body (preferred) or as ?propertyId= when omitted from the body. If both are sent they must match.',
+  })
+  @ApiQuery({
+    name: 'propertyId',
+    required: false,
+    description: 'Alias when body omits propertyId',
+  })
   @ApiResponse({ status: 201, description: 'Rate plan created' })
-  createRatePlan(@Body() dto: CreateRatePlanDto) {
-    return this.ratePlanService.create(dto);
+  createRatePlan(
+    @Body() dto: CreateRatePlanDto,
+    @Query('propertyId', new ParseUUIDPipe({ optional: true })) queryPropertyId?: string,
+  ) {
+    dto.propertyId = resolvePropertyId({ body: dto.propertyId, query: queryPropertyId });
+    return this.ratePlanService.create(dto as CreateRatePlanDto & { propertyId: string });
   }
 
   @Get(':id')
