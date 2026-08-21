@@ -64,7 +64,11 @@ export class ListReservationsDto {
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ default: 20 })
+  @ApiPropertyOptional({
+    default: 20,
+    description:
+      'Page size (default 20, max 100). Response always includes total and hasMore so clients can detect truncation.',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

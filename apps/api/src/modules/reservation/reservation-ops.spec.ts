@@ -197,6 +197,7 @@ describe('ReservationService — list confirmationNumber', () => {
     const svc = await createService(createListDb([row]));
     const result = await svc.list({ propertyId: 'prop-001', limit: 20, page: 1 } as any);
     expect(result.total).toBe(1);
+    expect(result.hasMore).toBe(false);
     expect(result.data[0]).toMatchObject({
       id: 'res-001',
       bookingId: 'book-001',

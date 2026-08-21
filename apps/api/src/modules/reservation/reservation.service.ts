@@ -1251,11 +1251,13 @@ export class ReservationService {
       ratePlanName: r.ratePlanName,
     }));
 
+    const total = Number(countResult[0]?.count ?? 0);
     return {
       data,
-      total: Number(countResult[0]?.count ?? 0),
+      total,
       page,
       limit,
+      hasMore: page * limit < total,
     };
   }
 

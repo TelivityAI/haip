@@ -758,6 +758,8 @@ haip/
 
 All endpoints are prefixed with `/api/v1/` and documented via OpenAPI 3.0. Run the API and visit `http://localhost:3000/docs` for the interactive Swagger UI.
 
+Integrator shape notes (`propertyId` locations, cancel field aliases, response envelopes, pagination, `externalConfirmation`): **[`docs/api-conventions.md`](./docs/api-conventions.md)**.
+
 ### Core Endpoints (~167 total)
 
 <details>
