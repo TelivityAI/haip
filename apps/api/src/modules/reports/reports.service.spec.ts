@@ -151,6 +151,8 @@ describe('ReportsService', () => {
         { status: 'out_of_order', count: 5 },
         { status: 'out_of_service', count: 5 },
       ],
+      // occupied stay-window count (departure exclusive)
+      [{ count: 60 }],
       // arrivals
       [{ count: 8 }],
       // departures
@@ -191,6 +193,7 @@ describe('ReportsService', () => {
         { status: 'out_of_order', count: 10 },
         { status: 'out_of_service', count: 5 },
       ],
+      [{ count: 20 }], // occupied stay-window
       [{ count: 0 }], [{ count: 0 }], [{ count: 0 }], [{ count: 0 }], [{ count: 0 }],
     ]);
     const module = await Test.createTestingModule({
@@ -205,6 +208,36 @@ describe('ReportsService', () => {
     expect(result.availableRooms).toBe(35); // 50 - 10 - 5
     // 20 / 35 = 0.5714
     expect(result.occupancyRate).toBeCloseTo(0.5714, 3);
+  });
+
+  it('should ignore sticky room.status when stay window has no guests', async () => {
+    const db = createMockDb([
+      [{ totalRooms: 10 }],
+      [
+        { status: 'occupied', count: 7 },
+        { status: 'out_of_order', count: 1 },
+        { status: 'vacant_clean', count: 2 },
+      ],
+      [{ count: 0 }], // stay-window occupied = 0 (stale stayovers past departure)
+      [{ count: 0 }],
+      [{ count: 0 }],
+      [{ count: 0 }],
+      [{ count: 0 }],
+      [{ count: 0 }],
+    ]);
+    const module = await Test.createTestingModule({
+      providers: [
+        ReportsService,
+        { provide: DRIZZLE, useValue: db },
+      ],
+    }).compile();
+    service = module.get(ReportsService);
+
+    const result = await service.getOccupancy('prop-001', '2026-08-20');
+    expect(result.occupiedRooms).toBe(0);
+    expect(result.availableRooms).toBe(9);
+    expect(result.occupancyRate).toBe(0);
+    expect(result.stayovers).toBe(0);
   });
 
   // --- Financial Summary ---
