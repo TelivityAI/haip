@@ -100,9 +100,15 @@ export class CreateReservationRow {
   @MaxLength(50)
   channelCode?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description:
+      'External / source-system confirmation. Persisted on the booking; with channelCode, used for idempotent dedupe on re-import.',
+    example: 'LEGACY-RES-42',
+    maxLength: 100,
+  })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   externalConfirmation?: string;
 
   @ApiPropertyOptional({

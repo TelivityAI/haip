@@ -135,24 +135,61 @@ export class ReservationController {
   // --- CRUD routes ---
 
   @Get()
-  @ApiOperation({ summary: 'List reservations with filters (propertyId required)' })
-  @ApiResponse({ status: 200, description: 'Paginated list of reservations' })
+  @ApiOperation({
+    summary: 'List reservations with filters (propertyId required)',
+    description:
+      'Paginated. Default limit=20. Response: { data, total, page, limit, hasMore }. Always read total/hasMore — a naive client that only looks at data silently gets page 1.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of reservations',
+    schema: {
+      example: {
+        data: [{ id: '…', status: 'confirmed', arrivalDate: '2026-08-01' }],
+        total: 47,
+        page: 1,
+        limit: 20,
+        hasMore: true,
+      },
+    },
+  })
   listReservations(@Query() dto: ListReservationsDto) {
     return this.reservationService.list(dto);
   }
 
   @Post()
   @Roles('admin', 'general_manager', 'front_desk', 'reservations')
-  @ApiOperation({ summary: 'Create new reservation (status: pending)' })
+  @ApiOperation({
+    summary: 'Create new reservation (status: pending)',
+    description:
+      'Optional externalConfirmation stores the source-system reference on the booking (same field channel inbound uses).',
+  })
   @ApiResponse({ status: 201, description: 'Reservation created' })
   createReservation(@Body() dto: CreateReservationDto) {
     return this.reservationService.create(dto);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get reservation with guest, room, and rate details' })
+  @ApiOperation({
+    summary: 'Get reservation with guest, room, and rate details',
+    description:
+      'Envelope is NOT { data }. Returns { reservation, guest, roomType, ratePlan, room, confirmationNumber }.',
+  })
   @ApiQuery({ name: 'propertyId', required: true })
-  @ApiResponse({ status: 200, description: 'Reservation found' })
+  @ApiResponse({
+    status: 200,
+    description: 'Reservation found',
+    schema: {
+      example: {
+        reservation: { id: '…', status: 'confirmed' },
+        guest: { id: '…', firstName: 'Ada' },
+        roomType: { id: '…', name: 'King' },
+        ratePlan: { id: '…', name: 'BAR' },
+        room: null,
+        confirmationNumber: 'HAIP-…',
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Reservation not found' })
   getReservationById(
     @Param('id', ParseUUIDPipe) id: string,
@@ -163,7 +200,11 @@ export class ReservationController {
 
   @Patch(':id')
   @Roles('admin', 'general_manager', 'front_desk', 'reservations')
-  @ApiOperation({ summary: 'Modify reservation (dates, room type, rate, occupancy)' })
+  @ApiOperation({
+    summary: 'Modify reservation (dates, room type, rate, occupancy)',
+    description:
+      'Allowed: arrivalDate, departureDate, roomTypeId, ratePlanId, totalAmount, adults, children, specialRequests, doNotMove. Not patchable: source, channelCode, status, guestId (use dedicated lifecycle routes for status).',
+  })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation modified' })
   @ApiResponse({ status: 404, description: 'Reservation not found' })
@@ -403,9 +444,21 @@ export class ReservationController {
   }
 
   @Get(':id/notes')
-  @ApiOperation({ summary: 'List notes for a reservation (with active count)' })
+  @ApiOperation({
+    summary: 'List notes for a reservation (with active count)',
+    description: 'Envelope is { notes, activeCount } — not { data }.',
+  })
   @ApiQuery({ name: 'propertyId', required: true })
-  @ApiResponse({ status: 200, description: 'Notes and active count' })
+  @ApiResponse({
+    status: 200,
+    description: 'Notes and active count',
+    schema: {
+      example: {
+        notes: [{ id: '…', body: 'VIP', isActive: true }],
+        activeCount: 1,
+      },
+    },
+  })
   listNotes(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,

@@ -72,8 +72,14 @@ export class CreateReservationDto {
   @MaxLength(50)
   channelCode?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description:
+      'External / source-system confirmation (OTA, GDS, migration id). Persisted on the booking; pair with channelCode for import idempotency.',
+    example: 'BDC-12345',
+    maxLength: 100,
+  })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   externalConfirmation?: string;
 }
