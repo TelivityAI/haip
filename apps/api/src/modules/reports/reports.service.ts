@@ -139,14 +139,29 @@ export class ReportsService {
 
     let outOfOrder = 0;
     let outOfService = 0;
-    let occupiedRooms = 0;
+    let occupiedFromRoomStatus = 0;
     for (const row of roomStatusCounts) {
       if (row.status === 'out_of_order') outOfOrder = row.count;
       else if (row.status === 'out_of_service') outOfService = row.count;
-      else if (row.status === 'occupied') occupiedRooms = row.count;
+      else if (row.status === 'occupied') occupiedFromRoomStatus = row.count;
     }
 
     const availableRooms = totalRooms - outOfOrder - outOfService;
+
+    // Room-nights occupied on reportDate (departure exclusive). Prefer stay window
+    // over sticky room.status so stale demo stayovers past departure do not inflate %.
+    const [occupiedStayResult] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.propertyId, propertyId),
+          sql`${reservations.status} in ('checked_in', 'stayover', 'due_out', 'checked_out')`,
+          lte(reservations.arrivalDate, reportDate),
+          sql`${reservations.departureDate} > ${reportDate}`,
+        ),
+      );
+    const occupiedRooms = occupiedStayResult?.count ?? occupiedFromRoomStatus;
     const occupancyRate = availableRooms > 0 ? occupiedRooms / availableRooms : 0;
 
     // Arrivals (checked in today)
@@ -171,7 +186,7 @@ export class ReportsService {
         ),
       );
 
-    // Stayovers (in-house continuing)
+    // Stayovers — in-house continuing on reportDate (same stay-window as occupied)
     const [stayoversResult] = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(reservations)
@@ -180,6 +195,7 @@ export class ReportsService {
           eq(reservations.propertyId, propertyId),
           sql`${reservations.status} in ('stayover', 'checked_in', 'due_out')`,
           lte(reservations.arrivalDate, reportDate),
+          sql`${reservations.departureDate} > ${reportDate}`,
         ),
       );
 
@@ -303,15 +319,16 @@ export class ReportsService {
       paymentsByMethod[row.method] = new Decimal(row.total).toNumber();
     }
 
-    // Rooms sold
+    // Rooms sold — room-nights covering `date` (departure exclusive; matches occupancy trend)
     const [roomsSoldResult] = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(reservations)
       .where(
         and(
           eq(reservations.propertyId, propertyId),
-          sql`${reservations.status} in ('checked_in', 'stayover', 'due_out')`,
+          sql`${reservations.status} in ('checked_in', 'stayover', 'due_out', 'checked_out')`,
           lte(reservations.arrivalDate, date),
+          sql`${reservations.departureDate} > ${date}`,
         ),
       );
     const roomsSold = roomsSoldResult?.count ?? 0;
