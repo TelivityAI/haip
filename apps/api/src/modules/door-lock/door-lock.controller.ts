@@ -9,7 +9,6 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { DoorLockService } from './door-lock.service';
 import { ListDoorLockCredentialsDto } from './dto/list-credentials.dto';
@@ -41,7 +40,6 @@ export class DoorLockController {
   }
 
   @Post('credentials/:reservationId/reissue')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('frontdesk.access')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reissue door-lock PIN for a reservation' })

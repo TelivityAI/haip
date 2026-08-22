@@ -10,7 +10,6 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { RatePlanService } from './rate-plan.service';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
@@ -35,7 +34,7 @@ export class RatePlanController {
   }
 
   @Post()
-  @Roles('admin', 'general_manager', 'revenue_manager')
+  @RequirePermissions('rateplans.manage')
   @ApiOperation({
     summary: 'Create new rate plan',
     description:
@@ -88,7 +87,7 @@ export class RatePlanController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'general_manager', 'revenue_manager')
+  @RequirePermissions('rateplans.manage')
   @ApiOperation({ summary: 'Update rate plan' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Rate plan updated' })
@@ -116,7 +115,7 @@ export class RatePlanController {
   }
 
   @Post(':id/restrictions')
-  @Roles('admin', 'general_manager', 'revenue_manager')
+  @RequirePermissions('rateplans.manage')
   @ApiOperation({ summary: 'Create restriction for a rate plan' })
   @ApiResponse({ status: 201, description: 'Restriction created' })
   createRestriction(
@@ -127,7 +126,7 @@ export class RatePlanController {
   }
 
   @Patch(':id/restrictions/:restrictionId')
-  @Roles('admin', 'general_manager', 'revenue_manager')
+  @RequirePermissions('rateplans.manage')
   @ApiOperation({ summary: 'Update a rate restriction' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Restriction updated' })
@@ -142,7 +141,7 @@ export class RatePlanController {
   }
 
   @Delete(':id/restrictions/:restrictionId')
-  @Roles('admin', 'general_manager', 'revenue_manager')
+  @RequirePermissions('rateplans.manage')
   @ApiOperation({ summary: 'Delete a rate restriction' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Restriction deleted' })

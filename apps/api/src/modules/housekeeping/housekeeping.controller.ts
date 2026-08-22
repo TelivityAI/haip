@@ -12,7 +12,6 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { HousekeepingService } from './housekeeping.service';
 import { RoomService } from '../room/room.service';
@@ -70,7 +69,6 @@ export class HousekeepingController {
   }
 
   @Post('/generate-stayover-tasks')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Generate stayover tasks for occupied rooms' })
   generateStayoverTasks(
@@ -80,7 +78,6 @@ export class HousekeepingController {
   }
 
   @Post('/auto-assign')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Auto-assign pending tasks to housekeepers' })
   autoAssign(@Body() dto: AutoAssignDto) {
@@ -88,7 +85,6 @@ export class HousekeepingController {
   }
 
   @Post('/tasks')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Create housekeeping task' })
   @HttpCode(HttpStatus.CREATED)
@@ -118,7 +114,6 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/assign')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Assign task to housekeeper' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -131,7 +126,6 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/start')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Start assigned task' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -143,7 +137,6 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/unassign')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Unassign task' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -155,7 +148,6 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/complete')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Complete housekeeping task' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -168,7 +160,6 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/inspect')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Inspect completed task' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -181,7 +172,6 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/skip')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Skip housekeeping task' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -194,7 +184,6 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Update housekeeping task' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -207,7 +196,6 @@ export class HousekeepingController {
   }
 
   @Delete('/tasks/:id')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('housekeeping.manage')
   @ApiOperation({ summary: 'Delete housekeeping task' })
   @ApiQuery({ name: 'propertyId', type: String })

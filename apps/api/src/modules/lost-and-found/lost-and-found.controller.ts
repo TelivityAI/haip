@@ -12,7 +12,6 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { LostAndFoundService } from './lost-and-found.service';
 import {
@@ -27,7 +26,6 @@ export class LostAndFoundController {
   constructor(private readonly lostAndFoundService: LostAndFoundService) {}
 
   @Post()
-  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Log a lost-and-found item' })
   @HttpCode(HttpStatus.CREATED)
@@ -54,7 +52,6 @@ export class LostAndFoundController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Update lost-and-found item' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })
@@ -67,7 +64,6 @@ export class LostAndFoundController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'general_manager', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Delete lost-and-found item' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })

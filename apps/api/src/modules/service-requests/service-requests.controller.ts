@@ -12,7 +12,6 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { ServiceRequestsService } from './service-requests.service';
 import {
@@ -28,7 +27,6 @@ export class ServiceRequestsController {
   constructor(private readonly serviceRequestsService: ServiceRequestsService) {}
 
   @Post()
-  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Create a service request' })
   @HttpCode(HttpStatus.CREATED)
@@ -55,7 +53,6 @@ export class ServiceRequestsController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Update service request' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })
@@ -68,7 +65,6 @@ export class ServiceRequestsController {
   }
 
   @Post(':id/create-task')
-  @Roles('admin', 'general_manager', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Create a linked housekeeping task from a service request' })
   createTask(
@@ -79,7 +75,6 @@ export class ServiceRequestsController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'general_manager', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Delete service request' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { FolioService } from './folio.service';
 import { FolioRoutingService } from './folio-routing.service';
 import { CreateFolioDto } from './dto/create-folio.dto';
@@ -70,7 +71,10 @@ export class FolioController {
   }
 
   @Get()
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  // Local permission, not a Keycloak realm-role list: a property-scoped
+  // custom role has no realm role at all, so @Roles() can never grant it
+  // "view folios" no matter what it was granted locally.
+  @RequirePermissions('folios.read')
   @ApiOperation({ summary: 'List folios with filters' })
   @ApiResponse({ status: 200, description: 'Paginated list of folios' })
   listFolios(@Query() dto: ListFoliosDto) {

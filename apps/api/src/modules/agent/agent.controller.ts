@@ -15,7 +15,7 @@ import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { eq, and, desc } from 'drizzle-orm';
 import { guestReviews, reservations } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
-import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
 import { AgentService } from './agent.service';
 import { UpdateAgentConfigDto } from './dto/agent-config.dto';
@@ -24,7 +24,7 @@ import { CreateReviewDto, UpdateReviewResponseDto } from './dto/create-review.dt
 
 @ApiTags('AI Agents')
 @Controller('agents')
-@Roles('admin', 'general_manager', 'revenue_manager')
+@RequirePermissions('revenue.manage')
 export class AgentController {
   constructor(
     private readonly agentService: AgentService,
@@ -171,7 +171,7 @@ export class AgentController {
 
   @Post(':propertyId/reviews')
   @ApiOperation({ summary: 'Submit a guest review for AI response drafting' })
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
+  @RequirePermissions('reviews.manage')
   async createReview(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: CreateReviewDto,
@@ -214,7 +214,7 @@ export class AgentController {
   @ApiOperation({ summary: 'List guest reviews for a property' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'source', required: false })
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
+  @RequirePermissions('reviews.manage')
   async listReviews(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Query('status') status?: string,
@@ -233,7 +233,7 @@ export class AgentController {
 
   @Patch(':propertyId/reviews/:id')
   @ApiOperation({ summary: 'Update review response (edit, approve, mark posted)' })
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
+  @RequirePermissions('reviews.manage')
   async updateReview(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('id', ParseUUIDPipe) id: string,
