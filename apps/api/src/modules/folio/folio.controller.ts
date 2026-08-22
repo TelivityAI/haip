@@ -9,7 +9,6 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { FolioService } from './folio.service';
 import { FolioRoutingService } from './folio-routing.service';
@@ -43,7 +42,7 @@ export class FolioController {
   // captured by the ':id' parameter.
 
   @Post('routing-rules')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Create a split-folio routing rule (KB 14.2)' })
   @ApiResponse({ status: 201, description: 'Routing rule created' })
   createRoutingRule(@Body() dto: CreateRoutingRuleDto) {
@@ -51,6 +50,7 @@ export class FolioController {
   }
 
   @Get('routing-rules')
+  @RequirePermissions('folios.read')
   @ApiOperation({ summary: 'List split-folio routing rules for a reservation' })
   @ApiResponse({ status: 200, description: 'Routing rules' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -63,7 +63,7 @@ export class FolioController {
   }
 
   @Post()
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Create a folio' })
   @ApiResponse({ status: 201, description: 'Folio created' })
   createFolio(@Body() dto: CreateFolioDto) {
@@ -71,9 +71,6 @@ export class FolioController {
   }
 
   @Get()
-  // Local permission, not a Keycloak realm-role list: a property-scoped
-  // custom role has no realm role at all, so @Roles() can never grant it
-  // "view folios" no matter what it was granted locally.
   @RequirePermissions('folios.read')
   @ApiOperation({ summary: 'List folios with filters' })
   @ApiResponse({ status: 200, description: 'Paginated list of folios' })
@@ -82,6 +79,7 @@ export class FolioController {
   }
 
   @Get(':id')
+  @RequirePermissions('folios.read')
   @ApiOperation({ summary: 'Get folio by ID' })
   @ApiResponse({ status: 200, description: 'Folio found' })
   @ApiResponse({ status: 404, description: 'Folio not found' })
@@ -94,7 +92,7 @@ export class FolioController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Update folio' })
   @ApiResponse({ status: 200, description: 'Folio updated' })
   @ApiResponse({ status: 404, description: 'Folio not found' })
@@ -108,7 +106,7 @@ export class FolioController {
   }
 
   @Patch(':id/settle')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Settle folio (balance must be zero)' })
   @ApiResponse({ status: 200, description: 'Folio settled' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -120,7 +118,7 @@ export class FolioController {
   }
 
   @Patch(':id/close')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Close folio (must be settled first)' })
   @ApiResponse({ status: 200, description: 'Folio closed' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -132,7 +130,7 @@ export class FolioController {
   }
 
   @Post(':id/charges')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Post charge to folio' })
   @ApiResponse({ status: 201, description: 'Charge posted' })
   postCharge(
@@ -143,6 +141,7 @@ export class FolioController {
   }
 
   @Get(':id/charges')
+  @RequirePermissions('folios.read')
   @ApiOperation({ summary: 'List charges on folio' })
   @ApiResponse({ status: 200, description: 'Paginated list of charges' })
   getCharges(
@@ -153,7 +152,7 @@ export class FolioController {
   }
 
   @Post(':id/charges/:chargeId/reverse')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Reverse a charge' })
   @ApiResponse({ status: 200, description: 'Charge reversed' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -166,7 +165,7 @@ export class FolioController {
   }
 
   @Post(':id/charges/lock')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Lock charges up to audit date' })
   @ApiResponse({ status: 200, description: 'Charges locked' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -179,7 +178,7 @@ export class FolioController {
   }
 
   @Post(':id/transfer-charge')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Transfer charge to another folio' })
   @ApiResponse({ status: 200, description: 'Charge transferred' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -192,7 +191,7 @@ export class FolioController {
   }
 
   @Post(':id/move-transactions')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Move transactions to another folio (KB 14.2)' })
   @ApiResponse({ status: 200, description: 'Transactions moved' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -210,7 +209,7 @@ export class FolioController {
   // --- Fiscal documents (regional tax integrations, invoice.* events) ---
 
   @Post(':id/fiscal-documents')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({
     summary:
       'Request a fiscal document (invoice/tax note) for a folio — emits invoice.requested for external issuing integrations',
@@ -224,6 +223,7 @@ export class FolioController {
   }
 
   @Get(':id/fiscal-documents')
+  @RequirePermissions('folios.read')
   @ApiOperation({ summary: 'List fiscal documents for a folio' })
   @ApiResponse({ status: 200, description: 'Fiscal documents' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -235,7 +235,7 @@ export class FolioController {
   }
 
   @Post(':id/fiscal-documents/:documentId/issue')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({
     summary:
       'Record the issued document reference (called by the issuing integration) — emits invoice.issued',
@@ -250,7 +250,7 @@ export class FolioController {
   }
 
   @Post(':id/fiscal-documents/:documentId/void')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Void a fiscal document (or cancel a pending request) — emits invoice.voided' })
   @ApiResponse({ status: 200, description: 'Fiscal document voided' })
   voidFiscalDocument(
@@ -262,7 +262,7 @@ export class FolioController {
   }
 
   @Post(':id/transfer-to-city-ledger')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Transfer outstanding balance to city ledger' })
   @ApiResponse({ status: 200, description: 'Balance transferred to city ledger' })
   @ApiQuery({ name: 'propertyId', type: String })
