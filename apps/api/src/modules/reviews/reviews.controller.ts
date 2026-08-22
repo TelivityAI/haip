@@ -1,6 +1,7 @@
 import { Body, Controller, Post, Query, ParseUUIDPipe } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { PullReviewsDto } from './dto/pull-reviews.dto';
 import { ReviewsService } from './reviews.service';
 
@@ -10,7 +11,7 @@ export class ReviewsController {
   constructor(private readonly reviewsService: ReviewsService) {}
 
   @Post('pull')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
+  @RequirePermissions('reviews.manage')
   @ApiOperation({
     summary:
       'Pull guest reviews from an external source (Google, TripAdvisor, or Wave 3 reputation packs)',

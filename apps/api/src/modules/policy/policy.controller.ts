@@ -10,7 +10,6 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { PolicyService } from './policy.service';
 import { CreateCancellationPolicyDto } from './dto/create-cancellation-policy.dto';
@@ -23,7 +22,6 @@ export class PolicyController {
   constructor(private readonly policyService: PolicyService) {}
 
   @Post()
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('policies.manage')
   @ApiOperation({ summary: 'Create a cancellation policy' })
   @ApiResponse({ status: 201, description: 'Policy created' })
@@ -53,7 +51,6 @@ export class PolicyController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('policies.manage')
   @ApiOperation({ summary: 'Update a cancellation policy' })
   @ApiResponse({ status: 200, description: 'Policy updated' })
@@ -67,7 +64,6 @@ export class PolicyController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'general_manager', 'revenue_manager')
   @RequirePermissions('policies.manage')
   @ApiOperation({ summary: 'Deactivate a cancellation policy' })
   @ApiResponse({ status: 200, description: 'Policy deactivated' })
