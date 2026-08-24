@@ -6,12 +6,16 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { bookingEngineConfig, bookingRequests } from '@telivityhaip/database';
+import {
+  auditLogs,
+  bookingEngineConfig,
+  bookingRequestConsequences,
+  bookingRequests,
+} from '@telivityhaip/database';
 import type {
   BookingFormQuestion,
   PaymentMethodCollection,
 } from '@telivityhaip/database';
-import type { WebhookEvent } from '@telivityhaip/shared';
 import { createHash } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -29,7 +33,10 @@ import {
 } from '../payment/interfaces/saved-payment-method-gateway.interface';
 import { RatePlanService } from '../rate-plan/rate-plan.service';
 import { AvailabilityService } from '../reservation/availability.service';
-import { WebhookService } from '../webhook/webhook.service';
+import {
+  WebhookService,
+  type WebhookPayload,
+} from '../webhook/webhook.service';
 import { assertCanonicalStayDates } from './booking-request-date.validator';
 import type { CreateRequestCardSetupDto } from './dto/create-request-card-setup.dto';
 import type { SubmitBookingRequestDto } from './dto/submit-booking-request.dto';
@@ -65,9 +72,12 @@ type ExistingRequest = {
 };
 
 type LockedRequestConfig = typeof bookingEngineConfig.$inferSelect;
+type CreatedConsequence = typeof bookingRequestConsequences.$inferSelect;
 
 const ACKNOWLEDGEMENT_MESSAGE =
   'Your booking request has been received and is pending review.';
+const CREATED_CONSEQUENCE_KIND = 'created_event' as const;
+const CONSEQUENCE_CLAIM_LEASE_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class BookingRequestService {
@@ -125,7 +135,11 @@ export class BookingRequestService {
       propertyId,
       applicationId,
     );
-    if (existing) return this.acknowledgeReplay(existing, fingerprint);
+    if (existing) {
+      const acknowledgement = this.acknowledgeReplay(existing, fingerprint);
+      await this.deliverCreatedConsequenceBestEffort(existing.id, propertyId);
+      return acknowledgement;
+    }
 
     const config = await this.configService.getPublicConfig(propertyId);
     this.assertRequestMode(config);
@@ -178,7 +192,7 @@ export class BookingRequestService {
       );
       if (transactionReplay) {
         this.acknowledgeReplay(transactionReplay, fingerprint);
-        return { requestId: transactionReplay.id, created: false };
+        return { requestId: transactionReplay.id };
       }
 
       const [request] = await tx
@@ -210,7 +224,29 @@ export class BookingRequestService {
         .onConflictDoNothing()
         .returning({ id: bookingRequests.id });
 
-      if (request) return { requestId: request.id, created: true };
+      if (request) {
+        const createdPayload = this.createdEventPayload(request.id, propertyId);
+        await tx.insert(bookingRequestConsequences).values({
+          propertyId,
+          bookingRequestId: request.id,
+          kind: CREATED_CONSEQUENCE_KIND,
+          payload: structuredClone(createdPayload) as unknown as Record<
+            string,
+            unknown
+          >,
+          status: 'pending',
+          attempts: 0,
+        });
+        await tx.insert(auditLogs).values({
+          propertyId,
+          action: 'create',
+          entityType: 'booking_request',
+          entityId: request.id,
+          description: 'Webhook event: booking_request.created',
+          newValue: structuredClone(createdPayload),
+        });
+        return { requestId: request.id };
+      }
 
       const concurrent = await this.findExistingRequest(
         tx,
@@ -221,10 +257,10 @@ export class BookingRequestService {
         throw new ConflictException('Payment method setup has already been used');
       }
       this.acknowledgeReplay(concurrent, fingerprint);
-      return { requestId: concurrent.id, created: false };
+      return { requestId: concurrent.id };
     });
 
-    if (result.created) await this.emitCreatedBestEffort(result.requestId, propertyId);
+    await this.deliverCreatedConsequenceBestEffort(result.requestId, propertyId);
     return this.acknowledgement(result.requestId);
   }
 
@@ -456,22 +492,133 @@ export class BookingRequestService {
     };
   }
 
-  private async emitCreatedBestEffort(requestId: string, propertyId: string): Promise<void> {
+  private createdEventPayload(
+    requestId: string,
+    propertyId: string,
+  ): WebhookPayload {
+    return {
+      event: 'booking_request.created',
+      entityType: 'booking_request',
+      entityId: requestId,
+      propertyId,
+      data: { requestId, status: 'pending' },
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  private async deliverCreatedConsequenceBestEffort(
+    requestId: string,
+    propertyId: string,
+  ): Promise<void> {
     try {
-      await this.webhookService.emit(
-        // Request webhook types are completed with the staff lifecycle events.
-        'booking_request.created' as unknown as WebhookEvent,
-        'booking_request',
-        requestId,
-        { requestId, status: 'pending' },
-        propertyId,
-      );
+      const consequence = await this.claimCreatedConsequence(requestId, propertyId);
+      if (!consequence) return;
+
+      try {
+        await this.webhookService.dispatchPersisted(
+          consequence.payload as unknown as WebhookPayload,
+        );
+      } catch (error: unknown) {
+        await this.recordConsequenceFailure(consequence, error);
+        this.logger.error(
+          `Booking request ${requestId} was committed but its created consequence failed`,
+          error instanceof Error ? error.stack : undefined,
+        );
+        return;
+      }
+
+      const completedAt = new Date();
+      await this.db
+        .update(bookingRequestConsequences)
+        .set({
+          status: 'completed',
+          claimedAt: null,
+          lastError: null,
+          completedAt,
+          updatedAt: completedAt,
+        })
+        .where(and(
+          eq(bookingRequestConsequences.id, consequence.id),
+          eq(bookingRequestConsequences.propertyId, propertyId),
+          eq(bookingRequestConsequences.status, 'processing'),
+          eq(bookingRequestConsequences.claimedAt, consequence.claimedAt!),
+        ));
     } catch (error: unknown) {
       this.logger.error(
-        `Booking request ${requestId} was committed but its created consequence failed`,
+        `Booking request ${requestId} was committed but its created consequence state could not be updated`,
         error instanceof Error ? error.stack : undefined,
       );
     }
+  }
+
+  private async claimCreatedConsequence(
+    requestId: string,
+    propertyId: string,
+  ): Promise<CreatedConsequence | undefined> {
+    return this.db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(bookingRequestConsequences)
+        .where(and(
+          eq(bookingRequestConsequences.propertyId, propertyId),
+          eq(bookingRequestConsequences.bookingRequestId, requestId),
+          eq(bookingRequestConsequences.kind, CREATED_CONSEQUENCE_KIND),
+        ))
+        .for('update');
+      const consequence = rows.find((candidate) =>
+        candidate.propertyId === propertyId
+        && candidate.bookingRequestId === requestId
+        && candidate.kind === CREATED_CONSEQUENCE_KIND);
+
+      if (!consequence || consequence.status === 'completed') return undefined;
+      if (
+        consequence.status === 'processing'
+        && consequence.claimedAt
+        && consequence.claimedAt.getTime() > Date.now() - CONSEQUENCE_CLAIM_LEASE_MS
+      ) {
+        return undefined;
+      }
+
+      const attemptedAt = new Date();
+      const [claimed] = await tx
+        .update(bookingRequestConsequences)
+        .set({
+          status: 'processing',
+          attempts: consequence.attempts + 1,
+          claimedAt: attemptedAt,
+          lastAttemptAt: attemptedAt,
+          lastError: null,
+          updatedAt: attemptedAt,
+        })
+        .where(and(
+          eq(bookingRequestConsequences.id, consequence.id),
+          eq(bookingRequestConsequences.propertyId, propertyId),
+        ))
+        .returning();
+      return claimed;
+    });
+  }
+
+  private async recordConsequenceFailure(
+    consequence: CreatedConsequence,
+    error: unknown,
+  ): Promise<void> {
+    const failedAt = new Date();
+    const message = error instanceof Error ? error.message : String(error);
+    await this.db
+      .update(bookingRequestConsequences)
+      .set({
+        status: 'pending',
+        claimedAt: null,
+        lastError: message.slice(0, 2000),
+        updatedAt: failedAt,
+      })
+      .where(and(
+        eq(bookingRequestConsequences.id, consequence.id),
+        eq(bookingRequestConsequences.propertyId, consequence.propertyId),
+        eq(bookingRequestConsequences.status, 'processing'),
+        eq(bookingRequestConsequences.claimedAt, consequence.claimedAt!),
+      ));
   }
 
   private assertQuoteUsesConfigSnapshot(

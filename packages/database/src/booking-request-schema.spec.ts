@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import {
   bookingEngineConfig,
+  bookingRequestConsequences,
   bookingRequests,
   bookingRequestInstallments,
   payments,
@@ -14,6 +15,15 @@ describe('booking request schema', () => {
     expect(bookingRequests.submissionIdempotencyKey).toBeDefined();
     expect(bookingRequests.submissionFingerprint).toBeDefined();
     expect(bookingRequests.setupIntentId).toBeDefined();
+    expect(bookingRequestConsequences.propertyId).toBeDefined();
+    expect(bookingRequestConsequences.bookingRequestId).toBeDefined();
+    expect(bookingRequestConsequences.kind).toBeDefined();
+    expect(bookingRequestConsequences.payload).toBeDefined();
+    expect(bookingRequestConsequences.status).toBeDefined();
+    expect(bookingRequestConsequences.attempts).toBeDefined();
+    expect(bookingRequestConsequences.claimedAt).toBeDefined();
+    expect(bookingRequestConsequences.lastError).toBeDefined();
+    expect(bookingRequestConsequences.completedAt).toBeDefined();
     expect(bookingRequestInstallments.dueMilestone).toBeDefined();
     expect(bookingEngineConfig.bookingMode).toBeDefined();
     expect(bookingEngineConfig.paymentMethodCollection).toBeDefined();
@@ -23,5 +33,11 @@ describe('booking request schema', () => {
     const indexNames = getTableConfig(bookingRequests).indexes.map((index) => index.config.name);
     expect(indexNames).toContain('booking_requests_property_submission_key_unique');
     expect(indexNames).toContain('booking_requests_setup_intent_unique');
+
+    const consequenceIndexNames = getTableConfig(bookingRequestConsequences)
+      .indexes.map((index) => index.config.name);
+    expect(consequenceIndexNames).toContain(
+      'booking_request_consequences_property_request_kind_unique',
+    );
   });
 });

@@ -115,6 +115,37 @@ export const bookingRequests = pgTable('booking_requests', {
     .on(table.acceptedReservationId),
 }));
 
+/**
+ * Durable, replayable consequences emitted from Booking Request state changes.
+ * Kinds are strings rather than a database enum so later receipt/decision/payment
+ * consequences can extend this outbox without another enum migration.
+ */
+export type BookingRequestConsequenceKind = 'created_event';
+export type BookingRequestConsequenceStatus = 'pending' | 'processing' | 'completed';
+
+export const bookingRequestConsequences = pgTable('booking_request_consequences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  bookingRequestId: uuid('booking_request_id').notNull().references(() => bookingRequests.id),
+  kind: varchar('kind', { length: 50 }).$type<BookingRequestConsequenceKind>().notNull(),
+  payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+  status: varchar('status', { length: 20 })
+    .$type<BookingRequestConsequenceStatus>()
+    .notNull()
+    .default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+  lastError: text('last_error'),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  propertyRequestKindUnique:
+    uniqueIndex('booking_request_consequences_property_request_kind_unique')
+      .on(table.propertyId, table.bookingRequestId, table.kind),
+}));
+
 export const bookingRequestInstallments = pgTable('booking_request_installments', {
   id: uuid('id').primaryKey().defaultRandom(),
   propertyId: uuid('property_id').notNull().references(() => properties.id),

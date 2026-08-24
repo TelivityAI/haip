@@ -87,6 +87,28 @@ CREATE TABLE IF NOT EXISTS booking_requests (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Reconcile a local/intermediate copy of the unreleased table before creating
+-- replay indexes. Stable legacy placeholders preserve every row without
+-- inventing recoverable client payloads.
+ALTER TABLE booking_requests
+  ADD COLUMN IF NOT EXISTS submission_idempotency_key varchar(200);
+ALTER TABLE booking_requests
+  ADD COLUMN IF NOT EXISTS submission_fingerprint varchar(64);
+ALTER TABLE booking_requests
+  ADD COLUMN IF NOT EXISTS setup_intent_id varchar(255);
+UPDATE booking_requests
+SET
+  submission_idempotency_key = COALESCE(
+    submission_idempotency_key,
+    'legacy-' || id::text
+  ),
+  submission_fingerprint = COALESCE(
+    submission_fingerprint,
+    md5(id::text) || md5('booking-request:' || id::text)
+  );
+ALTER TABLE booking_requests ALTER COLUMN submission_idempotency_key SET NOT NULL;
+ALTER TABLE booking_requests ALTER COLUMN submission_fingerprint SET NOT NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_accepted_reservation_unique
   ON booking_requests (accepted_reservation_id);
 CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_property_submission_key_unique
@@ -95,6 +117,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_setup_intent_unique
   ON booking_requests (setup_intent_id);
 CREATE INDEX IF NOT EXISTS booking_requests_property_status_idx
   ON booking_requests (property_id, status);
+
+CREATE TABLE IF NOT EXISTS booking_request_consequences (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  property_id uuid NOT NULL REFERENCES properties(id),
+  booking_request_id uuid NOT NULL REFERENCES booking_requests(id),
+  kind varchar(50) NOT NULL,
+  payload jsonb NOT NULL,
+  status varchar(20) NOT NULL DEFAULT 'pending',
+  attempts integer NOT NULL DEFAULT 0,
+  claimed_at timestamptz,
+  last_attempt_at timestamptz,
+  last_error text,
+  completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS booking_request_consequences_property_request_kind_unique
+  ON booking_request_consequences (property_id, booking_request_id, kind);
 
 CREATE TABLE IF NOT EXISTS booking_request_installments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

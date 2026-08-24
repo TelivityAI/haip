@@ -21,6 +21,15 @@ export class WebhookService {
   ) {}
 
   /**
+   * Dispatch a payload whose audit/outbox records were already committed by
+   * the domain transaction. Async listeners are awaited so a durable caller
+   * can retain and retry its pending consequence on delivery failure.
+   */
+  async dispatchPersisted(payload: WebhookPayload): Promise<void> {
+    await this.eventEmitter.emitAsync(payload.event, payload);
+  }
+
+  /**
    * Emit a webhook event and log it to the audit trail.
    */
   async emit(

@@ -6,7 +6,12 @@ import {
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { bookingEngineConfig, bookingRequests } from '@telivityhaip/database';
+import {
+  auditLogs,
+  bookingEngineConfig,
+  bookingRequestConsequences,
+  bookingRequests,
+} from '@telivityhaip/database';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BookingThrottleGuard } from '../booking-engine/booking-throttle.guard';
 import { BookingRequestPublicController } from './booking-request-public.controller';
@@ -16,6 +21,7 @@ import { SubmitBookingRequestDto } from './dto/submit-booking-request.dto';
 
 const PROPERTY_ID = 'aaaaaaaa-0000-4000-a000-000000000001';
 const REQUEST_ID = 'bbbbbbbb-0000-4000-a000-000000000001';
+const CONSEQUENCE_ID = 'bbbbbbbb-0000-4000-a000-000000000002';
 const ROOM_TYPE_ID = 'cccccccc-0000-4000-a000-000000000001';
 const RATE_PLAN_ID = 'dddddddd-0000-4000-a000-000000000001';
 const QUESTION_ID = 'eeeeeeee-0000-4000-a000-000000000001';
@@ -95,6 +101,20 @@ function makeHarness() {
     submissionFingerprint: string;
     setupIntentId: string | null;
   }> = [];
+  const storedConsequences: Array<{
+    id: string;
+    propertyId: string;
+    bookingRequestId: string;
+    kind: string;
+    payload: Record<string, unknown>;
+    status: 'pending' | 'processing' | 'completed';
+    attempts: number;
+    claimedAt: Date | null;
+    lastAttemptAt: Date | null;
+    lastError: string | null;
+    completedAt: Date | null;
+  }> = [];
+  const storedAudits: Array<Record<string, unknown>> = [];
   const lockedConfig = {
     ...structuredClone(publicConfig),
     bookingMode: publicConfig.bookingMode as 'instant' | 'request',
@@ -135,12 +155,37 @@ function makeHarness() {
       onConflictDoNothing: vi.fn(() => ({ returning })),
     };
   });
+  const consequenceValues = vi.fn((input: Record<string, unknown>) => {
+    if (!storedConsequences.some((row) =>
+      row.propertyId === input['propertyId']
+      && row.bookingRequestId === input['bookingRequestId']
+      && row.kind === input['kind'])) {
+      storedConsequences.push({
+        id: CONSEQUENCE_ID,
+        propertyId: String(input['propertyId']),
+        bookingRequestId: String(input['bookingRequestId']),
+        kind: String(input['kind']),
+        payload: structuredClone(input['payload'] as Record<string, unknown>),
+        status: 'pending',
+        attempts: 0,
+        claimedAt: null,
+        lastAttemptAt: null,
+        lastError: null,
+        completedAt: null,
+      });
+    }
+    return Promise.resolve();
+  });
+  const auditValues = vi.fn((input: Record<string, unknown>) => {
+    storedAudits.push(structuredClone(input));
+    return Promise.resolve();
+  });
   const db: Record<string, unknown> = {
     insert: vi.fn((table: unknown) => {
-      if (table !== bookingRequests) {
-        throw new Error('Submission attempted a non-request database write');
-      }
-      return { values };
+      if (table === bookingRequests) return { values };
+      if (table === bookingRequestConsequences) return { values: consequenceValues };
+      if (table === auditLogs) return { values: auditValues };
+      throw new Error('Submission attempted a forbidden database write');
     }),
   };
   db['select'] = vi.fn(() => {
@@ -151,12 +196,41 @@ function makeHarness() {
         return chain;
       }),
       where: vi.fn(() => chain),
-      for: vi.fn(async () => table === bookingEngineConfig ? [lockedConfig] : []),
+      for: vi.fn(async () => {
+        if (table === bookingEngineConfig) return [lockedConfig];
+        if (table === bookingRequestConsequences) return storedConsequences;
+        return [];
+      }),
       then: (resolve, reject) => Promise.resolve(
-        table === bookingRequests ? storedRequests : [],
+        table === bookingRequests
+          ? storedRequests
+          : table === bookingRequestConsequences
+            ? storedConsequences
+            : [],
       ).then(resolve, reject),
     };
     return chain;
+  });
+  db['update'] = vi.fn((table: unknown) => {
+    if (table !== bookingRequestConsequences) {
+      throw new Error('Submission attempted a forbidden database update');
+    }
+    return {
+      set: vi.fn((changes: Record<string, unknown>) => ({
+        where: vi.fn(() => {
+          const row = storedConsequences[0];
+          if (row) Object.assign(row, changes);
+          const result = row ? [structuredClone(row)] : [];
+          return {
+            returning: vi.fn(async () => result),
+            then: (
+              resolve: (value: unknown) => unknown,
+              reject: (reason: unknown) => unknown,
+            ) => Promise.resolve(result).then(resolve, reject),
+          };
+        }),
+      })),
+    };
   });
   let transactionQueue = Promise.resolve();
   db['transaction'] = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
@@ -201,7 +275,10 @@ function makeHarness() {
       cardBrand: 'visa',
     }),
   };
-  const webhook = { emit: vi.fn().mockResolvedValue(undefined) };
+  const webhook = {
+    emit: vi.fn().mockResolvedValue(undefined),
+    dispatchPersisted: vi.fn().mockResolvedValue(undefined),
+  };
   const service = new BookingRequestService(
     db as unknown as ConstructorParameters<typeof BookingRequestService>[0],
     config as unknown as ConstructorParameters<typeof BookingRequestService>[1],
@@ -222,8 +299,12 @@ function makeHarness() {
     savedPaymentMethod,
     webhook,
     values,
+    consequenceValues,
+    auditValues,
     lockedConfig,
     storedRequests,
+    storedConsequences,
+    storedAudits,
     get insertedValues() {
       return insertedValues;
     },
@@ -578,7 +659,7 @@ describe('BookingRequestService.submit', () => {
       children: 1,
       serviceIds: [],
     });
-    expect(harness.db.insert).toHaveBeenCalledOnce();
+    expect(harness.db.insert).toHaveBeenCalledTimes(3);
     expect(harness.values).toHaveBeenCalledOnce();
     expect(harness.insertedValues).toMatchObject({
       propertyId: PROPERTY_ID,
@@ -620,22 +701,42 @@ describe('BookingRequestService.submit', () => {
     expect(Object.keys(acknowledgement).sort()).toEqual(['message', 'requestId', 'status']);
   });
 
-  it('emits a sanitized created event after the request write', async () => {
+  it('commits a durable audit/outbox and dispatches its sanitized created event', async () => {
     await harness.service.submit(PROPERTY_ID, submitDto);
 
-    expect(harness.webhook.emit).toHaveBeenCalledWith(
-      'booking_request.created',
-      'booking_request',
-      REQUEST_ID,
-      { requestId: REQUEST_ID, status: 'pending' },
-      PROPERTY_ID,
-    );
+    expect(harness.storedConsequences).toHaveLength(1);
+    expect(harness.storedConsequences[0]).toMatchObject({
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      kind: 'created_event',
+      status: 'completed',
+      attempts: 1,
+      lastError: null,
+    });
+    expect(harness.storedAudits).toEqual([expect.objectContaining({
+      propertyId: PROPERTY_ID,
+      action: 'create',
+      entityType: 'booking_request',
+      entityId: REQUEST_ID,
+      description: 'Webhook event: booking_request.created',
+    })]);
+    const payload = expect.objectContaining({
+      event: 'booking_request.created',
+      entityType: 'booking_request',
+      entityId: REQUEST_ID,
+      propertyId: PROPERTY_ID,
+      data: { requestId: REQUEST_ID, status: 'pending' },
+      timestamp: expect.any(String),
+    });
+    expect(harness.storedConsequences[0]?.payload).toEqual(payload);
+    expect(harness.storedAudits[0]?.['newValue']).toEqual(payload);
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledWith(payload);
     expect(harness.values.mock.invocationCallOrder[0]).toBeLessThan(
-      harness.webhook.emit.mock.invocationCallOrder[0]!,
+      harness.webhook.dispatchPersisted.mock.invocationCallOrder[0]!,
     );
-    expect(JSON.stringify(harness.webhook.emit.mock.calls)).not.toContain('Leisure');
-    expect(JSON.stringify(harness.webhook.emit.mock.calls)).not.toContain('consent');
-    expect(JSON.stringify(harness.webhook.emit.mock.calls)).not.toContain('seti_');
+    expect(JSON.stringify(harness.webhook.dispatchPersisted.mock.calls)).not.toContain('Leisure');
+    expect(JSON.stringify(harness.webhook.dispatchPersisted.mock.calls)).not.toContain('consent');
+    expect(JSON.stringify(harness.webhook.dispatchPersisted.mock.calls)).not.toContain('seti_');
   });
 
   it('returns the existing acknowledgement for an exact replay without repeating work', async () => {
@@ -645,7 +746,7 @@ describe('BookingRequestService.submit', () => {
     expect(replay).toEqual(first);
     expect(harness.values).toHaveBeenCalledOnce();
     expect(harness.bookingEngine.quote).toHaveBeenCalledOnce();
-    expect(harness.webhook.emit).toHaveBeenCalledOnce();
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledOnce();
   });
 
   it('conflicts when a replay key is reused for a different submission payload', async () => {
@@ -656,7 +757,7 @@ describe('BookingRequestService.submit', () => {
       guestLastName: 'Byron',
     })).rejects.toBeInstanceOf(ConflictException);
     expect(harness.values).toHaveBeenCalledOnce();
-    expect(harness.webhook.emit).toHaveBeenCalledOnce();
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledOnce();
   });
 
   it('rejects reuse of one trusted SetupIntent under another application key', async () => {
@@ -678,7 +779,7 @@ describe('BookingRequestService.submit', () => {
       ...withCard,
       idempotencyKey: 'widget-attempt-2',
     })).rejects.toBeInstanceOf(ConflictException);
-    expect(harness.webhook.emit).toHaveBeenCalledOnce();
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledOnce();
   });
 
   it('collapses concurrent exact replays into one request and one created event', async () => {
@@ -689,24 +790,66 @@ describe('BookingRequestService.submit', () => {
 
     expect(replay).toEqual(first);
     expect(harness.values).toHaveBeenCalledOnce();
-    expect(harness.webhook.emit).toHaveBeenCalledOnce();
+    expect(harness.storedConsequences).toHaveLength(1);
+    expect(harness.storedAudits).toHaveLength(1);
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledOnce();
   });
 
-  it('acknowledges the durable request when its post-commit event/audit consequence fails', async () => {
-    harness.webhook.emit.mockRejectedValueOnce(new Error('audit unavailable'));
+  it('persists a failed consequence, retries it on replay, and never redelivers completion', async () => {
+    harness.webhook.dispatchPersisted.mockRejectedValueOnce(new Error('delivery unavailable'));
 
     await expect(harness.service.submit(PROPERTY_ID, submitDto)).resolves.toEqual({
       requestId: REQUEST_ID,
       status: 'pending',
       message: 'Your booking request has been received and is pending review.',
     });
+    expect(harness.storedConsequences[0]).toMatchObject({
+      status: 'pending',
+      attempts: 1,
+      lastError: 'delivery unavailable',
+      completedAt: null,
+    });
+    expect(harness.storedAudits).toHaveLength(1);
+
+    await expect(harness.service.submit(PROPERTY_ID, structuredClone(submitDto))).resolves.toEqual({
+      requestId: REQUEST_ID,
+      status: 'pending',
+      message: 'Your booking request has been received and is pending review.',
+    });
+    expect(harness.storedConsequences[0]).toMatchObject({
+      status: 'completed',
+      attempts: 2,
+      lastError: null,
+    });
+
     await expect(harness.service.submit(PROPERTY_ID, structuredClone(submitDto))).resolves.toEqual({
       requestId: REQUEST_ID,
       status: 'pending',
       message: 'Your booking request has been received and is pending review.',
     });
     expect(harness.values).toHaveBeenCalledOnce();
-    expect(harness.webhook.emit).toHaveBeenCalledOnce();
+    expect(harness.consequenceValues).toHaveBeenCalledOnce();
+    expect(harness.auditValues).toHaveBeenCalledOnce();
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows only one concurrent replay to claim a pending consequence', async () => {
+    harness.webhook.dispatchPersisted.mockRejectedValueOnce(new Error('delivery unavailable'));
+    await harness.service.submit(PROPERTY_ID, submitDto);
+
+    await Promise.all([
+      harness.service.submit(PROPERTY_ID, structuredClone(submitDto)),
+      harness.service.submit(PROPERTY_ID, structuredClone(submitDto)),
+    ]);
+
+    expect(harness.values).toHaveBeenCalledOnce();
+    expect(harness.storedConsequences).toHaveLength(1);
+    expect(harness.storedConsequences[0]).toMatchObject({
+      status: 'completed',
+      attempts: 2,
+      lastError: null,
+    });
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledTimes(2);
   });
 
   it('does not commit when the locked final config has switched to instant mode', async () => {
@@ -716,7 +859,7 @@ describe('BookingRequestService.submit', () => {
       ConflictException,
     );
     expect(harness.values).not.toHaveBeenCalled();
-    expect(harness.webhook.emit).not.toHaveBeenCalled();
+    expect(harness.webhook.dispatchPersisted).not.toHaveBeenCalled();
   });
 
   it('does not commit a card-policy snapshot that changed during submission', async () => {
@@ -726,6 +869,6 @@ describe('BookingRequestService.submit', () => {
       ConflictException,
     );
     expect(harness.values).not.toHaveBeenCalled();
-    expect(harness.webhook.emit).not.toHaveBeenCalled();
+    expect(harness.webhook.dispatchPersisted).not.toHaveBeenCalled();
   });
 });
