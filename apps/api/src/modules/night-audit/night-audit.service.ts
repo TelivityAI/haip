@@ -204,30 +204,54 @@ export class NightAuditService {
           continue; // Already posted, skip
         }
 
-        // Get nightly rate from rate plan or fallback
+        const acceptedPricing = reservation.acceptedPricingSnapshot;
+        const acceptedNight = acceptedPricing?.nights?.find(
+          (night: { date: string }) => night.date === businessDate,
+        );
         let rate: string;
-        const [ratePlan] = await this.db
-          .select({ baseAmount: ratePlans.baseAmount })
-          .from(ratePlans)
-          .where(eq(ratePlans.id, reservation.ratePlanId));
-
-        if (ratePlan) {
-          rate = ratePlan.baseAmount;
+        let result: any;
+        if (acceptedPricing) {
+          if (!acceptedNight) continue;
+          rate = acceptedNight.roomAmount;
+          const acceptedAdjustment = acceptedPricing.adjustment?.serviceDate === businessDate
+            ? {
+                amount: acceptedPricing.adjustment.amount,
+                reason: acceptedPricing.adjustment.reason,
+              }
+            : undefined;
+          result = await this.folioService.postChargeFromSnapshot(
+            folio.id,
+            {
+              propertyId,
+              type: 'room',
+              description: `Room tariff - ${businessDate}`,
+              amount: rate,
+              currencyCode: acceptedPricing.currencyCode,
+              serviceDate: serviceDateStart.toISOString(),
+              guestId: reservation.guestId,
+            },
+            acceptedNight.taxAmount,
+            acceptedAdjustment,
+          );
         } else {
-          // Fallback: total / nights
-          rate = new Decimal(reservation.totalAmount).div(reservation.nights).toFixed(2);
+          // Existing reservations retain canonical live rate/tax behavior.
+          const [ratePlan] = await this.db
+            .select({ baseAmount: ratePlans.baseAmount })
+            .from(ratePlans)
+            .where(eq(ratePlans.id, reservation.ratePlanId));
+          rate = ratePlan
+            ? ratePlan.baseAmount
+            : new Decimal(reservation.totalAmount).div(reservation.nights).toFixed(2);
+          result = await this.folioService.postCharge(folio.id, {
+            propertyId,
+            type: 'room',
+            description: `Room tariff - ${businessDate}`,
+            amount: rate,
+            currencyCode: reservation.currencyCode,
+            serviceDate: serviceDateStart.toISOString(),
+            guestId: reservation.guestId,
+          });
         }
-
-        // Post room tariff — TaxService auto-posts tax charges via FolioService
-        const result = await this.folioService.postCharge(folio.id, {
-          propertyId,
-          type: 'room',
-          description: `Room tariff - ${businessDate}`,
-          amount: rate,
-          currencyCode: reservation.currencyCode,
-          serviceDate: serviceDateStart.toISOString(),
-          guestId: reservation.guestId,
-        });
 
         // Sum auto-posted tax charges via Decimal
         const taxAmountDec = (result.taxCharges ?? [])

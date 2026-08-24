@@ -17,6 +17,7 @@ import {
   reservations,
 } from '@telivityhaip/database';
 import type {
+  AcceptedPricingSnapshot,
   BookingFormQuestion,
   PaymentMethodCollection,
 } from '@telivityhaip/database';
@@ -40,6 +41,7 @@ import {
 } from '../../common/audit/audit-actor';
 import { DRIZZLE } from '../../database/database.module';
 import { AncillaryService } from '../ancillary/ancillary.service';
+import { reservationServiceAttachedPayload } from '../ancillary/reservation-service-event';
 import { BookingEngineConfigService } from '../booking-engine/booking-engine-config.service';
 import { BookingEngineService } from '../booking-engine/booking-engine.service';
 import {
@@ -63,15 +65,21 @@ import {
 import { assertCanonicalStayDates } from './booking-request-date.validator';
 import {
   assertDenialMoneyResolved,
-  resolveAcceptedTotal,
   type BookingRequestPriceSource,
 } from './booking-request-money';
 import { assertBookingRequestTransition } from './booking-request-state';
+import { buildAcceptedPricingSnapshot } from './booking-request-pricing';
 import type { AcceptBookingRequestDto } from './dto/accept-booking-request.dto';
 import type { CreateRequestCardSetupDto } from './dto/create-request-card-setup.dto';
 import type { DenyBookingRequestDto } from './dto/deny-booking-request.dto';
 import type { ListBookingRequestsDto } from './dto/list-booking-requests.dto';
 import type { SubmitBookingRequestDto } from './dto/submit-booking-request.dto';
+import {
+  toAcceptedBookingRequestDecision,
+  toBookingRequestDetail,
+  toBookingRequestListItem,
+  toDeniedBookingRequestDecision,
+} from './dto/booking-request-response.dto';
 
 export type AcceptBookingRequestInput = {
   priceSource: BookingRequestPriceSource;
@@ -195,13 +203,59 @@ export class BookingRequestService {
     ]);
     // The SQL predicate is authoritative. The final check is deliberate
     // defense-in-depth for adapters/test doubles that return an over-broad rowset.
-    const data = selected.filter((row) => row.propertyId === dto.propertyId);
+    const data = selected
+      .filter((row) => row.propertyId === dto.propertyId)
+      .map(toBookingRequestListItem);
     const total = Number(countRows[0]?.count ?? 0);
     return { data, total, page, limit, hasMore: offset + data.length < total };
   }
 
   async findById(id: string, propertyId: string) {
-    return this.findRequest(this.db, id, propertyId);
+    return toBookingRequestDetail(await this.findRequest(this.db, id, propertyId));
+  }
+
+  /**
+   * Recover durable consequences after an API process stops between the
+   * decision commit and dispatch. Claims remain property-scoped and the
+   * existing lease permits safe recovery of stale processing rows.
+   */
+  async processPendingConsequences(limit = 100): Promise<number> {
+    const staleBefore = new Date(Date.now() - CONSEQUENCE_CLAIM_LEASE_MS);
+    const candidates = await this.db
+      .select()
+      .from(bookingRequestConsequences)
+      .where(or(
+        eq(bookingRequestConsequences.status, 'pending'),
+        and(
+          eq(bookingRequestConsequences.status, 'processing'),
+          lte(bookingRequestConsequences.claimedAt, staleBefore),
+        ),
+      ))
+      .orderBy(bookingRequestConsequences.createdAt)
+      .limit(Math.max(1, Math.min(limit, 500)));
+
+    const recoverable = candidates.filter((candidate) =>
+      candidate.status === 'pending'
+      || (
+        candidate.status === 'processing'
+        && candidate.claimedAt != null
+        && candidate.claimedAt.getTime() <= staleBefore.getTime()
+      ));
+    const requests = new Map<string, { requestId: string; propertyId: string }>();
+    for (const candidate of recoverable) {
+      const key = `${candidate.propertyId}:${candidate.bookingRequestId}`;
+      requests.set(key, {
+        requestId: candidate.bookingRequestId,
+        propertyId: candidate.propertyId,
+      });
+    }
+    for (const request of requests.values()) {
+      await this.deliverConsequencesBestEffort(
+        request.requestId,
+        request.propertyId,
+      );
+    }
+    return requests.size;
   }
 
   async accept(
@@ -214,34 +268,18 @@ export class BookingRequestService {
     if (initial.status === 'accepted') {
       const linked = await this.findLinkedReservation(this.db, initial, propertyId);
       await this.deliverConsequencesBestEffort(id, propertyId);
-      return linked;
+      return toAcceptedBookingRequestDecision(initial, linked);
     }
     if (initial.status === 'denied') {
       throw new ConflictException('Cannot accept a denied booking request');
     }
-
-    const currentQuote = await this.bookingEngineService.quote(propertyId, {
-      roomTypeId: initial.roomTypeId,
-      ratePlanId: initial.ratePlanId,
-      checkIn: initial.arrivalDate,
-      checkOut: initial.departureDate,
-      adults: initial.adults,
-      children: initial.children,
-      serviceIds: initial.serviceIds,
-    }).catch((error: unknown) => this.throwAcceptanceError(error));
-    const preliminaryPrice = resolveAcceptedTotal({
-      source: input.priceSource,
-      submittedTotal: this.quoteTotal(initial.submittedQuoteSnapshot),
-      currentTotal: currentQuote.grandTotal,
-      customTotal: input.customTotal,
-      customReason: input.customReason,
-    });
 
     const result = await this.db.transaction(async (tx) => {
       const locked = await this.lockRequest(tx, id, propertyId);
       if (locked.status === 'accepted') {
         return {
           reservation: await this.findLinkedReservation(tx, locked, propertyId),
+          request: locked,
         };
       }
       if (locked.status === 'denied') {
@@ -249,10 +287,21 @@ export class BookingRequestService {
       }
 
       assertBookingRequestTransition(locked.status, 'accepted');
-      const price = resolveAcceptedTotal({
-        source: preliminaryPrice.source,
-        submittedTotal: this.quoteTotal(locked.submittedQuoteSnapshot),
-        currentTotal: currentQuote.grandTotal,
+      await this.reservationService.lockInventory(propertyId, locked.roomTypeId, tx);
+      const currentQuote = await this.bookingEngineService.quote(propertyId, {
+        roomTypeId: locked.roomTypeId,
+        ratePlanId: locked.ratePlanId,
+        checkIn: locked.arrivalDate,
+        checkOut: locked.departureDate,
+        adults: locked.adults,
+        children: locked.children,
+        serviceIds: locked.serviceIds,
+      }, tx, { lockForUpdate: true });
+      const pricing = buildAcceptedPricingSnapshot({
+        source: input.priceSource,
+        requestCurrencyCode: locked.currencyCode,
+        submittedQuote: locked.submittedQuoteSnapshot,
+        currentQuote,
         customTotal: input.customTotal,
         customReason: input.customReason,
       });
@@ -269,34 +318,56 @@ export class BookingRequestService {
         departureDate: locked.departureDate,
         roomTypeId: locked.roomTypeId,
         ratePlanId: locked.ratePlanId,
-        totalAmount: price.total.toFixed(2),
-        currencyCode: locked.currencyCode,
+        totalAmount: pricing.grandTotal,
+        currencyCode: pricing.currencyCode,
         adults: locked.adults,
         children: locked.children,
         specialRequests: locked.specialRequests ?? undefined,
         source: 'direct',
         channelCode: 'booking_request',
-      }, undefined, tx);
+      }, { acceptedPricingSnapshot: pricing }, tx);
       const folio = await this.folioService.createAutoFolio({
         id: reservation.id,
         propertyId,
         bookingId: reservation.bookingId,
         guestId: guest.id,
-        currencyCode: locked.currencyCode,
+        currencyCode: pricing.currencyCode,
       }, tx);
 
       const attachedServices: Array<Record<string, unknown>> = [];
       for (const serviceId of new Set(locked.serviceIds ?? [])) {
+        const acceptedService = pricing.services.find((service: AcceptedPricingSnapshot['services'][number]) =>
+          service.serviceId === serviceId);
+        if (!acceptedService) {
+          throw new ConflictException(
+            `Accepted quote has no pricing for selected service ${serviceId}`,
+          );
+        }
         attachedServices.push(await this.ancillaryService.attachToReservation(
           reservation.id,
-          { propertyId, serviceId, sourceChannel: 'booking_engine' },
+          {
+            propertyId,
+            serviceId,
+            sourceChannel: 'booking_engine',
+            unitPrice: acceptedService.unitPrice,
+            quantity: 1,
+          },
           tx,
+          {
+            currencyCode: acceptedService.currencyCode,
+            postingRule: acceptedService.postingRule,
+            chargeType: acceptedService.chargeType,
+          },
         ));
       }
       attachedServices.push(...await this.ancillaryService.ensurePackageComponents(
         reservation.id,
         propertyId,
         tx,
+        {
+          freezeUnquotedAtZero: true,
+          currencyCode: pricing.currencyCode,
+        },
       ));
 
       const linkedPayments = await tx
@@ -317,9 +388,9 @@ export class BookingRequestService {
         .set({
           status: 'accepted',
           currentQuoteSnapshot: structuredClone(currentQuote),
-          acceptedPriceSource: price.source,
-          acceptedTotal: price.total.toFixed(2),
-          customPriceReason: price.customReason ?? null,
+          acceptedPriceSource: pricing.source,
+          acceptedTotal: pricing.grandTotal,
+          customPriceReason: pricing.adjustment?.reason ?? null,
           acceptedReservationId: reservation.id,
           acceptedFolioId: folio.id,
           decidedBy: actor?.userId ?? null,
@@ -345,8 +416,8 @@ export class BookingRequestService {
           requestId: id,
           reservationId: reservation.id,
           folioId: folio.id,
-          priceSource: price.source,
-          acceptedTotal: price.total.toFixed(2),
+          priceSource: pricing.source,
+          acceptedTotal: pricing.grandTotal,
         },
         timestamp: decidedAt.toISOString(),
       });
@@ -379,15 +450,20 @@ export class BookingRequestService {
       });
       for (const attached of attachedServices) {
         if (typeof attached['id'] !== 'string') continue;
+        if (typeof attached['serviceName'] !== 'string') {
+          throw new ConflictException('Attached service is missing its event snapshot');
+        }
         await this.insertConsequence(tx, propertyId, id, `service:${attached['id']}`, {
           event: 'reservation.service_attached',
           entityType: 'reservation_service',
           entityId: attached['id'],
           propertyId,
-          data: {
-            reservationId: reservation.id,
-            serviceId: attached['serviceId'] ?? null,
-          },
+          data: reservationServiceAttachedPayload(
+            attached as unknown as Parameters<
+              typeof reservationServiceAttachedPayload
+            >[0],
+            attached['serviceName'],
+          ),
           timestamp: decidedAt.toISOString(),
         });
       }
@@ -402,17 +478,17 @@ export class BookingRequestService {
           status: 'accepted',
           reservationId: reservation.id,
           folioId: folio.id,
-          priceSource: price.source,
-          acceptedTotal: price.total.toFixed(2),
-          customPriceReason: price.customReason ?? null,
+          priceSource: pricing.source,
+          acceptedTotal: pricing.grandTotal,
+          customPriceReason: pricing.adjustment?.reason ?? null,
         },
         description: 'Booking request accepted',
       });
-      return { reservation };
+      return { reservation, request: updated };
     }).catch((error: unknown) => this.throwAcceptanceError(error));
 
     await this.deliverConsequencesBestEffort(id, propertyId);
-    return result.reservation;
+    return toAcceptedBookingRequestDecision(result.request, result.reservation);
   }
 
   async deny(
@@ -426,6 +502,9 @@ export class BookingRequestService {
 
     const denied = await this.db.transaction(async (tx) => {
       const locked = await this.lockRequest(tx, id, propertyId);
+      if (locked.status === 'denied') {
+        return locked;
+      }
       assertBookingRequestTransition(locked.status, 'denied');
 
       const movementRows = await tx
@@ -491,7 +570,7 @@ export class BookingRequestService {
     });
 
     await this.deliverConsequencesBestEffort(id, propertyId);
-    return denied;
+    return toDeniedBookingRequestDecision(denied);
   }
 
   async createPaymentMethodSetup(
@@ -918,12 +997,6 @@ export class BookingRequestService {
       );
     }
     return reservation;
-  }
-
-  private quoteTotal(snapshot: unknown): string | null {
-    if (!snapshot || typeof snapshot !== 'object') return null;
-    const total = (snapshot as Record<string, unknown>)['grandTotal'];
-    return typeof total === 'string' ? total : null;
   }
 
   private throwAcceptanceError(error: unknown): never {

@@ -23,6 +23,13 @@ import { UpdateServiceDto } from './dto/update-service.dto';
 import { ListServicesDto } from './dto/list-services.dto';
 import { CreateRatePlanComponentDto } from './dto/create-rate-plan-component.dto';
 import { AttachReservationServiceDto } from './dto/attach-reservation-service.dto';
+import { reservationServiceAttachedPayload } from './reservation-service-event';
+
+export interface ReservationServicePricingOverride {
+  currencyCode: string;
+  postingRule: string;
+  chargeType: string;
+}
 
 const IN_HOUSE_STATUSES = ['checked_in', 'stayover', 'due_out'] as const;
 
@@ -258,6 +265,7 @@ export class AncillaryService {
     reservationId: string,
     dto: AttachReservationServiceDto,
     tx?: any,
+    pricingOverride?: ReservationServicePricingOverride,
   ) {
     const db = tx ?? this.db;
     const reservation = await this.findReservation(reservationId, dto.propertyId, db);
@@ -278,13 +286,13 @@ export class AncillaryService {
         serviceId: service.id,
         quantity,
         unitPrice,
-        currencyCode: service.currencyCode,
+        currencyCode: pricingOverride?.currencyCode ?? service.currencyCode,
         startDate: dto.startDate,
         endDate: dto.endDate,
         status: 'confirmed',
         sourceChannel: dto.sourceChannel ?? 'front_desk',
-        postingRule: service.postingRule,
-        chargeType: service.chargeType,
+        postingRule: pricingOverride?.postingRule ?? service.postingRule,
+        chargeType: pricingOverride?.chargeType ?? service.chargeType,
         notes: dto.notes,
       })
       .returning();
@@ -294,19 +302,12 @@ export class AncillaryService {
         'reservation.service_attached',
         'reservation_service',
         row.id,
-        {
-          reservationId,
-          serviceId: service.id,
-          serviceName: service.name,
-          quantity,
-          unitPrice,
-          postingRule: row.postingRule,
-        },
+        reservationServiceAttachedPayload(row, service.name),
         dto.propertyId,
       );
     }
 
-    return row;
+    return { ...row, serviceName: service.name };
   }
 
   async listForReservation(propertyId: string, reservationId: string) {
@@ -363,7 +364,15 @@ export class AncillaryService {
    * Attach package rate-plan components that are not yet on the reservation.
    * Intended to be called from check-in / book flows.
    */
-  async ensurePackageComponents(reservationId: string, propertyId: string, tx?: any) {
+  async ensurePackageComponents(
+    reservationId: string,
+    propertyId: string,
+    tx?: any,
+    acceptedPricing?: {
+      freezeUnquotedAtZero: true;
+      currencyCode: string;
+    },
+  ) {
     const db = tx ?? this.db;
     const reservation = await this.findReservation(reservationId, propertyId, db);
 
@@ -400,7 +409,13 @@ export class AncillaryService {
 
       const service = await this.findServiceById(component.serviceId, propertyId, db);
       let unitPrice: string;
-      if (component.amountOverride != null) {
+      if (acceptedPricing?.freezeUnquotedAtZero) {
+        // Booking-request totals contain only explicitly quoted extras. A rate
+        // package component absent from that immutable quote may still be
+        // attached for operations/event parity, but can never acquire a later
+        // live catalog price and silently exceed the staff-accepted total.
+        unitPrice = '0.00';
+      } else if (component.amountOverride != null) {
         unitPrice = component.amountOverride;
       } else if (component.includedInRate) {
         unitPrice = '0.00';
@@ -416,7 +431,7 @@ export class AncillaryService {
           serviceId: service.id,
           quantity: component.quantity ?? 1,
           unitPrice,
-          currencyCode: service.currencyCode,
+          currencyCode: acceptedPricing?.currencyCode ?? service.currencyCode,
           status: 'confirmed',
           sourceChannel: 'package',
           postingRule: service.postingRule,
@@ -429,19 +444,12 @@ export class AncillaryService {
           'reservation.service_attached',
           'reservation_service',
           row.id,
-          {
-            reservationId,
-            serviceId: service.id,
-            serviceName: service.name,
-            sourceChannel: 'package',
-            quantity: row.quantity,
-            unitPrice,
-          },
+          reservationServiceAttachedPayload(row, service.name),
           propertyId,
         );
       }
 
-      attached.push(row);
+      attached.push({ ...row, serviceName: service.name });
     }
 
     return attached;
@@ -498,21 +506,37 @@ export class AncillaryService {
         continue;
       }
 
-      const amount = new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
+      const acceptedLine = this.acceptedServiceLine(
+        reservation,
+        rs.serviceId,
+        serviceDate,
+        true,
+      );
+      const amount = acceptedLine?.amount
+        ?? new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
       const description = `${serviceName} ${this.svcTag(rs.id)}`;
 
       // FolioService rejects non-positive amounts except adjustments/reversals.
       // Zero-priced included lines are marked posted without a ledger row.
       if (new Decimal(amount).greaterThan(0)) {
-        await this.folioService.postCharge(folio.id, {
+        const chargeInput = {
           propertyId,
           type: rs.chargeType,
           description,
           amount,
-          currencyCode: rs.currencyCode,
+          currencyCode: acceptedLine?.currencyCode ?? rs.currencyCode,
           serviceDate: new Date(serviceDate + 'T00:00:00Z').toISOString(),
           guestId: reservation.guestId,
-        });
+        };
+        if (acceptedLine) {
+          await this.folioService.postChargeFromSnapshot(
+            folio.id,
+            chargeInput,
+            acceptedLine.taxAmount,
+          );
+        } else {
+          await this.folioService.postCharge(folio.id, chargeInput);
+        }
       }
 
       const [updated] = await this.db
@@ -609,22 +633,36 @@ export class AncillaryService {
           continue;
         }
 
-        const amount = new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
+        const acceptedLine = this.acceptedServiceLine(
+          reservation,
+          rs.serviceId,
+          date,
+          false,
+        );
+        const amount = acceptedLine?.amount
+          ?? new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
         if (new Decimal(amount).lessThanOrEqualTo(0)) {
           skipped.push(rs.id);
           continue;
         }
 
         const description = `${serviceName} ${this.svcTag(rs.id)}`;
-        const charge = await this.folioService.postCharge(folio.id, {
+        const chargeInput = {
           propertyId,
           type: rs.chargeType,
           description,
           amount,
-          currencyCode: rs.currencyCode,
+          currencyCode: acceptedLine?.currencyCode ?? rs.currencyCode,
           serviceDate: new Date(date + 'T00:00:00Z').toISOString(),
           guestId: reservation.guestId,
-        });
+        };
+        const charge = acceptedLine
+          ? await this.folioService.postChargeFromSnapshot(
+              folio.id,
+              chargeInput,
+              acceptedLine.taxAmount,
+            )
+          : await this.folioService.postCharge(folio.id, chargeInput);
 
         // Stay confirmed until stay ends — idempotency via charge existence.
         await this.webhookService.emit(
@@ -654,6 +692,29 @@ export class AncillaryService {
       skipped,
       errors,
       count: posted.length,
+    };
+  }
+
+  private acceptedServiceLine(
+    reservation: any,
+    serviceId: string,
+    date: string,
+    useFirstLine: boolean,
+  ): { amount: string; taxAmount: string; currencyCode: string } | null {
+    const pricing = reservation.acceptedPricingSnapshot;
+    if (!pricing || !Array.isArray(pricing.services)) return null;
+    const service = pricing.services.find(
+      (candidate: { serviceId?: string }) => candidate.serviceId === serviceId,
+    );
+    if (!service || !Array.isArray(service.lineItems)) return null;
+    const line = service.lineItems.find(
+      (candidate: { date?: string }) => candidate.date === date,
+    ) ?? (useFirstLine ? service.lineItems[0] : undefined);
+    if (!line) return null;
+    return {
+      amount: line.amount,
+      taxAmount: line.taxAmount,
+      currencyCode: pricing.currencyCode,
     };
   }
 }

@@ -386,15 +386,101 @@ export class FolioService {
 
     await this.recalculateBalance(folioId, dto.propertyId, tx);
 
+    if (!tx) {
+      await this.webhookService.emit(
+        'folio.charge_posted',
+        'charge',
+        charge.id,
+        { folioId, type: charge.type, amount: charge.amount, description: charge.description },
+        dto.propertyId,
+      );
+    }
+
+    return { ...charge, taxCharges };
+  }
+
+  /** Post an immutable accepted base/tax pair atomically without live tax lookup. */
+  async postChargeFromSnapshot(
+    folioId: string,
+    dto: CreateChargeDto,
+    taxAmount: string,
+    adjustment?: { amount: string; reason: string },
+  ) {
+    const result = await this.db.transaction(async (tx: any) => {
+      const base = await this.postCharge(folioId, {
+        ...dto,
+        skipTaxCalculation: true,
+      }, tx);
+      const taxCharges: any[] = [];
+      if (new Decimal(taxAmount).greaterThan(0)) {
+        taxCharges.push(await this.postCharge(folioId, {
+          propertyId: dto.propertyId,
+          type: 'tax',
+          description: `${dto.description} tax`.slice(0, 255),
+          amount: new Decimal(taxAmount).toFixed(2),
+          currencyCode: dto.currencyCode,
+          serviceDate: dto.serviceDate,
+          postedBy: dto.postedBy,
+          skipTaxCalculation: true,
+        }, tx));
+      }
+      const adjustmentCharges: any[] = [];
+      if (adjustment && !new Decimal(adjustment.amount).isZero()) {
+        adjustmentCharges.push(await this.postCharge(folioId, {
+          propertyId: dto.propertyId,
+          type: 'adjustment',
+          description: `Accepted price adjustment: ${adjustment.reason}`.slice(0, 255),
+          amount: new Decimal(adjustment.amount).toFixed(2),
+          currencyCode: dto.currencyCode,
+          serviceDate: dto.serviceDate,
+          postedBy: dto.postedBy,
+          skipTaxCalculation: true,
+        }, tx));
+      }
+      return { ...base, taxCharges, adjustmentCharges };
+    });
+
     await this.webhookService.emit(
       'folio.charge_posted',
       'charge',
-      charge.id,
-      { folioId, type: charge.type, amount: charge.amount, description: charge.description },
+      result.id,
+      {
+        folioId,
+        type: result.type,
+        amount: result.amount,
+        description: result.description,
+      },
       dto.propertyId,
     );
-
-    return { ...charge, taxCharges };
+    for (const tax of result.taxCharges) {
+      await this.webhookService.emit(
+        'folio.charge_posted',
+        'charge',
+        tax.id,
+        {
+          folioId,
+          type: tax.type,
+          amount: tax.amount,
+          description: tax.description,
+        },
+        dto.propertyId,
+      );
+    }
+    for (const adjustmentCharge of result.adjustmentCharges) {
+      await this.webhookService.emit(
+        'folio.charge_posted',
+        'charge',
+        adjustmentCharge.id,
+        {
+          folioId,
+          type: adjustmentCharge.type,
+          amount: adjustmentCharge.amount,
+          description: adjustmentCharge.description,
+        },
+        dto.propertyId,
+      );
+    }
+    return result;
   }
 
   async reverseCharge(folioId: string, chargeId: string, propertyId: string) {

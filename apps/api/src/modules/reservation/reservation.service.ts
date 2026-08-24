@@ -11,7 +11,10 @@ import Decimal from 'decimal.js';
 import { reservations, reservationGuests, bookings, guests, rooms, roomTypes, ratePlans, properties, payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { assertTransition, type ReservationStatus } from './reservation-state-machine';
-import { AvailabilityService } from './availability.service';
+import {
+  assertFullStayAvailability,
+  AvailabilityService,
+} from './availability.service';
 import { FolioService } from '../folio/folio.service';
 import { RoomStatusService } from '../room/room-status.service';
 import { PaymentService } from '../payment/payment.service';
@@ -32,7 +35,9 @@ import { CheckOutDto } from './dto/check-out.dto';
 import { GroupCheckInDto } from './dto/group-check-in.dto';
 import { BulkActionDto } from './dto/bulk-action.dto';
 import { ListUnassignedDto } from './dto/list-unassigned.dto';
-import { randomUUID, createCipheriv, randomBytes } from 'crypto';
+import { createCipheriv, randomBytes } from 'crypto';
+import { generateConfirmationNumber } from '../../common/crypto/confirmation-number';
+import type { AcceptedPricingSnapshot } from '@telivityhaip/database';
 
 @Injectable()
 export class ReservationService {
@@ -52,7 +57,10 @@ export class ReservationService {
 
   async create(
     dto: CreateReservationDto,
-    opts?: { confirmationNumber?: string },
+    opts?: {
+      confirmationNumber?: string;
+      acceptedPricingSnapshot?: AcceptedPricingSnapshot;
+    },
     tx?: any,
   ) {
     const db = tx ?? this.db;
@@ -80,12 +88,9 @@ export class ReservationService {
       throw new BadRequestException('Departure date must be after arrival date');
     }
 
-    // Generate confirmation number. Callers that expose it to guests as a bearer
-    // credential (e.g. the booking engine) inject a high-entropy value instead of
-    // the default timestamp form, which is too low-entropy to be unguessable.
-    const confirmationNumber =
-      opts?.confirmationNumber ??
-      `HAIP-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
+    // Every confirmation number is a bearer credential. Use the same 128-bit
+    // generator for direct, staff, channel, and fallback canonical callers.
+    const confirmationNumber = opts?.confirmationNumber ?? generateConfirmationNumber();
 
     // FK ownership (security audit #4): the caller supplies roomTypeId AND
     // ratePlanId in the DTO. Without scoping these to dto.propertyId, a caller
@@ -125,12 +130,16 @@ export class ReservationService {
       );
     }
 
-    // TOCTOU: availability check + insert run inside the same transaction so the
-    // race window between "there's space" and "we wrote the booking" is minimized.
-    // Postgres default isolation is READ COMMITTED, so concurrent txs can still
-    // double-book in theory; for stronger guarantees promote to SERIALIZABLE.
-    // See Bug 5 — kept at default to avoid driver-compat surprises.
+    // Availability check + insert run under the room-type inventory mutex in
+    // the same transaction. Under READ COMMITTED, competing canonical creates
+    // serialize on that row and the later transaction re-reads every stay date.
     const createInTransaction = async (transaction: any) => {
+      // A room-type row is the inventory mutex. Every canonical reservation
+      // creation for this room type takes the same lock before re-reading
+      // date-level availability, preventing two requests from consuming the
+      // final room concurrently under READ COMMITTED.
+      await this.lockInventory(dto.propertyId, dto.roomTypeId, transaction);
+
       // Check inventory availability inside the tx
       const availability = await this.availabilityService.searchAvailability(
         dto.propertyId,
@@ -139,12 +148,12 @@ export class ReservationService {
         dto.roomTypeId,
         transaction,
       );
-      const roomTypeAvail = availability.find((a: any) => a.roomTypeId === dto.roomTypeId);
-      if (!roomTypeAvail || roomTypeAvail.available <= 0) {
-        throw new BadRequestException(
-          `No availability for room type ${dto.roomTypeId} on the requested dates`,
-        );
-      }
+      assertFullStayAvailability(
+        availability,
+        dto.roomTypeId,
+        dto.arrivalDate,
+        dto.departureDate,
+      );
 
       const [booking] = await transaction
         .insert(bookings)
@@ -171,6 +180,7 @@ export class ReservationService {
           ratePlanId: dto.ratePlanId,
           totalAmount: dto.totalAmount,
           currencyCode: dto.currencyCode,
+          acceptedPricingSnapshot: opts?.acceptedPricingSnapshot,
           adults: dto.adults ?? 1,
           children: dto.children ?? 0,
           specialRequests: dto.specialRequests,
@@ -209,6 +219,20 @@ export class ReservationService {
     }
 
     return result;
+  }
+
+  async lockInventory(propertyId: string, roomTypeId: string, tx: any): Promise<void> {
+    const lockedRoomTypes = await tx
+      .select({ id: roomTypes.id })
+      .from(roomTypes)
+      .where(and(
+        eq(roomTypes.id, roomTypeId),
+        eq(roomTypes.propertyId, propertyId),
+      ))
+      .for('update');
+    if (!lockedRoomTypes.some((row: { id: string }) => row.id === roomTypeId)) {
+      throw new NotFoundException(`room type ${roomTypeId} not found in this property`);
+    }
   }
 
   async confirm(id: string, propertyId: string) {
@@ -1094,16 +1118,15 @@ export class ReservationService {
     // The existing reservation still occupies its old window (and room type) in searchAvailability,
     // so if roomType is unchanged we must exclude it from the count to avoid blocking itself on overlap.
     //
-    // TOCTOU: we run the availability check and the update inside the same transaction
-    // so concurrent writers cannot slip between them. Postgres' default isolation
-    // (READ COMMITTED) still permits some overlap, but the race window is minimized.
-    // For stricter guarantees, raise the transaction to SERIALIZABLE — not done here
-    // to avoid breakage with drizzle-orm's postgres-js driver; see Bug 5.
+    // Use the same room-type inventory mutex as canonical creation so a modify
+    // cannot race another create/modify for the final unit.
     const updated = await this.db.transaction(async (tx: any) => {
       if (arrivalChanged || departureChanged || roomTypeChanged) {
         const newArrival = (dto.arrivalDate ?? reservation.arrivalDate) as string;
         const newDeparture = (dto.departureDate ?? reservation.departureDate) as string;
         const newRoomTypeId = (dto.roomTypeId ?? reservation.roomTypeId) as string;
+
+        await this.lockInventory(propertyId, newRoomTypeId, tx);
 
         const availability = await this.availabilityService.searchAvailability(
           reservation.propertyId,
@@ -1120,21 +1143,29 @@ export class ReservationService {
           reservation.arrivalDate < newDeparture &&
           reservation.departureDate > newArrival;
 
-        const nightsOk = availability
-          .filter((a: any) => a.roomTypeId === newRoomTypeId)
-          .every((a: any) => {
-            const existingOccupiesThisNight =
-              currentCountsItself &&
-              (reservation.arrivalDate as string) <= a.date &&
-              (reservation.departureDate as string) > a.date;
-            const effectiveAvailable = a.available + (existingOccupiesThisNight ? 1 : 0);
-            return effectiveAvailable > 0;
-          });
-
-        if (!nightsOk) {
-          throw new ConflictException(
-            `No availability for room type ${newRoomTypeId} on ${newArrival} → ${newDeparture}`,
+        const adjustedAvailability = availability.map((row: any) => {
+          if (row.roomTypeId !== newRoomTypeId) return row;
+          const existingOccupiesThisNight =
+            currentCountsItself &&
+            (reservation.arrivalDate as string) <= row.date &&
+            (reservation.departureDate as string) > row.date;
+          return {
+            ...row,
+            available: row.available + (existingOccupiesThisNight ? 1 : 0),
+          };
+        });
+        try {
+          assertFullStayAvailability(
+            adjustedAvailability,
+            newRoomTypeId,
+            newArrival,
+            newDeparture,
           );
+        } catch (error: unknown) {
+          if (error instanceof BadRequestException) {
+            throw new ConflictException(error.message);
+          }
+          throw error;
         }
       }
 

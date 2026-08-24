@@ -13,6 +13,11 @@ import { PolicyService } from '../policy/policy.service';
 import { DepositSettlementService } from '../accounting/deposit-settlement.service';
 
 const mockFolioService = {
+  postChargeFromSnapshot: vi.fn().mockResolvedValue({
+    id: 'charge-room-snapshot',
+    amount: '123.00',
+    taxCharges: [{ id: 'tax-snapshot', amount: '12.00' }],
+  }),
   postCharge: vi.fn().mockResolvedValue({
     id: 'charge-room-001',
     amount: '150.00',
@@ -336,6 +341,119 @@ describe('NightAuditService', () => {
       amount: '150.00',
       guestId: 'guest-001',
     }));
+  });
+
+  it('posts the accepted nightly room and tax snapshot without live repricing', async () => {
+    const acceptedReservation = {
+      ...mockReservation,
+      acceptedPricingSnapshot: {
+        version: 1,
+        source: 'current',
+        currencyCode: 'USD',
+        grandTotal: '405.00',
+        roomTotal: '369.00',
+        taxTotal: '36.00',
+        nights: [
+          { date: '2026-04-04', roomAmount: '123.00', taxAmount: '12.00' },
+          { date: '2026-04-05', roomAmount: '123.00', taxAmount: '12.00' },
+          { date: '2026-04-06', roomAmount: '123.00', taxAmount: '12.00' },
+        ],
+        services: [],
+        servicesTotal: '0.00',
+        servicesTaxTotal: '0.00',
+        adjustment: null,
+      },
+    };
+    const db = createMockDb({
+      selectResults: [
+        [acceptedReservation],
+        [mockFolio],
+        [],
+      ],
+    });
+    const module = await Test.createTestingModule({
+      providers: [
+        NightAuditService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: FolioService, useValue: mockFolioService },
+        { provide: ReservationService, useValue: mockReservationService },
+        { provide: HousekeepingService, useValue: mockHousekeepingService },
+        { provide: RoomStatusService, useValue: mockRoomStatusService },
+        { provide: WebhookService, useValue: mockWebhookService },
+        { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
+      ],
+    }).compile();
+    service = module.get(NightAuditService);
+
+    const result = await service.postRoomTariffs('prop-001', '2026-04-06');
+
+    expect(mockFolioService.postChargeFromSnapshot).toHaveBeenCalledWith(
+      'folio-001',
+      expect.objectContaining({ type: 'room', amount: '123.00' }),
+      '12.00',
+      undefined,
+    );
+    expect(mockFolioService.postCharge).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ totalRoom: '123.00', totalTax: '12.00', count: 1 });
+  });
+
+  it('posts a custom accepted-price delta once with the arrival-night snapshot', async () => {
+    const acceptedReservation = {
+      ...mockReservation,
+      acceptedPricingSnapshot: {
+        version: 1,
+        source: 'custom',
+        currencyCode: 'USD',
+        grandTotal: '390.00',
+        roomTotal: '369.00',
+        taxTotal: '36.00',
+        nights: [
+          { date: '2026-04-04', roomAmount: '123.00', taxAmount: '12.00' },
+          { date: '2026-04-05', roomAmount: '123.00', taxAmount: '12.00' },
+          { date: '2026-04-06', roomAmount: '123.00', taxAmount: '12.00' },
+        ],
+        services: [],
+        servicesTotal: '0.00',
+        servicesTaxTotal: '0.00',
+        adjustment: {
+          amount: '-15.00',
+          reason: 'Staff loyalty adjustment',
+          serviceDate: '2026-04-04',
+        },
+      },
+    };
+    const db = createMockDb({
+      selectResults: [[acceptedReservation], [mockFolio], []],
+    });
+    const module = await Test.createTestingModule({
+      providers: [
+        NightAuditService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: FolioService, useValue: mockFolioService },
+        { provide: ReservationService, useValue: mockReservationService },
+        { provide: HousekeepingService, useValue: mockHousekeepingService },
+        { provide: RoomStatusService, useValue: mockRoomStatusService },
+        { provide: WebhookService, useValue: mockWebhookService },
+        { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
+      ],
+    }).compile();
+    service = module.get(NightAuditService);
+
+    await service.postRoomTariffs('prop-001', '2026-04-04');
+
+    expect(mockFolioService.postChargeFromSnapshot).toHaveBeenCalledWith(
+      'folio-001',
+      expect.objectContaining({ type: 'room', amount: '123.00' }),
+      '12.00',
+      {
+        amount: '-15.00',
+        reason: 'Staff loyalty adjustment',
+      },
+    );
   });
 
   it('should skip tariff if already posted for date (idempotent)', async () => {

@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { BadRequestException, Injectable, Inject } from '@nestjs/common';
 import { eq, and, notInArray, sql, lt, gt } from 'drizzle-orm';
 import { reservations, roomTypes, properties, rooms, icalBlocks, icalFeeds } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
@@ -11,6 +11,55 @@ export interface AvailabilityResult {
   sold: number;
   available: number;
   overbookingBuffer: number;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Enumerate the exact canonical nights consumed by [checkIn, checkOut). */
+export function stayDates(checkIn: string, checkOut: string): string[] {
+  if (!ISO_DATE.test(checkIn) || !ISO_DATE.test(checkOut)) {
+    throw new BadRequestException('Stay dates must use YYYY-MM-DD');
+  }
+  const start = new Date(`${checkIn}T00:00:00.000Z`);
+  const end = new Date(`${checkOut}T00:00:00.000Z`);
+  if (
+    Number.isNaN(start.getTime())
+    || Number.isNaN(end.getTime())
+    || start.toISOString().slice(0, 10) !== checkIn
+    || end.toISOString().slice(0, 10) !== checkOut
+    || end <= start
+  ) {
+    throw new BadRequestException('Check-out must be after check-in');
+  }
+
+  const dates: string[] = [];
+  for (let date = new Date(start); date < end; date.setUTCDate(date.getUTCDate() + 1)) {
+    dates.push(date.toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+/** Require one positive, property-calculated availability row for every night. */
+export function assertFullStayAvailability(
+  rows: AvailabilityResult[],
+  roomTypeId: string,
+  checkIn: string,
+  checkOut: string,
+): void {
+  const byDate = new Map(
+    rows
+      .filter((row) => row.roomTypeId === roomTypeId)
+      .map((row) => [row.date, row]),
+  );
+  const unavailable = stayDates(checkIn, checkOut).find((date) => {
+    const row = byDate.get(date);
+    return !row || row.available <= 0;
+  });
+  if (unavailable) {
+    throw new BadRequestException(
+      `No availability for room type ${roomTypeId} on ${unavailable}`,
+    );
+  }
 }
 
 @Injectable()
@@ -30,6 +79,7 @@ export class AvailabilityService {
     db?: any,
   ): Promise<AvailabilityResult[]> {
     const conn = db ?? this.db;
+    const requestedDates = stayDates(checkIn, checkOut);
 
     // Get property overbooking config
     const [property] = await conn
@@ -122,20 +172,12 @@ export class AvailabilityService {
 
     // Generate date-level availability
     const results: AvailabilityResult[] = [];
-    const startDate = new Date(checkIn);
-    const endDate = new Date(checkOut);
-
     for (const type of types) {
       const totalRooms = type.maxOccupancy
         ? (roomCountByType.get(type.id) ?? 0)
         : 0;
 
-      for (
-        let d = new Date(startDate);
-        d < endDate;
-        d.setDate(d.getDate() + 1)
-      ) {
-        const dateStr = d.toISOString().split('T')[0]!;
+      for (const dateStr of requestedDates) {
 
         // Count reservations occupying this room type on this date
         const sold = overlapping.filter(

@@ -364,6 +364,56 @@ describe('FolioService', () => {
     });
   });
 
+  describe('postChargeFromSnapshot', () => {
+    it('posts the frozen base, tax, and custom adjustment exactly once after commit', async () => {
+      const tx = { marker: 'snapshot-transaction' };
+      const db = {
+        transaction: vi.fn(async (callback: (transaction: unknown) => Promise<unknown>) =>
+          callback(tx)),
+      };
+      const webhook = { emit: vi.fn().mockResolvedValue(undefined) };
+      const tax = { calculateTaxes: vi.fn() };
+      const snapshotService = new FolioService(db as any, webhook as any, tax as any);
+      const postCharge = vi.spyOn(snapshotService, 'postCharge').mockImplementation(async (
+        _folioId: string,
+        dto: any,
+      ) => ({
+        id: `charge-${dto.type}`,
+        ...dto,
+        taxCharges: [],
+      }));
+
+      const result = await snapshotService.postChargeFromSnapshot(
+        'folio-001',
+        {
+          propertyId: 'prop-001',
+          type: 'room',
+          description: 'Room tariff - 2026-04-04',
+          amount: '123.00',
+          currencyCode: 'USD',
+          serviceDate: '2026-04-04T00:00:00.000Z',
+        },
+        '12.00',
+        { amount: '-15.00', reason: 'Loyalty recovery' },
+      );
+
+      expect(db.transaction).toHaveBeenCalledOnce();
+      expect(postCharge).toHaveBeenCalledTimes(3);
+      expect(postCharge.mock.calls.map((call) => ({
+        type: call[1].type,
+        amount: call[1].amount,
+        transaction: call[2],
+      }))).toEqual([
+        { type: 'room', amount: '123.00', transaction: tx },
+        { type: 'tax', amount: '12.00', transaction: tx },
+        { type: 'adjustment', amount: '-15.00', transaction: tx },
+      ]);
+      expect(tax.calculateTaxes).not.toHaveBeenCalled();
+      expect(webhook.emit).toHaveBeenCalledTimes(3);
+      expect(result.adjustmentCharges).toHaveLength(1);
+    });
+  });
+
   describe('reverseCharge', () => {
     it('should create a negated charge for reversal', async () => {
       const reversalCharge = {

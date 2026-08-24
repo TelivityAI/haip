@@ -6,6 +6,7 @@ import {
   bookingRequests,
   bookingRequestInstallments,
   payments,
+  reservations,
   webhookDeliveries,
 } from './schema/index.js';
 
@@ -31,6 +32,7 @@ describe('booking request schema', () => {
     expect(payments.bookingRequestId).toBeDefined();
     expect(payments.idempotencyKey).toBeDefined();
     expect(webhookDeliveries.logicalEventId).toBeDefined();
+    expect(reservations.acceptedPricingSnapshot).toBeDefined();
 
     const indexNames = getTableConfig(bookingRequests).indexes.map((index) => index.config.name);
     expect(indexNames).toContain('booking_requests_property_submission_key_unique');

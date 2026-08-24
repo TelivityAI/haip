@@ -46,14 +46,16 @@ export class BookingEngineConfigService {
   constructor(@Inject(DRIZZLE) private readonly db: any) {}
 
   /** Full config row (admin view). Creates a default row on first access. */
-  async getConfig(propertyId: string) {
-    const [existing] = await this.db
+  async getConfig(propertyId: string, db?: any, lockForUpdate = false) {
+    const conn = db ?? this.db;
+    const query = conn
       .select()
       .from(bookingEngineConfig)
       .where(eq(bookingEngineConfig.propertyId, propertyId));
+    const [existing] = lockForUpdate ? await query.for('update') : await query;
     if (existing) return existing;
 
-    const [created] = await this.db
+    const [created] = await conn
       .insert(bookingEngineConfig)
       .values({ propertyId })
       .returning();
@@ -64,8 +66,8 @@ export class BookingEngineConfigService {
    * Public-safe config for the widget. Excludes nothing secret (Stripe key here is
    * the PUBLISHABLE key only). Returned for the property bound to the booking key.
    */
-  async getPublicConfig(propertyId: string) {
-    const cfg = await this.getConfig(propertyId);
+  async getPublicConfig(propertyId: string, db?: any, lockForUpdate = false) {
+    const cfg = await this.getConfig(propertyId, db, lockForUpdate);
     const formQuestions = validateQuestionDefinitions(
       (cfg.formQuestions ?? []) as BookingFormQuestion[],
     )

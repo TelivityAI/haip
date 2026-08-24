@@ -178,7 +178,15 @@ describe('AncillaryService', () => {
         'reservation.service_attached',
         'reservation_service',
         mockRs.id,
-        expect.any(Object),
+        {
+          reservationId: 'res-001',
+          serviceId: 'svc-001',
+          serviceName: 'Breakfast Buffet',
+          sourceChannel: 'front_desk',
+          quantity: 1,
+          unitPrice: '25.00',
+          postingRule: 'once',
+        },
         'prop-001',
       );
     });

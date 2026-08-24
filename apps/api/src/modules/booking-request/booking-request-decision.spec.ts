@@ -48,7 +48,10 @@ const submittedQuote = {
   checkOut: '2026-10-03',
   nights: 2,
   currencyCode: 'EUR',
-  lineItems: [],
+  lineItems: [
+    { date: '2026-10-01', rate: '100.00', tax: '10.00' },
+    { date: '2026-10-02', rate: '100.00', tax: '10.00' },
+  ],
   roomTotal: '200.00',
   taxTotal: '20.00',
   services: [],
@@ -69,6 +72,10 @@ const currentQuote = {
   roomTotal: '240.00',
   taxTotal: '20.00',
   grandTotal: '260.00',
+  lineItems: [
+    { date: '2026-10-01', rate: '120.00', tax: '10.00' },
+    { date: '2026-10-02', rate: '120.00', tax: '10.00' },
+  ],
 };
 
 type RequestRow = {
@@ -346,6 +353,7 @@ function makeHarness(requests: RequestRow[] = [pendingRequest()]) {
     }),
   };
   const reservation = {
+    lockInventory: vi.fn(async () => undefined),
     create: vi.fn(async (dto: Record<string, unknown>) => {
       reservationCreates += 1;
       if (!hasAvailability) {
@@ -514,6 +522,68 @@ describe('BookingRequestService staff reads', () => {
     expect(result?.data?.map((row: RequestRow) => row.id)).toEqual([REQUEST_ID]);
   });
 
+  it('serializes list and detail through explicit safe shapes', async () => {
+    const request = pendingRequest();
+    Object.assign(request, {
+      submissionIdempotencyKey: 'do-not-leak-key',
+      submissionFingerprint: 'do-not-leak-fingerprint',
+      setupIntentId: 'seti_secret',
+      stripeCustomerId: 'cus_secret',
+      stripePaymentMethodId: 'pm_secret',
+      cardLastFour: '4242',
+      cardBrand: 'visa',
+      consentText: 'internal consent wording',
+      consentVersion: 'v-secret',
+      consentedAt: new Date(),
+      formSnapshot: [{ id: 'question-1', label: 'Internal prompt' }],
+      applicationAnswers: { 'question-1': 'Approved admin answer' },
+    });
+    const harness = makeHarness([request]);
+
+    const list = await call(harness.service, 'list', [{
+      propertyId: PROPERTY_ID,
+      page: 1,
+      limit: 20,
+    }]);
+    const detail = await call(harness.service, 'findById', [REQUEST_ID, PROPERTY_ID]);
+    const forbiddenKeys = [
+      'submissionIdempotencyKey',
+      'submissionFingerprint',
+      'setupIntentId',
+      'stripeCustomerId',
+      'stripePaymentMethodId',
+      'consentText',
+      'consentVersion',
+      'consentedAt',
+    ];
+
+    expect(list.data[0]).toEqual(expect.objectContaining({
+      id: REQUEST_ID,
+      hasCard: true,
+    }));
+    expect(Object.keys(list.data[0]).sort()).toEqual([
+      'acceptedPriceSource', 'acceptedReservationId', 'acceptedTotal', 'adults',
+      'arrivalDate', 'children', 'createdAt', 'departureDate', 'guestEmail',
+      'guestFirstName', 'guestLastName', 'hasCard', 'id', 'propertyId',
+      'ratePlanId', 'roomTypeId', 'status', 'updatedAt',
+    ].sort());
+    expect(detail.card).toEqual({ brand: 'visa', lastFour: '4242' });
+    expect(detail.applicationAnswers).toEqual({
+      'question-1': 'Approved admin answer',
+    });
+    expect(Object.keys(detail)).toEqual(expect.arrayContaining([
+      'submittedQuoteSnapshot',
+      'currentQuoteSnapshot',
+      'formSnapshot',
+      'applicationAnswers',
+    ]));
+    for (const key of forbiddenKeys) {
+      expect(JSON.stringify(list)).not.toContain(key);
+      expect(JSON.stringify(detail)).not.toContain(key);
+      expect(detail).not.toHaveProperty(key);
+    }
+  });
+
   it('returns not found for a request id that exists under another property', async () => {
     const harness = makeHarness([
       pendingRequest({ propertyId: OTHER_PROPERTY_ID }),
@@ -547,8 +617,14 @@ describe('BookingRequestService acceptance', () => {
         actor,
       ]);
 
-      expect(result.id).toBe(RESERVATION_ID);
-      expect(result.totalAmount).toBe(expectedTotal);
+      expect(result).toEqual({
+        requestId: REQUEST_ID,
+        status: 'accepted',
+        reservationId: RESERVATION_ID,
+        folioId: FOLIO_ID,
+        totalAmount: expectedTotal,
+        currencyCode: 'EUR',
+      });
       expect(harness.state.requests[0]).toMatchObject({
         status: 'accepted',
         acceptedPriceSource: priceSource,
@@ -560,6 +636,13 @@ describe('BookingRequestService acceptance', () => {
         currentQuoteSnapshot: currentQuote,
       });
       expect(harness.savedPaymentMethod.charge).not.toHaveBeenCalled();
+      expect(harness.reservation.create.mock.calls[0]?.[1]).toMatchObject({
+        acceptedPricingSnapshot: expect.objectContaining({
+          source: priceSource,
+          currencyCode: 'EUR',
+          grandTotal: expectedTotal,
+        }),
+      });
       expect(harness.state.audits).toContainEqual(expect.objectContaining({
         userId: actor.userId,
         userEmail: actor.userEmail,
@@ -572,7 +655,7 @@ describe('BookingRequestService acceptance', () => {
           'Webhook event: folio.created',
         ]),
       );
-      expect(harness.quoteTransactionStates).toEqual([false]);
+      expect(harness.quoteTransactionStates).toEqual([true]);
       expect(harness.dispatchTransactionStates.every((active) => !active)).toBe(true);
     },
   );
@@ -624,6 +707,23 @@ describe('BookingRequestService acceptance', () => {
     expect(harness.state.reservations).toHaveLength(0);
   });
 
+  it('rejects a current quote in a different currency without creating records', async () => {
+    const harness = makeHarness();
+    harness.bookingEngine.quote.mockResolvedValueOnce({
+      ...structuredClone(currentQuote),
+      currencyCode: 'USD',
+    });
+
+    await expect(call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { priceSource: 'current' },
+      actor,
+    ])).rejects.toThrow(/currency/i);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+    expect(harness.state.reservations).toHaveLength(0);
+  });
+
   it('serializes simultaneous acceptance and creates exactly one reservation', async () => {
     const harness = makeHarness();
 
@@ -642,10 +742,77 @@ describe('BookingRequestService acceptance', () => {
       ]),
     ]);
 
-    expect(first.id).toBe(RESERVATION_ID);
-    expect(second.id).toBe(RESERVATION_ID);
+    expect(first).toEqual(second);
+    expect(first).toEqual({
+      requestId: REQUEST_ID,
+      status: 'accepted',
+      reservationId: RESERVATION_ID,
+      folioId: FOLIO_ID,
+      totalAmount: '220.00',
+      currencyCode: 'EUR',
+    });
     expect(harness.reservationCreates).toBe(1);
     expect(harness.state.reservations).toHaveLength(1);
+  });
+
+  it('keeps one of two different requests pending when they compete for the last room', async () => {
+    const otherRequestId = 'bbbbbbbb-0000-4000-a000-000000000002';
+    const first = makeHarness([pendingRequest()]);
+    const second = makeHarness([pendingRequest({ id: otherRequestId })]);
+    let inventoryAvailable = true;
+    let inventoryQueue = Promise.resolve();
+
+    const useSharedInventory = (harness: ReturnType<typeof makeHarness>) => {
+      let releaseInventory: (() => void) | undefined;
+      const createReservation = harness.reservation.create.getMockImplementation()!;
+      harness.reservation.lockInventory.mockImplementation(async () => {
+        const previous = inventoryQueue;
+        inventoryQueue = new Promise<void>((resolve) => {
+          releaseInventory = resolve;
+        });
+        await previous;
+      });
+      harness.bookingEngine.quote.mockImplementation(async () => {
+        if (!inventoryAvailable) {
+          releaseInventory?.();
+          throw new BadRequestException('No availability for requested stay');
+        }
+        return structuredClone(currentQuote);
+      });
+      harness.reservation.create.mockImplementation(async (...args: any[]) => {
+        const reservation = await createReservation(...args);
+        inventoryAvailable = false;
+        releaseInventory?.();
+        return reservation;
+      });
+    };
+    useSharedInventory(first);
+    useSharedInventory(second);
+
+    const results = await Promise.allSettled([
+      call(first.service, 'accept', [
+        REQUEST_ID,
+        PROPERTY_ID,
+        { priceSource: 'current' },
+        actor,
+      ]),
+      call(second.service, 'accept', [
+        otherRequestId,
+        PROPERTY_ID,
+        { priceSource: 'current' },
+        actor,
+      ]),
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual([
+      'fulfilled',
+      'rejected',
+    ]);
+    expect([
+      first.state.requests[0]?.status,
+      second.state.requests[0]?.status,
+    ].sort()).toEqual(['accepted', 'pending']);
+    expect(first.state.reservations.length + second.state.reservations.length).toBe(1);
   });
 
   it('returns the linked reservation when an accepted request is replayed', async () => {
@@ -670,7 +837,14 @@ describe('BookingRequestService acceptance', () => {
       actor,
     ]);
 
-    expect(result).toMatchObject({ id: RESERVATION_ID, propertyId: PROPERTY_ID });
+    expect(result).toEqual({
+      requestId: REQUEST_ID,
+      status: 'accepted',
+      reservationId: RESERVATION_ID,
+      folioId: FOLIO_ID,
+      totalAmount: '220.00',
+      currencyCode: 'EUR',
+    });
     expect(harness.reservationCreates).toBe(0);
   });
 
@@ -697,6 +871,84 @@ describe('BookingRequestService acceptance', () => {
       bookingRequestId: REQUEST_ID,
       folioId: FOLIO_ID,
     });
+  });
+
+  it('persists selected and package ancillary events with the canonical payload contract', async () => {
+    const serviceId = '99999999-0000-4000-a000-000000000001';
+    const packageServiceId = '99999999-0000-4000-a000-000000000002';
+    const harness = makeHarness([
+      pendingRequest({ serviceIds: [serviceId] }),
+    ]);
+    harness.bookingEngine.quote.mockResolvedValue({
+      ...structuredClone(currentQuote),
+      services: [{
+        serviceId,
+        code: 'PARK',
+        name: 'Parking',
+        postingRule: 'once',
+        chargeType: 'parking',
+        currencyCode: 'EUR',
+        unitPrice: '15.00',
+        quantity: 1,
+        lineTotal: '15.00',
+        taxTotal: '2.00',
+        lineItems: [{ date: '2026-10-01', amount: '15.00', tax: '2.00' }],
+      }],
+      servicesTotal: '15.00',
+      servicesTaxTotal: '2.00',
+      grandTotal: '277.00',
+    });
+    harness.ancillary.attachToReservation.mockResolvedValue({
+      id: '44444444-0000-4000-a000-000000000001',
+      reservationId: RESERVATION_ID,
+      serviceId,
+      serviceName: 'Parking',
+      sourceChannel: 'booking_engine',
+      quantity: 1,
+      unitPrice: '15.00',
+      postingRule: 'once',
+    });
+    harness.ancillary.ensurePackageComponents.mockResolvedValue([{
+      id: '44444444-0000-4000-a000-000000000002',
+      reservationId: RESERVATION_ID,
+      serviceId: packageServiceId,
+      serviceName: 'Included transfer',
+      sourceChannel: 'package',
+      quantity: 1,
+      unitPrice: '0.00',
+      postingRule: 'once',
+    }]);
+
+    await call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { priceSource: 'current' },
+      actor,
+    ]);
+
+    const serviceEvents = harness.state.consequences
+      .filter((row) => String(row['kind']).startsWith('service:'))
+      .map((row) => (row['payload'] as any).data);
+    expect(serviceEvents).toEqual([
+      {
+        reservationId: RESERVATION_ID,
+        serviceId,
+        serviceName: 'Parking',
+        sourceChannel: 'booking_engine',
+        quantity: 1,
+        unitPrice: '15.00',
+        postingRule: 'once',
+      },
+      {
+        reservationId: RESERVATION_ID,
+        serviceId: packageServiceId,
+        serviceName: 'Included transfer',
+        sourceChannel: 'package',
+        quantity: 1,
+        unitPrice: '0.00',
+        postingRule: 'once',
+      },
+    ]);
   });
 
   it('treats cross-property acceptance as not found', async () => {
@@ -764,11 +1016,11 @@ describe('BookingRequestService denial', () => {
       actor,
     ]);
 
-    expect(result).toMatchObject({
-      id: REQUEST_ID,
+    expect(result).toEqual({
+      requestId: REQUEST_ID,
       status: 'denied',
       denialReason: 'Unable to accommodate',
-      decidedBy: actor.userId,
+      decidedAt: expect.any(Date),
     });
     expect(harness.state.requests).toHaveLength(1);
     expect(harness.state.payments).toHaveLength(1);
@@ -782,6 +1034,33 @@ describe('BookingRequestService denial', () => {
     expect(harness.dispatchTransactionStates.every((active) => !active)).toBe(true);
   });
 
+  it('replays a denied decision and retries its pending consequence idempotently', async () => {
+    const harness = makeHarness();
+    harness.webhook.dispatchPersisted.mockRejectedValueOnce(
+      new Error('process stopped after commit'),
+    );
+
+    const first = await call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Unable to accommodate' },
+      actor,
+    ]);
+    expect(harness.state.requests[0]?.status).toBe('denied');
+    expect(harness.state.consequences[0]).toMatchObject({ status: 'pending' });
+
+    const replay = await call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Different replay text is ignored' },
+      actor,
+    ]);
+
+    expect(replay).toEqual(first);
+    expect(harness.state.consequences[0]).toMatchObject({ status: 'completed' });
+    expect(harness.state.requests).toHaveLength(1);
+  });
+
   it('treats cross-property denial as not found', async () => {
     const harness = makeHarness([pendingRequest({ propertyId: OTHER_PROPERTY_ID })]);
 
@@ -792,6 +1071,77 @@ describe('BookingRequestService denial', () => {
       actor,
     ])).rejects.toBeInstanceOf(NotFoundException);
     expect(harness.state.requests[0]?.status).toBe('pending');
+  });
+});
+
+describe('Booking Request durable consequence recovery', () => {
+  function seedPendingConsequence(harness: ReturnType<typeof makeHarness>) {
+    harness.state.consequences.push({
+      id: '77777777-0000-4000-a000-000000000001',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      kind: 'created_event',
+      payload: {
+        event: 'booking_request.created',
+        entityType: 'booking_request',
+        entityId: REQUEST_ID,
+        propertyId: PROPERTY_ID,
+        data: { requestId: REQUEST_ID, status: 'pending' },
+        timestamp: '2026-08-24T10:00:00.000Z',
+      },
+      status: 'pending',
+      attempts: 0,
+      claimedAt: null,
+      createdAt: new Date('2026-08-24T10:00:00.000Z'),
+      updatedAt: new Date('2026-08-24T10:00:00.000Z'),
+    });
+  }
+
+  it('scans and dispatches a consequence left pending by a process crash', async () => {
+    const harness = makeHarness();
+    seedPendingConsequence(harness);
+
+    const scanned = await (harness.service as any).processPendingConsequences();
+
+    expect(scanned).toBe(1);
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'booking_request.created' }),
+      '77777777-0000-4000-a000-000000000001',
+    );
+    expect(harness.state.consequences[0]).toMatchObject({ status: 'completed' });
+  });
+
+  it('property-scoped claims allow concurrent scanners to dispatch a logical event once', async () => {
+    const harness = makeHarness();
+    seedPendingConsequence(harness);
+
+    await Promise.all([
+      (harness.service as any).processPendingConsequences(),
+      (harness.service as any).processPendingConsequences(),
+    ]);
+
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledTimes(1);
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledWith(
+      expect.anything(),
+      '77777777-0000-4000-a000-000000000001',
+    );
+  });
+
+  it('recovers a stale processing lease left by a stopped worker', async () => {
+    const harness = makeHarness();
+    seedPendingConsequence(harness);
+    Object.assign(harness.state.consequences[0]!, {
+      status: 'processing',
+      claimedAt: new Date(Date.now() - 10 * 60 * 1000),
+    });
+
+    await (harness.service as any).processPendingConsequences();
+
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledTimes(1);
+    expect(harness.state.consequences[0]).toMatchObject({
+      status: 'completed',
+      claimedAt: null,
+    });
   });
 });
 
@@ -843,6 +1193,9 @@ describe('canonical creation transaction seams', () => {
             return chain;
           }),
           where: vi.fn(() => chain),
+          for: vi.fn(() => Promise.resolve(
+            table === roomTypes ? [{ id: ROOM_TYPE_ID }] : [],
+          )),
           then: (resolve, reject) => Promise.resolve(
             table === folios ? [{ maxNumber: null }] : [{ id: 'exists' }],
           ).then(resolve, reject),
@@ -891,6 +1244,9 @@ describe('canonical creation transaction seams', () => {
             return chain;
           }),
           where: vi.fn(() => chain),
+          for: vi.fn(() => Promise.resolve(
+            table === roomTypes ? [{ id: ROOM_TYPE_ID }] : [],
+          )),
           then: (resolve, reject) => Promise.resolve(
             table === guests
               ? [{ id: GUEST_ID, isDnr: false }]
@@ -916,6 +1272,11 @@ describe('canonical creation transaction seams', () => {
     const availability = {
       searchAvailability: vi.fn(async () => [{
         roomTypeId: ROOM_TYPE_ID,
+        date: '2026-10-01',
+        available: 1,
+      }, {
+        roomTypeId: ROOM_TYPE_ID,
+        date: '2026-10-02',
         available: 1,
       }]),
     };

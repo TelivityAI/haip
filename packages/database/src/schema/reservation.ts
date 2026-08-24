@@ -36,6 +36,51 @@ export const bookingSourceEnum = pgEnum('booking_source', [
   'corporate',      // Corporate portal
 ]);
 
+export interface AcceptedPricingNight {
+  date: string;
+  roomAmount: string;
+  taxAmount: string;
+}
+
+export interface AcceptedPricingServiceNight {
+  date: string;
+  amount: string;
+  taxAmount: string;
+}
+
+export interface AcceptedPricingService {
+  serviceId: string;
+  code: string;
+  name: string;
+  postingRule: string;
+  chargeType: string;
+  currencyCode: string;
+  unitPrice: string;
+  quantity: number;
+  lineTotal: string;
+  taxTotal: string;
+  lineItems: AcceptedPricingServiceNight[];
+}
+
+/** Immutable operational tariff chosen when staff accepts a Booking Request. */
+export interface AcceptedPricingSnapshot {
+  version: 1;
+  source: 'submitted' | 'current' | 'custom';
+  currencyCode: string;
+  grandTotal: string;
+  roomTotal: string;
+  taxTotal: string;
+  nights: AcceptedPricingNight[];
+  services: AcceptedPricingService[];
+  servicesTotal: string;
+  servicesTaxTotal: string;
+  adjustment: null | {
+    amount: string;
+    reason: string;
+    serviceDate: string;
+  };
+}
+
 /**
  * Bookings — container for one or more reservations; identifies the booker.
  * Booking is the party wrapper; reservations are per-room.
@@ -92,6 +137,7 @@ export const reservations = pgTable('reservations', {
   ratePlanId: uuid('rate_plan_id').notNull().references(() => ratePlans.id),
   totalAmount: numeric('total_amount', { precision: 12, scale: 2 }).notNull(),
   currencyCode: varchar('currency_code', { length: 3 }).notNull(),
+  acceptedPricingSnapshot: jsonb('accepted_pricing_snapshot').$type<AcceptedPricingSnapshot>(),
 
   // Occupancy
   adults: integer('adults').notNull().default(1),

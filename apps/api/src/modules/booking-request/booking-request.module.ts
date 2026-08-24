@@ -13,6 +13,7 @@ import { WebhookModule } from '../webhook/webhook.module';
 import { BookingRequestController } from './booking-request.controller';
 import { BookingRequestPublicController } from './booking-request-public.controller';
 import { BookingRequestService } from './booking-request.service';
+import { BookingRequestConsequenceWorkerService } from './booking-request-consequence-worker.service';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { BookingRequestService } from './booking-request.service';
   controllers: [BookingRequestPublicController, BookingRequestController],
   providers: [
     BookingRequestService,
+    BookingRequestConsequenceWorkerService,
     BookingKeyGuard,
     BookingEngineScopeGuard,
     BookingThrottleGuard,
