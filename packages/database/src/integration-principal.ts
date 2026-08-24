@@ -46,6 +46,11 @@ export const INTEGRATION_CUSTOM_PERMISSION_ALLOWLIST: readonly string[] = [
   'rateplans.manage',
   'reports.view',
   'nightaudit.run',
+  // Channel/iCal feed CRUD and property config are settings.manage routes
+  // (ical.controller.ts, property.controller.ts, import.controller.ts). An
+  // integration that syncs OTA calendars needs it, and without it here such
+  // a principal cannot be expressed with --profile custom at all.
+  'settings.manage',
 ];
 
 export interface LinkIntegrationPrincipalInput {
