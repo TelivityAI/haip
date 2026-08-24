@@ -102,7 +102,7 @@ export class PaymentService {
       dto.propertyId,
     );
 
-    return payment;
+    return this.safePaymentResponse(payment);
   }
 
   async authorizePayment(dto: AuthorizePaymentDto) {
@@ -182,7 +182,7 @@ export class PaymentService {
       dto.propertyId,
     );
 
-    return payment;
+    return this.safePaymentResponse(payment);
   }
 
   /**
@@ -259,7 +259,7 @@ export class PaymentService {
       propertyId,
     );
 
-    return claimed;
+    return this.safePaymentResponse(claimed);
   }
 
   /**
@@ -314,7 +314,7 @@ export class PaymentService {
       propertyId,
     );
 
-    return claimed;
+    return this.safePaymentResponse(claimed);
   }
 
   /**
@@ -425,7 +425,7 @@ export class PaymentService {
       refundAmountDec: refundDec,
       replay,
     } = prepared;
-    if (replay) return replay;
+    if (replay) return this.safePaymentResponse(replay);
 
     const idempotencyKey = options.idempotencyKey
       ?? `ref_${id}_${totalAfterDec.toFixed(2)}`;
@@ -551,7 +551,7 @@ export class PaymentService {
       );
     }
 
-    return refund.row;
+    return this.safePaymentResponse(refund.row);
   }
 
   /**
@@ -649,7 +649,7 @@ export class PaymentService {
           { folioId: voided.folioId, status: 'voided' },
           propertyId,
         );
-        result = voided;
+        result = this.safePaymentResponse(voided);
       }
       await this.webhookService.emit(
         'payment.corrected',
@@ -745,7 +745,7 @@ export class PaymentService {
       { op: 'adjust', method: payment.method, adjustmentAmount: adjustment.adjustmentAmount },
       propertyId,
     );
-    return { op: 'adjust', adjustment: adjustment.row };
+    return { op: 'adjust', adjustment: this.safePaymentResponse(adjustment.row) };
   }
 
   async findById(id: string, propertyId: string) {
@@ -787,7 +787,6 @@ export class PaymentService {
       amount: payment.amount,
       currencyCode: payment.currencyCode,
       gatewayProvider: payment.gatewayProvider,
-      gatewayTransactionId: payment.gatewayTransactionId,
       cardLastFour: payment.cardLastFour,
       cardBrand: payment.cardBrand,
       isPreAuthorization: payment.isPreAuthorization,

@@ -32,6 +32,7 @@ import {
 } from '../payment/interfaces/saved-payment-method-gateway.interface';
 import { remainingCapturedAmount } from '../payment/payment-ledger';
 import { reconcileBookingRequestPaymentAllocations } from './booking-request-allocation-reconciler';
+import { ensureBookingRequestFinancialConsequence } from './booking-request-payment-consequence';
 import { assertAllocationAmount, resolveInstallmentAmount } from './booking-request-money';
 import type {
   AllocateBookingRequestPaymentDto,
@@ -117,8 +118,10 @@ export class BookingRequestPaymentService {
         .map((row: PaymentRow) => this.paymentResponse(row)),
       allocations: allocationRows.filter((row: AllocationRow) =>
         row.propertyId === propertyId && row.bookingRequestId === bookingRequestId),
-      resolutions: resolutionRows.filter((row: ResolutionRow) =>
-        row.propertyId === propertyId && row.bookingRequestId === bookingRequestId),
+      resolutions: resolutionRows
+        .filter((row: ResolutionRow) =>
+          row.propertyId === propertyId && row.bookingRequestId === bookingRequestId)
+        .map((row: ResolutionRow) => this.resolutionResponse(row)),
     };
   }
 
@@ -470,6 +473,22 @@ export class BookingRequestPaymentService {
             await this.folioService.recalculateBalance(currentFolioId, propertyId, tx);
           }
         }
+        if (existing.status === 'captured' || existing.status === 'failed') {
+          await ensureBookingRequestFinancialConsequence(tx, {
+            event: existing.status === 'captured' ? 'payment.received' : 'payment.failed',
+            logicalId: existing.id,
+            propertyId,
+            bookingRequestId,
+            entityType: 'payment',
+            entityId: existing.id,
+            data: {
+              folioId: request.acceptedFolioId ?? existing.folioId,
+              status: existing.status,
+              amount: existing.amount,
+              currencyCode: existing.currencyCode,
+            },
+          });
+        }
         return { payment: existing, request, isNew: false };
       }
       await this.audit(tx, {
@@ -541,6 +560,44 @@ export class BookingRequestPaymentService {
       );
     }
 
+    if (gatewayResult.indeterminate) {
+      await this.db.transaction(async (tx: any) => {
+        const request = await this.findRequest(tx, bookingRequestId, propertyId, true);
+        this.assertNotDenied(request);
+        const existing = await this.findPayment(tx, prepared.payment.id, propertyId, true);
+        if (existing.status !== 'pending') return;
+        await tx
+          .update(payments)
+          .set({
+            gatewayTransactionId: gatewayResult.transactionId || existing.gatewayTransactionId,
+            notes: `Gateway result pending (${gatewayResult.providerStatus ?? 'unknown'}); retry with the same payment identity`,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(payments.id, existing.id),
+            eq(payments.propertyId, propertyId),
+            eq(payments.bookingRequestId, bookingRequestId),
+            eq(payments.status, 'pending'),
+          ));
+        await this.audit(tx, {
+          propertyId,
+          action: 'update',
+          entityType: 'payment',
+          entityId: existing.id,
+          actor,
+          previousValue: { status: 'pending' },
+          newValue: {
+            status: 'pending',
+            providerStatus: gatewayResult.providerStatus ?? 'unknown',
+          },
+          description: 'Booking request saved-card charge remains pending at provider',
+        });
+      });
+      throw new ServiceUnavailableException(
+        'Saved-card gateway result is pending; retry with the same idempotency key',
+      );
+    }
+
     const finalized = await this.db.transaction(async (tx: any) => {
       const request = await this.findRequest(tx, bookingRequestId, propertyId, true);
       this.assertNotDenied(request);
@@ -591,6 +648,20 @@ export class BookingRequestPaymentService {
         description: status === 'captured'
           ? 'Booking request payment captured'
           : 'Booking request payment failed',
+      });
+      await ensureBookingRequestFinancialConsequence(tx, {
+        event: status === 'captured' ? 'payment.received' : 'payment.failed',
+        logicalId: updated.id,
+        propertyId,
+        bookingRequestId,
+        entityType: 'payment',
+        entityId: updated.id,
+        data: {
+          folioId: updated.folioId,
+          status,
+          amount: updated.amount,
+          currencyCode: updated.currencyCode,
+        },
       });
       if (status === 'captured' && updated.folioId) {
         await this.folioService.recalculateBalance(updated.folioId, propertyId, tx);
@@ -661,6 +732,21 @@ export class BookingRequestPaymentService {
         if (existing.folioId) {
           await this.folioService.recalculateBalance(existing.folioId, propertyId, tx);
         }
+        await ensureBookingRequestFinancialConsequence(tx, {
+          event: 'payment.received',
+          logicalId: existing.id,
+          propertyId,
+          bookingRequestId,
+          entityType: 'payment',
+          entityId: existing.id,
+          data: {
+            folioId: existing.folioId,
+            status: existing.status,
+            amount: existing.amount,
+            currencyCode: existing.currencyCode,
+            externalReference: reference,
+          },
+        });
         return { payment: existing, isNew: false };
       }
       await this.audit(tx, {
@@ -681,6 +767,21 @@ export class BookingRequestPaymentService {
           status: 'captured',
         },
         description: 'External booking request payment recorded',
+      });
+      await ensureBookingRequestFinancialConsequence(tx, {
+        event: 'payment.received',
+        logicalId: created.id,
+        propertyId,
+        bookingRequestId,
+        entityType: 'payment',
+        entityId: created.id,
+        data: {
+          folioId: created.folioId,
+          status: created.status,
+          amount: created.amount,
+          currencyCode: created.currencyCode,
+          externalReference: reference,
+        },
       });
       if (created.folioId) {
         await this.folioService.recalculateBalance(created.folioId, propertyId, tx);
@@ -738,6 +839,20 @@ export class BookingRequestPaymentService {
           if (movement.folioId) {
             await this.folioService.recalculateBalance(movement.folioId, propertyId, tx);
           }
+          await ensureBookingRequestFinancialConsequence(tx, {
+            event: 'payment.refunded',
+            logicalId: movement.id,
+            propertyId,
+            bookingRequestId,
+            entityType: 'payment',
+            entityId: movement.id,
+            data: {
+              folioId: movement.folioId,
+              originalPaymentId: original.id,
+              refundAmount: amount.toFixed(2),
+              resolutionId: replay.id,
+            },
+          });
           return { request, original, amount, claim: replay, movement, terminal: true as const };
         }
         if (replay.status === 'failed') {
@@ -783,7 +898,7 @@ export class BookingRequestPaymentService {
     if (prepared.terminal) {
       return {
         movement: this.paymentResponse(prepared.movement),
-        resolution: prepared.claim,
+        resolution: this.resolutionResponse(prepared.claim),
       };
     }
 
@@ -792,7 +907,16 @@ export class BookingRequestPaymentService {
       gatewayResult = await this.paymentGateway.refund(
         prepared.original.gatewayTransactionId!,
         prepared.amount.toNumber(),
-        { idempotencyKey, currencyCode: prepared.original.currencyCode },
+        {
+          idempotencyKey,
+          currencyCode: prepared.original.currencyCode,
+          metadata: {
+            claimId: prepared.claim.id,
+            propertyId,
+            bookingRequestId,
+            paymentId,
+          },
+        },
       );
     } catch (error: unknown) {
       await this.recordUnknownResolutionAttempt({
@@ -808,19 +932,42 @@ export class BookingRequestPaymentService {
       );
     }
 
-    if (!gatewayResult.success) {
+    const providerStatus = gatewayResult.providerStatus
+      ?? (gatewayResult.success ? 'succeeded' : 'failed');
+    if (providerStatus === 'pending'
+      || providerStatus === 'requires_action'
+      || providerStatus === 'unknown') {
+      await this.recordUnknownResolutionAttempt({
+        bookingRequestId,
+        propertyId,
+        paymentId,
+        resolutionId: prepared.claim.id,
+        error: gatewayResult.errorMessage
+          ?? `Gateway refund is ${providerStatus}`,
+        providerTransactionId: gatewayResult.transactionId,
+        providerStatus,
+        actor,
+      });
+      throw new ServiceUnavailableException(
+        `Gateway refund is ${providerStatus}; retry with the same idempotency key`,
+      );
+    }
+
+    if (!gatewayResult.success || providerStatus !== 'succeeded') {
       await this.finalizeFailedRefundClaim({
         bookingRequestId,
         propertyId,
         paymentId,
         resolutionId: prepared.claim.id,
         errorMessage: gatewayResult.errorMessage ?? 'Gateway declined the refund',
+        providerTransactionId: gatewayResult.transactionId,
+        providerStatus,
         actor,
       });
       throw new ConflictException(`Refund failed: ${gatewayResult.errorMessage ?? 'Gateway declined'}`);
     }
 
-    return this.finalizeCapturedRefund({
+    const finalized = await this.finalizeCapturedRefund({
       bookingRequestId,
       propertyId,
       paymentId,
@@ -829,6 +976,10 @@ export class BookingRequestPaymentService {
       gatewayResult,
       actor,
     });
+    return {
+      ...finalized,
+      resolution: this.resolutionResponse(finalized.resolution),
+    };
   }
 
   async recordExternalReturn(
@@ -880,10 +1031,26 @@ export class BookingRequestPaymentService {
           reason: `External return movement ${existing.id}`,
           actor,
           marker: existing.id,
+          movementId: existing.id,
         });
         if (existing.folioId) {
           await this.folioService.recalculateBalance(existing.folioId, propertyId, tx);
         }
+        await ensureBookingRequestFinancialConsequence(tx, {
+          event: 'payment.external_returned',
+          logicalId: existing.id,
+          propertyId,
+          bookingRequestId,
+          entityType: 'payment',
+          entityId: existing.id,
+          data: {
+            folioId: existing.folioId,
+            originalPaymentId: original.id,
+            returnAmount: amount.toFixed(2),
+            resolutionId: resolution.id,
+            externalReference: reference,
+          },
+        });
         return { movement: existing, resolution, isNew: false };
       }
       await this.assertResolutionCapacity(
@@ -920,6 +1087,7 @@ export class BookingRequestPaymentService {
         reason: `External return movement ${movement.id}`,
         actor,
         marker: movement.id,
+        movementId: movement.id,
       });
       await this.audit(tx, {
         propertyId,
@@ -938,6 +1106,21 @@ export class BookingRequestPaymentService {
         },
         description: 'External booking request payment return recorded',
       });
+      await ensureBookingRequestFinancialConsequence(tx, {
+        event: 'payment.external_returned',
+        logicalId: movement.id,
+        propertyId,
+        bookingRequestId,
+        entityType: 'payment',
+        entityId: movement.id,
+        data: {
+          folioId: movement.folioId,
+          originalPaymentId: original.id,
+          returnAmount: amount.toFixed(2),
+          resolutionId: resolution.id,
+          externalReference: reference,
+        },
+      });
       await this.reconcileAllocationsForPayment(
         tx,
         bookingRequestId,
@@ -952,7 +1135,7 @@ export class BookingRequestPaymentService {
     });
     return {
       movement: this.paymentResponse(result.movement),
-      resolution: result.resolution,
+      resolution: this.resolutionResponse(result.resolution),
     };
   }
 
@@ -965,7 +1148,7 @@ export class BookingRequestPaymentService {
   ) {
     const reason = input.reason?.trim();
     if (!reason) throw new BadRequestException('A reason is required for retained money');
-    return this.db.transaction(async (tx: any) => {
+    const resolution = await this.db.transaction(async (tx: any) => {
       const request = await this.findRequest(tx, bookingRequestId, propertyId, true);
       if (request.status !== 'pending') {
         throw new ConflictException('Money may be retained only for a pending request');
@@ -984,7 +1167,18 @@ export class BookingRequestPaymentService {
           && row.type === 'retained'
           && new Decimal(row.amount).eq(amount)
           && row.reason?.trim() === reason);
-      if (existing) return existing;
+      if (existing) {
+        await ensureBookingRequestFinancialConsequence(tx, {
+          event: 'payment.retained',
+          logicalId: existing.id,
+          propertyId,
+          bookingRequestId,
+          entityType: 'booking_request_payment_resolution',
+          entityId: existing.id,
+          data: { paymentId, amount: existing.amount, reason: existing.reason },
+        });
+        return existing;
+      }
       await this.assertResolutionCapacity(
         tx,
         bookingRequestId,
@@ -992,7 +1186,7 @@ export class BookingRequestPaymentService {
         original,
         amount,
       );
-      return this.ensureResolution(tx, {
+      const resolution = await this.ensureResolution(tx, {
         bookingRequestId,
         propertyId,
         paymentId,
@@ -1001,7 +1195,18 @@ export class BookingRequestPaymentService {
         reason,
         actor,
       });
+      await ensureBookingRequestFinancialConsequence(tx, {
+        event: 'payment.retained',
+        logicalId: resolution.id,
+        propertyId,
+        bookingRequestId,
+        entityType: 'booking_request_payment_resolution',
+        entityId: resolution.id,
+        data: { paymentId, amount: resolution.amount, reason: resolution.reason },
+      });
+      return resolution;
     });
+    return this.resolutionResponse(resolution);
   }
 
   private operationFingerprint(value: Record<string, unknown>): string {
@@ -1067,6 +1272,8 @@ export class BookingRequestPaymentService {
     paymentId: string;
     resolutionId: string;
     error: unknown;
+    providerTransactionId?: string;
+    providerStatus?: string;
     actor?: AuditActor;
   }): Promise<void> {
     await this.db.transaction(async (tx: any) => {
@@ -1095,12 +1302,18 @@ export class BookingRequestPaymentService {
       if (claim.status !== 'pending') return;
       const lastError = input.error instanceof Error
         ? input.error.message.slice(0, 500)
-        : 'Gateway result unknown';
+        : typeof input.error === 'string'
+          ? input.error.slice(0, 500)
+          : 'Gateway result unknown';
       await tx
         .update(bookingRequestPaymentResolutions)
         .set({
           attempts: (claim.attempts ?? 0) + 1,
           lastError,
+          providerTransactionId: input.providerTransactionId
+            || claim.providerTransactionId
+            || null,
+          providerStatus: input.providerStatus || claim.providerStatus || 'unknown',
           updatedAt: new Date(),
         })
         .where(and(
@@ -1127,6 +1340,8 @@ export class BookingRequestPaymentService {
     paymentId: string;
     resolutionId: string;
     errorMessage: string;
+    providerTransactionId?: string;
+    providerStatus?: string;
     actor?: AuditActor;
   }): Promise<void> {
     await this.db.transaction(async (tx: any) => {
@@ -1159,6 +1374,10 @@ export class BookingRequestPaymentService {
           status: 'failed',
           attempts: (claim.attempts ?? 0) + 1,
           lastError: input.errorMessage.slice(0, 500),
+          providerTransactionId: input.providerTransactionId
+            || claim.providerTransactionId
+            || null,
+          providerStatus: input.providerStatus || claim.providerStatus || 'failed',
           resolvedAt: new Date(),
           updatedAt: new Date(),
         })
@@ -1176,6 +1395,19 @@ export class BookingRequestPaymentService {
         previousValue: { status: 'pending' },
         newValue: { status: 'failed', error: input.errorMessage.slice(0, 500) },
         description: 'Booking request gateway refund failed',
+      });
+      await ensureBookingRequestFinancialConsequence(tx, {
+        event: 'payment.failed',
+        logicalId: claim.id,
+        propertyId: input.propertyId,
+        bookingRequestId: input.bookingRequestId,
+        entityType: 'booking_request_payment_resolution',
+        entityId: claim.id,
+        data: {
+          paymentId: input.paymentId,
+          type: 'refund',
+          providerStatus: input.providerStatus ?? 'failed',
+        },
       });
     });
   }
@@ -1217,6 +1449,21 @@ export class BookingRequestPaymentService {
         if (movement.folioId) {
           await this.folioService.recalculateBalance(movement.folioId, input.propertyId, tx);
         }
+        await ensureBookingRequestFinancialConsequence(tx, {
+          event: 'payment.refunded',
+          logicalId: movement.id,
+          propertyId: input.propertyId,
+          bookingRequestId: input.bookingRequestId,
+          entityType: 'payment',
+          entityId: movement.id,
+          data: {
+            folioId: movement.folioId,
+            originalPaymentId: original.id,
+            refundAmount: claim.amount,
+            resolutionId: claim.id,
+            providerRefundId: claim.providerTransactionId,
+          },
+        });
         return { movement: this.paymentResponse(movement), resolution: claim };
       }
       if (claim.status !== 'pending') {
@@ -1247,6 +1494,8 @@ export class BookingRequestPaymentService {
         .set({
           status: 'completed',
           movementId: movement.id,
+          providerTransactionId: input.gatewayResult.transactionId,
+          providerStatus: input.gatewayResult.providerStatus ?? 'succeeded',
           reason: `Gateway refund movement ${movement.id}`,
           attempts: (claim.attempts ?? 0) + 1,
           lastError: null,
@@ -1298,6 +1547,21 @@ export class BookingRequestPaymentService {
           amount: claim.amount,
         },
         description: 'Booking request gateway refund completed',
+      });
+      await ensureBookingRequestFinancialConsequence(tx, {
+        event: 'payment.refunded',
+        logicalId: movement.id,
+        propertyId: input.propertyId,
+        bookingRequestId: input.bookingRequestId,
+        entityType: 'payment',
+        entityId: movement.id,
+        data: {
+          folioId: movement.folioId,
+          originalPaymentId: original.id,
+          refundAmount: claim.amount,
+          resolutionId: claim.id,
+          providerRefundId: input.gatewayResult.transactionId,
+        },
       });
       await this.reconcileAllocationsForPayment(
         tx,
@@ -1358,8 +1622,8 @@ export class BookingRequestPaymentService {
     if (amount.decimalPlaces() > 2) {
       throw new BadRequestException('Installment percentage supports at most two decimal places');
     }
-    if (amount.gte(1000)) {
-      throw new BadRequestException('Installment percentage exceeds storage precision');
+    if (amount.gt(100)) {
+      throw new BadRequestException('Installment percentage cannot exceed 100');
     }
     return amount;
   }
@@ -1756,6 +2020,7 @@ export class BookingRequestPaymentService {
       reason?: string;
       actor?: AuditActor;
       marker?: string;
+      movementId?: string;
     },
   ) {
     if (input.marker) {
@@ -1767,7 +2032,19 @@ export class BookingRequestPaymentService {
         row.paymentId === input.paymentId
         && row.type === input.type
         && row.reason?.includes(input.marker!));
-      if (existing) return existing;
+      if (existing) {
+        if (input.type === 'external_return') {
+          if (!existing.movementId) {
+            throw new ConflictException(
+              'Existing external return resolution is missing canonical movement provenance',
+            );
+          }
+          if (input.movementId && existing.movementId !== input.movementId) {
+            throw new ConflictException('External return resolution movement does not match replay');
+          }
+        }
+        return existing;
+      }
     }
     const [resolution] = await tx
       .insert(bookingRequestPaymentResolutions)
@@ -1776,7 +2053,9 @@ export class BookingRequestPaymentService {
         bookingRequestId: input.bookingRequestId,
         paymentId: input.paymentId,
         type: input.type,
+        status: 'completed',
         amount: input.amount,
+        movementId: input.movementId ?? null,
         reason: input.reason ?? null,
         resolvedBy: input.actor?.userId ?? null,
         resolvedAt: new Date(),
@@ -1826,12 +2105,32 @@ export class BookingRequestPaymentService {
       amount: row.amount,
       currencyCode: row.currencyCode,
       gatewayProvider: row.gatewayProvider,
-      gatewayTransactionId: row.gatewayTransactionId,
+      reference: row.gatewayProvider && row.gatewayProvider !== 'stripe'
+        ? row.gatewayTransactionId
+        : null,
       cardLastFour: row.cardLastFour,
       cardBrand: row.cardBrand,
       originalPaymentId: row.originalPaymentId,
       notes: row.notes,
       processedAt: row.processedAt,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  private resolutionResponse(row: ResolutionRow) {
+    return {
+      id: row.id,
+      propertyId: row.propertyId,
+      bookingRequestId: row.bookingRequestId,
+      paymentId: row.paymentId,
+      type: row.type,
+      status: row.status,
+      amount: row.amount,
+      movementId: row.movementId,
+      reason: row.reason,
+      resolvedBy: row.resolvedBy,
+      resolvedAt: row.resolvedAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

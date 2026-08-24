@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
   auditLogs,
+  bookingRequestConsequences,
   bookingRequestInstallments,
   bookingRequestPaymentAllocations,
   bookingRequestPaymentResolutions,
@@ -38,6 +39,7 @@ type State = {
   allocations: Array<Record<string, any>>;
   resolutions: Array<Record<string, any>>;
   audits: Array<Record<string, any>>;
+  consequences: Array<Record<string, any>>;
 };
 
 function request(overrides: Record<string, unknown> = {}) {
@@ -106,6 +108,7 @@ function tableRows(state: State, table: unknown): Array<Record<string, any>> {
   if (table === bookingRequestPaymentAllocations) return state.allocations;
   if (table === bookingRequestPaymentResolutions) return state.resolutions;
   if (table === auditLogs) return state.audits;
+  if (table === bookingRequestConsequences) return state.consequences;
   throw new Error('Unexpected table in payment test');
 }
 
@@ -160,6 +163,16 @@ function makeDatabase(state: State) {
             throw new Error('duplicate payment allocation');
           }
         }
+        if (table === bookingRequestConsequences) {
+          const duplicate = rows.some((row) =>
+            row.propertyId === input['propertyId']
+            && row.bookingRequestId === input['bookingRequestId']
+            && row.kind === input['kind']);
+          if (duplicate) {
+            if (ignoreConflict) return [];
+            throw new Error('duplicate booking request consequence');
+          }
+        }
         sequence += 1;
         inserted = {
           id: input['id'] ?? `00000000-0000-4000-a000-${String(sequence).padStart(12, '0')}`,
@@ -174,6 +187,8 @@ function makeDatabase(state: State) {
         returning: vi.fn(async () => doInsert(false)),
         onConflictDoNothing: vi.fn(() => ({
           returning: vi.fn(async () => doInsert(true)),
+          then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) =>
+            Promise.resolve().then(() => doInsert(true)).then(resolve, reject),
         })),
         then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) =>
           Promise.resolve().then(() => doInsert(false)).then(resolve, reject),
@@ -240,6 +255,7 @@ function makeHarness(overrides: Partial<State> = {}) {
     allocations: [],
     resolutions: [],
     audits: [],
+    consequences: [],
     ...structuredClone(overrides),
   };
   const database = makeDatabase(state);
@@ -319,6 +335,16 @@ describe('Booking Request payment HTTP contract', () => {
       dueMilestone: 'arrival',
     });
     expect(await validate(validInstallment)).toHaveLength(0);
+    expect(await validate(plainToInstance(CreateBookingRequestInstallmentDto, {
+      label: 'Whole balance',
+      percentage: '100.00',
+      dueMilestone: 'manual',
+    }))).toHaveLength(0);
+    expect(await validate(plainToInstance(CreateBookingRequestInstallmentDto, {
+      label: 'Too much',
+      percentage: '100.01',
+      dueMilestone: 'manual',
+    }))).not.toHaveLength(0);
 
     for (const [Dto, value] of [
       [AllocateBookingRequestPaymentDto, { paymentId: 'not-a-uuid', amount: '0' }],
@@ -392,6 +418,11 @@ describe('BookingRequestPaymentService installments', () => {
       fixedAmount: '10.00',
       dueMilestone: 'date',
     }, actor)).rejects.toThrow(/due date/i);
+    await expect(harness.service.createInstallment(REQUEST_ID, PROPERTY_ID, {
+      label: 'Over one hundred percent',
+      percentage: '100.01',
+      dueMilestone: 'manual',
+    }, actor)).rejects.toThrow(/100/i);
   });
 
   it('uses ISO zero-decimal rounding and rejects installments for a zero-total request', async () => {
@@ -578,10 +609,13 @@ describe('BookingRequestPaymentService saved-card charges', () => {
       folioId: null,
       amount: '80.25',
       status: 'captured',
-      gatewayTransactionId: 'pi_saved_1',
     });
     expect(result).not.toHaveProperty('gatewayPaymentToken');
     expect(result).not.toHaveProperty('idempotencyKey');
+    expect(result).not.toHaveProperty('gatewayTransactionId');
+    expect(harness.state.consequences).toEqual([
+      expect.objectContaining({ kind: expect.stringMatching(/^payment_received:/) }),
+    ]);
   });
 
   it('returns the existing result for a stable key without calling the gateway again', async () => {
@@ -649,10 +683,34 @@ describe('BookingRequestPaymentService saved-card charges', () => {
       { amount: '40.00', idempotencyKey: 'timeout-after-capture' },
       actor,
     );
-    expect(recovered).toMatchObject({ status: 'captured', gatewayTransactionId: 'pi_recovered' });
+    expect(recovered).toMatchObject({ status: 'captured' });
+    expect(recovered).not.toHaveProperty('gatewayTransactionId');
     const keys = harness.gateway.charge.mock.calls.map((call) => call[0].idempotencyKey);
     expect(keys).toHaveLength(2);
     expect(new Set(keys).size).toBe(1);
+  });
+
+  it('persists a processing PaymentIntent identity while leaving the charge pending', async () => {
+    const harness = makeHarness();
+    harness.gateway.charge.mockResolvedValueOnce({
+      success: false,
+      transactionId: 'pi_processing',
+      requiresAction: false,
+      indeterminate: true,
+      providerStatus: 'processing',
+      errorMessage: 'Payment is processing',
+    });
+
+    await expect(harness.service.chargeSavedCard(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { amount: '40.00', idempotencyKey: 'processing-identity' },
+      actor,
+    )).rejects.toThrow(/pending|retry|processing/i);
+    expect(harness.state.payments[0]).toMatchObject({
+      status: 'pending',
+      gatewayTransactionId: 'pi_processing',
+    });
   });
 
   it('resumes concurrent callers of the same pending charge with one provider identity', async () => {
@@ -792,8 +850,11 @@ describe('BookingRequestPaymentService saved-card charges', () => {
         actor,
       );
       expect(result.status).toBe('failed');
-      expect(result.gatewayTransactionId).toBe(gatewayResult.transactionId);
+      expect(result).not.toHaveProperty('gatewayTransactionId');
       expect(JSON.stringify(result)).not.toMatch(/client_secret|authentication_url|https?:\/\//i);
+      expect(harness.state.consequences).toEqual([
+        expect.objectContaining({ kind: expect.stringMatching(/^payment_failed:/) }),
+      ]);
     }
   });
 
@@ -885,8 +946,13 @@ describe('BookingRequestPaymentService external movements and denial resolutions
         bookingRequestId: REQUEST_ID,
         paymentId: PAYMENT_ID,
         type: 'retained',
+        status: 'completed',
         amount: '10.00',
         reason: 'Supplier fee',
+        idempotencyKey: 'internal-resolution-key',
+        operationFingerprint: 'internal-fingerprint',
+        providerTransactionId: 're_internal',
+        providerStatus: 'succeeded',
       }],
     });
 
@@ -896,6 +962,10 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     expect(result.movements[0]).not.toHaveProperty('idempotencyKey');
     expect(result.allocations).toHaveLength(1);
     expect(result.resolutions).toHaveLength(1);
+    expect(result.resolutions[0]).not.toHaveProperty('idempotencyKey');
+    expect(result.resolutions[0]).not.toHaveProperty('operationFingerprint');
+    expect(result.resolutions[0]).not.toHaveProperty('providerTransactionId');
+    expect(result.resolutions[0]).not.toHaveProperty('providerStatus');
   });
 
   it('records an exact external payment with processed date/reference and rejects duplicate reference', async () => {
@@ -928,10 +998,13 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       amount: '75.10',
       processedAt: new Date(input.processedAt),
       gatewayProvider: 'bank',
-      gatewayTransactionId: 'wire-abc',
+      reference: 'wire-abc',
     });
     expect(second.id).toBe(first.id);
     expect(harness.state.payments).toHaveLength(1);
+    expect(harness.state.consequences).toEqual([
+      expect.objectContaining({ kind: expect.stringMatching(/^payment_received:/) }),
+    ]);
 
     await expect(harness.service.recordExternalPayment(
       REQUEST_ID,
@@ -1089,6 +1162,9 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       type: 'refund',
       amount: '35.00',
     });
+    expect(harness.state.consequences).toEqual([
+      expect.objectContaining({ kind: expect.stringMatching(/^payment_refunded:/) }),
+    ]);
   });
 
   it('persists a refund capacity claim before gateway I/O and recovers an unknown result', async () => {
@@ -1135,6 +1211,124 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     expect(keys).toHaveLength(2);
     expect(new Set(keys).size).toBe(1);
   });
+
+  it.each(['pending', 'requires_action', 'unknown'] as const)(
+    'keeps a provider %s refund durable and retryable with exact correlation',
+    async (providerStatus) => {
+      const harness = makeHarness({
+        payments: [capturedPayment({
+          method: 'credit_card',
+          idempotencyKey: 'booking-request-charge:original',
+          gatewayProvider: 'stripe',
+          gatewayTransactionId: 'pi_original',
+        })],
+      });
+      harness.refundGateway.refund.mockResolvedValueOnce({
+        success: false,
+        transactionId: `re_${providerStatus}`,
+        providerStatus,
+      });
+
+      await expect(harness.service.refund(
+        REQUEST_ID,
+        PAYMENT_ID,
+        PROPERTY_ID,
+        { amount: '25.00', idempotencyKey: `refund-${providerStatus}` },
+        actor,
+      )).rejects.toThrow(/pending|retry|unknown/i);
+      expect(harness.state.resolutions[0]).toMatchObject({
+        status: 'pending',
+        providerTransactionId: `re_${providerStatus}`,
+        providerStatus,
+      });
+      expect(harness.refundGateway.refund).toHaveBeenCalledWith(
+        'pi_original',
+        25,
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            claimId: harness.state.resolutions[0]!.id,
+            propertyId: PROPERTY_ID,
+            bookingRequestId: REQUEST_ID,
+            paymentId: PAYMENT_ID,
+          }),
+        }),
+      );
+    },
+  );
+
+  it('replays a provider-pending refund with the same claim and provider identity', async () => {
+    const harness = makeHarness({
+      payments: [capturedPayment({
+        method: 'credit_card',
+        idempotencyKey: 'booking-request-charge:original',
+        gatewayProvider: 'stripe',
+        gatewayTransactionId: 'pi_original',
+      })],
+    });
+    harness.refundGateway.refund
+      .mockResolvedValueOnce({
+        success: false,
+        transactionId: 're_processing',
+        providerStatus: 'pending',
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        transactionId: 're_processing',
+        providerStatus: 'succeeded',
+      });
+    const input = { amount: '25.00', idempotencyKey: 'provider-pending-replay' };
+
+    await expect(harness.service.refund(
+      REQUEST_ID, PAYMENT_ID, PROPERTY_ID, input, actor,
+    )).rejects.toThrow(/pending|retry/i);
+    const claimId = harness.state.resolutions[0]!.id;
+    const recovered = await harness.service.refund(
+      REQUEST_ID, PAYMENT_ID, PROPERTY_ID, input, actor,
+    );
+
+    expect(recovered.resolution).toMatchObject({
+      id: claimId,
+      status: 'completed',
+    });
+    expect(recovered.resolution).not.toHaveProperty('providerTransactionId');
+    expect(harness.state.resolutions[0]!.providerTransactionId).toBe('re_processing');
+    const options = harness.refundGateway.refund.mock.calls.map((call) => call[2]);
+    expect(new Set(options.map((option) => option.idempotencyKey)).size).toBe(1);
+    expect(options.every((option) => option.metadata.claimId === claimId)).toBe(true);
+  });
+
+  it.each(['failed', 'canceled'] as const)(
+    'fails a provider %s refund claim and releases its reserved capacity',
+    async (providerStatus) => {
+      const harness = makeHarness({
+        payments: [capturedPayment({
+          method: 'credit_card',
+          idempotencyKey: 'booking-request-charge:original',
+          gatewayProvider: 'stripe',
+          gatewayTransactionId: 'pi_original',
+        })],
+      });
+      harness.refundGateway.refund.mockResolvedValueOnce({
+        success: false,
+        transactionId: `re_${providerStatus}`,
+        providerStatus,
+        errorMessage: `Refund ${providerStatus}`,
+      });
+
+      await expect(harness.service.refund(
+        REQUEST_ID,
+        PAYMENT_ID,
+        PROPERTY_ID,
+        { amount: '25.00', idempotencyKey: `refund-${providerStatus}` },
+        actor,
+      )).rejects.toThrow(providerStatus);
+      expect(harness.state.resolutions[0]).toMatchObject({
+        status: 'failed',
+        providerTransactionId: `re_${providerStatus}`,
+        providerStatus,
+      });
+    },
+  );
 
   it('reserves refund capacity across different keys and competing retention', async () => {
     const original = capturedPayment({
@@ -1360,13 +1554,17 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       originalPaymentId: PAYMENT_ID,
       amount: '-30.00',
       status: 'captured',
-      gatewayTransactionId: 'return-1',
+      reference: 'return-1',
     });
     expect(result.resolution).toMatchObject({
       paymentId: PAYMENT_ID,
       type: 'external_return',
       amount: '30.00',
+      movementId: result.movement.id,
     });
+    expect(harness.state.consequences).toEqual([
+      expect.objectContaining({ kind: expect.stringMatching(/^external_returned:/) }),
+    ]);
   });
 
   it('fingerprints the complete external-return record for exact replay', async () => {

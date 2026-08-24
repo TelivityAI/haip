@@ -130,6 +130,11 @@ export type BookingRequestConsequenceKind =
   | 'denied_event'
   | 'reservation_created_event'
   | 'folio_created_event'
+  | `payment_received:${string}`
+  | `payment_failed:${string}`
+  | `payment_refunded:${string}`
+  | `external_returned:${string}`
+  | `payment_retained:${string}`
   | `service:${string}`;
 export type BookingRequestConsequenceStatus = 'pending' | 'processing' | 'completed';
 
@@ -223,6 +228,8 @@ export const bookingRequestPaymentResolutions = pgTable('booking_request_payment
   amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
   idempotencyKey: varchar('idempotency_key', { length: 255 }),
   operationFingerprint: varchar('operation_fingerprint', { length: 64 }),
+  providerTransactionId: varchar('provider_transaction_id', { length: 255 }),
+  providerStatus: varchar('provider_status', { length: 40 }),
   movementId: uuid('movement_id').references(() => payments.id),
   reason: text('reason'),
   attempts: integer('attempts').notNull().default(0),
@@ -235,6 +242,9 @@ export const bookingRequestPaymentResolutions = pgTable('booking_request_payment
   propertyIdempotencyKeyUnique:
     uniqueIndex('booking_request_payment_resolutions_property_idempotency_unique')
       .on(table.propertyId, table.idempotencyKey),
+  propertyProviderTransactionUnique:
+    uniqueIndex('br_payment_resolutions_property_provider_tx_unique')
+      .on(table.propertyId, table.providerTransactionId),
   positiveCheck: check(
     'booking_request_payment_resolutions_positive_check',
     sql`${table.amount} > 0`,
@@ -245,7 +255,25 @@ export const bookingRequestPaymentResolutions = pgTable('booking_request_payment
   ),
   retainedReasonCheck: check(
     'booking_request_payment_resolutions_retained_reason_check',
-    sql`${table.type} <> 'retained' or length(trim(${table.reason})) > 0`,
+    sql`${table.type} <> 'retained' or (${table.reason} is not null and length(trim(${table.reason})) > 0)`,
+  ),
+  lifecycleCheck: check(
+    'booking_request_payment_resolutions_lifecycle_check',
+    sql`(
+      (${table.status} = 'pending' and ${table.type} = 'refund'
+        and ${table.idempotencyKey} is not null and ${table.operationFingerprint} is not null
+        and ${table.resolvedAt} is null and ${table.movementId} is null)
+      or
+      (${table.status} = 'failed' and ${table.type} = 'refund'
+        and ${table.idempotencyKey} is not null and ${table.operationFingerprint} is not null
+        and ${table.resolvedAt} is not null and ${table.movementId} is null)
+      or
+      (${table.status} = 'completed' and ${table.resolvedAt} is not null and (
+        (${table.type} in ('refund', 'external_return') and ${table.movementId} is not null)
+        or
+        (${table.type} = 'retained' and ${table.movementId} is null)
+      ))
+    )`,
   ),
 }));
 

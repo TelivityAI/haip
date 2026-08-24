@@ -188,6 +188,11 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
         `Unable to resolve minor-unit exponent for '${currencyCode}'`,
       );
     }
+    if (exponent > 2) {
+      throw new SavedPaymentMethodValidationError(
+        `${currencyCode} minor-unit exponent ${exponent} exceeds ledger storage precision`,
+      );
+    }
     const minorUnits = new Decimal(amount).mul(new Decimal(10).pow(exponent));
     if (!minorUnits.isInteger()) {
       throw new SavedPaymentMethodValidationError(
@@ -215,7 +220,14 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
       return this.requiresAction(paymentIntent.id);
     }
     if (paymentIntent.status === 'processing') {
-      throw new Error(`Stripe PaymentIntent '${paymentIntent.id}' result is still processing`);
+      return {
+        success: false,
+        transactionId: paymentIntent.id,
+        requiresAction: false,
+        indeterminate: true,
+        providerStatus: paymentIntent.status,
+        errorMessage: `Stripe PaymentIntent '${paymentIntent.id}' result is still processing`,
+      };
     }
     return {
       success: false,

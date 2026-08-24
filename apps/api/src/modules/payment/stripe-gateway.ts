@@ -198,18 +198,37 @@ export class StripeGateway implements PaymentGateway {
       if (amount !== undefined) {
         params.amount = this.toLedgerMinorUnits(amount, options?.currencyCode ?? 'USD');
       }
+      if (options?.metadata) {
+        params.metadata = {
+          haip_claim_id: options.metadata.claimId,
+          haip_property_id: options.metadata.propertyId,
+          haip_booking_request_id: options.metadata.bookingRequestId,
+          haip_payment_id: options.metadata.paymentId,
+        };
+      }
 
       const refund = await this.stripe.refunds.create(params, this.requestOptions(options));
 
       this.logger.log(`Refund created: ${refund.id} for ${transactionId}`);
 
-      return { success: true, transactionId: refund.id };
+      const providerStatus = this.refundProviderStatus(refund.status);
+      return {
+        success: providerStatus === 'succeeded',
+        transactionId: refund.id,
+        providerStatus,
+        ...((providerStatus === 'failed' || providerStatus === 'canceled') && {
+          errorMessage: refund.failure_reason
+            ? `Stripe refund ${providerStatus}: ${refund.failure_reason}`
+            : `Stripe refund ${providerStatus}`,
+        }),
+      };
     } catch (err: any) {
       this.logger.error(`Stripe refund failed: ${err.message}`, err.stack);
       if (err instanceof StripeLedgerValidationError || this.isExplicitProviderRejection(err)) {
         return {
           success: false,
-          transactionId: transactionId,
+          transactionId: '',
+          providerStatus: 'failed',
           errorMessage: err.message ?? 'Refund failed',
         };
       }
@@ -222,5 +241,20 @@ export class StripeGateway implements PaymentGateway {
     return error.type === 'StripeInvalidRequestError'
       || error.type === 'StripeCardError'
       || error.type === 'StripeAuthenticationError';
+  }
+
+  private refundProviderStatus(
+    status: string | null | undefined,
+  ): NonNullable<PaymentGatewayResult['providerStatus']> {
+    switch (status) {
+      case 'succeeded':
+      case 'pending':
+      case 'requires_action':
+      case 'failed':
+      case 'canceled':
+        return status;
+      default:
+        return 'unknown';
+    }
   }
 }

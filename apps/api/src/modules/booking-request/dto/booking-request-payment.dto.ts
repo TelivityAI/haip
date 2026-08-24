@@ -46,9 +46,9 @@ export class CreateBookingRequestInstallmentDto {
   @IsMoneyString()
   fixedAmount?: string;
 
-  @ApiPropertyOptional({ example: '30.00', description: 'Percentage from 0.01 to 999.99' })
+  @ApiPropertyOptional({ example: '30.00', description: 'Percentage from 0.01 to 100.00' })
   @IsOptional()
-  @IsMoneyString()
+  @IsMoneyString({ maximum: '100' })
   percentage?: string;
 
   @ApiProperty({ enum: BOOKING_REQUEST_INSTALLMENT_MILESTONES })

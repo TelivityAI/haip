@@ -1,6 +1,8 @@
 export interface PaymentGatewayResult {
   success: boolean;
   transactionId: string;
+  /** Provider lifecycle status when an operation can complete asynchronously. */
+  providerStatus?: 'succeeded' | 'pending' | 'requires_action' | 'failed' | 'canceled' | 'unknown';
   errorMessage?: string;
 }
 
@@ -13,6 +15,13 @@ export interface PaymentGatewayCallOptions {
   idempotencyKey?: string;
   /** Required for amount-bearing capture/refund calls outside scale-two currencies. */
   currencyCode?: string;
+  /** Durable correlation identifiers forwarded to the provider on refund claims. */
+  metadata?: {
+    claimId: string;
+    propertyId: string;
+    bookingRequestId: string;
+    paymentId: string;
+  };
 }
 
 export interface PaymentGateway {

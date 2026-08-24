@@ -109,10 +109,10 @@ describe('legacy payment HTTP seam', () => {
       id: requestPayment.id,
       bookingRequestId: null,
       amount: '100.00',
-      gatewayTransactionId: 'pi_public_receipt',
     });
     expect(result).not.toHaveProperty('gatewayPaymentToken');
     expect(result).not.toHaveProperty('idempotencyKey');
+    expect(result).not.toHaveProperty('gatewayTransactionId');
     expect(result).not.toHaveProperty('fingerprint');
   });
 

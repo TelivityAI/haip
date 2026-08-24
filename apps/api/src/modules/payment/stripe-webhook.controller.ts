@@ -5,6 +5,7 @@ import {
   Res,
   Logger,
   BadRequestException,
+  ConflictException,
   Inject,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -21,9 +22,17 @@ import {
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
-import { sumRefundChildren } from './payment-ledger';
 import Stripe from 'stripe';
 import { reconcileBookingRequestPaymentAllocations } from '../booking-request/booking-request-allocation-reconciler';
+import { ensureBookingRequestFinancialConsequence } from '../booking-request/booking-request-payment-consequence';
+import {
+  decidePaymentIntentTransition,
+  decideRefundTransition,
+  refundCorrelation,
+  type PaymentIntentEvent,
+  type PaymentIntentLedgerStatus,
+  type RefundProviderStatus,
+} from './stripe-financial-state';
 
 /**
  * Stripe Webhook Controller.
@@ -35,7 +44,8 @@ import { reconcileBookingRequestPaymentAllocations } from '../booking-request/bo
  * - payment_intent.succeeded → captured
  * - payment_intent.payment_failed → failed
  * - payment_intent.canceled → voided
- * - charge.refunded → refunded
+ * - refund.* → exact claim lifecycle finalization
+ * - charge.refunded → reconciliation signal only
  */
 @ApiTags('webhooks')
 @Controller('webhooks/stripe')
@@ -115,6 +125,16 @@ export class StripeWebhookController {
           await this.handlePaymentIntentCanceled(event.data.object as Stripe.PaymentIntent);
           break;
 
+        case 'payment_intent.requires_action':
+          await this.handlePaymentIntentRequiresAction(event.data.object as Stripe.PaymentIntent);
+          break;
+
+        case 'refund.created':
+        case 'refund.updated':
+        case 'refund.failed':
+          await this.handleRefundUpdated(event.data.object as Stripe.Refund);
+          break;
+
         case 'charge.refunded':
           await this.handleChargeRefunded(event.data.object as Stripe.Charge);
           break;
@@ -133,90 +153,173 @@ export class StripeWebhookController {
   }
 
   private async handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
-    const payment = await this.findPaymentByGatewayTransactionId(pi.id);
-    if (!payment) {
+    await this.finalizePaymentIntent(pi, 'succeeded');
+  }
+
+  private async handlePaymentIntentFailed(pi: Stripe.PaymentIntent) {
+    await this.finalizePaymentIntent(pi, 'payment_failed');
+  }
+
+  private async handlePaymentIntentCanceled(pi: Stripe.PaymentIntent) {
+    await this.finalizePaymentIntent(pi, 'canceled');
+  }
+
+  private async handlePaymentIntentRequiresAction(pi: Stripe.PaymentIntent) {
+    await this.finalizePaymentIntent(pi, 'requires_action');
+  }
+
+  private async finalizePaymentIntent(pi: Stripe.PaymentIntent, event: PaymentIntentEvent) {
+    const initial = await this.findPaymentByGatewayTransactionId(pi.id);
+    if (!initial) {
       this.logger.warn(`No payment found for PaymentIntent ${pi.id}`);
       return;
     }
 
-    if (payment.status === 'captured') {
-      this.logger.debug(`Payment ${payment.id} already captured, skipping`);
-      return;
+    const outcome = await this.db.transaction(async (tx: any) => {
+      let request: typeof bookingRequests.$inferSelect | undefined;
+      if (initial.bookingRequestId) {
+        const requests = await tx
+          .select()
+          .from(bookingRequests)
+          .where(and(
+            eq(bookingRequests.id, initial.bookingRequestId),
+            eq(bookingRequests.propertyId, initial.propertyId),
+          ))
+          .for('update');
+        request = requests.find((row: typeof bookingRequests.$inferSelect) =>
+          row.id === initial.bookingRequestId && row.propertyId === initial.propertyId);
+        if (!request) {
+          throw new ConflictException(`Booking request ${initial.bookingRequestId} not found`);
+        }
+      }
+      const lockedRows = await tx
+        .select()
+        .from(payments)
+        .where(and(eq(payments.id, initial.id), eq(payments.propertyId, initial.propertyId)))
+        .for('update');
+      const payment = lockedRows.find((row: typeof payments.$inferSelect) =>
+        row.id === initial.id && row.propertyId === initial.propertyId);
+      if (!payment) return { changed: false, payment: initial, legacyEvent: undefined };
+
+      if (event === 'succeeded' && request?.status === 'denied' && payment.status !== 'captured') {
+        await this.auditUnexpectedProviderState(tx, payment, {
+          stripeObjectId: pi.id,
+          providerEvent: event,
+          requestStatus: request.status,
+          reason: 'Provider reported capture after booking request denial',
+        });
+        return { changed: false, payment, blocked: true, legacyEvent: undefined };
+      }
+
+      const decision = decidePaymentIntentTransition(
+        payment.status as PaymentIntentLedgerStatus,
+        event,
+        request?.status,
+      );
+      const folioId = request?.acceptedFolioId ?? payment.folioId;
+      let current = payment;
+      let changed = false;
+      if (decision.action === 'transition') {
+        const now = new Date();
+        const errorMessage = event === 'payment_failed'
+          ? pi.last_payment_error?.message ?? 'Payment failed'
+          : event === 'requires_action'
+            ? 'Payment requires additional authentication; no recovery link is available'
+            : event === 'canceled'
+              ? 'Payment canceled by provider'
+              : null;
+        const values = {
+          status: decision.status,
+          folioId,
+          processedAt: decision.status === 'captured' ? now : null,
+          ...(errorMessage ? { notes: errorMessage } : {}),
+          updatedAt: now,
+        };
+        const updated = await tx
+          .update(payments)
+          .set(values)
+          .where(and(
+            eq(payments.id, payment.id),
+            eq(payments.propertyId, payment.propertyId),
+            eq(payments.status, payment.status),
+          ))
+          .returning();
+        current = updated.find((row: typeof payments.$inferSelect) => row.id === payment.id)
+          ?? { ...payment, ...values };
+        changed = true;
+        await tx.insert(auditLogs).values({
+          propertyId: payment.propertyId,
+          action: 'update',
+          entityType: 'payment',
+          entityId: payment.id,
+          previousValue: { status: payment.status, folioId: payment.folioId },
+          newValue: { status: decision.status, folioId, stripeObjectId: pi.id },
+          description: `Stripe PaymentIntent ${event} finalized monotonically`,
+        });
+      } else if (decision.action === 'unexpected') {
+        await this.auditUnexpectedProviderState(tx, payment, {
+          stripeObjectId: pi.id,
+          providerEvent: event,
+          currentStatus: payment.status,
+        });
+      } else if (folioId && payment.folioId !== folioId) {
+        const updated = await tx
+          .update(payments)
+          .set({ folioId, updatedAt: new Date() })
+          .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)))
+          .returning();
+        current = updated.find((row: typeof payments.$inferSelect) => row.id === payment.id)
+          ?? { ...payment, folioId };
+      }
+
+      if (request && decision.action !== 'unexpected') {
+        const financialEvent = current.status === 'captured'
+          ? 'payment.received' as const
+          : 'payment.failed' as const;
+        await ensureBookingRequestFinancialConsequence(tx, {
+          event: financialEvent,
+          logicalId: current.id,
+          propertyId: current.propertyId,
+          bookingRequestId: request.id,
+          entityType: 'payment',
+          entityId: current.id,
+          data: {
+            folioId,
+            status: current.status,
+            stripePaymentIntentId: pi.id,
+          },
+        });
+      }
+      if (folioId && (current.status === 'captured' || decision.action === 'repair')) {
+        await this.folioService.recalculateBalance(folioId, payment.propertyId, tx);
+      }
+      return {
+        changed,
+        payment: current,
+        legacyEvent: request
+          ? undefined
+          : current.status === 'captured'
+            ? 'payment.received' as const
+            : decision.action === 'transition'
+              ? 'payment.failed' as const
+              : undefined,
+      };
+    });
+
+    if (outcome.blocked) {
+      throw new ConflictException(
+        'Provider captured the payment after booking request denial; operator reconciliation required',
+      );
     }
-
-    await this.db
-      .update(payments)
-      .set({ status: 'captured', processedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
-
-    // Pre-acceptance Booking Request movements do not have a folio yet.
-    if (payment.folioId) {
-      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    if (outcome.legacyEvent) {
+      await this.webhookService.emit(
+        outcome.legacyEvent,
+        'payment',
+        outcome.payment.id,
+        { folioId: outcome.payment.folioId, status: outcome.payment.status, stripeEvent: pi.id },
+        outcome.payment.propertyId,
+      );
     }
-
-    await this.webhookService.emit(
-      'payment.received',
-      'payment',
-      payment.id,
-      { folioId: payment.folioId, status: 'captured', stripeEvent: pi.id },
-      payment.propertyId,
-    );
-
-    this.logger.log(`Payment ${payment.id} updated to captured via webhook`);
-  }
-
-  private async handlePaymentIntentFailed(pi: Stripe.PaymentIntent) {
-    const payment = await this.findPaymentByGatewayTransactionId(pi.id);
-    if (!payment) return;
-
-    if (payment.status === 'failed') return;
-
-    const errorMessage = pi.last_payment_error?.message ?? 'Payment failed';
-
-    await this.db
-      .update(payments)
-      .set({ status: 'failed', notes: errorMessage, updatedAt: new Date() })
-      .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
-
-    if (payment.folioId) {
-      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
-    }
-
-    await this.webhookService.emit(
-      'payment.failed',
-      'payment',
-      payment.id,
-      { folioId: payment.folioId, error: errorMessage, stripeEvent: pi.id },
-      payment.propertyId,
-    );
-
-    this.logger.log(`Payment ${payment.id} updated to failed via webhook`);
-  }
-
-  private async handlePaymentIntentCanceled(pi: Stripe.PaymentIntent) {
-    const payment = await this.findPaymentByGatewayTransactionId(pi.id);
-    if (!payment) return;
-
-    if (payment.status === 'voided') return;
-
-    await this.db
-      .update(payments)
-      .set({ status: 'voided', updatedAt: new Date() })
-      .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
-
-    if (payment.folioId) {
-      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
-    }
-
-    await this.webhookService.emit(
-      'payment.failed',
-      'payment',
-      payment.id,
-      { folioId: payment.folioId, status: 'voided', stripeEvent: pi.id },
-      payment.propertyId,
-    );
-
-    this.logger.log(`Payment ${payment.id} updated to voided via webhook`);
   }
 
   private async handleChargeRefunded(charge: Stripe.Charge) {
@@ -229,13 +332,7 @@ export class StripeWebhookController {
     const payment = await this.findPaymentByGatewayTransactionId(piId);
     if (!payment) return;
 
-    const stripeRefundedDec = this.fromStripeMinorUnits(
-      charge.amount_refunded,
-      charge.currency ?? payment.currencyCode,
-    );
-    const ledgerKey = `stripe_refund:${charge.id}:${stripeRefundedDec.toFixed(2)}`;
-
-    const recorded = await this.db.transaction(async (tx: any) => {
+    await this.db.transaction(async (tx: any) => {
       if (payment.bookingRequestId) {
         await tx
           .select({ id: bookingRequests.id })
@@ -246,7 +343,7 @@ export class StripeWebhookController {
           ))
           .for('update');
       }
-      const [parent] = await tx
+      const parents = await tx
         .select()
         .from(payments)
         .where(
@@ -257,141 +354,22 @@ export class StripeWebhookController {
         )
         .for('update');
 
-      if (!parent) return null;
-
-      const [existingForLedger] = await tx
-        .select()
-        .from(payments)
-        .where(eq(payments.gatewayTransactionId, ledgerKey))
-        .limit(1);
-      if (existingForLedger) {
-        if (parent.bookingRequestId) {
-          await reconcileBookingRequestPaymentAllocations(tx, {
-            bookingRequestId: parent.bookingRequestId,
-            propertyId: parent.propertyId,
-            payment: parent,
-          });
-        }
-        if (parent.folioId) {
-          await this.folioService.recalculateBalance(parent.folioId, parent.propertyId, tx);
-        }
-        return {
-          row: existingForLedger,
-          parent,
-          deltaDec: new Decimal(0),
-          replay: true as const,
-        };
-      }
-
-      const existingRefunds = await tx
-        .select()
-        .from(payments)
-        .where(
-          and(
-            eq(payments.originalPaymentId, parent.id),
-            eq(payments.propertyId, parent.propertyId),
-          ),
-        );
-
-      const alreadyRefundedDec = sumRefundChildren(existingRefunds ?? []);
-      const deltaDec = stripeRefundedDec.minus(alreadyRefundedDec);
-
-      if (deltaDec.lte(0)) {
-        this.logger.debug(
-          `Payment ${parent.id} Stripe refund already recorded (${stripeRefundedDec.toFixed(2)})`,
-        );
-        return null;
-      }
-
-      const [row] = await tx
-        .insert(payments)
-        .values({
-          folioId: parent.folioId,
-          propertyId: parent.propertyId,
-          bookingRequestId: parent.bookingRequestId,
-          method: parent.method,
-          amount: deltaDec.negated().toFixed(2),
-          currencyCode: parent.currencyCode,
-          status: 'captured',
-          originalPaymentId: parent.id,
-          gatewayProvider: parent.gatewayProvider,
-          gatewayTransactionId: ledgerKey,
-          processedAt: new Date(),
-          notes: `Stripe refund ${charge.id}`,
-        })
-        .returning();
-
+      const parent = parents.find((row: typeof payments.$inferSelect) =>
+        row.id === payment.id && row.propertyId === payment.propertyId);
+      if (!parent) return;
       if (parent.bookingRequestId) {
-        const pendingRows = await tx
-          .select()
-          .from(bookingRequestPaymentResolutions)
-          .where(and(
-            eq(bookingRequestPaymentResolutions.propertyId, parent.propertyId),
-            eq(bookingRequestPaymentResolutions.bookingRequestId, parent.bookingRequestId),
-            eq(bookingRequestPaymentResolutions.paymentId, parent.id),
-            eq(bookingRequestPaymentResolutions.type, 'refund'),
-            eq(bookingRequestPaymentResolutions.status, 'pending'),
-          ))
-          .for('update');
-        const pendingClaim = pendingRows.find((candidate: typeof bookingRequestPaymentResolutions.$inferSelect) =>
-          candidate.propertyId === parent.propertyId
-          && candidate.bookingRequestId === parent.bookingRequestId
-          && candidate.paymentId === parent.id
-          && candidate.type === 'refund'
-          && candidate.status === 'pending'
-          && new Decimal(candidate.amount).eq(deltaDec));
-        const resolvedAt = new Date();
-        let resolution: typeof bookingRequestPaymentResolutions.$inferSelect;
-        if (pendingClaim) {
-          const values = {
-            status: 'completed',
-            movementId: row.id,
-            reason: `Gateway refund movement ${row.id}`,
-            attempts: (pendingClaim.attempts ?? 0) + 1,
-            lastError: null,
-            resolvedAt,
-            updatedAt: resolvedAt,
-          } as const;
-          await tx
-            .update(bookingRequestPaymentResolutions)
-            .set(values)
-            .where(and(
-              eq(bookingRequestPaymentResolutions.id, pendingClaim.id),
-              eq(bookingRequestPaymentResolutions.propertyId, parent.propertyId),
-              eq(bookingRequestPaymentResolutions.status, 'pending'),
-            ));
-          resolution = { ...pendingClaim, ...values };
-        } else {
-          [resolution] = await tx
-            .insert(bookingRequestPaymentResolutions)
-            .values({
-              propertyId: parent.propertyId,
-              bookingRequestId: parent.bookingRequestId,
-              paymentId: parent.id,
-              type: 'refund',
-              status: 'completed',
-              amount: deltaDec.toFixed(2),
-              movementId: row.id,
-              reason: `Gateway refund movement ${row.id}`,
-              resolvedAt,
-            })
-            .returning();
-        }
         await tx.insert(auditLogs).values({
           propertyId: parent.propertyId,
-          action: pendingClaim ? 'update' : 'create',
-          entityType: 'booking_request_payment_resolution',
-          entityId: resolution.id,
+          action: 'update',
+          entityType: 'payment',
+          entityId: parent.id,
           newValue: {
             requestId: parent.bookingRequestId,
             paymentId: parent.id,
-            type: 'refund',
-            amount: deltaDec.toFixed(2),
+            stripeChargeId: charge.id,
+            cumulativeRefundMinorUnits: charge.amount_refunded,
           },
-          previousValue: pendingClaim ? { status: 'pending' } : null,
-          description: pendingClaim
-            ? 'Stripe refund completed pending Booking Request refund claim'
-            : 'Stripe refund resolved Booking Request money',
+          description: 'Stripe charge.refunded observed as reconciliation signal only',
         });
         await reconcileBookingRequestPaymentAllocations(tx, {
           bookingRequestId: parent.bookingRequestId,
@@ -399,32 +377,290 @@ export class StripeWebhookController {
           payment: parent,
         });
       }
-
-      if (parent.folioId) {
-        await this.folioService.recalculateBalance(parent.folioId, parent.propertyId, tx);
+      const requestFolio = parent.bookingRequestId
+        ? (await tx.select().from(bookingRequests).where(and(
+          eq(bookingRequests.id, parent.bookingRequestId),
+          eq(bookingRequests.propertyId, parent.propertyId),
+        )))[0]?.acceptedFolioId
+        : null;
+      const folioId = requestFolio ?? parent.folioId;
+      if (folioId) {
+        await this.folioService.recalculateBalance(folioId, parent.propertyId, tx);
       }
-      return { row, parent, deltaDec };
     });
+  }
 
-    if (!recorded) return;
-    if ('replay' in recorded && recorded.replay) return;
+  private async handleRefundUpdated(refund: Stripe.Refund) {
+    const correlation = refundCorrelation(refund.metadata);
+    const providerStatus = this.refundStatus(refund.status);
+    const result = await this.db.transaction(async (tx: any) => {
+      const requestRows = await tx
+        .select()
+        .from(bookingRequests)
+        .where(and(
+          eq(bookingRequests.id, correlation.bookingRequestId),
+          eq(bookingRequests.propertyId, correlation.propertyId),
+        ))
+        .for('update');
+      const request = requestRows.find((row: typeof bookingRequests.$inferSelect) =>
+        row.id === correlation.bookingRequestId && row.propertyId === correlation.propertyId);
+      if (!request) throw new ConflictException('Stripe refund booking request correlation is invalid');
 
-    await this.webhookService.emit(
-      'payment.refunded',
-      'payment',
-      recorded.row.id,
-      {
-        folioId: recorded.parent.folioId,
-        originalPaymentId: recorded.parent.id,
-        refundAmount: recorded.deltaDec.toFixed(2),
-        stripeEvent: charge.id,
-      },
-      recorded.parent.propertyId,
-    );
+      const parentRows = await tx
+        .select()
+        .from(payments)
+        .where(and(
+          eq(payments.id, correlation.paymentId),
+          eq(payments.propertyId, correlation.propertyId),
+          eq(payments.bookingRequestId, correlation.bookingRequestId),
+        ))
+        .for('update');
+      const parent = parentRows.find((row: typeof payments.$inferSelect) =>
+        row.id === correlation.paymentId
+        && row.propertyId === correlation.propertyId
+        && row.bookingRequestId === correlation.bookingRequestId);
+      if (!parent) throw new ConflictException('Stripe refund payment correlation is invalid');
 
-    this.logger.log(
-      `Payment ${recorded.parent.id} refund child ${recorded.row.id} recorded via webhook (${recorded.deltaDec.toFixed(2)})`,
-    );
+      const claimRows = await tx
+        .select()
+        .from(bookingRequestPaymentResolutions)
+        .where(and(
+          eq(bookingRequestPaymentResolutions.id, correlation.claimId),
+          eq(bookingRequestPaymentResolutions.propertyId, correlation.propertyId),
+          eq(bookingRequestPaymentResolutions.bookingRequestId, correlation.bookingRequestId),
+          eq(bookingRequestPaymentResolutions.paymentId, correlation.paymentId),
+        ))
+        .for('update');
+      const claim = claimRows.find((row: typeof bookingRequestPaymentResolutions.$inferSelect) =>
+        row.id === correlation.claimId
+        && row.propertyId === correlation.propertyId
+        && row.bookingRequestId === correlation.bookingRequestId
+        && row.paymentId === correlation.paymentId);
+      if (!claim || claim.type !== 'refund') {
+        throw new ConflictException('Stripe refund claim correlation is invalid');
+      }
+      if (claim.providerTransactionId && claim.providerTransactionId !== refund.id) {
+        throw new ConflictException('Stripe refund ID does not match the durable refund claim');
+      }
+      const refundPaymentIntentId = typeof refund.payment_intent === 'string'
+        ? refund.payment_intent
+        : refund.payment_intent?.id;
+      if (refundPaymentIntentId && refundPaymentIntentId !== parent.gatewayTransactionId) {
+        throw new ConflictException('Stripe refund PaymentIntent does not match the claimed payment');
+      }
+      const amount = this.fromStripeMinorUnits(refund.amount, refund.currency);
+      if (!amount.eq(claim.amount)
+        || refund.currency.toUpperCase() !== parent.currencyCode.toUpperCase()) {
+        throw new ConflictException('Stripe refund amount or currency does not match the claim');
+      }
+
+      const decision = decideRefundTransition(claim.status as 'pending' | 'completed' | 'failed', providerStatus);
+      if (decision.action === 'record_pending') {
+        await tx.update(bookingRequestPaymentResolutions).set({
+          providerTransactionId: refund.id,
+          providerStatus,
+          attempts: (claim.attempts ?? 0) + 1,
+          lastError: `Stripe refund is ${providerStatus}`,
+          updatedAt: new Date(),
+        }).where(and(
+          eq(bookingRequestPaymentResolutions.id, claim.id),
+          eq(bookingRequestPaymentResolutions.propertyId, claim.propertyId),
+          eq(bookingRequestPaymentResolutions.status, 'pending'),
+        ));
+        await tx.insert(auditLogs).values({
+          propertyId: claim.propertyId,
+          action: 'update',
+          entityType: 'booking_request_payment_resolution',
+          entityId: claim.id,
+          previousValue: { status: claim.status, providerStatus: claim.providerStatus },
+          newValue: { status: 'pending', providerStatus, stripeRefundId: refund.id },
+          description: 'Stripe refund remains pending under exact durable claim',
+        });
+        return { blocked: false };
+      }
+      if (decision.action === 'unexpected') {
+        await this.auditUnexpectedRefundState(tx, claim, refund.id, providerStatus);
+        return { blocked: false };
+      }
+      if (decision.status === 'failed') {
+        const now = new Date();
+        await tx.update(bookingRequestPaymentResolutions).set({
+          status: 'failed',
+          providerTransactionId: refund.id,
+          providerStatus,
+          attempts: (claim.attempts ?? 0) + 1,
+          lastError: refund.failure_reason ?? `Stripe refund ${providerStatus}`,
+          resolvedAt: now,
+          updatedAt: now,
+        }).where(and(
+          eq(bookingRequestPaymentResolutions.id, claim.id),
+          eq(bookingRequestPaymentResolutions.propertyId, claim.propertyId),
+          eq(bookingRequestPaymentResolutions.status, 'pending'),
+        ));
+        await tx.insert(auditLogs).values({
+          propertyId: claim.propertyId,
+          action: 'update',
+          entityType: 'booking_request_payment_resolution',
+          entityId: claim.id,
+          previousValue: { status: claim.status, providerStatus: claim.providerStatus },
+          newValue: { status: 'failed', providerStatus, stripeRefundId: refund.id },
+          description: 'Stripe refund claim failed terminally',
+        });
+        await ensureBookingRequestFinancialConsequence(tx, {
+          event: 'payment.failed',
+          logicalId: claim.id,
+          propertyId: claim.propertyId,
+          bookingRequestId: claim.bookingRequestId,
+          entityType: 'booking_request_payment_resolution',
+          entityId: claim.id,
+          data: { paymentId: parent.id, type: 'refund', providerStatus, stripeRefundId: refund.id },
+        });
+        return { blocked: false };
+      }
+
+      if (request.status === 'denied') {
+        await this.auditUnexpectedRefundState(tx, claim, refund.id, providerStatus);
+        return { blocked: true };
+      }
+      let movement: typeof payments.$inferSelect | undefined;
+      if (claim.movementId) {
+        const movementRows = await tx.select().from(payments).where(and(
+          eq(payments.id, claim.movementId),
+          eq(payments.propertyId, claim.propertyId),
+        ));
+        movement = movementRows.find((row: typeof payments.$inferSelect) => row.id === claim.movementId);
+      } else {
+        const providerRows = await tx.select().from(payments).where(and(
+          eq(payments.propertyId, claim.propertyId),
+          eq(payments.gatewayTransactionId, refund.id),
+        ));
+        movement = providerRows.find((row: typeof payments.$inferSelect) =>
+          row.gatewayTransactionId === refund.id && row.propertyId === claim.propertyId);
+      }
+      if (movement && (movement.originalPaymentId !== parent.id
+        || !new Decimal(movement.amount).abs().eq(claim.amount))) {
+        throw new ConflictException('Stripe refund ID is already linked to another ledger movement');
+      }
+      if (!movement) {
+        [movement] = await tx.insert(payments).values({
+          propertyId: parent.propertyId,
+          bookingRequestId: parent.bookingRequestId,
+          folioId: request.acceptedFolioId,
+          idempotencyKey: claim.idempotencyKey ?? `booking-request-refund:${claim.id}`,
+          method: parent.method,
+          status: 'captured',
+          amount: amount.negated().toFixed(2),
+          currencyCode: parent.currencyCode,
+          gatewayProvider: parent.gatewayProvider,
+          gatewayTransactionId: refund.id,
+          originalPaymentId: parent.id,
+          notes: `Stripe refund ${refund.id}`,
+          processedAt: new Date(),
+        }).returning();
+      }
+      if (!movement) throw new ConflictException('Stripe refund movement could not be persisted');
+
+      if (claim.status === 'pending') {
+        const now = new Date();
+        await tx.update(bookingRequestPaymentResolutions).set({
+          status: 'completed',
+          movementId: movement.id,
+          providerTransactionId: refund.id,
+          providerStatus,
+          reason: `Gateway refund movement ${movement.id}`,
+          attempts: (claim.attempts ?? 0) + 1,
+          lastError: null,
+          resolvedAt: now,
+          updatedAt: now,
+        }).where(and(
+          eq(bookingRequestPaymentResolutions.id, claim.id),
+          eq(bookingRequestPaymentResolutions.propertyId, claim.propertyId),
+          eq(bookingRequestPaymentResolutions.status, 'pending'),
+        ));
+      }
+      await tx.insert(auditLogs).values({
+        propertyId: parent.propertyId,
+        action: claim.status === 'pending' ? 'update' : 'create',
+        entityType: 'booking_request_payment_resolution',
+        entityId: claim.id,
+        previousValue: { status: claim.status },
+        newValue: { status: 'completed', movementId: movement.id, stripeRefundId: refund.id },
+        description: 'Stripe refund finalized by exact durable claim correlation',
+      });
+      await reconcileBookingRequestPaymentAllocations(tx, {
+        bookingRequestId: parent.bookingRequestId!,
+        propertyId: parent.propertyId,
+        payment: parent,
+      });
+      if (request.acceptedFolioId) {
+        await this.folioService.recalculateBalance(request.acceptedFolioId, parent.propertyId, tx);
+      }
+      await ensureBookingRequestFinancialConsequence(tx, {
+        event: 'payment.refunded',
+        logicalId: movement.id,
+        propertyId: parent.propertyId,
+        bookingRequestId: parent.bookingRequestId!,
+        entityType: 'payment',
+        entityId: movement.id,
+        data: {
+          folioId: request.acceptedFolioId,
+          originalPaymentId: parent.id,
+          refundAmount: amount.toFixed(2),
+          stripeRefundId: refund.id,
+          resolutionId: claim.id,
+        },
+      });
+      return { blocked: false };
+    });
+    if (result.blocked) {
+      throw new ConflictException('Refund succeeded after booking request denial; reconciliation required');
+    }
+  }
+
+  private refundStatus(status: string | null): RefundProviderStatus {
+    switch (status) {
+      case 'succeeded':
+      case 'pending':
+      case 'requires_action':
+      case 'failed':
+      case 'canceled':
+        return status;
+      default:
+        throw new BadRequestException(`Unsupported Stripe refund status '${status ?? 'unknown'}'`);
+    }
+  }
+
+  private async auditUnexpectedProviderState(
+    tx: any,
+    payment: typeof payments.$inferSelect,
+    details: Record<string, unknown>,
+  ): Promise<void> {
+    await tx.insert(auditLogs).values({
+      propertyId: payment.propertyId,
+      action: 'update',
+      entityType: 'payment',
+      entityId: payment.id,
+      previousValue: { status: payment.status },
+      newValue: details,
+      description: 'Unexpected Stripe PaymentIntent state ignored monotonically',
+    });
+  }
+
+  private async auditUnexpectedRefundState(
+    tx: any,
+    claim: typeof bookingRequestPaymentResolutions.$inferSelect,
+    refundId: string,
+    providerStatus: RefundProviderStatus,
+  ): Promise<void> {
+    await tx.insert(auditLogs).values({
+      propertyId: claim.propertyId,
+      action: 'update',
+      entityType: 'booking_request_payment_resolution',
+      entityId: claim.id,
+      previousValue: { status: claim.status },
+      newValue: { providerStatus, stripeRefundId: refundId },
+      description: 'Unexpected Stripe refund state ignored monotonically',
+    });
   }
 
   private fromStripeMinorUnits(amount: number, currencyCode: string): Decimal {
@@ -456,10 +692,19 @@ export class StripeWebhookController {
   }
 
   private async findPaymentByGatewayTransactionId(transactionId: string) {
-    const [payment] = await this.db
+    const candidates = await this.db
       .select()
       .from(payments)
-      .where(eq(payments.gatewayTransactionId, transactionId));
-    return payment ?? null;
+      .where(and(
+        eq(payments.gatewayTransactionId, transactionId),
+        eq(payments.gatewayProvider, 'stripe'),
+      ))
+      .limit(2);
+    if (candidates.length > 1) {
+      throw new ConflictException(
+        `Stripe PaymentIntent ${transactionId} is ambiguously linked to multiple payments`,
+      );
+    }
+    return candidates[0] ?? null;
   }
 }

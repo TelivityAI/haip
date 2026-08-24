@@ -3,6 +3,7 @@ import postgres from 'postgres';
 import { eq } from 'drizzle-orm';
 import {
   auditLogs,
+  bookingRequestConsequences,
   bookingRequestInstallments,
   bookingRequestPaymentResolutions,
   bookingRequests,
@@ -23,6 +24,10 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
   const ratePlanId = '71000000-0000-4000-a000-000000000003';
   const requestId = '71000000-0000-4000-a000-000000000004';
   const paymentId = '71000000-0000-4000-a000-000000000005';
+  const otherPropertyId = '72000000-0000-4000-a000-000000000001';
+  const otherRoomTypeId = '72000000-0000-4000-a000-000000000002';
+  const otherRatePlanId = '72000000-0000-4000-a000-000000000003';
+  const otherRequestId = '72000000-0000-4000-a000-000000000004';
   let client: ReturnType<typeof postgres>;
   let db: ReturnType<typeof drizzle>;
 
@@ -84,10 +89,54 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
       gatewayTransactionId: 'pi_task_7_db',
       processedAt: new Date(),
     });
+    await db.insert(properties).values({
+      id: otherPropertyId,
+      name: 'Task 7 other property',
+      code: 'TASK7OTHER',
+      countryCode: 'ES',
+      timezone: 'Europe/Madrid',
+      currencyCode: 'EUR',
+      totalRooms: 1,
+    });
+    await db.insert(roomTypes).values({
+      id: otherRoomTypeId,
+      propertyId: otherPropertyId,
+      name: 'Other room',
+      code: 'OTHER',
+      maxOccupancy: 2,
+      defaultOccupancy: 2,
+    });
+    await db.insert(ratePlans).values({
+      id: otherRatePlanId,
+      propertyId: otherPropertyId,
+      roomTypeId: otherRoomTypeId,
+      name: 'Other rate',
+      code: 'OTHER',
+      type: 'bar',
+      baseAmount: '100.00',
+      currencyCode: 'EUR',
+    });
+    await db.insert(bookingRequests).values({
+      id: otherRequestId,
+      propertyId: otherPropertyId,
+      submissionIdempotencyKey: 'task-7-other-request',
+      submissionFingerprint: 'b'.repeat(64),
+      arrivalDate: '2026-09-01',
+      departureDate: '2026-09-02',
+      roomTypeId: otherRoomTypeId,
+      ratePlanId: otherRatePlanId,
+      guestFirstName: 'Other',
+      guestLastName: 'Property',
+      guestEmail: 'other@example.com',
+      submittedQuoteSnapshot: { grandTotal: '100.00' },
+      currencyCode: 'EUR',
+    });
   });
 
   afterAll(async () => {
     if (!client) return;
+    await db.delete(bookingRequestConsequences)
+      .where(eq(bookingRequestConsequences.bookingRequestId, requestId));
     await db.delete(auditLogs).where(eq(auditLogs.propertyId, propertyId));
     await db.delete(bookingRequestPaymentResolutions)
       .where(eq(bookingRequestPaymentResolutions.bookingRequestId, requestId));
@@ -96,6 +145,10 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
     await db.delete(ratePlans).where(eq(ratePlans.id, ratePlanId));
     await db.delete(roomTypes).where(eq(roomTypes.id, roomTypeId));
     await db.delete(properties).where(eq(properties.id, propertyId));
+    await db.delete(bookingRequests).where(eq(bookingRequests.id, otherRequestId));
+    await db.delete(ratePlans).where(eq(ratePlans.id, otherRatePlanId));
+    await db.delete(roomTypes).where(eq(roomTypes.id, otherRoomTypeId));
+    await db.delete(properties).where(eq(properties.id, otherPropertyId));
     await client.end();
   });
 
@@ -170,8 +223,73 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
       status: 'completed',
       amount: '1.00',
       reason: '   ',
+      resolvedAt: new Date(),
     })).rejects.toMatchObject({
       constraint_name: 'booking_request_payment_resolutions_retained_reason_check',
+    });
+  });
+
+  it('enforces request/property ownership, refund child shape, and resolution lifecycle', async () => {
+    await expect(db.insert(payments).values({
+      propertyId,
+      bookingRequestId: otherRequestId,
+      method: 'cash',
+      status: 'captured',
+      amount: '10.00',
+      currencyCode: 'EUR',
+    })).rejects.toMatchObject({ constraint_name: 'payments_booking_request_fkey' });
+
+    await expect(db.insert(bookingRequestInstallments).values({
+      propertyId,
+      bookingRequestId: otherRequestId,
+      label: 'Wrong owner',
+      fixedAmount: '10.00',
+      resolvedAmount: '10.00',
+      dueMilestone: 'manual',
+    })).rejects.toMatchObject({ constraint_name: 'booking_request_installments_request_fkey' });
+
+    await expect(db.insert(payments).values({
+      propertyId: otherPropertyId,
+      bookingRequestId: otherRequestId,
+      originalPaymentId: paymentId,
+      method: 'credit_card',
+      status: 'captured',
+      amount: '-10.00',
+      currencyCode: 'EUR',
+    })).rejects.toMatchObject({ constraint_name: 'payments_booking_request_parent_fkey' });
+
+    await expect(db.insert(payments).values({
+      propertyId,
+      bookingRequestId: requestId,
+      originalPaymentId: paymentId,
+      method: 'credit_card',
+      status: 'pending',
+      amount: '10.00',
+      currencyCode: 'EUR',
+    })).rejects.toMatchObject({ constraint_name: 'payments_booking_request_child_shape_check' });
+
+    await expect(db.insert(bookingRequestPaymentResolutions).values({
+      propertyId,
+      bookingRequestId: requestId,
+      paymentId,
+      type: 'refund',
+      status: 'completed',
+      amount: '1.00',
+      resolvedAt: new Date(),
+    })).rejects.toMatchObject({
+      constraint_name: 'booking_request_payment_resolutions_lifecycle_check',
+    });
+
+    await expect(db.insert(bookingRequestPaymentResolutions).values({
+      propertyId,
+      bookingRequestId: requestId,
+      paymentId,
+      type: 'retained',
+      status: 'pending',
+      amount: '1.00',
+      reason: 'Pending retention is invalid',
+    })).rejects.toMatchObject({
+      constraint_name: 'booking_request_payment_resolutions_lifecycle_check',
     });
   });
 });

@@ -23,6 +23,9 @@ export type SavedPaymentMethodChargeResult = {
   success: boolean;
   transactionId: string;
   requiresAction: boolean;
+  /** The provider accepted the request but has not reported a terminal result. */
+  indeterminate?: boolean;
+  providerStatus?: string;
   errorMessage?: string;
 };
 

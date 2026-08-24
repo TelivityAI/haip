@@ -201,4 +201,8 @@ export const payments = pgTable('payments', {
     'payments_booking_request_parent_positive_check',
     sql`${table.bookingRequestId} is null or ${table.originalPaymentId} is not null or ${table.amount} > 0`,
   ),
+  bookingRequestChildShapeCheck: check(
+    'payments_booking_request_child_shape_check',
+    sql`${table.bookingRequestId} is null or ${table.originalPaymentId} is null or (${table.amount} < 0 and ${table.status} = 'captured')`,
+  ),
 }));

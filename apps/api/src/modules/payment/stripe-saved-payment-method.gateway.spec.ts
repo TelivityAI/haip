@@ -255,9 +255,30 @@ describe('StripeSavedPaymentMethodGateway', () => {
     );
   });
 
+  it('returns a typed indeterminate result with the PaymentIntent identity while processing', async () => {
+    stripe.paymentIntents.create.mockResolvedValue({
+      id: 'pi_processing',
+      status: 'processing',
+    });
+
+    await expect(gateway.charge({
+      customerId: 'cus_trusted',
+      paymentMethodId: 'pm_trusted',
+      amount: '25.00',
+      currencyCode: 'USD',
+      idempotencyKey: 'request-charge:processing',
+    })).resolves.toEqual({
+      success: false,
+      transactionId: 'pi_processing',
+      requiresAction: false,
+      indeterminate: true,
+      providerStatus: 'processing',
+      errorMessage: "Stripe PaymentIntent 'pi_processing' result is still processing",
+    });
+  });
+
   it.each([
     { currencyCode: 'JPY', amount: '123', expectedMinorUnits: 123 },
-    { currencyCode: 'BHD', amount: '1.234', expectedMinorUnits: 1234 },
   ])(
     'uses the ISO-4217 exponent for $currencyCode without losing Decimal exactness',
     async ({ currencyCode, amount, expectedMinorUnits }) => {
@@ -285,7 +306,6 @@ describe('StripeSavedPaymentMethodGateway', () => {
   it.each([
     { currencyCode: 'JPY', amount: '1.5' },
     { currencyCode: 'USD', amount: '1.001' },
-    { currencyCode: 'BHD', amount: '1.2345' },
   ])(
     'rejects $amount $currencyCode instead of rounding a fractional minor unit',
     async ({ currencyCode, amount }) => {
@@ -306,6 +326,24 @@ describe('StripeSavedPaymentMethodGateway', () => {
       expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
     },
   );
+
+  it('rejects a scale-three currency before creating a PaymentIntent', async () => {
+    const result = await gateway.charge({
+      customerId: 'cus_trusted',
+      paymentMethodId: 'pm_trusted',
+      amount: '1.234',
+      currencyCode: 'BHD',
+      idempotencyKey: 'request-charge:unsupported-bhd',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      transactionId: '',
+      requiresAction: false,
+      errorMessage: expect.stringMatching(/exceeds ledger storage precision/i),
+    });
+    expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
+  });
 
   it('rejects an unknown currency code before calling Stripe', async () => {
     const result = await gateway.charge({
