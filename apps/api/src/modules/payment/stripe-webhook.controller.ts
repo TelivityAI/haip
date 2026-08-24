@@ -8,11 +8,15 @@ import {
   Inject,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
+import { ApiExcludeEndpoint, ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
 import { eq, and } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
-import { payments } from '@telivityhaip/database';
+import {
+  auditLogs,
+  bookingRequestPaymentResolutions,
+  payments,
+} from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
@@ -142,8 +146,10 @@ export class StripeWebhookController {
       .set({ status: 'captured', processedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
 
-    // Recalculate folio balance after payment state change
-    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    // Pre-acceptance Booking Request movements do not have a folio yet.
+    if (payment.folioId) {
+      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    }
 
     await this.webhookService.emit(
       'payment.received',
@@ -169,8 +175,9 @@ export class StripeWebhookController {
       .set({ status: 'failed', notes: errorMessage, updatedAt: new Date() })
       .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
 
-    // Recalculate folio balance after payment state change
-    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    if (payment.folioId) {
+      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    }
 
     await this.webhookService.emit(
       'payment.failed',
@@ -194,8 +201,9 @@ export class StripeWebhookController {
       .set({ status: 'voided', updatedAt: new Date() })
       .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
 
-    // Recalculate folio balance after payment state change
-    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    if (payment.folioId) {
+      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    }
 
     await this.webhookService.emit(
       'payment.failed',
@@ -218,7 +226,10 @@ export class StripeWebhookController {
     const payment = await this.findPaymentByGatewayTransactionId(piId);
     if (!payment) return;
 
-    const stripeRefundedDec = new Decimal(charge.amount_refunded).div(100);
+    const stripeRefundedDec = this.fromStripeMinorUnits(
+      charge.amount_refunded,
+      charge.currency ?? payment.currencyCode,
+    );
     const ledgerKey = `stripe_refund:${charge.id}:${stripeRefundedDec.toFixed(2)}`;
 
     const recorded = await this.db.transaction(async (tx: any) => {
@@ -269,6 +280,7 @@ export class StripeWebhookController {
         .values({
           folioId: parent.folioId,
           propertyId: parent.propertyId,
+          bookingRequestId: parent.bookingRequestId,
           method: parent.method,
           amount: deltaDec.negated().toFixed(2),
           currencyCode: parent.currencyCode,
@@ -281,7 +293,37 @@ export class StripeWebhookController {
         })
         .returning();
 
-      await this.folioService.recalculateBalance(parent.folioId, parent.propertyId, tx);
+      if (parent.bookingRequestId) {
+        const [resolution] = await tx
+          .insert(bookingRequestPaymentResolutions)
+          .values({
+            propertyId: parent.propertyId,
+            bookingRequestId: parent.bookingRequestId,
+            paymentId: parent.id,
+            type: 'refund',
+            amount: deltaDec.toFixed(2),
+            reason: `Gateway refund movement ${row.id}`,
+            resolvedAt: new Date(),
+          })
+          .returning();
+        await tx.insert(auditLogs).values({
+          propertyId: parent.propertyId,
+          action: 'create',
+          entityType: 'booking_request_payment_resolution',
+          entityId: resolution.id,
+          newValue: {
+            requestId: parent.bookingRequestId,
+            paymentId: parent.id,
+            type: 'refund',
+            amount: deltaDec.toFixed(2),
+          },
+          description: 'Stripe refund resolved Booking Request money',
+        });
+      }
+
+      if (parent.folioId) {
+        await this.folioService.recalculateBalance(parent.folioId, parent.propertyId, tx);
+      }
       return { row, parent, deltaDec };
     });
 
@@ -303,6 +345,29 @@ export class StripeWebhookController {
     this.logger.log(
       `Payment ${recorded.parent.id} refund child ${recorded.row.id} recorded via webhook (${recorded.deltaDec.toFixed(2)})`,
     );
+  }
+
+  private fromStripeMinorUnits(amount: number, currencyCode: string): Decimal {
+    const normalized = currencyCode.trim().toUpperCase();
+    let exponent: number | undefined;
+    try {
+      exponent = new Intl.NumberFormat('en', {
+        style: 'currency',
+        currency: normalized,
+      }).resolvedOptions().maximumFractionDigits;
+    } catch {
+      throw new BadRequestException(`Unsupported Stripe currency '${currencyCode}'`);
+    }
+    if (exponent == null) {
+      throw new BadRequestException(`Unable to resolve Stripe currency '${currencyCode}'`);
+    }
+    const result = new Decimal(amount).div(new Decimal(10).pow(exponent));
+    if (result.decimalPlaces() > 2) {
+      throw new BadRequestException(
+        `Stripe refund amount for ${normalized} exceeds ledger storage precision`,
+      );
+    }
+    return result;
   }
 
   private async findPaymentByGatewayTransactionId(transactionId: string) {

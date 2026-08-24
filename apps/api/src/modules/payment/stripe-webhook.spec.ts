@@ -4,6 +4,10 @@ import { StripeWebhookController } from './stripe-webhook.controller';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
 import { DRIZZLE } from '../../database/database.module';
+import {
+  bookingRequestPaymentResolutions,
+  payments,
+} from '@telivityhaip/database';
 
 const mockPayment = {
   id: 'pay-001',
@@ -11,6 +15,7 @@ const mockPayment = {
   folioId: 'folio-001',
   status: 'authorized',
   amount: '500.00',
+  currencyCode: 'USD',
   gatewayTransactionId: 'pi_test_123',
 };
 
@@ -19,6 +24,8 @@ function createRefundWebhookDb(
   existingRefunds: any[] = [],
   existingForLedger: any[] = [],
 ) {
+  let insertedValues: Record<string, unknown> | undefined;
+  let resolutionValues: Record<string, unknown> | undefined;
   return {
     select: vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
@@ -48,17 +55,30 @@ function createRefundWebhookDb(
             }),
           }),
         })),
-        insert: vi.fn().mockReturnValue({
-          values: vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([
-              { id: 'refund-webhook-1', folioId: payment.folioId, originalPaymentId: payment.id },
-            ]),
+        insert: vi.fn((table: unknown) => ({
+          values: vi.fn((values: Record<string, unknown>) => {
+            if (table === payments) insertedValues = values;
+            if (table === bookingRequestPaymentResolutions) resolutionValues = values;
+            return {
+              returning: vi.fn().mockResolvedValue([
+                table === payments
+                  ? {
+                    id: 'refund-webhook-1',
+                    folioId: payment.folioId,
+                    bookingRequestId: payment.bookingRequestId,
+                    originalPaymentId: payment.id,
+                  }
+                  : { id: 'resolution-webhook-1', ...values },
+              ]),
+            };
           }),
-        }),
+        })),
       };
       return fn(tx);
     }),
     update: vi.fn(),
+    getInsertedValues: () => insertedValues,
+    getResolutionValues: () => resolutionValues,
   };
 }
 
@@ -145,6 +165,29 @@ describe('StripeWebhookController', () => {
         expect.objectContaining({ status: 'captured' }),
         'prop-001',
       );
+    });
+
+    it('does not recalculate a missing folio for a pre-acceptance request payment', async () => {
+      const requestDb = createMockDb([{
+        ...mockPayment,
+        folioId: null,
+        bookingRequestId: 'request-001',
+      }]);
+      const module = await Test.createTestingModule({
+        controllers: [StripeWebhookController],
+        providers: [
+          { provide: DRIZZLE, useValue: requestDb },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: ConfigService, useValue: mockConfigService },
+        ],
+      }).compile();
+
+      await (module.get(StripeWebhookController) as any)
+        .handlePaymentIntentSucceeded({ id: 'pi_test_123' });
+
+      expect(requestDb.update).toHaveBeenCalled();
+      expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
     });
 
     it('should skip if payment already captured', async () => {
@@ -260,6 +303,79 @@ describe('StripeWebhookController', () => {
         expect.objectContaining({ refundAmount: '250.00' }),
         'prop-001',
       );
+    });
+
+    it('converts Stripe refunds with the currency minor-unit exponent', async () => {
+      const jpyPayment = {
+        ...mockPayment,
+        status: 'captured',
+        method: 'credit_card',
+        amount: '500.00',
+        currencyCode: 'JPY',
+      };
+      const capturedDb = createRefundWebhookDb(jpyPayment);
+      const module = await Test.createTestingModule({
+        controllers: [StripeWebhookController],
+        providers: [
+          { provide: DRIZZLE, useValue: capturedDb },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: ConfigService, useValue: mockConfigService },
+        ],
+      }).compile();
+
+      await (module.get(StripeWebhookController) as any).handleChargeRefunded({
+        id: 'ch_jpy_123',
+        payment_intent: 'pi_test_123',
+        amount: 500,
+        amount_refunded: 500,
+        currency: 'jpy',
+      });
+
+      expect(capturedDb.getInsertedValues()).toEqual(expect.objectContaining({
+        amount: '-500.00',
+        currencyCode: 'JPY',
+      }));
+    });
+
+    it('preserves request provenance on a pre-acceptance refund webhook', async () => {
+      const capturedDb = createRefundWebhookDb({
+        ...mockPayment,
+        folioId: null,
+        bookingRequestId: 'request-001',
+        status: 'captured',
+        method: 'credit_card',
+      });
+      const module = await Test.createTestingModule({
+        controllers: [StripeWebhookController],
+        providers: [
+          { provide: DRIZZLE, useValue: capturedDb },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: ConfigService, useValue: mockConfigService },
+        ],
+      }).compile();
+
+      await (module.get(StripeWebhookController) as any).handleChargeRefunded({
+        id: 'ch_request_123',
+        payment_intent: 'pi_test_123',
+        amount: 50000,
+        amount_refunded: 25000,
+      });
+
+      expect(capturedDb.getInsertedValues()).toEqual(expect.objectContaining({
+        bookingRequestId: 'request-001',
+        folioId: null,
+        originalPaymentId: 'pay-001',
+      }));
+      expect(capturedDb.getResolutionValues()).toEqual(expect.objectContaining({
+        propertyId: 'prop-001',
+        bookingRequestId: 'request-001',
+        paymentId: 'pay-001',
+        type: 'refund',
+        amount: '250.00',
+      }));
+      expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
     });
 
     it('should not update if payment not found', async () => {

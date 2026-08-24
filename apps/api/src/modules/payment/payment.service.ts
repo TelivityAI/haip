@@ -20,6 +20,11 @@ import { sumRefundChildren, parentCountsTowardFolioBalance } from './payment-led
 
 const CARD_METHODS = ['credit_card', 'debit_card', 'vcc'];
 
+export type RefundPaymentOptions = {
+  /** Stable logical refund identity used for crash-safe provider/ledger replay. */
+  idempotencyKey?: string;
+};
+
 @Injectable()
 export class PaymentService {
   constructor(
@@ -314,7 +319,12 @@ export class PaymentService {
    * Parent row stays `captured` (or `settled`); net folio effect comes from a
    * negative child row. Row lock serializes concurrent partial refunds.
    */
-  async refundPayment(id: string, propertyId: string, amount?: string) {
+  async refundPayment(
+    id: string,
+    propertyId: string,
+    amount?: string,
+    options: RefundPaymentOptions = {},
+  ) {
     const prepared = await this.db.transaction(async (tx: any) => {
       const [original] = await tx
         .select()
@@ -338,7 +348,40 @@ export class PaymentService {
       if (refundAmountInTx.lte(0)) {
         throw new BadRequestException('Refund amount must be positive');
       }
+      if (!original.gatewayTransactionId) {
+        throw new BadRequestException(
+          `Payment ${id} has no gateway transaction to refund`,
+        );
+      }
 
+      if (options.idempotencyKey) {
+        const replayRows = await tx
+          .select()
+          .from(payments)
+          .where(and(
+            eq(payments.propertyId, propertyId),
+            eq(payments.idempotencyKey, options.idempotencyKey),
+          ));
+        const replay = (replayRows ?? []).find((row: typeof payments.$inferSelect) =>
+          row.propertyId === propertyId
+          && row.idempotencyKey === options.idempotencyKey);
+        if (replay) {
+          if (
+            replay.originalPaymentId !== id
+            || !new Decimal(replay.amount).abs().eq(refundAmountInTx)
+          ) {
+            throw new ConflictException(
+              'Refund idempotency key was already used for different refund data',
+            );
+          }
+          return {
+            original,
+            totalAfterDec: new Decimal(original.amount),
+            refundAmountDec: refundAmountInTx,
+            replay,
+          };
+        }
+      }
       const existingRefunds = await tx
         .select()
         .from(payments)
@@ -362,12 +405,24 @@ export class PaymentService {
       }
 
       const totalAfterDec = alreadyRefundedDec.plus(refundAmountInTx);
-      return { original, totalAfterDec, refundAmountDec: refundAmountInTx };
+      return {
+        original,
+        totalAfterDec,
+        refundAmountDec: refundAmountInTx,
+        replay: undefined,
+      };
     });
 
-    const { original, totalAfterDec, refundAmountDec: refundDec } = prepared;
+    const {
+      original,
+      totalAfterDec,
+      refundAmountDec: refundDec,
+      replay,
+    } = prepared;
+    if (replay) return replay;
 
-    const idempotencyKey = `ref_${id}_${totalAfterDec.toFixed(2)}`;
+    const idempotencyKey = options.idempotencyKey
+      ?? `ref_${id}_${totalAfterDec.toFixed(2)}`;
     const result = await this.gateway.refund(
       original.gatewayTransactionId,
       refundDec.toNumber(),
@@ -399,6 +454,32 @@ export class PaymentService {
           ),
         );
       const alreadyRefundedDec = sumRefundChildren(existingRefunds ?? []);
+
+      if (options.idempotencyKey) {
+        const replayRows = await tx
+          .select()
+          .from(payments)
+          .where(and(
+            eq(payments.propertyId, propertyId),
+            eq(payments.idempotencyKey, options.idempotencyKey),
+          ));
+        const replayAfterGateway = (replayRows ?? []).find(
+          (row: typeof payments.$inferSelect) =>
+          row.propertyId === propertyId
+          && row.idempotencyKey === options.idempotencyKey,
+        );
+        if (replayAfterGateway) {
+          if (
+            replayAfterGateway.originalPaymentId !== id
+            || !new Decimal(replayAfterGateway.amount).abs().eq(refundDec)
+          ) {
+            throw new ConflictException(
+              'Refund idempotency key was already used for different refund data',
+            );
+          }
+          return { row: replayAfterGateway, isNew: false };
+        }
+      }
 
       if (result.transactionId) {
         const existingByGateway = (existingRefunds ?? []).find(
@@ -433,6 +514,8 @@ export class PaymentService {
         .values({
           folioId: locked.folioId,
           propertyId,
+          bookingRequestId: locked.bookingRequestId,
+          idempotencyKey: options.idempotencyKey ?? null,
           method: locked.method,
           amount: ledgerRefundDec.negated().toFixed(2),
           currencyCode: locked.currencyCode,
@@ -449,7 +532,9 @@ export class PaymentService {
     });
 
     if (refund.isNew) {
-      await this.folioService.recalculateBalance(original.folioId, propertyId);
+      if (original.folioId) {
+        await this.folioService.recalculateBalance(original.folioId, propertyId);
+      }
 
       await this.webhookService.emit(
         'payment.refunded',

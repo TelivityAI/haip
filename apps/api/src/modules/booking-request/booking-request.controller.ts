@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -14,6 +16,7 @@ import {
   type AuditActor,
 } from '../../common/audit/audit-actor';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { BookingRequestPaymentService } from './booking-request-payment.service';
 import { BookingRequestService } from './booking-request.service';
 // DTOs must remain runtime imports for Nest validation metadata.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -22,12 +25,25 @@ import { AcceptBookingRequestDto } from './dto/accept-booking-request.dto';
 import { DenyBookingRequestDto } from './dto/deny-booking-request.dto';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { ListBookingRequestsDto } from './dto/list-booking-requests.dto';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import {
+  AllocateBookingRequestPaymentDto,
+  ChargeBookingRequestCardDto,
+  CreateBookingRequestInstallmentDto,
+  RecordBookingRequestExternalPaymentDto,
+  RecordBookingRequestExternalReturnDto,
+  RefundBookingRequestPaymentDto,
+  RetainBookingRequestPaymentDto,
+  UpdateBookingRequestInstallmentDto,
+} from './dto/booking-request-payment.dto';
 
 @ApiTags('booking-requests')
 @Controller('booking-requests')
 export class BookingRequestController {
   constructor(
     @Inject(BookingRequestService) private readonly service: BookingRequestService,
+    @Inject(BookingRequestPaymentService)
+    private readonly paymentService: BookingRequestPaymentService,
   ) {}
 
   @Get()
@@ -72,5 +88,155 @@ export class BookingRequestController {
     @AuditActorCtx() actor: AuditActor,
   ) {
     return this.service.deny(id, propertyId, dto, actor);
+  }
+
+  @Get(':id/installments')
+  @RequirePermissions('reservations.read')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'List a Booking Request payment plan' })
+  listInstallments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.paymentService.listInstallments(id, propertyId);
+  }
+
+  @Post(':id/installments')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Add an informational payment-plan installment' })
+  createInstallment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: CreateBookingRequestInstallmentDto,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.paymentService.createInstallment(id, propertyId, dto, actor);
+  }
+
+  @Patch(':id/installments/:installmentId')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Edit an unallocated payment-plan installment' })
+  updateInstallment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('installmentId', ParseUUIDPipe) installmentId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: UpdateBookingRequestInstallmentDto,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.paymentService.updateInstallment(
+      id,
+      installmentId,
+      propertyId,
+      dto,
+      actor,
+    );
+  }
+
+  @Delete(':id/installments/:installmentId')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Delete an unallocated payment-plan installment' })
+  deleteInstallment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('installmentId', ParseUUIDPipe) installmentId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.paymentService.deleteInstallment(id, installmentId, propertyId, actor);
+  }
+
+  @Post(':id/installments/:installmentId/allocations')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Allocate a captured movement to an installment' })
+  allocatePayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('installmentId', ParseUUIDPipe) installmentId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: AllocateBookingRequestPaymentDto,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.paymentService.allocatePayment(id, installmentId, propertyId, dto, actor);
+  }
+
+  @Get(':id/payments')
+  @RequirePermissions('reservations.read')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'List Booking Request movements and resolutions' })
+  listPayments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.paymentService.listPayments(id, propertyId);
+  }
+
+  @Post(':id/payments/charge')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Manually charge the saved Booking Request card' })
+  chargeSavedCard(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: ChargeBookingRequestCardDto,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.paymentService.chargeSavedCard(id, propertyId, dto, actor);
+  }
+
+  @Post(':id/payments/external')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Record externally collected Booking Request money' })
+  recordExternalPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: RecordBookingRequestExternalPaymentDto,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.paymentService.recordExternalPayment(id, propertyId, dto, actor);
+  }
+
+  @Post(':id/payments/:paymentId/refunds')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Partially or fully refund a request gateway payment' })
+  refundPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: RefundBookingRequestPaymentDto,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.paymentService.refund(id, paymentId, propertyId, dto, actor);
+  }
+
+  @Post(':id/payments/:paymentId/external-returns')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Record that externally collected money was returned' })
+  recordExternalReturn(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: RecordBookingRequestExternalReturnDto,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.paymentService.recordExternalReturn(id, paymentId, propertyId, dto, actor);
+  }
+
+  @Post(':id/payments/:paymentId/retentions')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Resolve captured money as retained for denial' })
+  retainForDenial(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: RetainBookingRequestPaymentDto,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.paymentService.retainForDenial(id, paymentId, propertyId, dto, actor);
   }
 }

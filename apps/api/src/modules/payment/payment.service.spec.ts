@@ -529,6 +529,118 @@ describe('PaymentService', () => {
       expect(result).toEqual(refundPayment);
     });
 
+    it('preserves Booking Request provenance and does not recalculate a missing folio', async () => {
+      const requestPayment = {
+        ...mockPayment,
+        folioId: null,
+        bookingRequestId: 'request-001',
+        status: 'captured',
+      };
+      const refundPayment = {
+        ...mockPayment,
+        id: 'pay-request-refund',
+        folioId: null,
+        bookingRequestId: 'request-001',
+        amount: '-25.00',
+        originalPaymentId: 'pay-001',
+      };
+      let insertedValues: Record<string, unknown> | undefined;
+      const makeTx = () => {
+        let selectCall = 0;
+        return {
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => {
+                selectCall += 1;
+                return selectCall === 1
+                  ? { for: vi.fn().mockResolvedValue([requestPayment]) }
+                  : { then: (resolve: any) => resolve([]) };
+              }),
+            })),
+          })),
+          insert: vi.fn(() => ({
+            values: vi.fn((values: Record<string, unknown>) => {
+              insertedValues = values;
+              return { returning: vi.fn().mockResolvedValue([refundPayment]) };
+            }),
+          })),
+        };
+      };
+      const db = {
+        transaction: vi.fn(async (fn: any) => fn(makeTx())),
+      };
+      const module = await Test.createTestingModule({
+        providers: [
+          PaymentService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+
+      await module.get(PaymentService).refundPayment(
+        'pay-001',
+        'prop-001',
+        '25.00',
+      );
+
+      expect(insertedValues).toEqual(expect.objectContaining({
+        bookingRequestId: 'request-001',
+        folioId: null,
+        originalPaymentId: 'pay-001',
+        amount: '-25.00',
+      }));
+      expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
+    });
+
+    it('replays an explicitly idempotent refund without another gateway call', async () => {
+      const original = {
+        ...mockPayment,
+        amount: '100.00',
+        status: 'captured',
+      };
+      const existingRefund = {
+        ...mockPayment,
+        id: 'refund-existing',
+        amount: '-30.00',
+        originalPaymentId: 'pay-001',
+        idempotencyKey: 'booking-request-refund:stable',
+      };
+      const tx = {
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => ({
+              for: vi.fn().mockResolvedValue([original]),
+              then: (resolve: any) => resolve([existingRefund]),
+            })),
+          })),
+        })),
+      };
+      const db = {
+        transaction: vi.fn(async (fn: any) => fn(tx)),
+      };
+      const module = await Test.createTestingModule({
+        providers: [
+          PaymentService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+
+      const result = await (module.get(PaymentService).refundPayment as any)(
+        'pay-001',
+        'prop-001',
+        '30.00',
+        { idempotencyKey: 'booking-request-refund:stable' },
+      );
+
+      expect(result).toBe(existingRefund);
+      expect(mockGateway.refund).not.toHaveBeenCalled();
+    });
+
     // Partial refunds: parent stays captured; negative children net the folio balance.
     describe('multi-refund partial scenario', () => {
       function buildRefundTxDb(

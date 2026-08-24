@@ -14,6 +14,7 @@ import { BookingRequestController } from './booking-request.controller';
 import { BookingRequestPublicController } from './booking-request-public.controller';
 import { BookingRequestService } from './booking-request.service';
 import { BookingRequestConsequenceWorkerService } from './booking-request-consequence-worker.service';
+import { BookingRequestPaymentService } from './booking-request-payment.service';
 
 @Module({
   imports: [
@@ -29,11 +30,12 @@ import { BookingRequestConsequenceWorkerService } from './booking-request-conseq
   controllers: [BookingRequestPublicController, BookingRequestController],
   providers: [
     BookingRequestService,
+    BookingRequestPaymentService,
     BookingRequestConsequenceWorkerService,
     BookingKeyGuard,
     BookingEngineScopeGuard,
     BookingThrottleGuard,
   ],
-  exports: [BookingRequestService],
+  exports: [BookingRequestService, BookingRequestPaymentService],
 })
 export class BookingRequestModule {}
