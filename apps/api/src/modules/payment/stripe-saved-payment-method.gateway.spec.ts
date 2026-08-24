@@ -101,6 +101,7 @@ describe('StripeSavedPaymentMethodGateway', () => {
     stripe.paymentMethods.retrieve.mockResolvedValue({
       id: 'pm_trusted',
       type: 'card',
+      customer: { id: 'cus_trusted' },
       card: {
         brand: 'visa',
         last4: '4242',
@@ -135,10 +136,33 @@ describe('StripeSavedPaymentMethodGateway', () => {
     stripe.paymentMethods.retrieve.mockResolvedValue({
       id: 'pm_bank',
       type: 'us_bank_account',
+      customer: 'cus_trusted',
       card: null,
     });
 
     await expect(gateway.resolveSetup('seti_bank')).rejects.toThrow(/card payment method/);
+  });
+
+  it('rejects a PaymentMethod attached to a different Stripe customer', async () => {
+    stripe.setupIntents.retrieve.mockResolvedValue({
+      id: 'seti_mismatch',
+      status: 'succeeded',
+      customer: 'cus_setup_owner',
+      payment_method: 'pm_mismatched',
+    });
+    stripe.paymentMethods.retrieve.mockResolvedValue({
+      id: 'pm_mismatched',
+      type: 'card',
+      customer: { id: 'cus_different_owner' },
+      card: {
+        brand: 'visa',
+        last4: '4242',
+      },
+    });
+
+    await expect(gateway.resolveSetup('seti_mismatch')).rejects.toThrow(
+      /PaymentMethod.*does not belong.*cus_setup_owner/,
+    );
   });
 
   it('confirms an off-session PaymentIntent with automatic capture and idempotency', async () => {
@@ -174,6 +198,76 @@ describe('StripeSavedPaymentMethodGateway', () => {
       },
       { idempotencyKey: 'request-charge:payment_123' },
     );
+  });
+
+  it.each([
+    { currencyCode: 'JPY', amount: '123', expectedMinorUnits: 123 },
+    { currencyCode: 'BHD', amount: '1.234', expectedMinorUnits: 1234 },
+  ])(
+    'uses the ISO-4217 exponent for $currencyCode without losing Decimal exactness',
+    async ({ currencyCode, amount, expectedMinorUnits }) => {
+      stripe.paymentIntents.create.mockResolvedValue({
+        id: `pi_${currencyCode.toLowerCase()}`,
+        status: 'succeeded',
+      });
+
+      const result = await gateway.charge({
+        customerId: 'cus_trusted',
+        paymentMethodId: 'pm_trusted',
+        amount,
+        currencyCode,
+        idempotencyKey: `request-charge:${currencyCode}`,
+      });
+
+      expect(result.success).toBe(true);
+      expect(stripe.paymentIntents.create).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: expectedMinorUnits }),
+        { idempotencyKey: `request-charge:${currencyCode}` },
+      );
+    },
+  );
+
+  it.each([
+    { currencyCode: 'JPY', amount: '1.5' },
+    { currencyCode: 'USD', amount: '1.001' },
+    { currencyCode: 'BHD', amount: '1.2345' },
+  ])(
+    'rejects $amount $currencyCode instead of rounding a fractional minor unit',
+    async ({ currencyCode, amount }) => {
+      const result = await gateway.charge({
+        customerId: 'cus_trusted',
+        paymentMethodId: 'pm_trusted',
+        amount,
+        currencyCode,
+        idempotencyKey: `request-charge:fractional-${currencyCode}`,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        transactionId: '',
+        requiresAction: false,
+        errorMessage: expect.stringMatching(/fractional minor units/),
+      });
+      expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects an unknown currency code before calling Stripe', async () => {
+    const result = await gateway.charge({
+      customerId: 'cus_trusted',
+      paymentMethodId: 'pm_trusted',
+      amount: '10.00',
+      currencyCode: 'ZZZ',
+      idempotencyKey: 'request-charge:unknown-currency',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      transactionId: '',
+      requiresAction: false,
+      errorMessage: "Unsupported ISO-4217 currency code 'ZZZ'",
+    });
+    expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
   });
 
   it('maps additional authentication to a failed charge with no recovery secret', async () => {

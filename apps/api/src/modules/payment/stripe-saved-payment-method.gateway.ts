@@ -68,6 +68,13 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
     }
 
     const paymentMethod = await this.stripe.paymentMethods.retrieve(paymentMethodId);
+    const attachedCustomerId = this.expandedId(paymentMethod.customer);
+    if (attachedCustomerId !== customerId) {
+      throw new Error(
+        `Stripe PaymentMethod '${paymentMethod.id}' does not belong to ` +
+        `SetupIntent customer '${customerId}'`,
+      );
+    }
     if (paymentMethod.type !== 'card' || !paymentMethod.card) {
       throw new Error(`Stripe SetupIntent '${setupIntentId}' did not save a card payment method`);
     }
@@ -83,10 +90,11 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
 
   async charge(input: SavedPaymentMethodChargeInput): Promise<SavedPaymentMethodChargeResult> {
     try {
+      const currencyCode = this.normalizeCurrencyCode(input.currencyCode);
       const paymentIntent = await this.stripe.paymentIntents.create(
         {
-          amount: this.toMinorUnits(input.amount),
-          currency: input.currencyCode.toLowerCase(),
+          amount: this.toMinorUnits(input.amount, currencyCode),
+          currency: currencyCode.toLowerCase(),
           customer: input.customerId,
           payment_method: input.paymentMethodId,
           confirm: true,
@@ -120,8 +128,37 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
     return typeof value === 'string' ? value : value?.id ?? null;
   }
 
-  private toMinorUnits(amount: string): number {
-    return new Decimal(amount).mul(100).toDecimalPlaces(0).toNumber();
+  private normalizeCurrencyCode(currencyCode: string): string {
+    const normalized = currencyCode.trim().toUpperCase();
+    const intlWithSupportedValues = Intl as typeof Intl & {
+      supportedValuesOf?: (key: 'currency') => string[];
+    };
+    if (
+      !intlWithSupportedValues.supportedValuesOf ||
+      !intlWithSupportedValues.supportedValuesOf('currency').includes(normalized)
+    ) {
+      throw new Error(`Unsupported ISO-4217 currency code '${currencyCode}'`);
+    }
+    return normalized;
+  }
+
+  private toMinorUnits(amount: string, currencyCode: string): number {
+    const exponent = new Intl.NumberFormat('en', {
+      style: 'currency',
+      currency: currencyCode,
+    }).resolvedOptions().maximumFractionDigits;
+    if (exponent === undefined) {
+      throw new Error(`Unable to resolve minor-unit exponent for '${currencyCode}'`);
+    }
+    const minorUnits = new Decimal(amount).mul(new Decimal(10).pow(exponent));
+    if (!minorUnits.isInteger()) {
+      throw new Error(`Amount '${amount}' ${currencyCode} has fractional minor units`);
+    }
+    const value = minorUnits.toNumber();
+    if (!Number.isSafeInteger(value)) {
+      throw new Error(`Amount '${amount}' ${currencyCode} exceeds the safe Stripe integer range`);
+    }
+    return value;
   }
 
   private mapPaymentIntent(paymentIntent: Stripe.PaymentIntent): SavedPaymentMethodChargeResult {

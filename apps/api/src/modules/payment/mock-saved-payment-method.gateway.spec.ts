@@ -118,4 +118,40 @@ describe('PaymentModule saved-payment-method registration', () => {
     expect(provider.useFactory(mockOverride)).toBeInstanceOf(MockSavedPaymentMethodGateway);
     expect(provider.useFactory(stripeOverride)).toBeInstanceOf(StripeSavedPaymentMethodGateway);
   });
+
+  it.each(['adyen', 'mollie', 'square', 'braintree', 'wise'])(
+    'preserves %s startup without constructing a Stripe saved-method adapter',
+    (paymentProvider) => {
+      const provider = gatewayProvider();
+      const alternativeConfig = {
+        get: (key: string, fallback?: string) =>
+          key === 'PAYMENT_GATEWAY' ? paymentProvider : fallback,
+      } as ConfigService;
+
+      expect(() => provider.useFactory(alternativeConfig)).not.toThrow();
+    },
+  );
+
+  it('rejects every saved-method operation clearly for an unsupported provider', async () => {
+    const provider = gatewayProvider();
+    const alternativeConfig = {
+      get: (key: string, fallback?: string) =>
+        key === 'PAYMENT_GATEWAY' ? 'adyen' : fallback,
+    } as ConfigService;
+    const gateway = provider.useFactory(alternativeConfig);
+
+    await expect(gateway.createSetup('guest@example.com', 'setup-key')).rejects.toThrow(
+      /Saved payment methods are not supported.*adyen/,
+    );
+    await expect(gateway.resolveSetup('seti_test')).rejects.toThrow(
+      /Saved payment methods are not supported.*adyen/,
+    );
+    await expect(gateway.charge({
+      customerId: 'cus_test',
+      paymentMethodId: 'pm_test',
+      amount: '10.00',
+      currencyCode: 'USD',
+      idempotencyKey: 'charge-key',
+    })).rejects.toThrow(/Saved payment methods are not supported.*adyen/);
+  });
 });

@@ -13,6 +13,19 @@ import {
 import { SAVED_PAYMENT_METHOD_GATEWAY } from './interfaces/saved-payment-method-gateway.interface';
 import { MockSavedPaymentMethodGateway } from './mock-saved-payment-method.gateway';
 import { StripeSavedPaymentMethodGateway } from './stripe-saved-payment-method.gateway';
+import { UnsupportedSavedPaymentMethodGateway } from './unsupported-saved-payment-method.gateway';
+
+function createSavedPaymentMethodGateway(configService: ConfigService) {
+  const provider = resolvePaymentGatewayProvider(configService);
+  switch (provider) {
+    case 'mock':
+      return new MockSavedPaymentMethodGateway();
+    case 'stripe':
+      return new StripeSavedPaymentMethodGateway(configService);
+    default:
+      return new UnsupportedSavedPaymentMethodGateway(provider);
+  }
+}
 
 /**
  * Payment module with configurable gateway.
@@ -38,9 +51,7 @@ import { StripeSavedPaymentMethodGateway } from './stripe-saved-payment-method.g
     {
       provide: SAVED_PAYMENT_METHOD_GATEWAY,
       useFactory: (configService: ConfigService) =>
-        resolvePaymentGatewayProvider(configService) === 'mock'
-          ? new MockSavedPaymentMethodGateway()
-          : new StripeSavedPaymentMethodGateway(configService),
+        createSavedPaymentMethodGateway(configService),
       inject: [ConfigService],
     },
   ],
