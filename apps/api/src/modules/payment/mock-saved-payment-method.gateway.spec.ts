@@ -72,6 +72,9 @@ describe('MockSavedPaymentMethodGateway', () => {
     const input = {
       customerId: 'cus_mock_trusted',
       paymentMethodId: 'pm_mock_trusted',
+      paymentId: 'cccccccc-0000-4000-a000-000000000001',
+      propertyId: provenance.propertyId,
+      bookingRequestId: 'bbbbbbbb-0000-4000-a000-000000000001',
       amount: '75.00',
       currencyCode: 'EUR',
       idempotencyKey: 'request-charge:payment_123',
@@ -86,6 +89,11 @@ describe('MockSavedPaymentMethodGateway', () => {
       requiresAction: false,
     });
     expect(retry).toEqual(first);
+
+    await expect(gateway.charge({
+      ...input,
+      paymentId: 'dddddddd-0000-4000-a000-000000000001',
+    })).rejects.toThrow(/idempotency.*different.*payment|identity/i);
   });
 });
 
@@ -184,6 +192,9 @@ describe('PaymentModule saved-payment-method registration', () => {
     await expect(gateway.charge({
       customerId: 'cus_test',
       paymentMethodId: 'pm_test',
+      paymentId: 'cccccccc-0000-4000-a000-000000000001',
+      propertyId: 'aaaaaaaa-0000-4000-a000-000000000001',
+      bookingRequestId: 'bbbbbbbb-0000-4000-a000-000000000001',
       amount: '10.00',
       currencyCode: 'USD',
       idempotencyKey: 'charge-key',

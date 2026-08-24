@@ -5,6 +5,7 @@ import {
   auditLogs,
   bookingRequestConsequences,
   bookingRequestInstallments,
+  bookingRequestPaymentAllocations,
   bookingRequestPaymentResolutions,
   bookingRequests,
   payments,
@@ -24,6 +25,9 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
   const ratePlanId = '71000000-0000-4000-a000-000000000003';
   const requestId = '71000000-0000-4000-a000-000000000004';
   const paymentId = '71000000-0000-4000-a000-000000000005';
+  const installmentId = '71000000-0000-4000-a000-000000000006';
+  const secondPaymentId = '71000000-0000-4000-a000-000000000007';
+  const secondMovementId = '71000000-0000-4000-a000-000000000008';
   const otherPropertyId = '72000000-0000-4000-a000-000000000001';
   const otherRoomTypeId = '72000000-0000-4000-a000-000000000002';
   const otherRatePlanId = '72000000-0000-4000-a000-000000000003';
@@ -135,12 +139,16 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
 
   afterAll(async () => {
     if (!client) return;
+    await db.delete(bookingRequestPaymentAllocations)
+      .where(eq(bookingRequestPaymentAllocations.bookingRequestId, requestId));
     await db.delete(bookingRequestConsequences)
       .where(eq(bookingRequestConsequences.bookingRequestId, requestId));
     await db.delete(auditLogs).where(eq(auditLogs.propertyId, propertyId));
     await db.delete(bookingRequestPaymentResolutions)
       .where(eq(bookingRequestPaymentResolutions.bookingRequestId, requestId));
     await db.delete(payments).where(eq(payments.bookingRequestId, requestId));
+    await db.delete(bookingRequestInstallments)
+      .where(eq(bookingRequestInstallments.bookingRequestId, requestId));
     await db.delete(bookingRequests).where(eq(bookingRequests.id, requestId));
     await db.delete(ratePlans).where(eq(ratePlans.id, ratePlanId));
     await db.delete(roomTypes).where(eq(roomTypes.id, roomTypeId));
@@ -290,6 +298,71 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
       reason: 'Pending retention is invalid',
     })).rejects.toMatchObject({
       constraint_name: 'booking_request_payment_resolutions_lifecycle_check',
+    });
+  });
+
+  it('rejects cross-scope consequence/allocation rows and movements from another parent', async () => {
+    await expect(db.insert(bookingRequestConsequences).values({
+      propertyId,
+      bookingRequestId: otherRequestId,
+      kind: 'payment_received:cross-scope',
+      payload: {},
+    })).rejects.toMatchObject({
+      constraint_name: 'booking_request_consequences_request_fkey',
+    });
+
+    await db.insert(bookingRequestInstallments).values({
+      id: installmentId,
+      propertyId,
+      bookingRequestId: requestId,
+      label: 'Ownership fixture',
+      fixedAmount: '10.00',
+      resolvedAmount: '10.00',
+      dueMilestone: 'manual',
+    });
+    await expect(db.insert(bookingRequestPaymentAllocations).values({
+      propertyId: otherPropertyId,
+      bookingRequestId: otherRequestId,
+      paymentId,
+      installmentId,
+      amount: '1.00',
+    })).rejects.toMatchObject({
+      constraint_name: 'booking_request_payment_allocations_payment_fkey',
+    });
+
+    await db.insert(payments).values({
+      id: secondPaymentId,
+      propertyId,
+      bookingRequestId: requestId,
+      method: 'cash',
+      status: 'captured',
+      amount: '20.00',
+      currencyCode: 'EUR',
+      processedAt: new Date(),
+    });
+    await db.insert(payments).values({
+      id: secondMovementId,
+      propertyId,
+      bookingRequestId: requestId,
+      originalPaymentId: secondPaymentId,
+      method: 'cash',
+      status: 'captured',
+      amount: '-5.00',
+      currencyCode: 'EUR',
+      processedAt: new Date(),
+    });
+    await expect(db.insert(bookingRequestPaymentResolutions).values({
+      propertyId,
+      bookingRequestId: requestId,
+      paymentId,
+      type: 'external_return',
+      status: 'completed',
+      amount: '5.00',
+      movementId: secondMovementId,
+      reason: 'Movement belongs to a different parent',
+      resolvedAt: new Date(),
+    })).rejects.toMatchObject({
+      constraint_name: 'booking_request_payment_resolutions_parent_movement_fkey',
     });
   });
 });

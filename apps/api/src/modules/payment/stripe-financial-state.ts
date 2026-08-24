@@ -6,6 +6,32 @@ export type PaymentIntentEvent =
   | 'canceled'
   | 'requires_action';
 
+export type PaymentIntentCorrelation = {
+  paymentId: string;
+  propertyId: string;
+  bookingRequestId: string;
+};
+
+export function paymentIntentCorrelation(
+  metadata: Record<string, string> | null | undefined,
+): PaymentIntentCorrelation {
+  const correlation = {
+    paymentId: metadata?.['haip_payment_id'],
+    propertyId: metadata?.['haip_property_id'],
+    bookingRequestId: metadata?.['haip_booking_request_id'],
+  };
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!correlation.paymentId
+    || !correlation.propertyId
+    || !correlation.bookingRequestId
+    || !uuid.test(correlation.paymentId)
+    || !uuid.test(correlation.propertyId)
+    || !uuid.test(correlation.bookingRequestId)) {
+    throw new BadRequestException('Stripe PaymentIntent is missing exact HAIP correlation metadata');
+  }
+  return correlation as PaymentIntentCorrelation;
+}
+
 export type PaymentIntentLedgerStatus =
   | 'pending'
   | 'authorized'

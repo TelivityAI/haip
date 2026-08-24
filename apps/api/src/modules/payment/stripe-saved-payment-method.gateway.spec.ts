@@ -229,6 +229,9 @@ describe('StripeSavedPaymentMethodGateway', () => {
     await expect(gateway.charge({
       customerId: 'cus_trusted',
       paymentMethodId: 'pm_trusted',
+      paymentId: 'cccccccc-0000-4000-a000-000000000001',
+      propertyId: 'aaaaaaaa-0000-4000-a000-000000000001',
+      bookingRequestId: 'bbbbbbbb-0000-4000-a000-000000000001',
       amount: '123.45',
       currencyCode: 'EUR',
       idempotencyKey: 'request-charge:payment_123',
@@ -243,6 +246,11 @@ describe('StripeSavedPaymentMethodGateway', () => {
         currency: 'eur',
         customer: 'cus_trusted',
         payment_method: 'pm_trusted',
+        metadata: {
+          haip_payment_id: 'cccccccc-0000-4000-a000-000000000001',
+          haip_property_id: 'aaaaaaaa-0000-4000-a000-000000000001',
+          haip_booking_request_id: 'bbbbbbbb-0000-4000-a000-000000000001',
+        },
         confirm: true,
         off_session: true,
         capture_method: 'automatic',

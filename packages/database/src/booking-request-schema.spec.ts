@@ -55,6 +55,8 @@ describe('booking request schema', () => {
     expect(consequenceIndexNames).toContain(
       'booking_request_consequences_property_request_kind_unique',
     );
+    expect(getTableConfig(bookingRequestConsequences).foreignKeys.map((key) => key.getName()))
+      .toContain('booking_request_consequences_request_fkey');
 
     const installmentChecks = getTableConfig(bookingRequestInstallments)
       .checks.map((check) => check.name);
@@ -66,6 +68,12 @@ describe('booking request schema', () => {
     const allocationChecks = getTableConfig(bookingRequestPaymentAllocations)
       .checks.map((check) => check.name);
     expect(allocationChecks).toContain('booking_request_payment_allocations_positive_check');
+    expect(getTableConfig(bookingRequestPaymentAllocations).foreignKeys.map((key) => key.getName()))
+      .toEqual(expect.arrayContaining([
+        'booking_request_payment_allocations_request_fkey',
+        'booking_request_payment_allocations_payment_fkey',
+        'booking_request_payment_allocations_installment_fkey',
+      ]));
     const resolutionConfig = getTableConfig(bookingRequestPaymentResolutions);
     expect(resolutionConfig.checks.map((check) => check.name)).toEqual(expect.arrayContaining([
       'booking_request_payment_resolutions_positive_check',
@@ -76,10 +84,28 @@ describe('booking request schema', () => {
     expect(resolutionConfig.indexes.map((index) => index.config.name)).toContain(
       'booking_request_payment_resolutions_property_idempotency_unique',
     );
+    expect(resolutionConfig.foreignKeys.map((key) => key.getName())).toEqual(
+      expect.arrayContaining([
+        'booking_request_payment_resolutions_request_fkey',
+        'booking_request_payment_resolutions_payment_fkey',
+        'booking_request_payment_resolutions_parent_movement_fkey',
+      ]),
+    );
+    expect(getTableConfig(bookingRequestInstallments).foreignKeys.map((key) => key.getName()))
+      .toContain('booking_request_installments_request_fkey');
     expect(getTableConfig(payments).checks.map((check) => check.name)).toEqual(
       expect.arrayContaining([
         'payments_booking_request_parent_positive_check',
         'payments_booking_request_child_shape_check',
+      ]),
+    );
+    expect(getTableConfig(payments).indexes.map((index) => index.config.name)).toContain(
+      'payments_property_request_parent_id_unique',
+    );
+    expect(getTableConfig(payments).foreignKeys.map((key) => key.getName())).toEqual(
+      expect.arrayContaining([
+        'payments_booking_request_fkey',
+        'payments_booking_request_parent_fkey',
       ]),
     );
 

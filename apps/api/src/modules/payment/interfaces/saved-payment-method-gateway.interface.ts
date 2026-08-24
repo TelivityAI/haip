@@ -14,6 +14,10 @@ export type SavedPaymentMethodProvenance = {
 export type SavedPaymentMethodChargeInput = {
   customerId: string;
   paymentMethodId: string;
+  /** Durable HAIP identities used by signed provider webhooks for crash recovery. */
+  paymentId: string;
+  propertyId: string;
+  bookingRequestId: string;
   amount: string;
   currencyCode: string;
   idempotencyKey: string;

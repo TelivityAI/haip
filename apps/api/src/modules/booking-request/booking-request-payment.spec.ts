@@ -493,6 +493,23 @@ describe('BookingRequestPaymentService installments', () => {
     expect(harness.database.lockCalls).toBeGreaterThanOrEqual(6);
   });
 
+  it('rejects allocation for a zero-total request even when legacy rows already exist', async () => {
+    const harness = makeHarness({
+      requests: [request({ submittedQuoteSnapshot: { grandTotal: '0.00' } })],
+      installments: [installment()],
+      payments: [capturedPayment({ amount: '100.00' })],
+    });
+
+    await expect(harness.service.allocatePayment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      { paymentId: PAYMENT_ID, amount: '10.00' },
+      actor,
+    )).rejects.toThrow(/zero-total|positive total/i);
+    expect(harness.state.allocations).toHaveLength(0);
+  });
+
   it('allocates only the canonical net captured amount after returns', async () => {
     const parent = capturedPayment({ amount: '100.00' });
     const returned = capturedPayment({
@@ -599,6 +616,9 @@ describe('BookingRequestPaymentService saved-card charges', () => {
     expect(harness.gateway.charge).toHaveBeenCalledWith(expect.objectContaining({
       customerId: 'cus_saved',
       paymentMethodId: 'pm_saved',
+      paymentId: result.id,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
       amount: '80.25',
       currencyCode: 'EUR',
       idempotencyKey: expect.stringContaining('booking-request-charge:'),
@@ -616,6 +636,30 @@ describe('BookingRequestPaymentService saved-card charges', () => {
     expect(harness.state.consequences).toEqual([
       expect.objectContaining({ kind: expect.stringMatching(/^payment_received:/) }),
     ]);
+  });
+
+  it('returns a webhook-recovered capture on later API replay without another provider call', async () => {
+    const harness = makeHarness();
+    const input = { amount: '25.00', idempotencyKey: 'crash-before-provider-id-commit' };
+    harness.gateway.charge.mockRejectedValueOnce(new Error('process stopped after provider create'));
+
+    await expect(harness.service.chargeSavedCard(
+      REQUEST_ID, PROPERTY_ID, input, actor,
+    )).rejects.toThrow(/same idempotency key|unknown/i);
+    expect(harness.state.payments[0]!.status).toBe('pending');
+    expect(harness.state.payments[0]!.gatewayTransactionId).toBeFalsy();
+
+    Object.assign(harness.state.payments[0]!, {
+      status: 'captured',
+      gatewayTransactionId: 'pi_recovered_by_signed_webhook',
+      processedAt: new Date(),
+    });
+    const replay = await harness.service.chargeSavedCard(
+      REQUEST_ID, PROPERTY_ID, input, actor,
+    );
+
+    expect(replay).toMatchObject({ status: 'captured', id: harness.state.payments[0]!.id });
+    expect(harness.gateway.charge).toHaveBeenCalledTimes(1);
   });
 
   it('returns the existing result for a stable key without calling the gateway again', async () => {
@@ -1443,6 +1487,68 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     );
   });
 
+  it('heals allocations when a concurrent webhook completes the refund during provider I/O', async () => {
+    const movementId = 'dddddddd-0000-4000-a000-000000000077';
+    const harness = makeHarness({
+      installments: [installment({ allocatedAmount: '100.00', status: 'paid' })],
+      allocations: [{
+        id: '88888888-0000-4000-a000-000000000077',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        paymentId: PAYMENT_ID,
+        installmentId: INSTALLMENT_ID,
+        amount: '100.00',
+        createdAt: new Date('2026-08-20T10:00:00.000Z'),
+      }],
+      payments: [capturedPayment({
+        amount: '100.00',
+        method: 'credit_card',
+        idempotencyKey: 'booking-request-charge:original',
+        gatewayProvider: 'stripe',
+        gatewayTransactionId: 'pi_original',
+      })],
+    });
+    let release!: (value: { success: true; transactionId: string }) => void;
+    harness.refundGateway.refund.mockImplementation(() => new Promise((resolve) => {
+      release = resolve;
+    }));
+
+    const refunding = harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '40.00', idempotencyKey: 'webhook-wins-refund-race' },
+      actor,
+    );
+    await vi.waitFor(() => expect(harness.refundGateway.refund).toHaveBeenCalledTimes(1));
+    harness.state.payments.push(capturedPayment({
+      id: movementId,
+      amount: '-40.00',
+      originalPaymentId: PAYMENT_ID,
+      idempotencyKey: 'booking-request-refund:webhook-wins-refund-race',
+      gatewayTransactionId: 're_webhook_won',
+    }));
+    Object.assign(harness.state.resolutions[0]!, {
+      status: 'completed',
+      movementId,
+      providerTransactionId: 're_webhook_won',
+      providerStatus: 'succeeded',
+      resolvedAt: new Date(),
+    });
+    release({ success: true, transactionId: 're_webhook_won' });
+
+    await expect(refunding).resolves.toMatchObject({
+      movement: { id: movementId },
+      resolution: { status: 'completed' },
+    });
+    expect(harness.state.allocations).toEqual([
+      expect.objectContaining({ amount: '60.00' }),
+    ]);
+    expect(harness.state.installments[0]).toMatchObject({
+      allocatedAmount: '60.00', status: 'partial',
+    });
+  });
+
   it('keeps a captured provider refund claim retryable when folio recalculation rolls back', async () => {
     const harness = makeHarness({
       requests: [request({
@@ -1518,6 +1624,45 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       { amount: '99.00', idempotencyKey: 'full-refund' },
       actor,
     )).rejects.toThrow(/different/i);
+  });
+
+  it('heals stale paid allocations when a completed refund is replayed', async () => {
+    const harness = makeHarness({
+      installments: [installment({
+        resolvedAmount: '100.00', allocatedAmount: '0.00', status: 'unpaid',
+      })],
+      payments: [capturedPayment({
+        amount: '100.00',
+        method: 'credit_card',
+        idempotencyKey: 'booking-request-charge:original',
+        gatewayProvider: 'stripe',
+        gatewayTransactionId: 'pi_original',
+      })],
+    });
+    const input = { amount: '40.00', idempotencyKey: 'refund-heals-stale-allocation' };
+    await harness.service.refund(REQUEST_ID, PAYMENT_ID, PROPERTY_ID, input, actor);
+    Object.assign(harness.state.installments[0]!, {
+      allocatedAmount: '100.00', status: 'paid',
+    });
+    harness.state.allocations.push({
+      id: '88888888-0000-4000-a000-000000000001',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      paymentId: PAYMENT_ID,
+      installmentId: INSTALLMENT_ID,
+      amount: '100.00',
+      createdAt: new Date('2026-08-20T10:00:00.000Z'),
+    });
+
+    await harness.service.refund(REQUEST_ID, PAYMENT_ID, PROPERTY_ID, input, actor);
+
+    expect(harness.state.allocations).toEqual([
+      expect.objectContaining({ amount: '60.00' }),
+    ]);
+    expect(harness.state.installments).toEqual([
+      expect.objectContaining({ allocatedAmount: '60.00', status: 'partial' }),
+    ]);
+    expect(harness.refundGateway.refund).toHaveBeenCalledTimes(1);
   });
 
   it('does not send an externally recorded payment to the configured gateway refund adapter', async () => {
@@ -1638,6 +1783,46 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       PROPERTY_ID,
       expect.anything(),
     );
+  });
+
+  it('heals stale paid allocations when a completed external return is replayed', async () => {
+    const harness = makeHarness({
+      installments: [installment({
+        resolvedAmount: '100.00', allocatedAmount: '0.00', status: 'unpaid',
+      })],
+      payments: [capturedPayment({ amount: '100.00' })],
+    });
+    const input = {
+      amount: '40.00',
+      processedAt: '2026-08-21T10:00:00.000Z',
+      reference: 'return-heals-stale-allocation',
+    };
+    await harness.service.recordExternalReturn(
+      REQUEST_ID, PAYMENT_ID, PROPERTY_ID, input, actor,
+    );
+    Object.assign(harness.state.installments[0]!, {
+      allocatedAmount: '100.00', status: 'paid',
+    });
+    harness.state.allocations.push({
+      id: '88888888-0000-4000-a000-000000000001',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      paymentId: PAYMENT_ID,
+      installmentId: INSTALLMENT_ID,
+      amount: '100.00',
+      createdAt: new Date('2026-08-20T10:00:00.000Z'),
+    });
+
+    await harness.service.recordExternalReturn(
+      REQUEST_ID, PAYMENT_ID, PROPERTY_ID, input, actor,
+    );
+
+    expect(harness.state.allocations).toEqual([
+      expect.objectContaining({ amount: '60.00' }),
+    ]);
+    expect(harness.state.installments).toEqual([
+      expect.objectContaining({ allocatedAmount: '60.00', status: 'partial' }),
+    ]);
   });
 
   it('releases over-allocated value and recomputes installment state after a return', async () => {

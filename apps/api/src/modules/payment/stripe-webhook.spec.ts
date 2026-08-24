@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'node:crypto';
 import {
   auditLogs,
   bookingRequestConsequences,
@@ -11,6 +12,7 @@ import { DRIZZLE } from '../../database/database.module';
 import { FolioService } from '../folio/folio.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { reconcileBookingRequestPaymentAllocations } from '../booking-request/booking-request-allocation-reconciler';
+import { BookingRequestPaymentService } from '../booking-request/booking-request-payment.service';
 import { StripeWebhookController } from './stripe-webhook.controller';
 
 vi.mock('../booking-request/booking-request-allocation-reconciler', () => ({
@@ -278,6 +280,108 @@ describe('StripeWebhookController financial finalization', () => {
     ]);
     expect(h.folioService.recalculateBalance).toHaveBeenCalledWith(FOLIO_ID, PROPERTY_ID, h.db);
     expect(h.webhookService.emit).not.toHaveBeenCalled();
+  });
+
+  it('binds and finalizes an unknown PaymentIntent from exact signed metadata', async () => {
+    const clientKey = 'api-crashed-before-provider-id-commit';
+    const idempotencyKey = `booking-request-charge:${createHash('sha256')
+      .update(`${PROPERTY_ID}:${clientKey}`)
+      .digest('hex')}`;
+    const h = await harness({
+      requests: [request({
+        currencyCode: 'USD',
+        submittedQuoteSnapshot: { grandTotal: '100.00' },
+        stripeCustomerId: 'cus_saved',
+        stripePaymentMethodId: 'pm_saved',
+      })],
+      payments: [payment({
+        gatewayTransactionId: null,
+        idempotencyKey,
+        amount: '25.00',
+      })],
+    });
+    const pi = {
+      id: 'pi_recovered_from_metadata',
+      metadata: {
+        haip_payment_id: PAYMENT_ID,
+        haip_property_id: PROPERTY_ID,
+        haip_booking_request_id: REQUEST_ID,
+      },
+    };
+
+    await h.controller.handlePaymentIntentSucceeded(pi);
+    await h.controller.handlePaymentIntentSucceeded(pi);
+
+    expect(h.state.payments[0]).toMatchObject({
+      status: 'captured',
+      gatewayTransactionId: 'pi_recovered_from_metadata',
+    });
+    expect(h.state.consequences).toHaveLength(1);
+
+    const gateway = { charge: vi.fn() };
+    const service = new (BookingRequestPaymentService as any)(
+      h.db,
+      gateway,
+      h.folioService,
+      { refund: vi.fn() },
+    ) as BookingRequestPaymentService;
+    const replay = await service.chargeSavedCard(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { amount: '25.00', idempotencyKey: clientKey },
+    );
+    expect(replay).toMatchObject({
+      id: PAYMENT_ID,
+      status: 'captured',
+    });
+    expect(replay).not.toHaveProperty('gatewayTransactionId');
+    expect(gateway.charge).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['cross-property', {
+      haip_payment_id: PAYMENT_ID,
+      haip_property_id: 'aaaaaaaa-0000-4000-a000-000000000099',
+      haip_booking_request_id: REQUEST_ID,
+    }],
+    ['cross-request', {
+      haip_payment_id: PAYMENT_ID,
+      haip_property_id: PROPERTY_ID,
+      haip_booking_request_id: 'bbbbbbbb-0000-4000-a000-000000000099',
+    }],
+    ['spoofed-payment', {
+      haip_payment_id: 'cccccccc-0000-4000-a000-000000000099',
+      haip_property_id: PROPERTY_ID,
+      haip_booking_request_id: REQUEST_ID,
+    }],
+  ] as const)('rejects %s metadata for an unknown PaymentIntent', async (_label, metadata) => {
+    const h = await harness({ payments: [payment({ gatewayTransactionId: null })] });
+
+    await expect(h.controller.handlePaymentIntentSucceeded({
+      id: 'pi_unknown_spoofed', metadata,
+    })).rejects.toThrow(/metadata|identify|correlation/i);
+    expect(h.state.payments[0]).toMatchObject({
+      status: 'pending',
+      gatewayTransactionId: null,
+    });
+  });
+
+  it.each([
+    ['terminal state', { status: 'failed', gatewayTransactionId: null }],
+    ['different provider identity', { status: 'pending', gatewayTransactionId: 'pi_other' }],
+  ])('rejects metadata binding against a %s', async (_label, overrides) => {
+    const h = await harness({ payments: [payment(overrides)] });
+
+    await expect(h.controller.handlePaymentIntentSucceeded({
+      id: 'pi_unknown_conflict',
+      metadata: {
+        haip_payment_id: PAYMENT_ID,
+        haip_property_id: PROPERTY_ID,
+        haip_booking_request_id: REQUEST_ID,
+      },
+    })).rejects.toThrow(/pending payment|already bound|provider identity/i);
+    expect(h.state.payments[0]!.status).toBe(overrides.status);
   });
 
   it('repairs a captured replay without duplicating its durable consequence', async () => {

@@ -28,8 +28,10 @@ import { ensureBookingRequestFinancialConsequence } from '../booking-request/boo
 import {
   decidePaymentIntentTransition,
   decideRefundTransition,
+  paymentIntentCorrelation,
   refundCorrelation,
   type PaymentIntentEvent,
+  type PaymentIntentCorrelation,
   type PaymentIntentLedgerStatus,
   type RefundProviderStatus,
 } from './stripe-financial-state';
@@ -169,10 +171,16 @@ export class StripeWebhookController {
   }
 
   private async finalizePaymentIntent(pi: Stripe.PaymentIntent, event: PaymentIntentEvent) {
-    const initial = await this.findPaymentByGatewayTransactionId(pi.id);
+    let correlation: PaymentIntentCorrelation | undefined;
+    let initial = await this.findPaymentByGatewayTransactionId(pi.id);
     if (!initial) {
-      this.logger.warn(`No payment found for PaymentIntent ${pi.id}`);
-      return;
+      correlation = paymentIntentCorrelation(pi.metadata);
+      initial = await this.findPaymentByCorrelation(correlation);
+      if (!initial) {
+        throw new ConflictException(
+          `Stripe PaymentIntent ${pi.id} metadata does not identify a pending payment`,
+        );
+      }
     }
 
     const outcome = await this.db.transaction(async (tx: any) => {
@@ -197,9 +205,45 @@ export class StripeWebhookController {
         .from(payments)
         .where(and(eq(payments.id, initial.id), eq(payments.propertyId, initial.propertyId)))
         .for('update');
-      const payment = lockedRows.find((row: typeof payments.$inferSelect) =>
+      let payment = lockedRows.find((row: typeof payments.$inferSelect) =>
         row.id === initial.id && row.propertyId === initial.propertyId);
       if (!payment) return { changed: false, payment: initial, legacyEvent: undefined };
+
+      if (correlation) {
+        if (payment.id !== correlation.paymentId
+          || payment.propertyId !== correlation.propertyId
+          || payment.bookingRequestId !== correlation.bookingRequestId
+          || payment.gatewayProvider !== 'stripe') {
+          throw new ConflictException('Stripe PaymentIntent metadata ownership is invalid');
+        }
+        if (payment.status !== 'pending') {
+          throw new ConflictException(
+            `Stripe PaymentIntent metadata can bind only a pending payment, not '${payment.status}'`,
+          );
+        }
+        if (payment.gatewayTransactionId && payment.gatewayTransactionId !== pi.id) {
+          throw new ConflictException(
+            'Stripe PaymentIntent does not match the provider identity already bound to the payment',
+          );
+        }
+        if (!payment.gatewayTransactionId) {
+          const boundRows = await tx
+            .update(payments)
+            .set({ gatewayTransactionId: pi.id, updatedAt: new Date() })
+            .where(and(
+              eq(payments.id, payment.id),
+              eq(payments.propertyId, correlation.propertyId),
+              eq(payments.bookingRequestId, correlation.bookingRequestId),
+              eq(payments.status, 'pending'),
+            ))
+            .returning();
+          const bound = boundRows.find((row: typeof payments.$inferSelect) => row.id === payment!.id);
+          if (!bound) {
+            throw new ConflictException('Stripe PaymentIntent payment identity changed while binding');
+          }
+          payment = bound;
+        }
+      }
 
       if (event === 'succeeded' && request?.status === 'denied' && payment.status !== 'captured') {
         await this.auditUnexpectedProviderState(tx, payment, {
@@ -704,6 +748,23 @@ export class StripeWebhookController {
       throw new ConflictException(
         `Stripe PaymentIntent ${transactionId} is ambiguously linked to multiple payments`,
       );
+    }
+    return candidates[0] ?? null;
+  }
+
+  private async findPaymentByCorrelation(correlation: PaymentIntentCorrelation) {
+    const candidates = await this.db
+      .select()
+      .from(payments)
+      .where(and(
+        eq(payments.id, correlation.paymentId),
+        eq(payments.propertyId, correlation.propertyId),
+        eq(payments.bookingRequestId, correlation.bookingRequestId),
+        eq(payments.gatewayProvider, 'stripe'),
+      ))
+      .limit(2);
+    if (candidates.length > 1) {
+      throw new ConflictException('Stripe PaymentIntent metadata is ambiguously linked');
     }
     return candidates[0] ?? null;
   }

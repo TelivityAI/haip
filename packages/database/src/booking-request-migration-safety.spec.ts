@@ -10,6 +10,10 @@ const paymentIntegrityMigration = readFileSync(
   new URL('./migrations/0023_booking_request_payment_integrity.sql', import.meta.url),
   'utf8',
 );
+const financialRecoveryMigration = readFileSync(
+  new URL('./migrations/0024_booking_request_financial_recovery.sql', import.meta.url),
+  'utf8',
+);
 
 describe('booking request accepted-pricing migration safety', () => {
   it('fails instead of accepting an already-accepted request without an operational snapshot', () => {
@@ -59,6 +63,26 @@ describe('booking request payment integrity migration safety', () => {
       expect(source).toContain('booking_request_payment_allocations_request_fkey');
       expect(source).toContain('booking_request_payment_resolutions_movement_fkey');
       expect(source).toContain('payments_booking_request_parent_positive_check');
+    }
+  });
+
+  it('stages complete aggregate ownership, including a movement tied to its exact parent', () => {
+    for (const source of [financialRecoveryMigration, pushSchema]) {
+      expect(source).toContain('payments_property_request_parent_id_unique');
+      expect(source).toContain('booking_request_consequences_request_fkey');
+      expect(source).toContain('booking_request_payment_resolutions_parent_movement_fkey');
+      expect(source).toMatch(
+        /FOREIGN KEY \(property_id, booking_request_id, payment_id, movement_id\)[\s\S]*REFERENCES payments\(property_id, booking_request_id, original_payment_id, id\)/,
+      );
+    }
+  });
+
+  it('repairs net allocations and derived installment state in both migration paths', () => {
+    for (const source of [financialRecoveryMigration, pushSchema]) {
+      expect(source).toContain('booking_request_net_allocation_repair');
+      expect(source).toMatch(/DELETE FROM booking_request_payment_allocations/i);
+      expect(source).toMatch(/UPDATE booking_request_payment_allocations/i);
+      expect(source).toMatch(/UPDATE booking_request_installments/i);
     }
   });
 });

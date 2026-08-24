@@ -15,11 +15,18 @@ type MockSetupRecord = {
   applicationHash: string;
 };
 
+type MockChargeRecord = {
+  result: SavedPaymentMethodChargeResult;
+  paymentId: string;
+  propertyId: string;
+  bookingRequestId: string;
+};
+
 @Injectable()
 export class MockSavedPaymentMethodGateway implements SavedPaymentMethodGateway {
   private readonly setupsByKey = new Map<string, MockSetupRecord>();
   private readonly setupsBySetupId = new Map<string, MockSetupRecord>();
-  private readonly chargesByKey = new Map<string, SavedPaymentMethodChargeResult>();
+  private readonly chargesByKey = new Map<string, MockChargeRecord>();
 
   async createSetup(
     _email: string,
@@ -74,14 +81,26 @@ export class MockSavedPaymentMethodGateway implements SavedPaymentMethodGateway 
 
   async charge(input: SavedPaymentMethodChargeInput): Promise<SavedPaymentMethodChargeResult> {
     const existing = this.chargesByKey.get(input.idempotencyKey);
-    if (existing) return existing;
+    if (existing) {
+      if (existing.paymentId !== input.paymentId
+        || existing.propertyId !== input.propertyId
+        || existing.bookingRequestId !== input.bookingRequestId) {
+        throw new Error('Mock charge idempotency key was reused for a different payment identity');
+      }
+      return existing.result;
+    }
 
     const result = {
       success: true,
       transactionId: `pi_mock_${this.stableSuffix(input.idempotencyKey)}`,
       requiresAction: false,
     } satisfies SavedPaymentMethodChargeResult;
-    this.chargesByKey.set(input.idempotencyKey, result);
+    this.chargesByKey.set(input.idempotencyKey, {
+      result,
+      paymentId: input.paymentId,
+      propertyId: input.propertyId,
+      bookingRequestId: input.bookingRequestId,
+    });
     return result;
   }
 

@@ -1,6 +1,7 @@
 import {
   check,
   date,
+  foreignKey,
   integer,
   jsonb,
   numeric,
@@ -159,6 +160,11 @@ export const bookingRequestConsequences = pgTable('booking_request_consequences'
   propertyRequestKindUnique:
     uniqueIndex('booking_request_consequences_property_request_kind_unique')
       .on(table.propertyId, table.bookingRequestId, table.kind),
+  requestOwnership: foreignKey({
+    name: 'booking_request_consequences_request_fkey',
+    columns: [table.propertyId, table.bookingRequestId],
+    foreignColumns: [bookingRequests.propertyId, bookingRequests.id],
+  }),
 }));
 
 export const bookingRequestInstallments = pgTable('booking_request_installments', {
@@ -179,6 +185,11 @@ export const bookingRequestInstallments = pgTable('booking_request_installments'
 }, (table) => ({
   propertyRequestIdUnique: uniqueIndex('booking_request_installments_property_request_id_unique')
     .on(table.propertyId, table.bookingRequestId, table.id),
+  requestOwnership: foreignKey({
+    name: 'booking_request_installments_request_fkey',
+    columns: [table.propertyId, table.bookingRequestId],
+    foreignColumns: [bookingRequests.propertyId, bookingRequests.id],
+  }),
   amountKindCheck: check(
     'booking_request_installments_amount_kind_check',
     sql`(
@@ -212,6 +223,25 @@ export const bookingRequestPaymentAllocations = pgTable('booking_request_payment
 }, (table) => ({
   paymentInstallmentUnique: uniqueIndex('booking_request_payment_allocations_payment_installment_unique')
     .on(table.paymentId, table.installmentId),
+  requestOwnership: foreignKey({
+    name: 'booking_request_payment_allocations_request_fkey',
+    columns: [table.propertyId, table.bookingRequestId],
+    foreignColumns: [bookingRequests.propertyId, bookingRequests.id],
+  }),
+  paymentOwnership: foreignKey({
+    name: 'booking_request_payment_allocations_payment_fkey',
+    columns: [table.propertyId, table.bookingRequestId, table.paymentId],
+    foreignColumns: [payments.propertyId, payments.bookingRequestId, payments.id],
+  }),
+  installmentOwnership: foreignKey({
+    name: 'booking_request_payment_allocations_installment_fkey',
+    columns: [table.propertyId, table.bookingRequestId, table.installmentId],
+    foreignColumns: [
+      bookingRequestInstallments.propertyId,
+      bookingRequestInstallments.bookingRequestId,
+      bookingRequestInstallments.id,
+    ],
+  }),
   positiveCheck: check(
     'booking_request_payment_allocations_positive_check',
     sql`${table.amount} > 0`,
@@ -245,6 +275,26 @@ export const bookingRequestPaymentResolutions = pgTable('booking_request_payment
   propertyProviderTransactionUnique:
     uniqueIndex('br_payment_resolutions_property_provider_tx_unique')
       .on(table.propertyId, table.providerTransactionId),
+  requestOwnership: foreignKey({
+    name: 'booking_request_payment_resolutions_request_fkey',
+    columns: [table.propertyId, table.bookingRequestId],
+    foreignColumns: [bookingRequests.propertyId, bookingRequests.id],
+  }),
+  paymentOwnership: foreignKey({
+    name: 'booking_request_payment_resolutions_payment_fkey',
+    columns: [table.propertyId, table.bookingRequestId, table.paymentId],
+    foreignColumns: [payments.propertyId, payments.bookingRequestId, payments.id],
+  }),
+  parentMovementOwnership: foreignKey({
+    name: 'booking_request_payment_resolutions_parent_movement_fkey',
+    columns: [table.propertyId, table.bookingRequestId, table.paymentId, table.movementId],
+    foreignColumns: [
+      payments.propertyId,
+      payments.bookingRequestId,
+      payments.originalPaymentId,
+      payments.id,
+    ],
+  }),
   positiveCheck: check(
     'booking_request_payment_resolutions_positive_check',
     sql`${table.amount} > 0`,

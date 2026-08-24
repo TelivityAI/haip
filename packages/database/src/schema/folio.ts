@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
+import { check, foreignKey, pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 import { reservations, bookings } from './reservation.js';
 import { guests } from './guest.js';
@@ -197,6 +197,18 @@ export const payments = pgTable('payments', {
     .on(table.propertyId, table.idempotencyKey),
   propertyRequestIdUnique: uniqueIndex('payments_property_request_id_unique')
     .on(table.propertyId, table.bookingRequestId, table.id),
+  propertyRequestParentIdUnique: uniqueIndex('payments_property_request_parent_id_unique')
+    .on(table.propertyId, table.bookingRequestId, table.originalPaymentId, table.id),
+  bookingRequestOwnership: foreignKey({
+    name: 'payments_booking_request_fkey',
+    columns: [table.propertyId, table.bookingRequestId],
+    foreignColumns: [bookingRequests.propertyId, bookingRequests.id],
+  }),
+  bookingRequestParentOwnership: foreignKey({
+    name: 'payments_booking_request_parent_fkey',
+    columns: [table.propertyId, table.bookingRequestId, table.originalPaymentId],
+    foreignColumns: [table.propertyId, table.bookingRequestId, table.id],
+  }),
   bookingRequestParentPositiveCheck: check(
     'payments_booking_request_parent_positive_check',
     sql`${table.bookingRequestId} is null or ${table.originalPaymentId} is not null or ${table.amount} > 0`,

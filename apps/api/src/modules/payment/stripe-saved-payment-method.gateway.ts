@@ -122,6 +122,11 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
           currency: currencyCode.toLowerCase(),
           customer: input.customerId,
           payment_method: input.paymentMethodId,
+          metadata: {
+            haip_payment_id: input.paymentId,
+            haip_property_id: input.propertyId,
+            haip_booking_request_id: input.bookingRequestId,
+          },
           confirm: true,
           off_session: true,
           capture_method: 'automatic',

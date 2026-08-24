@@ -54,12 +54,112 @@ $booking_request_resolution_provenance$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS br_payment_resolutions_property_provider_tx_unique
   ON booking_request_payment_resolutions (property_id, provider_transaction_id);
+CREATE UNIQUE INDEX IF NOT EXISTS payments_property_request_parent_id_unique
+  ON payments (property_id, booking_request_id, original_payment_id, id);
+
+-- booking_request_net_allocation_repair: releases allocations made stale by
+-- completed refund/return movements from the pre-reconciliation release. Rows
+-- are consumed deterministically by allocation creation order.
+WITH net_capacity AS (
+  SELECT parent.property_id,
+         parent.booking_request_id,
+         parent.id AS payment_id,
+         GREATEST(parent.amount + COALESCE(SUM(child.amount)
+           FILTER (WHERE child.status = 'captured'), 0), 0) AS net_amount
+  FROM payments parent
+  LEFT JOIN payments child
+    ON child.property_id = parent.property_id
+   AND child.booking_request_id = parent.booking_request_id
+   AND child.original_payment_id = parent.id
+  WHERE parent.booking_request_id IS NOT NULL
+    AND parent.original_payment_id IS NULL
+  GROUP BY parent.property_id, parent.booking_request_id, parent.id, parent.amount
+), ranked AS (
+  SELECT allocation.id,
+         capacity.net_amount,
+         COALESCE(SUM(allocation.amount) OVER (
+           PARTITION BY allocation.property_id, allocation.booking_request_id, allocation.payment_id
+           ORDER BY allocation.created_at, allocation.id
+           ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+         ), 0) AS used_before
+  FROM booking_request_payment_allocations allocation
+  JOIN net_capacity capacity
+    ON capacity.property_id = allocation.property_id
+   AND capacity.booking_request_id = allocation.booking_request_id
+   AND capacity.payment_id = allocation.payment_id
+)
+DELETE FROM booking_request_payment_allocations allocation
+USING ranked
+WHERE allocation.id = ranked.id
+  AND ranked.used_before >= ranked.net_amount;
+
+WITH net_capacity AS (
+  SELECT parent.property_id,
+         parent.booking_request_id,
+         parent.id AS payment_id,
+         GREATEST(parent.amount + COALESCE(SUM(child.amount)
+           FILTER (WHERE child.status = 'captured'), 0), 0) AS net_amount
+  FROM payments parent
+  LEFT JOIN payments child
+    ON child.property_id = parent.property_id
+   AND child.booking_request_id = parent.booking_request_id
+   AND child.original_payment_id = parent.id
+  WHERE parent.booking_request_id IS NOT NULL
+    AND parent.original_payment_id IS NULL
+  GROUP BY parent.property_id, parent.booking_request_id, parent.id, parent.amount
+), ranked AS (
+  SELECT allocation.id,
+         allocation.amount,
+         capacity.net_amount,
+         COALESCE(SUM(allocation.amount) OVER (
+           PARTITION BY allocation.property_id, allocation.booking_request_id, allocation.payment_id
+           ORDER BY allocation.created_at, allocation.id
+           ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+         ), 0) AS used_before
+  FROM booking_request_payment_allocations allocation
+  JOIN net_capacity capacity
+    ON capacity.property_id = allocation.property_id
+   AND capacity.booking_request_id = allocation.booking_request_id
+   AND capacity.payment_id = allocation.payment_id
+)
+UPDATE booking_request_payment_allocations allocation
+SET amount = LEAST(ranked.amount, ranked.net_amount - ranked.used_before)
+FROM ranked
+WHERE allocation.id = ranked.id
+  AND ranked.amount > ranked.net_amount - ranked.used_before;
+
+WITH installment_totals AS (
+  SELECT installment.id,
+         installment.resolved_amount,
+         COALESCE(SUM(allocation.amount), 0) AS amount
+  FROM booking_request_installments installment
+  LEFT JOIN booking_request_payment_allocations allocation
+    ON allocation.property_id = installment.property_id
+   AND allocation.booking_request_id = installment.booking_request_id
+   AND allocation.installment_id = installment.id
+  GROUP BY installment.id, installment.resolved_amount
+)
+UPDATE booking_request_installments installment
+SET allocated_amount = LEAST(total.amount, total.resolved_amount),
+    status = CASE
+      WHEN total.amount <= 0 THEN 'unpaid'
+      WHEN total.amount >= total.resolved_amount THEN 'paid'
+      ELSE 'partial'
+    END::booking_request_installment_status,
+    updated_at = now()
+FROM installment_totals total
+WHERE installment.id = total.id;
 
 ALTER TABLE booking_request_payment_resolutions
   DROP CONSTRAINT IF EXISTS booking_request_payment_resolutions_retained_reason_check,
   DROP CONSTRAINT IF EXISTS booking_request_payment_resolutions_lifecycle_check;
 
 DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'booking_request_consequences_request_fkey') THEN
+    ALTER TABLE booking_request_consequences ADD CONSTRAINT booking_request_consequences_request_fkey
+      FOREIGN KEY (property_id, booking_request_id)
+      REFERENCES booking_requests(property_id, id) NOT VALID;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'booking_request_payment_resolutions_retained_reason_check') THEN
     ALTER TABLE booking_request_payment_resolutions ADD CONSTRAINT booking_request_payment_resolutions_retained_reason_check
       CHECK (type <> 'retained' OR (reason IS NOT NULL AND NULLIF(BTRIM(reason), '') IS NOT NULL)) NOT VALID;
@@ -104,11 +204,18 @@ DO $$ BEGIN
       FOREIGN KEY (property_id, booking_request_id, original_payment_id)
       REFERENCES payments(property_id, booking_request_id, id) NOT VALID;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'booking_request_payment_resolutions_parent_movement_fkey') THEN
+    ALTER TABLE booking_request_payment_resolutions ADD CONSTRAINT booking_request_payment_resolutions_parent_movement_fkey
+      FOREIGN KEY (property_id, booking_request_id, payment_id, movement_id)
+      REFERENCES payments(property_id, booking_request_id, original_payment_id, id) NOT VALID;
+  END IF;
 END $$;
 
 ALTER TABLE booking_request_payment_resolutions VALIDATE CONSTRAINT booking_request_payment_resolutions_retained_reason_check;
 ALTER TABLE booking_request_payment_resolutions VALIDATE CONSTRAINT booking_request_payment_resolutions_lifecycle_check;
 ALTER TABLE payments VALIDATE CONSTRAINT payments_booking_request_child_shape_check;
 ALTER TABLE booking_request_installments VALIDATE CONSTRAINT booking_request_installments_request_fkey;
+ALTER TABLE booking_request_consequences VALIDATE CONSTRAINT booking_request_consequences_request_fkey;
 ALTER TABLE payments VALIDATE CONSTRAINT payments_booking_request_fkey;
 ALTER TABLE payments VALIDATE CONSTRAINT payments_booking_request_parent_fkey;
+ALTER TABLE booking_request_payment_resolutions VALIDATE CONSTRAINT booking_request_payment_resolutions_parent_movement_fkey;

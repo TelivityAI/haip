@@ -286,6 +286,9 @@ export class BookingRequestPaymentService {
   ) {
     return this.db.transaction(async (tx: any) => {
       const request = await this.findRequest(tx, bookingRequestId, propertyId, true);
+      if (this.requestTotal(request).lte(0)) {
+        throw new ConflictException('A zero-total booking request cannot be allocated');
+      }
       this.assertNotDenied(request);
       const payment = await this.findParentPayment(
         tx,
@@ -519,6 +522,9 @@ export class BookingRequestPaymentService {
       gatewayResult = await this.savedPaymentMethodGateway.charge({
         customerId: prepared.request.stripeCustomerId!,
         paymentMethodId: prepared.request.stripePaymentMethodId!,
+        paymentId: prepared.payment.id,
+        propertyId,
+        bookingRequestId,
         amount: prepared.payment.amount,
         currencyCode: prepared.payment.currencyCode,
         idempotencyKey,
@@ -836,6 +842,13 @@ export class BookingRequestPaymentService {
         this.assertResolutionReplay(replay, fingerprint, 'Refund idempotency key');
         if (replay.status === 'completed' && replay.movementId) {
           const movement = await this.findPayment(tx, replay.movementId, propertyId, true);
+          await this.reconcileAllocationsForPayment(
+            tx,
+            bookingRequestId,
+            propertyId,
+            original,
+            actor,
+          );
           if (movement.folioId) {
             await this.folioService.recalculateBalance(movement.folioId, propertyId, tx);
           }
@@ -1033,6 +1046,13 @@ export class BookingRequestPaymentService {
           marker: existing.id,
           movementId: existing.id,
         });
+        await this.reconcileAllocationsForPayment(
+          tx,
+          bookingRequestId,
+          propertyId,
+          original,
+          actor,
+        );
         if (existing.folioId) {
           await this.folioService.recalculateBalance(existing.folioId, propertyId, tx);
         }
@@ -1446,6 +1466,13 @@ export class BookingRequestPaymentService {
       );
       if (claim.status === 'completed' && claim.movementId) {
         const movement = await this.findPayment(tx, claim.movementId, input.propertyId, true);
+        await this.reconcileAllocationsForPayment(
+          tx,
+          input.bookingRequestId,
+          input.propertyId,
+          original,
+          input.actor,
+        );
         if (movement.folioId) {
           await this.folioService.recalculateBalance(movement.folioId, input.propertyId, tx);
         }
