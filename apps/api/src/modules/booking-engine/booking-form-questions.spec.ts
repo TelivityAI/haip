@@ -163,12 +163,20 @@ function makeConfigService(row: Record<string, unknown>) {
   const selectWhere = vi.fn().mockResolvedValue([row]);
   const from = vi.fn().mockReturnValue({ where: selectWhere });
   const select = vi.fn().mockReturnValue({ from });
-  const db = { select, update };
+  const lock = vi.fn().mockResolvedValue([row]);
+  const lockedWhere = vi.fn().mockReturnValue({ for: lock });
+  const lockedFrom = vi.fn().mockReturnValue({ where: lockedWhere });
+  const lockedSelect = vi.fn().mockReturnValue({ from: lockedFrom });
+  const tx = { select: lockedSelect, update };
+  const transaction = vi.fn(async (callback: (transaction: typeof tx) => unknown) => callback(tx));
+  const db = { select, update, transaction };
 
   return {
     service: new BookingEngineConfigService(db as any),
     update,
     set,
+    transaction,
+    lock,
   };
 }
 
@@ -231,5 +239,14 @@ describe('BookingEngineConfigService request settings', () => {
     expect(written).not.toHaveProperty('bookingMode');
     expect(written).not.toHaveProperty('paymentMethodCollection');
     expect(written).not.toHaveProperty('formQuestions');
+  });
+
+  it('locks the config row while validating and applying a partial update', async () => {
+    const { service, transaction, lock } = makeConfigService(configRow);
+
+    await service.updateConfig(configRow.propertyId, { bookingMode: 'request' });
+
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(lock).toHaveBeenCalledWith('update');
   });
 });

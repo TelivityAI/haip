@@ -89,37 +89,49 @@ export class BookingEngineConfigService {
   }
 
   async updateConfig(propertyId: string, input: UpdateConfigInput) {
-    const current = await this.getConfig(propertyId); // ensure row exists
-    const bookingMode = input.bookingMode ?? current.bookingMode as BookingMode;
-    const paymentMethodCollection = input.paymentMethodCollection
-      ?? current.paymentMethodCollection as PaymentMethodCollection;
-    const stripePublishableKey = input.stripePublishableKey === undefined
-      ? current.stripePublishableKey
-      : input.stripePublishableKey;
-    const formQuestions = input.formQuestions === undefined
-      ? undefined
-      : validateQuestionDefinitions(input.formQuestions);
+    await this.getConfig(propertyId); // ensure a row exists before locking it
 
-    if (bookingMode === 'request'
-      && paymentMethodCollection === 'required'
-      && (!stripePublishableKey || stripePublishableKey.trim().length === 0)) {
-      throw new BadRequestException(
-        'A Stripe publishable key is required when request-mode card collection is required',
-      );
-    }
+    return this.db.transaction(async (tx: any) => {
+      const [current] = await tx
+        .select()
+        .from(bookingEngineConfig)
+        .where(eq(bookingEngineConfig.propertyId, propertyId))
+        .for('update');
+      if (!current) {
+        throw new NotFoundException(`Booking engine config for property ${propertyId} not found`);
+      }
 
-    const [updated] = await this.db
-      .update(bookingEngineConfig)
-      .set({
-        ...Object.fromEntries(
-          Object.entries(input).filter(([, value]) => value !== undefined),
-        ),
-        ...(input.formQuestions === undefined ? {} : { formQuestions }),
-        updatedAt: new Date(),
-      })
-      .where(eq(bookingEngineConfig.propertyId, propertyId))
-      .returning();
-    return updated;
+      const bookingMode = input.bookingMode ?? current.bookingMode as BookingMode;
+      const paymentMethodCollection = input.paymentMethodCollection
+        ?? current.paymentMethodCollection as PaymentMethodCollection;
+      const stripePublishableKey = input.stripePublishableKey === undefined
+        ? current.stripePublishableKey
+        : input.stripePublishableKey;
+      const formQuestions = input.formQuestions === undefined
+        ? undefined
+        : validateQuestionDefinitions(input.formQuestions);
+
+      if (bookingMode === 'request'
+        && paymentMethodCollection === 'required'
+        && (!stripePublishableKey || stripePublishableKey.trim().length === 0)) {
+        throw new BadRequestException(
+          'A Stripe publishable key is required when request-mode card collection is required',
+        );
+      }
+
+      const [updated] = await tx
+        .update(bookingEngineConfig)
+        .set({
+          ...Object.fromEntries(
+            Object.entries(input).filter(([, value]) => value !== undefined),
+          ),
+          ...(input.formQuestions === undefined ? {} : { formQuestions }),
+          updatedAt: new Date(),
+        })
+        .where(eq(bookingEngineConfig.propertyId, propertyId))
+        .returning();
+      return updated;
+    });
   }
 
   // --- Publishable keys ---
