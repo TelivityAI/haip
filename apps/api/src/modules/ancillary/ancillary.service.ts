@@ -521,7 +521,6 @@ export class AncillaryService {
 
       // FolioService rejects non-positive amounts except adjustments/reversals.
       // Zero-priced included lines are marked posted without a ledger row.
-      let wasCreated = true;
       if (new Decimal(amount).greaterThan(0)) {
         const chargeInput = {
           propertyId,
@@ -533,23 +532,21 @@ export class AncillaryService {
           guestId: reservation.guestId,
         };
         if (acceptedLine) {
-          const outcome = await this.folioService.postChargeFromSnapshotWithOutcome(
+          await this.folioService.postChargeFromSnapshotWithOutcome(
             folio.id,
             chargeInput,
             acceptedLine.taxAmount,
             undefined,
             `accepted-pricing:reservation-service:${rs.id}:once`,
           );
-          wasCreated = outcome.wasCreated;
         } else {
           await this.folioService.postCharge(folio.id, chargeInput);
         }
       }
 
-      // A concurrent source-key loser observes the winner's immutable ledger
-      // group as success, but must not repeat the domain transition or event.
-      if (!wasCreated) continue;
-
+      // Ledger creation and service-state recovery are separate idempotency
+      // boundaries. Creators and replays both attempt this CAS so a replay can
+      // recover a crash after the ledger commit; only the CAS winner emits.
       const [updated] = await this.db
         .update(reservationServices)
         .set({ status: 'posted', updatedAt: new Date() })

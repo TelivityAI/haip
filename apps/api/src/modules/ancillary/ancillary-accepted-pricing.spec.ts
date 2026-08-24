@@ -31,8 +31,14 @@ function recordedWebhookService() {
   return { webhook, eventEmitter, audits };
 }
 
-function idempotentSnapshotPoster() {
+function idempotentSnapshotPoster(hasExistingGroup = false) {
   const ledgerGroups: Array<{ base: { id: string }; tax: { id: string } }> = [];
+  if (hasExistingGroup) {
+    ledgerGroups.push({
+      base: { id: 'charge-1' },
+      tax: { id: 'tax-1' },
+    });
+  }
   const postChargeFromSnapshotWithOutcome = vi.fn(async () => {
     const wasCreated = ledgerGroups.length === 0;
     if (wasCreated) {
@@ -54,64 +60,62 @@ function idempotentSnapshotPoster() {
   };
 }
 
-describe('AncillaryService accepted operational pricing', () => {
-  it('lets only the concurrent once-service ledger winner transition and emit', async () => {
-    const reservation = {
-      id: 'res-1',
-      propertyId: 'prop-1',
-      guestId: 'guest-1',
-      arrivalDate: '2026-10-01',
-      acceptedPricingSnapshot: {
-        currencyCode: 'EUR',
-        services: [{
-          serviceId: 'svc-1',
-          lineItems: [{ date: '2026-10-01', amount: '15.00', taxAmount: '2.00' }],
-        }],
-      },
-    };
-    const rs = {
-      id: 'rs-1',
-      propertyId: 'prop-1',
-      reservationId: 'res-1',
-      serviceId: 'svc-1',
-      unitPrice: '99.00',
-      quantity: 1,
-      chargeType: 'parking',
+function acceptedOnceScenario() {
+  const reservation = {
+    id: 'res-1',
+    propertyId: 'prop-1',
+    guestId: 'guest-1',
+    arrivalDate: '2026-10-01',
+    acceptedPricingSnapshot: {
       currencyCode: 'EUR',
-      postingRule: 'once',
-      status: 'confirmed',
-    };
-    const update = vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: vi.fn(() => ({
-          returning: vi.fn(async () => [{ ...rs, status: 'posted' }]),
-        })),
-      })),
-    }));
-    const createDb = (postedChargeRows: Array<{ id: string }>) => ({
-      select: stagedSelect([
-        [reservation],
-        [{ id: 'folio-1' }],
-        [{ rs, serviceName: 'Parking' }],
-        postedChargeRows,
-      ]),
-      update,
-    });
-    const { ledgerGroups, folio } = idempotentSnapshotPoster();
-    const { webhook, eventEmitter, audits } = recordedWebhookService();
-    const first = new AncillaryService(createDb([]) as any, folio as any, webhook);
-    // Models the interleaving where this caller's preflight observes the
-    // winner's just-committed group after both selected a confirmed service.
-    const second = new AncillaryService(
-      createDb([{ id: 'charge-1' }]) as any,
-      folio as any,
-      webhook,
-    );
+      services: [{
+        serviceId: 'svc-1',
+        lineItems: [{ date: '2026-10-01', amount: '15.00', taxAmount: '2.00' }],
+      }],
+    },
+  };
+  const rs = {
+    id: 'rs-1',
+    propertyId: 'prop-1',
+    reservationId: 'res-1',
+    serviceId: 'svc-1',
+    unitPrice: '99.00',
+    quantity: 1,
+    chargeType: 'parking',
+    currencyCode: 'EUR',
+    postingRule: 'once',
+    status: 'confirmed',
+  };
+  let status = 'confirmed';
+  const casReturning = vi.fn(async () => {
+    if (status !== 'confirmed') return [];
+    status = 'posted';
+    return [{ ...rs, status }];
+  });
+  const update = vi.fn(() => ({
+    set: vi.fn(() => ({
+      where: vi.fn(() => ({ returning: casReturning })),
+    })),
+  }));
+  const createDb = () => ({
+    select: stagedSelect([
+      [reservation],
+      [{ id: 'folio-1' }],
+      [{ rs, serviceName: 'Parking' }],
+    ]),
+    update,
+  });
+  return { createDb, update, casReturning };
+}
 
-    const results = await Promise.all([
-      first.postOnceForReservation('res-1', 'prop-1'),
-      second.postOnceForReservation('res-1', 'prop-1'),
-    ]);
+describe('AncillaryService accepted operational pricing', () => {
+  it('recovers a confirmed once service when its accepted ledger group already exists', async () => {
+    const { createDb, update } = acceptedOnceScenario();
+    const { ledgerGroups, folio } = idempotentSnapshotPoster(true);
+    const { webhook, eventEmitter, audits } = recordedWebhookService();
+    const service = new AncillaryService(createDb() as any, folio as any, webhook);
+
+    const result = await service.postOnceForReservation('res-1', 'prop-1');
 
     expect(ledgerGroups).toHaveLength(1);
     expect(update).toHaveBeenCalledOnce();
@@ -120,6 +124,26 @@ describe('AncillaryService accepted operational pricing', () => {
       'reservation.service_posted',
       expect.objectContaining({ entityId: 'rs-1', propertyId: 'prop-1' }),
     );
+    expect(audits).toHaveLength(1);
+    expect(result.count).toBe(1);
+  });
+
+  it('lets only one concurrent once-service replay win the state CAS and emit', async () => {
+    const { createDb, update, casReturning } = acceptedOnceScenario();
+    const { ledgerGroups, folio } = idempotentSnapshotPoster(true);
+    const { webhook, eventEmitter, audits } = recordedWebhookService();
+    const first = new AncillaryService(createDb() as any, folio as any, webhook);
+    const second = new AncillaryService(createDb() as any, folio as any, webhook);
+
+    const results = await Promise.all([
+      first.postOnceForReservation('res-1', 'prop-1'),
+      second.postOnceForReservation('res-1', 'prop-1'),
+    ]);
+
+    expect(ledgerGroups).toHaveLength(1);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(casReturning).toHaveBeenCalledTimes(2);
+    expect(eventEmitter.emit).toHaveBeenCalledOnce();
     expect(audits).toHaveLength(1);
     expect(results.map((result) => result.count).sort()).toEqual([0, 1]);
   });
