@@ -1,5 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { EmailMessage, EmailProvider, EmailResult } from '../email-provider.interface';
+import type {
+  EmailMessage,
+  EmailProvider,
+  EmailResult,
+  EmailSendOptions,
+} from '../email-provider.interface';
+import {
+  boundedEmailFetch,
+  EmailTransportTimeoutError,
+  unknownTimeoutResult,
+} from './bounded-email-transport';
 
 /**
  * SendGrid Email API reference adapter.
@@ -32,7 +42,7 @@ export class SendgridEmailProvider implements EmailProvider {
     return Boolean(this.apiKey && this.defaultFrom);
   }
 
-  async send(message: EmailMessage): Promise<EmailResult> {
+  async send(message: EmailMessage, options?: EmailSendOptions): Promise<EmailResult> {
     if (!this.isConfigured()) {
       return { sent: false, provider: this.name, error: 'SendGrid not configured' };
     }
@@ -58,18 +68,25 @@ export class SendgridEmailProvider implements EmailProvider {
     };
 
     try {
-      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
+      const { response: res, failureBody } = await boundedEmailFetch(
+        'https://api.sendgrid.com/v3/mail/send',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+        options,
+        async (response) => ({
+          response,
+          failureBody: response.ok ? undefined : await response.text(),
+        }),
+      );
 
       if (!res.ok) {
-        const body = await res.text();
-        this.logger.error(`SendGrid send failed (${res.status}): ${body}`);
+        this.logger.error(`SendGrid send failed (${res.status}): ${failureBody ?? ''}`);
         return { sent: false, provider: this.name, error: `SendGrid HTTP ${res.status}` };
       }
 
@@ -77,6 +94,9 @@ export class SendgridEmailProvider implements EmailProvider {
       this.logger.log(`Email sent via SendGrid to ${message.to}`);
       return { sent: true, provider: this.name, messageId };
     } catch (error: any) {
+      if (error instanceof EmailTransportTimeoutError) {
+        return unknownTimeoutResult(this.name);
+      }
       this.logger.error(`SendGrid send failed: ${error.message}`);
       return { sent: false, provider: this.name, error: error.message };
     }

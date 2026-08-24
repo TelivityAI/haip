@@ -64,6 +64,7 @@ function createHarness(seed: Delivery[] = [], options: HarnessOptions = {}) {
     requests: [{ id: REQUEST_ID, propertyId: PROPERTY_ID }],
     deliveries: seed.map((row) => ({ ...row })),
     audits: [] as Array<Record<string, unknown>>,
+    deliveryUpdates: [] as Array<Record<string, unknown>>,
   };
   let remainingAuditFailures = options.failAuditTimes ?? 0;
 
@@ -140,12 +141,14 @@ function createHarness(seed: Delivery[] = [], options: HarnessOptions = {}) {
             Object.assign(current, options.casWinner);
             return [];
           }
+          state.deliveryUpdates.push({ ...changes });
           Object.assign(current, changes);
           return [current];
         },
         then: (resolve: (value: any) => unknown) => {
           const current = state.deliveries.find((row) => conditionContains(condition, row.id));
           if (table === bookingRequestEmailDeliveries && current) {
+            state.deliveryUpdates.push({ ...changes });
             Object.assign(current, changes);
           }
           return Promise.resolve(undefined).then(resolve);
@@ -161,11 +164,17 @@ function createHarness(seed: Delivery[] = [], options: HarnessOptions = {}) {
     transaction: async (work: (tx: any) => unknown) => {
       const deliveriesBefore = structuredClone(state.deliveries);
       const auditsBefore = structuredClone(state.audits);
+      const deliveryUpdatesBefore = structuredClone(state.deliveryUpdates);
       try {
         return await work(db);
       } catch (error) {
         state.deliveries.splice(0, state.deliveries.length, ...deliveriesBefore);
         state.audits.splice(0, state.audits.length, ...auditsBefore);
+        state.deliveryUpdates.splice(
+          0,
+          state.deliveryUpdates.length,
+          ...deliveryUpdatesBefore,
+        );
         throw error;
       }
     },
@@ -408,7 +417,81 @@ describe('BookingRequestMailerService', () => {
     );
   });
 
-  it('manually requeues a terminal failure with attributed transactional audits', async () => {
+  it('atomically reserves a manual retry so an automatic worker cannot steal it', async () => {
+    const actor: AuditActor = {
+      userId: 'dddddddd-0000-4000-a000-000000000001',
+      userEmail: 'agent@example.com',
+      ipAddress: '203.0.113.8',
+    };
+    const h = createHarness([delivery({
+      status: 'failed',
+      attempts: 5,
+      automaticAttempts: 5,
+      nextAttemptAt: null,
+      errorMessage: 'Email transport failed',
+    })]);
+    let finishSend!: () => void;
+    h.emailService.send.mockReturnValue(new Promise((resolve) => {
+      finishSend = () => resolve({
+        sent: true, provider: 'smtp', messageId: 'provider-retry-id',
+      });
+    }));
+
+    const retrying = h.service.retry(DELIVERY_ID, REQUEST_ID, PROPERTY_ID, actor);
+    await vi.waitFor(() => expect(h.emailService.send).toHaveBeenCalledOnce());
+
+    expect(h.state.deliveries[0]).toMatchObject({
+      status: 'processing',
+      attempts: 6,
+      automaticAttempts: 0,
+      claimedAt: expect.any(Date),
+      nextAttemptAt: expect.any(Date),
+    });
+    expect(h.state.deliveryUpdates).not.toContainEqual(expect.objectContaining({
+      status: 'pending',
+    }));
+    expect(await h.service.processPendingDeliveries()).toBe(0);
+    expect(h.emailService.send).toHaveBeenCalledOnce();
+
+    finishSend();
+    const retried = await retrying;
+
+    expect(retried).toMatchObject({ status: 'sent', attempts: 6, errorMessage: null });
+    expect(retried).not.toHaveProperty('providerMessageId');
+    expect(h.state.audits.map((audit) => audit.description)).toEqual([
+      'Booking request email delivery attempted',
+      'Booking request email delivered',
+    ]);
+    expect(h.state.audits).toHaveLength(2);
+    expect(h.state.audits.every((audit) =>
+      audit.userId === actor.userId
+      && audit.userEmail === actor.userEmail
+      && audit.ipAddress === actor.ipAddress)).toBe(true);
+  });
+
+  it('rolls back a manual claim when its attributed audit cannot be persisted', async () => {
+    const h = createHarness([delivery({
+      status: 'failed',
+      attempts: 5,
+      automaticAttempts: 5,
+      nextAttemptAt: null,
+      errorMessage: 'Email transport failed',
+    })], {
+      failAuditDescription: 'Booking request email delivery attempted',
+      failAuditTimes: 1,
+    });
+
+    await expect(h.service.retry(DELIVERY_ID, REQUEST_ID, PROPERTY_ID, {
+      userId: 'dddddddd-0000-4000-a000-000000000001',
+    })).rejects.toThrow('audit write failed');
+    expect(h.state.deliveries[0]).toMatchObject({
+      status: 'failed', attempts: 5, automaticAttempts: 5,
+    });
+    expect(h.emailService.send).not.toHaveBeenCalled();
+    expect(h.state.audits).toHaveLength(0);
+  });
+
+  it('terminalizes a failed manual attempt and attributes both audits to staff', async () => {
     const actor: AuditActor = {
       userId: 'dddddddd-0000-4000-a000-000000000001',
       userEmail: 'agent@example.com',
@@ -422,43 +505,55 @@ describe('BookingRequestMailerService', () => {
       errorMessage: 'Email transport failed',
     })]);
     h.emailService.send.mockResolvedValue({
-      sent: true, provider: 'smtp', messageId: 'provider-retry-id',
+      sent: false, provider: 'smtp', error: 'temporary provider detail',
     });
 
-    const retried = await h.service.retry(DELIVERY_ID, REQUEST_ID, PROPERTY_ID, actor);
+    const result = await h.service.retry(DELIVERY_ID, REQUEST_ID, PROPERTY_ID, actor);
 
-    expect(retried).toMatchObject({ status: 'sent', attempts: 6, errorMessage: null });
-    expect(retried).not.toHaveProperty('providerMessageId');
-    expect(h.state.audits.map((audit) => audit.description)).toEqual([
-      'Booking request email manually requeued',
-      'Booking request email delivery attempted',
-      'Booking request email delivered',
-    ]);
-    expect(h.state.audits).toEqual(expect.arrayContaining([
-      expect.objectContaining(actor),
-    ]));
-  });
-
-  it('rolls back a manual requeue when its attributed audit cannot be persisted', async () => {
-    const h = createHarness([delivery({
+    expect(result).toMatchObject({
       status: 'failed',
-      attempts: 5,
-      automaticAttempts: 5,
+      attempts: 6,
       nextAttemptAt: null,
       errorMessage: 'Email transport failed',
-    })], {
-      failAuditDescription: 'Booking request email manually requeued',
-      failAuditTimes: 1,
+    });
+    expect(await h.service.processPendingDeliveries()).toBe(0);
+    expect(h.state.audits.map((audit) => audit.description)).toEqual([
+      'Booking request email delivery attempted',
+      'Booking request email delivery failed terminally',
+    ]);
+    expect(h.state.audits.every((audit) => audit.userId === actor.userId)).toBe(true);
+  });
+
+  it('returns the persisted manual-retry winner when final compare-and-set loses', async () => {
+    const actor: AuditActor = {
+      userId: 'dddddddd-0000-4000-a000-000000000001',
+      userEmail: 'agent@example.com',
+      ipAddress: '203.0.113.8',
+    };
+    const winner = delivery({
+      status: 'sent',
+      attempts: 7,
+      automaticAttempts: 1,
+      claimedAt: null,
+      nextAttemptAt: null,
+      sentAt: new Date('2026-08-25T00:00:10.000Z'),
+      providerMessageId: 'persisted-winner-provider-id',
+    });
+    const h = createHarness([delivery({
+      status: 'failed', attempts: 5, automaticAttempts: 5, nextAttemptAt: null,
+    })], { casWinner: winner });
+    h.emailService.send.mockResolvedValue({
+      sent: false, provider: 'smtp', error: 'loser result',
     });
 
-    await expect(h.service.retry(DELIVERY_ID, REQUEST_ID, PROPERTY_ID, {
-      userId: 'dddddddd-0000-4000-a000-000000000001',
-    })).rejects.toThrow('audit write failed');
-    expect(h.state.deliveries[0]).toMatchObject({
-      status: 'failed', attempts: 5, automaticAttempts: 5,
-    });
-    expect(h.emailService.send).not.toHaveBeenCalled();
-    expect(h.state.audits).toHaveLength(0);
+    const result = await h.service.retry(DELIVERY_ID, REQUEST_ID, PROPERTY_ID, actor);
+
+    expect(result).toMatchObject({ status: 'sent', attempts: 7 });
+    expect(result).not.toHaveProperty('providerMessageId');
+    expect(h.state.audits.map((audit) => audit.description)).toEqual([
+      'Booking request email delivery attempted',
+    ]);
+    expect(h.state.audits[0]).toMatchObject(actor);
   });
 
   it('rolls back the delivery claim when its attempt audit cannot be persisted', async () => {
@@ -494,20 +589,48 @@ describe('BookingRequestMailerService', () => {
     await expect(first).resolves.toMatchObject({ status: 'sent' });
   });
 
-  it('bounds a hung transport below the lease and schedules recovery', async () => {
+  it('never releases a claim while the bounded provider operation is still active', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-25T00:00:00.000Z'));
     const h = createHarness([delivery()]);
-    h.emailService.send.mockReturnValue(new Promise(() => undefined));
+    let providerSettled = false;
+    let settleProvider!: () => void;
+    h.emailService.send.mockReturnValue(new Promise((resolve) => {
+      settleProvider = () => {
+        providerSettled = true;
+        resolve({
+          sent: false,
+          provider: 'smtp',
+          error: 'Email transport timed out',
+          outcomeUnknown: true,
+        });
+      };
+    }));
 
     const attempt = h.service.deliver(DELIVERY_ID, REQUEST_ID, PROPERTY_ID);
     await vi.advanceTimersByTimeAsync(60_000);
 
-    await expect(attempt).resolves.toMatchObject({
-      status: 'pending',
-      claimedAt: null,
-      nextAttemptAt: new Date('2026-08-25T00:01:30.000Z'),
+    expect(providerSettled).toBe(false);
+    expect(h.state.deliveries[0]).toMatchObject({
+      status: 'processing',
+      claimedAt: new Date('2026-08-25T00:00:00.000Z'),
+      nextAttemptAt: new Date('2026-08-25T00:05:00.000Z'),
     });
+    expect(await h.service.processPendingDeliveries()).toBe(0);
+    expect(h.emailService.send).toHaveBeenCalledOnce();
+    expect(h.emailService.send).toHaveBeenCalledWith(
+      expect.any(Object),
+      { timeoutMs: 60_000 },
+    );
+
+    settleProvider();
+    await expect(attempt).resolves.toMatchObject({
+      status: 'failed',
+      claimedAt: null,
+      nextAttemptAt: null,
+      errorMessage: 'Email delivery outcome requires manual review',
+    });
+    expect(providerSettled).toBe(true);
   });
 
   it('reuses stable transport identity after an ambiguous committed send', async () => {

@@ -1,5 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { EmailMessage, EmailProvider, EmailResult } from '../email-provider.interface';
+import type {
+  EmailMessage,
+  EmailProvider,
+  EmailResult,
+  EmailSendOptions,
+} from '../email-provider.interface';
+import {
+  emailSendTimeoutMs,
+  unknownTimeoutResult,
+} from './bounded-email-transport';
 
 /**
  * SMTP transport (nodemailer) — configured via SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM.
@@ -8,7 +17,8 @@ import type { EmailMessage, EmailProvider, EmailResult } from '../email-provider
 export class SmtpEmailProvider implements EmailProvider {
   readonly name = 'smtp';
   private readonly logger = new Logger(SmtpEmailProvider.name);
-  private transport: any = null;
+  private nodemailer: any = null;
+  private transportConfig: Record<string, unknown> | null = null;
 
   constructor() {
     this.initTransport();
@@ -28,12 +38,13 @@ export class SmtpEmailProvider implements EmailProvider {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const nodemailer = require('nodemailer');
-      this.transport = nodemailer.createTransport({
+      this.nodemailer = nodemailer;
+      this.transportConfig = {
         host,
         port: parseInt(port, 10),
         secure: parseInt(port, 10) === 465,
         auth: user && pass ? { user, pass } : undefined,
-      });
+      };
       this.logger.log(`SMTP email provider configured: ${host}:${port}`);
     } catch {
       this.logger.warn('nodemailer not available — SMTP email provider disabled');
@@ -41,17 +52,31 @@ export class SmtpEmailProvider implements EmailProvider {
   }
 
   isConfigured(): boolean {
-    return this.transport !== null;
+    return this.nodemailer !== null && this.transportConfig !== null;
   }
 
-  async send(message: EmailMessage): Promise<EmailResult> {
-    if (!this.transport) {
+  async send(message: EmailMessage, options?: EmailSendOptions): Promise<EmailResult> {
+    if (!this.isConfigured()) {
       return { sent: false, provider: this.name, error: 'SMTP not configured' };
     }
 
+    const timeoutMs = emailSendTimeoutMs(options);
+    const transport = this.nodemailer.createTransport({
+      ...this.transportConfig,
+      connectionTimeout: timeoutMs,
+      greetingTimeout: timeoutMs,
+      socketTimeout: timeoutMs,
+      dnsTimeout: timeoutMs,
+    });
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      transport.close?.();
+    }, timeoutMs);
+    timeout.unref?.();
     try {
       const from = message.from ?? process.env['SMTP_FROM'] ?? 'noreply@haip.dev';
-      const info = await this.transport.sendMail({
+      const info = await transport.sendMail({
         from,
         to: message.to,
         subject: message.subject,
@@ -63,11 +88,22 @@ export class SmtpEmailProvider implements EmailProvider {
           : undefined,
       });
 
+      if (timedOut) return unknownTimeoutResult(this.name);
       this.logger.log(`Email sent via SMTP to ${message.to}: ${info.messageId}`);
       return { sent: true, provider: this.name, messageId: info.messageId };
     } catch (error: any) {
+      if (
+        timedOut
+        || error?.code === 'ETIMEDOUT'
+        || /timed?\s*out|greeting never received/i.test(String(error?.message))
+      ) {
+        return unknownTimeoutResult(this.name);
+      }
       this.logger.error(`SMTP send failed to ${message.to}: ${error.message}`);
       return { sent: false, provider: this.name, error: error.message };
+    } finally {
+      clearTimeout(timeout);
+      transport.close?.();
     }
   }
 }

@@ -15,12 +15,19 @@ export interface EmailResult {
   messageId?: string;
   provider?: string;
   error?: string;
+  /** True when the transport may have accepted mail before timing out. */
+  outcomeUnknown?: boolean;
+}
+
+export interface EmailSendOptions {
+  /** Hard upper bound requested by the caller for transport settlement. */
+  timeoutMs?: number;
 }
 
 export interface EmailProvider {
   readonly name: string;
   isConfigured(): boolean;
-  send(message: EmailMessage): Promise<EmailResult>;
+  send(message: EmailMessage, options?: EmailSendOptions): Promise<EmailResult>;
 }
 
 export const EMAIL_PROVIDERS = Symbol('EMAIL_PROVIDERS');
