@@ -21,13 +21,6 @@ function normalized(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
 
-function isBlank(value: unknown): boolean {
-  return value === undefined
-    || value === null
-    || (typeof value === 'string' && value.trim().length === 0)
-    || (Array.isArray(value) && value.length === 0);
-}
-
 function isIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
@@ -116,7 +109,7 @@ export function validateApplicationAnswers(
   const validated: Record<string, unknown> = {};
   for (const question of activeQuestions) {
     const answer = answers[question.id];
-    if (isBlank(answer)) {
+    if (!Object.prototype.hasOwnProperty.call(answers, question.id)) {
       if (question.isRequired) {
         invalid(`${question.label} is required`);
       }
@@ -127,6 +120,10 @@ export function validateApplicationAnswers(
       case 'short_text':
       case 'long_text':
         if (typeof answer !== 'string') invalid(`${question.label} must be text`);
+        if (answer.trim().length === 0) {
+          if (question.isRequired) invalid(`${question.label} is required`);
+          continue;
+        }
         break;
       case 'single_select':
         if (typeof answer !== 'string' || !question.options!.includes(answer)) {
@@ -134,8 +131,14 @@ export function validateApplicationAnswers(
         }
         break;
       case 'multi_select':
-        if (!Array.isArray(answer)
-          || answer.some((value) => typeof value !== 'string' || !question.options!.includes(value))
+        if (!Array.isArray(answer)) {
+          invalid(`${question.label} must contain distinct configured options`);
+        }
+        if (answer.length === 0) {
+          if (question.isRequired) invalid(`${question.label} is required`);
+          continue;
+        }
+        if (answer.some((value) => typeof value !== 'string' || !question.options!.includes(value))
           || new Set(answer).size !== answer.length) {
           invalid(`${question.label} must contain distinct configured options`);
         }

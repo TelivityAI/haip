@@ -110,6 +110,20 @@ describe('validateApplicationAnswers', () => {
     expect(() => validateApplicationAnswers(questions, { late: 'yes' })).toThrow(/Late arrival/);
     expect(() => validateApplicationAnswers(questions, { retired: 'legacy answer' })).toThrow(/retired/i);
   });
+
+  it('treats blank values as omissions only for optional text and multi-select questions', () => {
+    const questions: BookingFormQuestion[] = [
+      { id: 'notes', label: 'Notes', type: 'long_text', order: 0, isActive: true, isRequired: false },
+      { id: 'dietary', label: 'Dietary needs', type: 'multi_select', options: ['Vegan'], order: 1, isActive: true, isRequired: false },
+      { id: 'late', label: 'Late arrival', type: 'yes_no', order: 2, isActive: true, isRequired: false },
+      { id: 'birthday', label: 'Birthday', type: 'date', order: 3, isActive: true, isRequired: false },
+    ];
+
+    expect(validateApplicationAnswers(questions, { notes: '', dietary: [] })).toEqual({});
+    expect(() => validateApplicationAnswers(questions, { dietary: '' })).toThrow(/Dietary needs/);
+    expect(() => validateApplicationAnswers(questions, { late: [] })).toThrow(/Late arrival/);
+    expect(() => validateApplicationAnswers(questions, { birthday: [] })).toThrow(/Birthday/);
+  });
 });
 
 describe('booking form DTO validation', () => {
@@ -200,5 +214,22 @@ describe('BookingEngineConfigService request settings', () => {
       paymentMethodCollection: 'required',
     })).rejects.toThrow(/publishable/i);
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('does not write absent request settings during a branding-only update', async () => {
+    const { service, set } = makeConfigService(configRow);
+
+    await service.updateConfig(configRow.propertyId, {
+      displayName: 'Renamed Hotel',
+      bookingMode: undefined,
+      paymentMethodCollection: undefined,
+      formQuestions: undefined,
+    });
+
+    const written = set.mock.calls[0][0];
+    expect(written).toMatchObject({ displayName: 'Renamed Hotel' });
+    expect(written).not.toHaveProperty('bookingMode');
+    expect(written).not.toHaveProperty('paymentMethodCollection');
+    expect(written).not.toHaveProperty('formQuestions');
   });
 });

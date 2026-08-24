@@ -15,6 +15,16 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { BookingFormQuestion, BookingFormQuestionType } from '@telivityhaip/database';
+
+const BOOKING_FORM_QUESTION_TYPES: BookingFormQuestionType[] = [
+  'short_text',
+  'long_text',
+  'single_select',
+  'multi_select',
+  'yes_no',
+  'date',
+];
 
 export class DepositPolicyDto {
   @ApiProperty({ enum: ['none', 'first_night', 'percentage', 'full'] })
@@ -41,7 +51,7 @@ export class CreateBookingKeyDto {
   label!: string;
 }
 
-export class BookingFormQuestionDto {
+export class BookingFormQuestionDto implements BookingFormQuestion {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   id!: string;
@@ -51,9 +61,9 @@ export class BookingFormQuestionDto {
   @MaxLength(200)
   label!: string;
 
-  @ApiProperty({ enum: ['short_text', 'long_text', 'single_select', 'multi_select', 'yes_no', 'date'] })
-  @IsIn(['short_text', 'long_text', 'single_select', 'multi_select', 'yes_no', 'date'])
-  type!: 'short_text' | 'long_text' | 'single_select' | 'multi_select' | 'yes_no' | 'date';
+  @ApiProperty({ enum: BOOKING_FORM_QUESTION_TYPES })
+  @IsIn(BOOKING_FORM_QUESTION_TYPES)
+  type!: BookingFormQuestionType;
 
   @ApiPropertyOptional({ type: [String], maxItems: 50 })
   @IsOptional()

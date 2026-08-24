@@ -97,7 +97,7 @@ export class BookingEngineConfigService {
       ? current.stripePublishableKey
       : input.stripePublishableKey;
     const formQuestions = input.formQuestions === undefined
-      ? current.formQuestions as BookingFormQuestion[]
+      ? undefined
       : validateQuestionDefinitions(input.formQuestions);
 
     if (bookingMode === 'request'
@@ -111,10 +111,10 @@ export class BookingEngineConfigService {
     const [updated] = await this.db
       .update(bookingEngineConfig)
       .set({
-        ...input,
-        bookingMode,
-        paymentMethodCollection,
-        formQuestions,
+        ...Object.fromEntries(
+          Object.entries(input).filter(([, value]) => value !== undefined),
+        ),
+        ...(input.formQuestions === undefined ? {} : { formQuestions }),
         updatedAt: new Date(),
       })
       .where(eq(bookingEngineConfig.propertyId, propertyId))
