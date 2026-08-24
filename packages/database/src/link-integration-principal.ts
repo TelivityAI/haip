@@ -39,19 +39,32 @@ function parseArgs(argv: string[]) {
   return { args, positional };
 }
 
+function parsePropertyIds(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 async function main() {
   const { args } = parseArgs(process.argv.slice(2));
 
-  const propertyId = args['property_id'];
+  const propertyIdRaw = args['property_id'];
   const keycloakSub = args['keycloak_sub'];
   const label = args['label'];
   const profileRaw = args['profile'] ?? 'inventory';
   const permissionsRaw = args['permissions'];
 
-  if (!propertyId || !keycloakSub || !label) {
+  if (!propertyIdRaw || !keycloakSub || !label) {
     console.error(
-      'Usage: pnpm integration:link -- --property-id <uuid> --keycloak-sub <uuid> --label <name> --profile inventory|reservations|custom [--permissions key1,key2]',
+      'Usage: pnpm integration:link -- --property-id <uuid>[,uuid...] --keycloak-sub <uuid> --label <name> --profile inventory|reservations|custom [--permissions key1,key2]',
     );
+    process.exit(1);
+  }
+
+  const propertyIds = parsePropertyIds(propertyIdRaw);
+  if (propertyIds.length === 0) {
+    console.error('At least one --property-id is required');
     process.exit(1);
   }
 
@@ -74,22 +87,24 @@ async function main() {
   const db = drizzle(client, { schema });
 
   try {
-    const result = await linkIntegrationPrincipal(db, {
-      propertyId,
-      keycloakSub,
-      label,
-      profile,
-      permissions,
-    });
+    for (const propertyId of propertyIds) {
+      const result = await linkIntegrationPrincipal(db, {
+        propertyId,
+        keycloakSub,
+        label,
+        profile,
+        permissions,
+      });
 
-    console.log('Integration principal linked:');
-    console.log(`  userId:     ${result.userId}`);
-    console.log(`  email:      ${result.email}`);
-    console.log(`  roleKey:    ${result.roleKey}`);
-    console.log(`  roleId:     ${result.roleId}`);
-    console.log(`  userCreated: ${result.userCreated}`);
-    console.log(`  roleCreated: ${result.roleCreated}`);
-    console.log(`  assignmentCreated: ${result.assignmentCreated}`);
+      console.log(`Integration principal linked (property ${propertyId}):`);
+      console.log(`  userId:     ${result.userId}`);
+      console.log(`  email:      ${result.email}`);
+      console.log(`  roleKey:    ${result.roleKey}`);
+      console.log(`  roleId:     ${result.roleId}`);
+      console.log(`  userCreated: ${result.userCreated}`);
+      console.log(`  roleCreated: ${result.roleCreated}`);
+      console.log(`  assignmentCreated: ${result.assignmentCreated}`);
+    }
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);
