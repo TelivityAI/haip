@@ -6,6 +6,10 @@ const migration = readFileSync(
   'utf8',
 );
 const pushSchema = readFileSync(new URL('./push-schema.ts', import.meta.url), 'utf8');
+const paymentIntegrityMigration = readFileSync(
+  new URL('./migrations/0023_booking_request_payment_integrity.sql', import.meta.url),
+  'utf8',
+);
 
 describe('booking request accepted-pricing migration safety', () => {
   it('fails instead of accepting an already-accepted request without an operational snapshot', () => {
@@ -32,5 +36,29 @@ describe('booking request accepted-pricing migration safety', () => {
     const index = migration.indexOf('charges_property_folio_source_key_unique');
     expect(column).toBeGreaterThanOrEqual(0);
     expect(index).toBeGreaterThan(column);
+  });
+});
+
+describe('booking request payment integrity migration safety', () => {
+  it('persists recoverable resolution claims in both migration paths', () => {
+    for (const source of [paymentIntegrityMigration, pushSchema]) {
+      expect(source).toContain('booking_request_payment_resolutions_property_idempotency_unique');
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS operation_fingerprint');
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS movement_id');
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS last_error');
+      expect(source).toContain('booking_request_payment_resolutions_status_check');
+    }
+  });
+
+  it('adds positive-money, installment-shape, and aggregate ownership constraints', () => {
+    for (const source of [paymentIntegrityMigration, pushSchema]) {
+      expect(source).toContain('booking_request_installments_amount_kind_check');
+      expect(source).toContain('booking_request_installments_milestone_date_check');
+      expect(source).toContain('booking_request_payment_allocations_positive_check');
+      expect(source).toContain('booking_request_payment_resolutions_retained_reason_check');
+      expect(source).toContain('booking_request_payment_allocations_request_fkey');
+      expect(source).toContain('booking_request_payment_resolutions_movement_fkey');
+      expect(source).toContain('payments_booking_request_parent_positive_check');
+    }
   });
 });

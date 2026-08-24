@@ -1036,6 +1036,58 @@ describe('BookingRequestService denial', () => {
     expect(harness.state.payments).toHaveLength(1);
   });
 
+  it('blocks denial while a request payment attempt is pending', async () => {
+    const harness = makeHarness();
+    harness.state.payments.push({
+      id: PAYMENT_ID,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      originalPaymentId: null,
+      status: 'pending',
+      amount: '100.00',
+    });
+
+    await expect(call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Unable to accommodate' },
+      actor,
+    ])).rejects.toThrow(/pending payment/i);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+  });
+
+  it('blocks denial while a refund capacity claim is pending', async () => {
+    const harness = makeHarness();
+    harness.state.payments.push({
+      id: PAYMENT_ID,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      originalPaymentId: null,
+      status: 'captured',
+      amount: '100.00',
+    });
+    harness.state.resolutions.push({
+      id: '66666666-0000-4000-a000-000000000002',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      paymentId: PAYMENT_ID,
+      type: 'refund',
+      status: 'pending',
+      amount: '100.00',
+      reason: 'Gateway refund pending',
+    });
+
+    await expect(call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Unable to accommodate' },
+      actor,
+    ])).rejects.toThrow(/pending refund|pending payment resolution/i);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+  });
+
   it('denies after money is resolved, records actor, and delivers consequences after commit', async () => {
     const harness = makeHarness();
     harness.state.payments.push({

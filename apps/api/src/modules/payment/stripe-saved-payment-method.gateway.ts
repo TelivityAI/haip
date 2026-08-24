@@ -14,6 +14,8 @@ import type {
 const PROPERTY_METADATA_KEY = 'haip_property_id';
 const APPLICATION_METADATA_KEY = 'haip_application_hash';
 
+class SavedPaymentMethodValidationError extends Error {}
+
 @Injectable()
 export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGateway {
   private readonly stripe: Stripe;
@@ -137,13 +139,18 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
       if (stripePaymentIntent?.status === 'requires_action') {
         return this.requiresAction(stripePaymentIntent.id);
       }
-
-      return {
-        success: false,
-        transactionId: stripePaymentIntent?.id ?? '',
-        requiresAction: false,
-        errorMessage: error instanceof Error ? error.message : 'Stripe charge failed',
-      };
+      if (
+        error instanceof SavedPaymentMethodValidationError
+        || this.isExplicitDecline(error, stripePaymentIntent)
+      ) {
+        return {
+          success: false,
+          transactionId: stripePaymentIntent?.id ?? '',
+          requiresAction: false,
+          errorMessage: this.errorMessage(error),
+        };
+      }
+      throw error;
     }
   }
 
@@ -164,7 +171,9 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
       !intlWithSupportedValues.supportedValuesOf ||
       !intlWithSupportedValues.supportedValuesOf('currency').includes(normalized)
     ) {
-      throw new Error(`Unsupported ISO-4217 currency code '${currencyCode}'`);
+      throw new SavedPaymentMethodValidationError(
+        `Unsupported ISO-4217 currency code '${currencyCode}'`,
+      );
     }
     return normalized;
   }
@@ -175,15 +184,21 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
       currency: currencyCode,
     }).resolvedOptions().maximumFractionDigits;
     if (exponent === undefined) {
-      throw new Error(`Unable to resolve minor-unit exponent for '${currencyCode}'`);
+      throw new SavedPaymentMethodValidationError(
+        `Unable to resolve minor-unit exponent for '${currencyCode}'`,
+      );
     }
     const minorUnits = new Decimal(amount).mul(new Decimal(10).pow(exponent));
     if (!minorUnits.isInteger()) {
-      throw new Error(`Amount '${amount}' ${currencyCode} has fractional minor units`);
+      throw new SavedPaymentMethodValidationError(
+        `Amount '${amount}' ${currencyCode} has fractional minor units`,
+      );
     }
     const value = minorUnits.toNumber();
     if (!Number.isSafeInteger(value)) {
-      throw new Error(`Amount '${amount}' ${currencyCode} exceeds the safe Stripe integer range`);
+      throw new SavedPaymentMethodValidationError(
+        `Amount '${amount}' ${currencyCode} exceeds the safe Stripe integer range`,
+      );
     }
     return value;
   }
@@ -198,6 +213,9 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
     }
     if (paymentIntent.status === 'requires_action') {
       return this.requiresAction(paymentIntent.id);
+    }
+    if (paymentIntent.status === 'processing') {
+      throw new Error(`Stripe PaymentIntent '${paymentIntent.id}' result is still processing`);
     }
     return {
       success: false,
@@ -224,5 +242,30 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
     return typeof paymentIntent === 'object' && paymentIntent !== null && 'id' in paymentIntent
       ? paymentIntent as Stripe.PaymentIntent
       : undefined;
+  }
+
+  private isExplicitDecline(
+    error: unknown,
+    paymentIntent?: Stripe.PaymentIntent,
+  ): boolean {
+    const status = paymentIntent?.status;
+    if (status === 'requires_payment_method' || status === 'canceled') return true;
+    return typeof error === 'object'
+      && error !== null
+      && 'type' in error
+      && error.type === 'StripeCardError';
+  }
+
+  private errorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (
+      typeof error === 'object'
+      && error !== null
+      && 'message' in error
+      && typeof error.message === 'string'
+    ) {
+      return error.message;
+    }
+    return 'Stripe charge failed';
   }
 }

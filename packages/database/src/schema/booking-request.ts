@@ -1,4 +1,5 @@
 import {
+  check,
   date,
   integer,
   jsonb,
@@ -11,6 +12,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import type { BookingFormQuestion } from './booking-engine.js';
 import { payments, folios } from './folio.js';
 import { properties } from './property.js';
@@ -113,6 +115,8 @@ export const bookingRequests = pgTable('booking_requests', {
     .on(table.setupIntentId),
   acceptedReservationUnique: uniqueIndex('booking_requests_accepted_reservation_unique')
     .on(table.acceptedReservationId),
+  propertyIdUnique: uniqueIndex('booking_requests_property_id_unique')
+    .on(table.propertyId, table.id),
 }));
 
 /**
@@ -167,7 +171,30 @@ export const bookingRequestInstallments = pgTable('booking_request_installments'
   status: bookingRequestInstallmentStatusEnum('status').notNull().default('unpaid'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  propertyRequestIdUnique: uniqueIndex('booking_request_installments_property_request_id_unique')
+    .on(table.propertyId, table.bookingRequestId, table.id),
+  amountKindCheck: check(
+    'booking_request_installments_amount_kind_check',
+    sql`(
+      (${table.fixedAmount} is not null and ${table.fixedAmount} > 0 and ${table.percentage} is null)
+      or
+      (${table.fixedAmount} is null and ${table.percentage} > 0 and ${table.percentage} <= 100)
+    ) and ${table.resolvedAmount} is not null and ${table.resolvedAmount} > 0`,
+  ),
+  milestoneDateCheck: check(
+    'booking_request_installments_milestone_date_check',
+    sql`(
+      (${table.dueMilestone} = 'date' and ${table.dueDate} is not null)
+      or
+      (${table.dueMilestone} <> 'date' and ${table.dueDate} is null)
+    )`,
+  ),
+  allocatedNonnegativeCheck: check(
+    'booking_request_installments_allocated_nonnegative_check',
+    sql`${table.allocatedAmount} >= 0 and ${table.allocatedAmount} <= ${table.resolvedAmount}`,
+  ),
+}));
 
 export const bookingRequestPaymentAllocations = pgTable('booking_request_payment_allocations', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -180,6 +207,10 @@ export const bookingRequestPaymentAllocations = pgTable('booking_request_payment
 }, (table) => ({
   paymentInstallmentUnique: uniqueIndex('booking_request_payment_allocations_payment_installment_unique')
     .on(table.paymentId, table.installmentId),
+  positiveCheck: check(
+    'booking_request_payment_allocations_positive_check',
+    sql`${table.amount} > 0`,
+  ),
 }));
 
 export const bookingRequestPaymentResolutions = pgTable('booking_request_payment_resolutions', {
@@ -188,12 +219,35 @@ export const bookingRequestPaymentResolutions = pgTable('booking_request_payment
   bookingRequestId: uuid('booking_request_id').notNull().references(() => bookingRequests.id),
   paymentId: uuid('payment_id').notNull().references(() => payments.id),
   type: bookingRequestPaymentResolutionTypeEnum('type').notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('completed'),
   amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  idempotencyKey: varchar('idempotency_key', { length: 255 }),
+  operationFingerprint: varchar('operation_fingerprint', { length: 64 }),
+  movementId: uuid('movement_id').references(() => payments.id),
   reason: text('reason'),
+  attempts: integer('attempts').notNull().default(0),
+  lastError: text('last_error'),
   resolvedBy: uuid('resolved_by'),
-  resolvedAt: timestamp('resolved_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  propertyIdempotencyKeyUnique:
+    uniqueIndex('booking_request_payment_resolutions_property_idempotency_unique')
+      .on(table.propertyId, table.idempotencyKey),
+  positiveCheck: check(
+    'booking_request_payment_resolutions_positive_check',
+    sql`${table.amount} > 0`,
+  ),
+  statusCheck: check(
+    'booking_request_payment_resolutions_status_check',
+    sql`${table.status} in ('pending', 'completed', 'failed')`,
+  ),
+  retainedReasonCheck: check(
+    'booking_request_payment_resolutions_retained_reason_check',
+    sql`${table.type} <> 'retained' or length(trim(${table.reason})) > 0`,
+  ),
+}));
 
 export const bookingRequestEmailDeliveries = pgTable('booking_request_email_deliveries', {
   id: uuid('id').primaryKey().defaultRandom(),

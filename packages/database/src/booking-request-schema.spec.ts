@@ -5,6 +5,8 @@ import {
   bookingRequestConsequences,
   bookingRequests,
   bookingRequestInstallments,
+  bookingRequestPaymentAllocations,
+  bookingRequestPaymentResolutions,
   charges,
   payments,
   reservations,
@@ -28,6 +30,12 @@ describe('booking request schema', () => {
     expect(bookingRequestConsequences.lastError).toBeDefined();
     expect(bookingRequestConsequences.completedAt).toBeDefined();
     expect(bookingRequestInstallments.dueMilestone).toBeDefined();
+    expect(bookingRequestPaymentResolutions.status).toBeDefined();
+    expect(bookingRequestPaymentResolutions.idempotencyKey).toBeDefined();
+    expect(bookingRequestPaymentResolutions.operationFingerprint).toBeDefined();
+    expect(bookingRequestPaymentResolutions.movementId).toBeDefined();
+    expect(bookingRequestPaymentResolutions.attempts).toBeDefined();
+    expect(bookingRequestPaymentResolutions.lastError).toBeDefined();
     expect(bookingEngineConfig.bookingMode).toBeDefined();
     expect(bookingEngineConfig.paymentMethodCollection).toBeDefined();
     expect(payments.bookingRequestId).toBeDefined();
@@ -44,6 +52,29 @@ describe('booking request schema', () => {
       .indexes.map((index) => index.config.name);
     expect(consequenceIndexNames).toContain(
       'booking_request_consequences_property_request_kind_unique',
+    );
+
+    const installmentChecks = getTableConfig(bookingRequestInstallments)
+      .checks.map((check) => check.name);
+    expect(installmentChecks).toEqual(expect.arrayContaining([
+      'booking_request_installments_amount_kind_check',
+      'booking_request_installments_milestone_date_check',
+      'booking_request_installments_allocated_nonnegative_check',
+    ]));
+    const allocationChecks = getTableConfig(bookingRequestPaymentAllocations)
+      .checks.map((check) => check.name);
+    expect(allocationChecks).toContain('booking_request_payment_allocations_positive_check');
+    const resolutionConfig = getTableConfig(bookingRequestPaymentResolutions);
+    expect(resolutionConfig.checks.map((check) => check.name)).toEqual(expect.arrayContaining([
+      'booking_request_payment_resolutions_positive_check',
+      'booking_request_payment_resolutions_status_check',
+      'booking_request_payment_resolutions_retained_reason_check',
+    ]));
+    expect(resolutionConfig.indexes.map((index) => index.config.name)).toContain(
+      'booking_request_payment_resolutions_property_idempotency_unique',
+    );
+    expect(getTableConfig(payments).checks.map((check) => check.name)).toContain(
+      'payments_booking_request_parent_positive_check',
     );
 
     const deliveryIndexNames = getTableConfig(webhookDeliveries)

@@ -11,6 +11,8 @@ export interface PaymentGatewayResult {
  */
 export interface PaymentGatewayCallOptions {
   idempotencyKey?: string;
+  /** Required for amount-bearing capture/refund calls outside scale-two currencies. */
+  currencyCode?: string;
 }
 
 export interface PaymentGateway {

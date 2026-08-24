@@ -209,15 +209,50 @@ describe('StripeGateway', () => {
       }, undefined);
     });
 
+    it('uses the ISO currency exponent for a JPY partial refund', async () => {
+      stripeInstance.refunds.create.mockResolvedValue({
+        id: 're_jpy',
+        status: 'succeeded',
+      });
+
+      await gateway.refund('pi_jpy', 51, { currencyCode: 'JPY' });
+
+      expect(stripeInstance.refunds.create).toHaveBeenCalledWith({
+        payment_intent: 'pi_jpy',
+        amount: 51,
+      }, undefined);
+    });
+
+    it('rejects a currency beyond ledger precision before calling Stripe', async () => {
+      const result = await gateway.refund('pi_bhd', 1, { currencyCode: 'BHD' });
+
+      expect(result.success).toBe(false);
+      expect(result.errorMessage).toMatch(/ledger.*precision/i);
+      expect(stripeInstance.refunds.create).not.toHaveBeenCalled();
+    });
+
     it('should handle refund failure', async () => {
-      stripeInstance.refunds.create.mockRejectedValue(
-        new Error('Charge has already been refunded'),
-      );
+      stripeInstance.refunds.create.mockRejectedValue({
+        type: 'StripeInvalidRequestError',
+        message: 'Charge has already been refunded',
+      });
 
       const result = await gateway.refund('pi_test_123');
 
       expect(result.success).toBe(false);
       expect(result.errorMessage).toContain('already been refunded');
+    });
+
+    it('propagates an unknown transport result for durable same-key retry', async () => {
+      stripeInstance.refunds.create.mockRejectedValue(
+        new Error('connection reset after refund submission'),
+      );
+
+      await expect(gateway.refund(
+        'pi_test_123',
+        50,
+        { idempotencyKey: 'refund-same-key', currencyCode: 'USD' },
+      )).rejects.toThrow(/connection reset/i);
     });
   });
 });

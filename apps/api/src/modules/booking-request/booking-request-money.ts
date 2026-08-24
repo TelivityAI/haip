@@ -26,6 +26,8 @@ export type ResolveInstallmentAmountInput = {
   percentage?: MoneyValue | null;
   /** Optional existing allocation, useful when validating an edited plan. */
   allocatedAmount?: MoneyValue | null;
+  /** ISO 4217 minor-unit exponent; defaults to the scale-two ledger. */
+  currencyExponent?: number;
 };
 
 export type AllocationAmountInput = {
@@ -86,8 +88,8 @@ function nonNegative(value: MoneyValue, field: string): Decimal {
   return result;
 }
 
-function currency(value: Decimal): Decimal {
-  return value.toDecimalPlaces(2);
+function currency(value: Decimal, exponent = 2): Decimal {
+  return value.toDecimalPlaces(exponent);
 }
 
 function selectedTotal(
@@ -155,7 +157,7 @@ export function resolveInstallmentAmount(
     result = total.times(percentage).div(100);
   }
 
-  result = currency(result);
+  result = currency(result, input.currencyExponent ?? 2);
   if (result.lte(0)) {
     throw new ConflictException('Installment amount must be positive');
   }

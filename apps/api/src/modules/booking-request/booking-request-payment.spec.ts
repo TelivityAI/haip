@@ -254,8 +254,11 @@ function makeHarness(overrides: Partial<State> = {}) {
       };
     }),
   };
-  const canonicalPaymentService = {
-    refundPayment: vi.fn(),
+  const refundGateway = {
+    refund: vi.fn().mockResolvedValue({
+      success: true,
+      transactionId: 're_gateway_1',
+    }),
   };
   const folioService = {
     recalculateBalance: vi.fn(),
@@ -263,16 +266,16 @@ function makeHarness(overrides: Partial<State> = {}) {
   const service = new (BookingRequestPaymentService as any)(
     database.db,
     gateway,
-    canonicalPaymentService,
     folioService,
+    refundGateway,
   ) as BookingRequestPaymentService;
   return {
     service,
     state,
     database,
     gateway,
-    canonicalPaymentService,
     folioService,
+    refundGateway,
     gatewayTransactionStates,
   };
 }
@@ -391,6 +394,30 @@ describe('BookingRequestPaymentService installments', () => {
     }, actor)).rejects.toThrow(/due date/i);
   });
 
+  it('uses ISO zero-decimal rounding and rejects installments for a zero-total request', async () => {
+    const jpy = makeHarness({
+      requests: [request({
+        currencyCode: 'JPY',
+        submittedQuoteSnapshot: { grandTotal: '101' },
+      })],
+    });
+    const rounded = await jpy.service.createInstallment(REQUEST_ID, PROPERTY_ID, {
+      label: 'Half',
+      percentage: '50',
+      dueMilestone: 'manual',
+    }, actor);
+    expect(rounded.resolvedAmount).toBe('51.00');
+
+    const zeroTotal = makeHarness({
+      requests: [request({ submittedQuoteSnapshot: { grandTotal: '0.00' } })],
+    });
+    await expect(zeroTotal.service.createInstallment(REQUEST_ID, PROPERTY_ID, {
+      label: 'Invalid plan',
+      fixedAmount: '10.00',
+      dueMilestone: 'manual',
+    }, actor)).rejects.toThrow(/zero-total|positive total/i);
+  });
+
   it('adds partial allocations under locks and recomputes unpaid, partial, and paid state', async () => {
     const harness = makeHarness({
       installments: [installment()],
@@ -433,6 +460,42 @@ describe('BookingRequestPaymentService installments', () => {
     );
     expect(paid.installment).toMatchObject({ allocatedAmount: '100.00', status: 'paid' });
     expect(harness.database.lockCalls).toBeGreaterThanOrEqual(6);
+  });
+
+  it('allocates only the canonical net captured amount after returns', async () => {
+    const parent = capturedPayment({ amount: '100.00' });
+    const returned = capturedPayment({
+      id: 'dddddddd-0000-4000-a000-000000000099',
+      amount: '-40.00',
+      originalPaymentId: PAYMENT_ID,
+      idempotencyKey: 'booking-request-external-return:existing',
+    });
+    const harness = makeHarness({
+      installments: [installment({ resolvedAmount: '100.00' })],
+      payments: [parent, returned],
+    });
+
+    await expect(harness.service.allocatePayment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      { paymentId: PAYMENT_ID, amount: '60.01' },
+      actor,
+    )).rejects.toThrow(/movement/i);
+    await harness.service.allocatePayment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      { paymentId: PAYMENT_ID, amount: '60.00' },
+      actor,
+    );
+    await expect(harness.service.allocatePayment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      { paymentId: PAYMENT_ID, amount: '0.01' },
+      actor,
+    )).rejects.toThrow(/movement/i);
   });
 
   it('blocks editing and deletion after any amount has been allocated', async () => {
@@ -539,6 +602,153 @@ describe('BookingRequestPaymentService saved-card charges', () => {
     expect(harness.gateway.charge).toHaveBeenCalledTimes(1);
   });
 
+  it('repairs folio balance recalculation when a captured charge is replayed', async () => {
+    const harness = makeHarness({
+      requests: [request({
+        status: 'accepted',
+        acceptedTotal: '220.00',
+        acceptedFolioId: FOLIO_ID,
+      })],
+    });
+    const input = { amount: '40.00', idempotencyKey: 'charge-recalc-replay' };
+    await harness.service.chargeSavedCard(REQUEST_ID, PROPERTY_ID, input, actor);
+    harness.folioService.recalculateBalance.mockClear();
+
+    await harness.service.chargeSavedCard(REQUEST_ID, PROPERTY_ID, input, actor);
+
+    expect(harness.folioService.recalculateBalance).toHaveBeenCalledWith(
+      FOLIO_ID,
+      PROPERTY_ID,
+      expect.anything(),
+    );
+    expect(harness.gateway.charge).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an unknown gateway result pending and resumes with the same provider key', async () => {
+    const harness = makeHarness();
+    harness.gateway.charge
+      .mockRejectedValueOnce(new Error('socket timed out after provider capture'))
+      .mockResolvedValueOnce({
+        success: true,
+        transactionId: 'pi_recovered',
+        requiresAction: false,
+      });
+
+    await expect(harness.service.chargeSavedCard(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { amount: '40.00', idempotencyKey: 'timeout-after-capture' },
+      actor,
+    )).rejects.toThrow(/unknown|retry/i);
+    expect(harness.state.payments).toHaveLength(1);
+    expect(harness.state.payments[0]).toMatchObject({ status: 'pending' });
+
+    const recovered = await harness.service.chargeSavedCard(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { amount: '40.00', idempotencyKey: 'timeout-after-capture' },
+      actor,
+    );
+    expect(recovered).toMatchObject({ status: 'captured', gatewayTransactionId: 'pi_recovered' });
+    const keys = harness.gateway.charge.mock.calls.map((call) => call[0].idempotencyKey);
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it('resumes concurrent callers of the same pending charge with one provider identity', async () => {
+    const harness = makeHarness();
+    let release!: (value: {
+      success: true;
+      transactionId: string;
+      requiresAction: false;
+    }) => void;
+    const providerResult = new Promise<{
+      success: true;
+      transactionId: string;
+      requiresAction: false;
+    }>((resolve) => { release = resolve; });
+    harness.gateway.charge.mockImplementation(() => providerResult);
+
+    const first = harness.service.chargeSavedCard(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { amount: '40.00', idempotencyKey: 'concurrent-charge' },
+      actor,
+    );
+    await vi.waitFor(() => expect(harness.gateway.charge).toHaveBeenCalledTimes(1));
+    const second = harness.service.chargeSavedCard(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { amount: '40.00', idempotencyKey: 'concurrent-charge' },
+      actor,
+    );
+    await vi.waitFor(() => expect(harness.gateway.charge).toHaveBeenCalledTimes(2));
+    release({ success: true, transactionId: 'pi_concurrent', requiresAction: false });
+
+    const results = await Promise.all([first, second]);
+    expect(results.every((result) => result.status === 'captured')).toBe(true);
+    const keys = harness.gateway.charge.mock.calls.map((call) => call[0].idempotencyKey);
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it('uses the freshly locked accepted folio when capture finishes after acceptance', async () => {
+    const harness = makeHarness();
+    let release!: (value: {
+      success: true;
+      transactionId: string;
+      requiresAction: false;
+    }) => void;
+    harness.gateway.charge.mockImplementation(() => new Promise((resolve) => {
+      release = resolve;
+    }));
+
+    const charging = harness.service.chargeSavedCard(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { amount: '40.00', idempotencyKey: 'accept-during-charge' },
+      actor,
+    );
+    await vi.waitFor(() => expect(harness.gateway.charge).toHaveBeenCalledTimes(1));
+    Object.assign(harness.state.requests[0], {
+      status: 'accepted',
+      acceptedTotal: '220.00',
+      acceptedFolioId: FOLIO_ID,
+    });
+    release({ success: true, transactionId: 'pi_after_accept', requiresAction: false });
+
+    const result = await charging;
+    expect(result).toMatchObject({ status: 'captured', folioId: FOLIO_ID });
+    expect(harness.folioService.recalculateBalance).toHaveBeenCalledWith(
+      FOLIO_ID,
+      PROPERTY_ID,
+      expect.anything(),
+    );
+  });
+
+  it('never finalizes capture after the request becomes denied', async () => {
+    const harness = makeHarness();
+    let release!: (value: {
+      success: true;
+      transactionId: string;
+      requiresAction: false;
+    }) => void;
+    harness.gateway.charge.mockImplementation(() => new Promise((resolve) => {
+      release = resolve;
+    }));
+    const charging = harness.service.chargeSavedCard(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { amount: '40.00', idempotencyKey: 'denial-race' },
+      actor,
+    );
+    await vi.waitFor(() => expect(harness.gateway.charge).toHaveBeenCalledTimes(1));
+    harness.state.requests[0]!.status = 'denied';
+    release({ success: true, transactionId: 'pi_denial_race', requiresAction: false });
+
+    await expect(charging).rejects.toThrow(/denied/i);
+    expect(harness.state.payments[0]).toMatchObject({ status: 'pending' });
+  });
+
   it('scopes the gateway idempotency identity by property', async () => {
     const firstProperty = makeHarness();
     const secondProperty = makeHarness({
@@ -605,6 +815,7 @@ describe('BookingRequestPaymentService saved-card charges', () => {
     expect(harness.folioService.recalculateBalance).toHaveBeenCalledWith(
       FOLIO_ID,
       PROPERTY_ID,
+      expect.anything(),
     );
   });
 
@@ -625,6 +836,24 @@ describe('BookingRequestPaymentService saved-card charges', () => {
       expect(harness.gateway.charge).not.toHaveBeenCalled();
       expect(harness.state.payments).toHaveLength(0);
     }
+  });
+
+  it('rejects currencies whose minor units exceed the scale-two ledger before gateway I/O', async () => {
+    const harness = makeHarness({
+      requests: [request({
+        currencyCode: 'BHD',
+        submittedQuoteSnapshot: { grandTotal: '100.000' },
+      })],
+    });
+
+    await expect(harness.service.chargeSavedCard(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { amount: '1.00', idempotencyKey: 'unsupported-bhd' },
+      actor,
+    )).rejects.toThrow(/ledger.*precision|unsupported.*BHD/i);
+    expect(harness.gateway.charge).not.toHaveBeenCalled();
+    expect(harness.state.payments).toHaveLength(0);
   });
 });
 
@@ -710,6 +939,58 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       { ...input, amount: '75.11' },
       actor,
     )).rejects.toThrow(/reference/i);
+    for (const changed of [
+      { ...input, processedAt: '2026-08-20T11:00:00.000Z' },
+      { ...input, method: 'cash' as const },
+      { ...input, provider: 'different-bank' },
+      { ...input, notes: 'Different note' },
+    ]) {
+      await expect(harness.service.recordExternalPayment(
+        REQUEST_ID,
+        PROPERTY_ID,
+        changed,
+        actor,
+      )).rejects.toThrow(/reference|different financial data/i);
+    }
+    expect(harness.state.payments).toHaveLength(1);
+  });
+
+  it('rejects external money for zero-total requests and unsupported scale-three currencies', async () => {
+    const zeroTotal = makeHarness({
+      requests: [request({ submittedQuoteSnapshot: { grandTotal: '0.00' } })],
+    });
+    await expect(zeroTotal.service.recordExternalPayment(
+      REQUEST_ID,
+      PROPERTY_ID,
+      {
+        amount: '10.00',
+        currencyCode: 'EUR',
+        method: 'cash',
+        processedAt: '2026-08-20T10:00:00.000Z',
+        reference: 'zero-total-payment',
+      },
+      actor,
+    )).rejects.toThrow(/zero-total|positive total/i);
+
+    const bhd = makeHarness({
+      requests: [request({
+        currencyCode: 'BHD',
+        submittedQuoteSnapshot: { grandTotal: '100.000' },
+      })],
+    });
+    await expect(bhd.service.recordExternalPayment(
+      REQUEST_ID,
+      PROPERTY_ID,
+      {
+        amount: '1.00',
+        currencyCode: 'BHD',
+        method: 'cash',
+        processedAt: '2026-08-20T10:00:00.000Z',
+        reference: 'unsupported-bhd',
+      },
+      actor,
+    )).rejects.toThrow(/ledger.*precision|unsupported.*BHD/i);
+    expect(bhd.state.payments).toHaveLength(0);
   });
 
   it('records external money after acceptance directly on the linked folio', async () => {
@@ -736,6 +1017,42 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     expect(harness.folioService.recalculateBalance).toHaveBeenCalledWith(
       FOLIO_ID,
       PROPERTY_ID,
+      expect.anything(),
+    );
+  });
+
+  it('repairs a missed folio recalculation when an external-payment replay follows acceptance', async () => {
+    const harness = makeHarness();
+    const input = {
+      amount: '20.00',
+      currencyCode: 'EUR',
+      method: 'cash' as const,
+      processedAt: '2026-08-20T10:00:00.000Z',
+      reference: 'recalc-replay',
+    };
+    await harness.service.recordExternalPayment(
+      REQUEST_ID,
+      PROPERTY_ID,
+      input,
+      actor,
+    );
+    Object.assign(harness.state.requests[0], {
+      status: 'accepted',
+      acceptedTotal: '220.00',
+      acceptedFolioId: FOLIO_ID,
+    });
+    harness.state.payments[0]!.folioId = FOLIO_ID;
+
+    await harness.service.recordExternalPayment(
+      REQUEST_ID,
+      PROPERTY_ID,
+      input,
+      actor,
+    );
+    expect(harness.folioService.recalculateBalance).toHaveBeenCalledWith(
+      FOLIO_ID,
+      PROPERTY_ID,
+      expect.anything(),
     );
   });
 
@@ -746,15 +1063,7 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       gatewayProvider: 'stripe',
       gatewayTransactionId: 'pi_original',
     });
-    const refund = {
-      ...capturedPayment(),
-      id: 'dddddddd-0000-4000-a000-000000000002',
-      amount: '-35.00',
-      originalPaymentId: PAYMENT_ID,
-      idempotencyKey: 'booking-request-refund:partial-1',
-    };
     const harness = makeHarness({ payments: [original] });
-    harness.canonicalPaymentService.refundPayment.mockResolvedValueOnce(refund);
 
     const result = await harness.service.refund(
       REQUEST_ID,
@@ -763,14 +1072,15 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       { amount: '35.00', idempotencyKey: 'partial-refund-1' },
       actor,
     );
-    expect(harness.canonicalPaymentService.refundPayment).toHaveBeenCalledWith(
-      PAYMENT_ID,
-      PROPERTY_ID,
-      '35.00',
-      { idempotencyKey: expect.stringContaining('booking-request-refund:') },
+    expect(harness.refundGateway.refund).toHaveBeenCalledWith(
+      'pi_original',
+      35,
+      expect.objectContaining({
+        idempotencyKey: expect.stringContaining('booking-request-refund:'),
+        currencyCode: 'EUR',
+      }),
     );
     expect(result.movement).toMatchObject({
-      id: refund.id,
       originalPaymentId: PAYMENT_ID,
       amount: '-35.00',
     });
@@ -779,6 +1089,241 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       type: 'refund',
       amount: '35.00',
     });
+  });
+
+  it('persists a refund capacity claim before gateway I/O and recovers an unknown result', async () => {
+    const original = capturedPayment({
+      method: 'credit_card',
+      idempotencyKey: 'booking-request-charge:original',
+      gatewayProvider: 'stripe',
+      gatewayTransactionId: 'pi_original',
+    });
+    const harness = makeHarness({ payments: [original] });
+    harness.refundGateway.refund
+      .mockRejectedValueOnce(new Error('timeout after refund submission'))
+      .mockResolvedValueOnce({ success: true, transactionId: 're_recovered' });
+
+    await expect(harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '50.00', idempotencyKey: 'refund-timeout' },
+      actor,
+    )).rejects.toThrow(/unknown|retry/i);
+    expect(harness.state.resolutions).toEqual([
+      expect.objectContaining({
+        paymentId: PAYMENT_ID,
+        type: 'refund',
+        amount: '50.00',
+        status: 'pending',
+      }),
+    ]);
+    expect(harness.state.payments).toHaveLength(1);
+
+    const recovered = await harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '50.00', idempotencyKey: 'refund-timeout' },
+      actor,
+    );
+    expect(recovered).toMatchObject({
+      movement: { amount: '-50.00', originalPaymentId: PAYMENT_ID },
+      resolution: { status: 'completed', amount: '50.00' },
+    });
+    const keys = harness.refundGateway.refund.mock.calls.map((call) => call[2].idempotencyKey);
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it('reserves refund capacity across different keys and competing retention', async () => {
+    const original = capturedPayment({
+      method: 'credit_card',
+      idempotencyKey: 'booking-request-charge:original',
+      gatewayProvider: 'stripe',
+      gatewayTransactionId: 'pi_original',
+    });
+    const harness = makeHarness({
+      payments: [original],
+      resolutions: [{
+        id: '99999999-0000-4000-a000-000000000001',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        paymentId: PAYMENT_ID,
+        type: 'refund',
+        amount: '50.00',
+        status: 'pending',
+        idempotencyKey: 'booking-request-refund:pending',
+        operationFingerprint: 'pending-fingerprint',
+        reason: 'Gateway refund pending',
+      }],
+    });
+
+    await expect(harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '50.01', idempotencyKey: 'second-refund' },
+      actor,
+    )).rejects.toThrow(/remaining/i);
+    await expect(harness.service.retainForDenial(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '50.01', reason: 'Competing retained amount' },
+      actor,
+    )).rejects.toThrow(/remaining/i);
+    expect(harness.refundGateway.refund).not.toHaveBeenCalled();
+  });
+
+  it('allows two distinct fifty-unit claims to exactly exhaust a one-hundred payment', async () => {
+    const harness = makeHarness({
+      payments: [capturedPayment({
+        method: 'credit_card',
+        amount: '100.00',
+        idempotencyKey: 'booking-request-charge:original',
+        gatewayProvider: 'stripe',
+        gatewayTransactionId: 'pi_original',
+      })],
+    });
+
+    await harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '50.00', idempotencyKey: 'refund-half-one' },
+      actor,
+    );
+    await harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '50.00', idempotencyKey: 'refund-half-two' },
+      actor,
+    );
+
+    expect(harness.state.resolutions.filter((row) => row.status === 'completed')).toHaveLength(2);
+    expect(harness.state.payments.filter((row) => row.originalPaymentId === PAYMENT_ID))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ amount: '-50.00' }),
+        expect.objectContaining({ amount: '-50.00' }),
+      ]));
+  });
+
+  it('uses the freshly locked folio when acceptance completes during refund I/O', async () => {
+    const harness = makeHarness({
+      payments: [capturedPayment({
+        method: 'credit_card',
+        idempotencyKey: 'booking-request-charge:original',
+        gatewayProvider: 'stripe',
+        gatewayTransactionId: 'pi_original',
+      })],
+    });
+    let release!: (value: { success: true; transactionId: string }) => void;
+    harness.refundGateway.refund.mockImplementation(() => new Promise((resolve) => {
+      release = resolve;
+    }));
+
+    const refunding = harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '25.00', idempotencyKey: 'accept-during-refund' },
+      actor,
+    );
+    await vi.waitFor(() => expect(harness.refundGateway.refund).toHaveBeenCalledTimes(1));
+    Object.assign(harness.state.requests[0], {
+      status: 'accepted',
+      acceptedTotal: '220.00',
+      acceptedFolioId: FOLIO_ID,
+    });
+    harness.state.payments[0]!.folioId = FOLIO_ID;
+    release({ success: true, transactionId: 're_after_accept' });
+
+    const result = await refunding;
+    expect(result.movement).toMatchObject({ folioId: FOLIO_ID, amount: '-25.00' });
+    expect(harness.folioService.recalculateBalance).toHaveBeenCalledWith(
+      FOLIO_ID,
+      PROPERTY_ID,
+      expect.anything(),
+    );
+  });
+
+  it('keeps a captured provider refund claim retryable when folio recalculation rolls back', async () => {
+    const harness = makeHarness({
+      requests: [request({
+        status: 'accepted',
+        acceptedTotal: '220.00',
+        acceptedFolioId: FOLIO_ID,
+      })],
+      payments: [capturedPayment({
+        folioId: FOLIO_ID,
+        method: 'credit_card',
+        idempotencyKey: 'booking-request-charge:original',
+        gatewayProvider: 'stripe',
+        gatewayTransactionId: 'pi_original',
+      })],
+    });
+    harness.folioService.recalculateBalance
+      .mockRejectedValueOnce(new Error('folio lock timeout'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '25.00', idempotencyKey: 'refund-recalc-recovery' },
+      actor,
+    )).rejects.toThrow(/folio lock timeout/i);
+    expect(harness.state.resolutions).toEqual([
+      expect.objectContaining({ status: 'pending', amount: '25.00' }),
+    ]);
+    expect(harness.state.payments).toHaveLength(1);
+
+    const recovered = await harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '25.00', idempotencyKey: 'refund-recalc-recovery' },
+      actor,
+    );
+    expect(recovered.resolution).toMatchObject({ status: 'completed' });
+    const keys = harness.refundGateway.refund.mock.calls.map((call) => call[2].idempotencyKey);
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it('replays a fully completed refund before remaining-capacity validation', async () => {
+    const original = capturedPayment({
+      method: 'credit_card',
+      idempotencyKey: 'booking-request-charge:original',
+      gatewayProvider: 'stripe',
+      gatewayTransactionId: 'pi_original',
+    });
+    const harness = makeHarness({ payments: [original] });
+
+    const first = await harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '100.00', idempotencyKey: 'full-refund' },
+      actor,
+    );
+    const replay = await harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '100.00', idempotencyKey: 'full-refund' },
+      actor,
+    );
+    expect(replay.movement.id).toBe(first.movement.id);
+    expect(harness.refundGateway.refund).toHaveBeenCalledTimes(1);
+    await expect(harness.service.refund(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '99.00', idempotencyKey: 'full-refund' },
+      actor,
+    )).rejects.toThrow(/different/i);
   });
 
   it('does not send an externally recorded payment to the configured gateway refund adapter', async () => {
@@ -792,7 +1337,7 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       { amount: '10.00', idempotencyKey: 'wrong-refund-path' },
       actor,
     )).rejects.toThrow(/external return/i);
-    expect(harness.canonicalPaymentService.refundPayment).not.toHaveBeenCalled();
+    expect(harness.refundGateway.refund).not.toHaveBeenCalled();
   });
 
   it('records partial external returns as negative canonical movements', async () => {
@@ -824,6 +1369,118 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     });
   });
 
+  it('fingerprints the complete external-return record for exact replay', async () => {
+    const harness = makeHarness({ payments: [capturedPayment()] });
+    const input = {
+      amount: '30.00',
+      processedAt: '2026-08-21T10:00:00.000Z',
+      reference: 'return-fingerprint',
+      notes: 'Returned at bank',
+    };
+    const first = await harness.service.recordExternalReturn(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      input,
+      actor,
+    );
+    const replay = await harness.service.recordExternalReturn(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      input,
+      actor,
+    );
+    expect(replay.movement.id).toBe(first.movement.id);
+
+    for (const changed of [
+      { ...input, processedAt: '2026-08-21T11:00:00.000Z' },
+      { ...input, notes: 'Different note' },
+    ]) {
+      await expect(harness.service.recordExternalReturn(
+        REQUEST_ID,
+        PAYMENT_ID,
+        PROPERTY_ID,
+        changed,
+        actor,
+      )).rejects.toThrow(/reference|different financial data/i);
+    }
+  });
+
+  it('repairs a missed folio recalculation on an exact external-return replay', async () => {
+    const harness = makeHarness({ payments: [capturedPayment()] });
+    const input = {
+      amount: '30.00',
+      processedAt: '2026-08-21T10:00:00.000Z',
+      reference: 'return-recalc-replay',
+    };
+    await harness.service.recordExternalReturn(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      input,
+      actor,
+    );
+    Object.assign(harness.state.requests[0], {
+      status: 'accepted',
+      acceptedTotal: '220.00',
+      acceptedFolioId: FOLIO_ID,
+    });
+    for (const payment of harness.state.payments) payment.folioId = FOLIO_ID;
+
+    await harness.service.recordExternalReturn(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      input,
+      actor,
+    );
+    expect(harness.folioService.recalculateBalance).toHaveBeenCalledWith(
+      FOLIO_ID,
+      PROPERTY_ID,
+      expect.anything(),
+    );
+  });
+
+  it('releases over-allocated value and recomputes installment state after a return', async () => {
+    const harness = makeHarness({
+      installments: [installment({
+        resolvedAmount: '100.00',
+        allocatedAmount: '80.00',
+        status: 'partial',
+      })],
+      payments: [capturedPayment({ amount: '100.00' })],
+      allocations: [{
+        id: '88888888-0000-4000-a000-000000000001',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        paymentId: PAYMENT_ID,
+        installmentId: INSTALLMENT_ID,
+        amount: '80.00',
+        createdAt: new Date('2026-08-20T10:00:00.000Z'),
+      }],
+    });
+
+    await harness.service.recordExternalReturn(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      {
+        amount: '40.00',
+        processedAt: '2026-08-21T10:00:00.000Z',
+        reference: 'return-releases-allocation',
+      },
+      actor,
+    );
+
+    expect(harness.state.allocations).toEqual([
+      expect.objectContaining({ amount: '60.00' }),
+    ]);
+    expect(harness.state.installments).toEqual([
+      expect.objectContaining({ allocatedAmount: '60.00', status: 'partial' }),
+    ]);
+  });
+
   it('requires a reason for retained money and supports partial retained resolution', async () => {
     const harness = makeHarness({ payments: [capturedPayment()] });
     await expect(harness.service.retainForDenial(
@@ -848,6 +1505,29 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       reason: 'Non-refundable supplier cost',
       resolvedBy: actor.userId,
     });
+  });
+
+  it('allows retention only while the request decision is pending', async () => {
+    for (const status of ['accepted', 'denied'] as const) {
+      const harness = makeHarness({
+        requests: [request({
+          status,
+          acceptedTotal: status === 'accepted' ? '220.00' : null,
+          acceptedFolioId: status === 'accepted' ? FOLIO_ID : null,
+        })],
+        payments: [capturedPayment({
+          folioId: status === 'accepted' ? FOLIO_ID : null,
+        })],
+      });
+      await expect(harness.service.retainForDenial(
+        REQUEST_ID,
+        PAYMENT_ID,
+        PROPERTY_ID,
+        { amount: '20.00', reason: 'Supplier cost' },
+        actor,
+      )).rejects.toThrow(/pending request/i);
+      expect(harness.state.resolutions).toHaveLength(0);
+    }
   });
 
   it('rejects zero/negative, future-dated, wrong-currency, over-resolved, and cross-property movements', async () => {

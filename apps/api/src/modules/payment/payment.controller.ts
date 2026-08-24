@@ -8,7 +8,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
@@ -21,7 +21,7 @@ export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
   @Post()
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Record payment (cash, bank transfer, etc.)' })
   @ApiResponse({ status: 201, description: 'Payment recorded' })
   recordPayment(@Body() dto: CreatePaymentDto) {
@@ -29,7 +29,7 @@ export class PaymentController {
   }
 
   @Post('authorize')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Authorize card payment (pre-auth)' })
   @ApiResponse({ status: 201, description: 'Payment authorized' })
   authorizePayment(@Body() dto: AuthorizePaymentDto) {
@@ -37,6 +37,7 @@ export class PaymentController {
   }
 
   @Get()
+  @RequirePermissions('folios.read')
   @ApiOperation({ summary: 'List payments with filters' })
   @ApiResponse({ status: 200, description: 'Paginated list of payments' })
   listPayments(@Query() dto: ListPaymentsDto) {
@@ -44,6 +45,7 @@ export class PaymentController {
   }
 
   @Get(':id')
+  @RequirePermissions('folios.read')
   @ApiOperation({ summary: 'Get payment by ID' })
   @ApiResponse({ status: 200, description: 'Payment found' })
   @ApiResponse({ status: 404, description: 'Payment not found' })
@@ -56,7 +58,7 @@ export class PaymentController {
   }
 
   @Post(':id/capture')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Capture authorized payment' })
   @ApiResponse({ status: 200, description: 'Payment captured' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -68,7 +70,7 @@ export class PaymentController {
   }
 
   @Post(':id/void')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Void authorized payment' })
   @ApiResponse({ status: 200, description: 'Payment voided' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -80,7 +82,7 @@ export class PaymentController {
   }
 
   @Post(':id/refund')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Refund captured payment' })
   @ApiResponse({ status: 200, description: 'Payment refunded' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -93,7 +95,7 @@ export class PaymentController {
   }
 
   @Post(':id/correct')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
+  @RequirePermissions('folios.manage')
   @ApiOperation({ summary: 'Correct a payment via the void/refund/adjust matrix (KB 14.1)' })
   @ApiResponse({ status: 200, description: 'Payment corrected' })
   correctPayment(

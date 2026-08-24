@@ -525,9 +525,31 @@ export class BookingRequestService {
         row.propertyId === propertyId
         && row.bookingRequestId === id
         && row.originalPaymentId == null);
+      if (scopedMovements.some((row) => row.status === 'pending')) {
+        throw new ConflictException(
+          'Booking request has a pending payment attempt; retry or resolve it before denial',
+        );
+      }
       const scopedResolutions = resolutionRows.filter((row) =>
         row.propertyId === propertyId && row.bookingRequestId === id);
-      assertDenialMoneyResolved(scopedMovements, scopedResolutions);
+      if (scopedResolutions.some((row) => row.status === 'pending')) {
+        throw new ConflictException(
+          'Booking request has a pending payment resolution; retry it before denial',
+        );
+      }
+      assertDenialMoneyResolved(
+        scopedMovements,
+        scopedResolutions
+          .filter((row) => row.status == null || row.status === 'completed')
+          .map((row) => ({
+            id: row.id,
+            paymentId: row.paymentId,
+            movementId: row.movementId ?? undefined,
+            type: row.type,
+            amount: row.amount,
+            reason: row.reason,
+          })),
+      );
 
       const decidedAt = new Date();
       const [updated] = await tx

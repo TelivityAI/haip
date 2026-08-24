@@ -529,22 +529,14 @@ describe('PaymentService', () => {
       expect(result).toEqual(refundPayment);
     });
 
-    it('preserves Booking Request provenance and does not recalculate a missing folio', async () => {
+    it('rejects a Booking Request refund through the generic service', async () => {
       const requestPayment = {
         ...mockPayment,
         folioId: null,
         bookingRequestId: 'request-001',
         status: 'captured',
       };
-      const refundPayment = {
-        ...mockPayment,
-        id: 'pay-request-refund',
-        folioId: null,
-        bookingRequestId: 'request-001',
-        amount: '-25.00',
-        originalPaymentId: 'pay-001',
-      };
-      let insertedValues: Record<string, unknown> | undefined;
+      const insert = vi.fn();
       const makeTx = () => {
         let selectCall = 0;
         return {
@@ -558,12 +550,7 @@ describe('PaymentService', () => {
               }),
             })),
           })),
-          insert: vi.fn(() => ({
-            values: vi.fn((values: Record<string, unknown>) => {
-              insertedValues = values;
-              return { returning: vi.fn().mockResolvedValue([refundPayment]) };
-            }),
-          })),
+          insert,
         };
       };
       const db = {
@@ -579,18 +566,13 @@ describe('PaymentService', () => {
         ],
       }).compile();
 
-      await module.get(PaymentService).refundPayment(
+      await expect(module.get(PaymentService).refundPayment(
         'pay-001',
         'prop-001',
         '25.00',
-      );
+      )).rejects.toThrow(/Booking Request payment endpoint/i);
 
-      expect(insertedValues).toEqual(expect.objectContaining({
-        bookingRequestId: 'request-001',
-        folioId: null,
-        originalPaymentId: 'pay-001',
-        amount: '-25.00',
-      }));
+      expect(insert).not.toHaveBeenCalled();
       expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
     });
 

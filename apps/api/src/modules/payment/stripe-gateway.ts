@@ -1,11 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
+import Decimal from 'decimal.js';
 import type {
   PaymentGateway,
   PaymentGatewayCallOptions,
   PaymentGatewayResult,
 } from './interfaces/payment-gateway.interface';
+
+class StripeLedgerValidationError extends Error {}
 
 /**
  * Stripe implementation of PaymentGateway.
@@ -51,6 +54,37 @@ export class StripeGateway implements PaymentGateway {
     return undefined;
   }
 
+  private toLedgerMinorUnits(amount: number, currencyCode: string): number {
+    const normalized = currencyCode.trim().toUpperCase();
+    const exponent = new Intl.NumberFormat('en', {
+      style: 'currency',
+      currency: normalized,
+    }).resolvedOptions().maximumFractionDigits;
+    if (exponent == null) {
+      throw new StripeLedgerValidationError(
+        `Unable to resolve minor-unit exponent for '${normalized}'`,
+      );
+    }
+    if (exponent > 2) {
+      throw new StripeLedgerValidationError(
+        `${normalized} minor-unit exponent ${exponent} exceeds ledger storage precision`,
+      );
+    }
+    const minorUnits = new Decimal(amount).mul(new Decimal(10).pow(exponent));
+    if (!minorUnits.isInteger()) {
+      throw new StripeLedgerValidationError(
+        `Amount '${amount}' ${normalized} has fractional minor units`,
+      );
+    }
+    const value = minorUnits.toNumber();
+    if (!Number.isSafeInteger(value)) {
+      throw new StripeLedgerValidationError(
+        `Amount '${amount}' ${normalized} exceeds Stripe's safe integer range`,
+      );
+    }
+    return value;
+  }
+
   async authorize(
     token: string,
     amount: number,
@@ -60,7 +94,7 @@ export class StripeGateway implements PaymentGateway {
     try {
       const paymentIntent = await this.stripe.paymentIntents.create(
         {
-          amount: Math.round(amount * 100), // Stripe uses cents
+          amount: this.toLedgerMinorUnits(amount, currency),
           currency: currency.toLowerCase(),
           payment_method: token,
           capture_method: 'manual',
@@ -103,7 +137,10 @@ export class StripeGateway implements PaymentGateway {
     try {
       const params: Stripe.PaymentIntentCaptureParams = {};
       if (amount !== undefined) {
-        params.amount_to_capture = Math.round(amount * 100);
+        params.amount_to_capture = this.toLedgerMinorUnits(
+          amount,
+          options?.currencyCode ?? 'USD',
+        );
       }
 
       const paymentIntent = await this.stripe.paymentIntents.capture(
@@ -159,7 +196,7 @@ export class StripeGateway implements PaymentGateway {
         payment_intent: transactionId,
       };
       if (amount !== undefined) {
-        params.amount = Math.round(amount * 100);
+        params.amount = this.toLedgerMinorUnits(amount, options?.currencyCode ?? 'USD');
       }
 
       const refund = await this.stripe.refunds.create(params, this.requestOptions(options));
@@ -169,11 +206,21 @@ export class StripeGateway implements PaymentGateway {
       return { success: true, transactionId: refund.id };
     } catch (err: any) {
       this.logger.error(`Stripe refund failed: ${err.message}`, err.stack);
-      return {
-        success: false,
-        transactionId: transactionId,
-        errorMessage: err.message ?? 'Refund failed',
-      };
+      if (err instanceof StripeLedgerValidationError || this.isExplicitProviderRejection(err)) {
+        return {
+          success: false,
+          transactionId: transactionId,
+          errorMessage: err.message ?? 'Refund failed',
+        };
+      }
+      throw err;
     }
+  }
+
+  private isExplicitProviderRejection(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null || !('type' in error)) return false;
+    return error.type === 'StripeInvalidRequestError'
+      || error.type === 'StripeCardError'
+      || error.type === 'StripeAuthenticationError';
   }
 }

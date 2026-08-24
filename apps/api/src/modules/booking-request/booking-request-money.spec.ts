@@ -46,6 +46,15 @@ describe('booking request money', () => {
       .toEqual(new Decimal('33.33'));
   });
 
+  it('rounds percentage installments to the supplied ISO currency exponent', () => {
+    expect(resolveInstallmentAmount({
+      total: '101', percentage: '50', currencyExponent: 0,
+    })).toEqual(new Decimal('51'));
+    expect(resolveInstallmentAmount({
+      total: '101.00', percentage: '50', currencyExponent: 2,
+    })).toEqual(new Decimal('50.50'));
+  });
+
   it('rejects invalid installment amounts and allocations', () => {
     expect(() => resolveInstallmentAmount({ total: '100', fixedAmount: '0' })).toThrow(/positive/);
     expect(() => resolveInstallmentAmount({ total: '100', fixedAmount: '50', allocatedAmount: '51' }))

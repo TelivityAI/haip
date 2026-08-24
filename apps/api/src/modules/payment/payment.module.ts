@@ -55,6 +55,6 @@ function createSavedPaymentMethodGateway(configService: ConfigService) {
       inject: [ConfigService],
     },
   ],
-  exports: [PaymentService, SAVED_PAYMENT_METHOD_GATEWAY],
+  exports: [PaymentService, PAYMENT_GATEWAY, SAVED_PAYMENT_METHOD_GATEWAY],
 })
 export class PaymentModule {}

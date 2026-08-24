@@ -14,6 +14,7 @@ import { eq, and } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
 import {
   auditLogs,
+  bookingRequests,
   bookingRequestPaymentResolutions,
   payments,
 } from '@telivityhaip/database';
@@ -22,6 +23,7 @@ import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
 import { sumRefundChildren } from './payment-ledger';
 import Stripe from 'stripe';
+import { reconcileBookingRequestPaymentAllocations } from '../booking-request/booking-request-allocation-reconciler';
 
 /**
  * Stripe Webhook Controller.
@@ -122,8 +124,9 @@ export class StripeWebhookController {
       }
     } catch (err: any) {
       this.logger.error(`Error processing webhook ${event.type}: ${err.message}`, err.stack);
-      // Return 200 to prevent Stripe retries for processing errors
-      // The error is logged for manual investigation
+      // Do not acknowledge an unpersisted financial event. Stripe must retry
+      // transient failures and operators must see unsupported currencies.
+      throw err;
     }
 
     return res.status(200).json({ received: true });
@@ -233,6 +236,16 @@ export class StripeWebhookController {
     const ledgerKey = `stripe_refund:${charge.id}:${stripeRefundedDec.toFixed(2)}`;
 
     const recorded = await this.db.transaction(async (tx: any) => {
+      if (payment.bookingRequestId) {
+        await tx
+          .select({ id: bookingRequests.id })
+          .from(bookingRequests)
+          .where(and(
+            eq(bookingRequests.id, payment.bookingRequestId),
+            eq(bookingRequests.propertyId, payment.propertyId),
+          ))
+          .for('update');
+      }
       const [parent] = await tx
         .select()
         .from(payments)
@@ -247,12 +260,27 @@ export class StripeWebhookController {
       if (!parent) return null;
 
       const [existingForLedger] = await tx
-        .select({ id: payments.id })
+        .select()
         .from(payments)
         .where(eq(payments.gatewayTransactionId, ledgerKey))
         .limit(1);
       if (existingForLedger) {
-        return null;
+        if (parent.bookingRequestId) {
+          await reconcileBookingRequestPaymentAllocations(tx, {
+            bookingRequestId: parent.bookingRequestId,
+            propertyId: parent.propertyId,
+            payment: parent,
+          });
+        }
+        if (parent.folioId) {
+          await this.folioService.recalculateBalance(parent.folioId, parent.propertyId, tx);
+        }
+        return {
+          row: existingForLedger,
+          parent,
+          deltaDec: new Decimal(0),
+          replay: true as const,
+        };
       }
 
       const existingRefunds = await tx
@@ -294,21 +322,64 @@ export class StripeWebhookController {
         .returning();
 
       if (parent.bookingRequestId) {
-        const [resolution] = await tx
-          .insert(bookingRequestPaymentResolutions)
-          .values({
-            propertyId: parent.propertyId,
-            bookingRequestId: parent.bookingRequestId,
-            paymentId: parent.id,
-            type: 'refund',
-            amount: deltaDec.toFixed(2),
+        const pendingRows = await tx
+          .select()
+          .from(bookingRequestPaymentResolutions)
+          .where(and(
+            eq(bookingRequestPaymentResolutions.propertyId, parent.propertyId),
+            eq(bookingRequestPaymentResolutions.bookingRequestId, parent.bookingRequestId),
+            eq(bookingRequestPaymentResolutions.paymentId, parent.id),
+            eq(bookingRequestPaymentResolutions.type, 'refund'),
+            eq(bookingRequestPaymentResolutions.status, 'pending'),
+          ))
+          .for('update');
+        const pendingClaim = pendingRows.find((candidate: typeof bookingRequestPaymentResolutions.$inferSelect) =>
+          candidate.propertyId === parent.propertyId
+          && candidate.bookingRequestId === parent.bookingRequestId
+          && candidate.paymentId === parent.id
+          && candidate.type === 'refund'
+          && candidate.status === 'pending'
+          && new Decimal(candidate.amount).eq(deltaDec));
+        const resolvedAt = new Date();
+        let resolution: typeof bookingRequestPaymentResolutions.$inferSelect;
+        if (pendingClaim) {
+          const values = {
+            status: 'completed',
+            movementId: row.id,
             reason: `Gateway refund movement ${row.id}`,
-            resolvedAt: new Date(),
-          })
-          .returning();
+            attempts: (pendingClaim.attempts ?? 0) + 1,
+            lastError: null,
+            resolvedAt,
+            updatedAt: resolvedAt,
+          } as const;
+          await tx
+            .update(bookingRequestPaymentResolutions)
+            .set(values)
+            .where(and(
+              eq(bookingRequestPaymentResolutions.id, pendingClaim.id),
+              eq(bookingRequestPaymentResolutions.propertyId, parent.propertyId),
+              eq(bookingRequestPaymentResolutions.status, 'pending'),
+            ));
+          resolution = { ...pendingClaim, ...values };
+        } else {
+          [resolution] = await tx
+            .insert(bookingRequestPaymentResolutions)
+            .values({
+              propertyId: parent.propertyId,
+              bookingRequestId: parent.bookingRequestId,
+              paymentId: parent.id,
+              type: 'refund',
+              status: 'completed',
+              amount: deltaDec.toFixed(2),
+              movementId: row.id,
+              reason: `Gateway refund movement ${row.id}`,
+              resolvedAt,
+            })
+            .returning();
+        }
         await tx.insert(auditLogs).values({
           propertyId: parent.propertyId,
-          action: 'create',
+          action: pendingClaim ? 'update' : 'create',
           entityType: 'booking_request_payment_resolution',
           entityId: resolution.id,
           newValue: {
@@ -317,7 +388,15 @@ export class StripeWebhookController {
             type: 'refund',
             amount: deltaDec.toFixed(2),
           },
-          description: 'Stripe refund resolved Booking Request money',
+          previousValue: pendingClaim ? { status: 'pending' } : null,
+          description: pendingClaim
+            ? 'Stripe refund completed pending Booking Request refund claim'
+            : 'Stripe refund resolved Booking Request money',
+        });
+        await reconcileBookingRequestPaymentAllocations(tx, {
+          bookingRequestId: parent.bookingRequestId,
+          propertyId: parent.propertyId,
+          payment: parent,
         });
       }
 
@@ -328,6 +407,7 @@ export class StripeWebhookController {
     });
 
     if (!recorded) return;
+    if ('replay' in recorded && recorded.replay) return;
 
     await this.webhookService.emit(
       'payment.refunded',
@@ -360,6 +440,11 @@ export class StripeWebhookController {
     }
     if (exponent == null) {
       throw new BadRequestException(`Unable to resolve Stripe currency '${currencyCode}'`);
+    }
+    if (exponent > 2) {
+      throw new BadRequestException(
+        `${normalized} minor-unit exponent ${exponent} exceeds ledger storage precision`,
+      );
     }
     const result = new Decimal(amount).div(new Decimal(10).pow(exponent));
     if (result.decimalPlaces() > 2) {

@@ -373,4 +373,40 @@ describe('StripeSavedPaymentMethodGateway', () => {
       errorMessage: 'Payment requires additional authentication',
     });
   });
+
+  it('propagates a transport error so the durable payment claim remains retryable', async () => {
+    stripe.paymentIntents.create.mockRejectedValue(new Error('connection reset after write'));
+
+    await expect(gateway.charge({
+      customerId: 'cus_trusted',
+      paymentMethodId: 'pm_trusted',
+      amount: '40.00',
+      currencyCode: 'USD',
+      idempotencyKey: 'request-charge:transport-error',
+    })).rejects.toThrow(/connection reset/i);
+  });
+
+  it('maps an explicit Stripe card decline to a terminal failure', async () => {
+    stripe.paymentIntents.create.mockRejectedValue({
+      type: 'StripeCardError',
+      message: 'Your card was declined',
+      payment_intent: {
+        id: 'pi_declined',
+        status: 'requires_payment_method',
+      },
+    });
+
+    await expect(gateway.charge({
+      customerId: 'cus_trusted',
+      paymentMethodId: 'pm_trusted',
+      amount: '40.00',
+      currencyCode: 'USD',
+      idempotencyKey: 'request-charge:declined',
+    })).resolves.toEqual({
+      success: false,
+      transactionId: 'pi_declined',
+      requiresAction: false,
+      errorMessage: 'Your card was declined',
+    });
+  });
 });
