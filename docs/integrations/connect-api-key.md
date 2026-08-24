@@ -77,4 +77,4 @@ curl -sS -X POST "https://your-haip.example.com/api/v1/connect/subscriptions" \
 - `POST /api/v1/folio-inbound/charges` — [Folio inbound (POS)](folio-inbound-pos.md)
 - `POST /api/v1/pos/charges` — outlet POS variant (see OpenAPI **pos** tag)
 
-Staff-facing REST routes (folios, reservations, reports) use OAuth/Keycloak — use Connect + webhooks for integrations, or service accounts as your deployment documents.
+Staff-facing REST routes (folios, reservations, reports) use OAuth/Keycloak — use Connect + webhooks for integrations, or a **[service principal](service-principal.md)** (documented setup + `pnpm integration:link`).

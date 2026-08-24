@@ -29,7 +29,7 @@ describe('permissions catalog', () => {
     expect([...ROLE_DEFAULT_PERMISSIONS.admin].sort()).toEqual([...PERMISSION_KEYS].sort());
   });
 
-  it('defines defaults for all ten system roles', () => {
+  it('defines defaults for all system roles', () => {
     expect(SYSTEM_ROLE_KEYS.sort()).toEqual(
       [
         'accounting',
@@ -38,6 +38,8 @@ describe('permissions catalog', () => {
         'general_manager',
         'housekeeping',
         'housekeeping_manager',
+        'integration_inventory',
+        'integration_reservations',
         'night_auditor',
         'readonly',
         'reservations',

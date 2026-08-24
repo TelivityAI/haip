@@ -190,6 +190,8 @@ async function main() {
     { key: 'revenue_manager', name: 'Revenue Manager', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'groups.read', 'groups.manage', 'commercial.read', 'rateplans.read', 'rateplans.manage', 'policies.read', 'policies.manage', 'revenue.manage', 'channels.manage', 'reports.view', 'communications.manage'] },
     { key: 'accounting', name: 'Accounting', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'folios.read', 'folios.manage', 'houseaccounts.read', 'houseaccounts.manage', 'cashier.access', 'accounting.view', 'tax.manage', 'nightaudit.run', 'reports.view', 'commercial.read'] },
     { key: 'reservations', name: 'Reservations', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'groups.read', 'groups.manage', 'commercial.read', 'rateplans.read', 'services.read', 'services.manage', 'policies.read', 'communications.manage', 'reviews.manage'] },
+    { key: 'integration_inventory', name: 'Integration — Inventory', perms: ['rooms.read', 'rooms.write', 'ops.manage'] },
+    { key: 'integration_reservations', name: 'Integration — Reservations', perms: ['reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read'] },
   ];
 
   const roleIdByKey: Record<string, string> = {};
