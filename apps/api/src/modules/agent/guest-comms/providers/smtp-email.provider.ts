@@ -10,6 +10,30 @@ import {
   unknownTimeoutResult,
 } from './bounded-email-transport';
 
+interface OwnedSmtpPoolResource {
+  connection?: {
+    _socket?: OwnedSmtpConnectionSocket;
+  };
+  close?: () => void;
+}
+
+interface OwnedSmtpSocket {
+  destroyed?: boolean;
+  destroy?: () => void;
+}
+
+interface OwnedSmtpConnectionSocket extends OwnedSmtpSocket {
+  socket?: OwnedSmtpSocket;
+}
+
+interface OwnedSmtpTransport {
+  close?: () => void;
+  transporter?: {
+    _connections?: OwnedSmtpPoolResource[];
+  };
+  sendMail: (message: Record<string, unknown>) => Promise<{ messageId: string }>;
+}
+
 /**
  * SMTP transport (nodemailer) — configured via SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM.
  */
@@ -63,15 +87,24 @@ export class SmtpEmailProvider implements EmailProvider {
     const timeoutMs = emailSendTimeoutMs(options);
     const transport = this.nodemailer.createTransport({
       ...this.transportConfig,
+      pool: true,
+      maxConnections: 1,
+      maxMessages: 1,
+      maxRequeues: 0,
       connectionTimeout: timeoutMs,
       greetingTimeout: timeoutMs,
       socketTimeout: timeoutMs,
       dnsTimeout: timeoutMs,
-    });
+    }) as OwnedSmtpTransport;
     let timedOut = false;
+    let lateClose: ReturnType<typeof setImmediate> | undefined;
     const timeout = setTimeout(() => {
       timedOut = true;
-      transport.close?.();
+      this.closeOwnedTransport(transport);
+      // Pool resource setup itself is asynchronous. Re-close on the next turn
+      // so a resource created at the deadline cannot outlive this send.
+      lateClose = setImmediate(() => this.closeOwnedTransport(transport));
+      lateClose.unref?.();
     }, timeoutMs);
     timeout.unref?.();
     try {
@@ -103,7 +136,27 @@ export class SmtpEmailProvider implements EmailProvider {
       return { sent: false, provider: this.name, error: error.message };
     } finally {
       clearTimeout(timeout);
-      transport.close?.();
+      if (lateClose) clearImmediate(lateClose);
+      // This runs only after sendMail has settled. Destroying again here makes
+      // return from send() the ownership boundary for every per-send socket.
+      this.closeOwnedTransport(transport);
+    }
+  }
+
+  private closeOwnedTransport(transport: OwnedSmtpTransport): void {
+    const resources = [...(transport.transporter?._connections ?? [])];
+    const sockets = resources.map((resource) => {
+      const wrappedSocket = resource.connection?._socket;
+      return wrappedSocket?.socket ?? wrappedSocket;
+    });
+
+    // Marks the pool closed and fails any work that has not acquired a resource.
+    transport.close?.();
+    for (const resource of resources) resource.close?.();
+    // SMTPConnection.close() is graceful after greeting. A hard deadline also
+    // destroys the owned socket so an active half-open transaction cannot live.
+    for (const socket of sockets) {
+      if (!socket?.destroyed) socket?.destroy?.();
     }
   }
 }
