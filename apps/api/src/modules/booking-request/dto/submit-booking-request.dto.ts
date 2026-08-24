@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
-  IsDateString,
   IsEmail,
   IsInt,
   IsObject,
@@ -11,7 +10,12 @@ import {
   IsUUID,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
+import {
+  IsAfterCheckIn,
+  IsCanonicalCalendarDate,
+} from '../booking-request-date.validator';
 
 /**
  * Public Booking Request input. Property scope and every persisted price/card
@@ -19,6 +23,15 @@ import {
  * application, consent, and a SetupIntent reference.
  */
 export class SubmitBookingRequestDto {
+  @ApiProperty({
+    description: 'Stable client-generated identifier for replay-safe submission.',
+    example: 'booking-widget-attempt-018f5f0c',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  idempotencyKey!: string;
+
   @ApiProperty()
   @IsUUID()
   roomTypeId!: string;
@@ -28,11 +41,12 @@ export class SubmitBookingRequestDto {
   ratePlanId!: string;
 
   @ApiProperty({ example: '2026-10-01' })
-  @IsDateString()
+  @IsCanonicalCalendarDate()
   checkIn!: string;
 
   @ApiProperty({ example: '2026-10-03' })
-  @IsDateString()
+  @IsCanonicalCalendarDate()
+  @IsAfterCheckIn()
   checkOut!: string;
 
   @ApiProperty({ example: 'Ada' })

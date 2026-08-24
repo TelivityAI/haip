@@ -5,24 +5,36 @@ import type {
   SavedPaymentMethodChargeInput,
   SavedPaymentMethodChargeResult,
   SavedPaymentMethodGateway,
+  SavedPaymentMethodProvenance,
 } from './interfaces/saved-payment-method-gateway.interface';
+
+type MockSetupRecord = {
+  setup: { setupIntentId: string; clientSecret: string; customerId: string };
+  paymentMethod: SavedPaymentMethod;
+  propertyId: string;
+  applicationHash: string;
+};
 
 @Injectable()
 export class MockSavedPaymentMethodGateway implements SavedPaymentMethodGateway {
-  private readonly setupsByKey = new Map<string, {
-    setup: { setupIntentId: string; clientSecret: string; customerId: string };
-    paymentMethod: SavedPaymentMethod;
-  }>();
-  private readonly paymentMethodsBySetupId = new Map<string, SavedPaymentMethod>();
+  private readonly setupsByKey = new Map<string, MockSetupRecord>();
+  private readonly setupsBySetupId = new Map<string, MockSetupRecord>();
   private readonly chargesByKey = new Map<string, SavedPaymentMethodChargeResult>();
 
-  async createSetup(_email: string, idempotencyKey: string): Promise<{
+  async createSetup(
+    _email: string,
+    idempotencyKey: string,
+    provenance: SavedPaymentMethodProvenance,
+  ): Promise<{
     setupIntentId: string;
     clientSecret: string;
     customerId: string;
   }> {
     const existing = this.setupsByKey.get(idempotencyKey);
-    if (existing) return existing.setup;
+    if (existing) {
+      this.assertProvenance(existing, provenance);
+      return existing.setup;
+    }
 
     const suffix = this.stableSuffix(idempotencyKey);
     const setup = {
@@ -37,17 +49,27 @@ export class MockSavedPaymentMethodGateway implements SavedPaymentMethodGateway 
       cardLastFour: '4242',
       cardBrand: 'visa',
     };
-    this.setupsByKey.set(idempotencyKey, { setup, paymentMethod });
-    this.paymentMethodsBySetupId.set(setup.setupIntentId, paymentMethod);
+    const record = {
+      setup,
+      paymentMethod,
+      propertyId: provenance.propertyId,
+      applicationHash: this.stableHash(provenance.applicationId),
+    };
+    this.setupsByKey.set(idempotencyKey, record);
+    this.setupsBySetupId.set(setup.setupIntentId, record);
     return setup;
   }
 
-  async resolveSetup(setupIntentId: string): Promise<SavedPaymentMethod> {
-    const paymentMethod = this.paymentMethodsBySetupId.get(setupIntentId);
-    if (!paymentMethod) {
+  async resolveSetup(
+    setupIntentId: string,
+    expectedProvenance: SavedPaymentMethodProvenance,
+  ): Promise<SavedPaymentMethod> {
+    const record = this.setupsBySetupId.get(setupIntentId);
+    if (!record) {
       throw new Error(`Unknown mock SetupIntent '${setupIntentId}'`);
     }
-    return paymentMethod;
+    this.assertProvenance(record, expectedProvenance);
+    return record.paymentMethod;
   }
 
   async charge(input: SavedPaymentMethodChargeInput): Promise<SavedPaymentMethodChargeResult> {
@@ -64,6 +86,22 @@ export class MockSavedPaymentMethodGateway implements SavedPaymentMethodGateway 
   }
 
   private stableSuffix(value: string): string {
-    return createHash('sha256').update(value).digest('hex').slice(0, 24);
+    return this.stableHash(value).slice(0, 24);
+  }
+
+  private stableHash(value: string): string {
+    return createHash('sha256').update(value).digest('hex');
+  }
+
+  private assertProvenance(
+    record: Pick<MockSetupRecord, 'propertyId' | 'applicationHash'>,
+    expected: SavedPaymentMethodProvenance,
+  ): void {
+    if (
+      record.propertyId !== expected.propertyId
+      || record.applicationHash !== this.stableHash(expected.applicationId)
+    ) {
+      throw new Error('Mock SetupIntent provenance does not match');
+    }
   }
 }

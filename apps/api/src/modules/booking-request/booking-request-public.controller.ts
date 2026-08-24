@@ -26,6 +26,7 @@ export class BookingRequestPublicController {
   ) {}
 
   @Post('request-payment-method-setup')
+  @UseGuards(BookingThrottleGuard)
   @ApiOperation({ summary: 'Prepare optional or required request card collection' })
   @ApiResponse({ status: 201, description: 'SetupIntent client details' })
   createSetup(@Body() dto: CreateRequestCardSetupDto, @Req() req: BookingEngineRequest) {

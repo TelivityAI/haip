@@ -3,6 +3,7 @@ import type {
   SavedPaymentMethodChargeInput,
   SavedPaymentMethodChargeResult,
   SavedPaymentMethodGateway,
+  SavedPaymentMethodProvenance,
 } from './interfaces/saved-payment-method-gateway.interface';
 import type { PaymentGatewayProvider } from './payment-gateway.factory';
 
@@ -12,11 +13,15 @@ export class UnsupportedSavedPaymentMethodGateway implements SavedPaymentMethodG
   async createSetup(
     _email: string,
     _idempotencyKey: string,
+    _provenance: SavedPaymentMethodProvenance,
   ): Promise<{ setupIntentId: string; clientSecret: string; customerId: string }> {
     throw this.unsupported();
   }
 
-  async resolveSetup(_setupIntentId: string): Promise<SavedPaymentMethod> {
+  async resolveSetup(
+    _setupIntentId: string,
+    _expectedProvenance: SavedPaymentMethodProvenance,
+  ): Promise<SavedPaymentMethod> {
     throw this.unsupported();
   }
 

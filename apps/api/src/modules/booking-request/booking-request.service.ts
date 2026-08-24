@@ -4,15 +4,24 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
-  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
-import { bookingRequests } from '@telivityhaip/database';
-import type { PaymentMethodCollection } from '@telivityhaip/database';
+import { bookingEngineConfig, bookingRequests } from '@telivityhaip/database';
+import type {
+  BookingFormQuestion,
+  PaymentMethodCollection,
+} from '@telivityhaip/database';
 import type { WebhookEvent } from '@telivityhaip/shared';
+import { createHash } from 'node:crypto';
+import { and, eq } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE } from '../../database/database.module';
 import { BookingEngineConfigService } from '../booking-engine/booking-engine-config.service';
 import { BookingEngineService } from '../booking-engine/booking-engine.service';
-import { validateApplicationAnswers } from '../booking-engine/booking-form-questions';
+import {
+  validateApplicationAnswers,
+  validateQuestionDefinitions,
+} from '../booking-engine/booking-form-questions';
 import {
   SAVED_PAYMENT_METHOD_GATEWAY,
   type SavedPaymentMethod,
@@ -21,6 +30,7 @@ import {
 import { RatePlanService } from '../rate-plan/rate-plan.service';
 import { AvailabilityService } from '../reservation/availability.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { assertCanonicalStayDates } from './booking-request-date.validator';
 import type { CreateRequestCardSetupDto } from './dto/create-request-card-setup.dto';
 import type { SubmitBookingRequestDto } from './dto/submit-booking-request.dto';
 
@@ -35,6 +45,7 @@ type PublicRequestConfig = Awaited<
 >;
 
 type CardSnapshot = {
+  setupIntentId: string | null;
   stripeCustomerId: string | null;
   stripePaymentMethodId: string | null;
   cardLastFour: string | null;
@@ -44,19 +55,24 @@ type CardSnapshot = {
   consentedAt: Date | null;
 };
 
-type BookingRequestDatabase = {
-  insert(table: typeof bookingRequests): {
-    values(input: typeof bookingRequests.$inferInsert): {
-      returning(selection: { id: typeof bookingRequests.id }): Promise<Array<{ id: string }>>;
-    };
-  };
+type BookingRequestDatabase = PostgresJsDatabase;
+
+type ExistingRequest = {
+  id: string;
+  propertyId: string;
+  submissionIdempotencyKey: string;
+  submissionFingerprint: string;
 };
+
+type LockedRequestConfig = typeof bookingEngineConfig.$inferSelect;
 
 const ACKNOWLEDGEMENT_MESSAGE =
   'Your booking request has been received and is pending review.';
 
 @Injectable()
 export class BookingRequestService {
+  private readonly logger = new Logger(BookingRequestService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: BookingRequestDatabase,
     @Inject(BookingEngineConfigService)
@@ -85,9 +101,11 @@ export class BookingRequestService {
       throw new BadRequestException('Payment method collection is unavailable for this property');
     }
 
+    const applicationId = this.normalizeApplicationId(dto.idempotencyKey);
     const setup = await this.savedPaymentMethodGateway.createSetup(
       dto.guestEmail,
-      `booking-request:${propertyId}:${dto.idempotencyKey}`,
+      `booking-request:${propertyId}:${applicationId}`,
+      { propertyId, applicationId },
     );
     return {
       setupIntentId: setup.setupIntentId,
@@ -99,6 +117,16 @@ export class BookingRequestService {
     propertyId: string,
     dto: SubmitBookingRequestDto,
   ): Promise<BookingRequestAcknowledgement> {
+    assertCanonicalStayDates(dto.checkIn, dto.checkOut);
+    const applicationId = this.normalizeApplicationId(dto.idempotencyKey);
+    const fingerprint = this.submissionFingerprint(propertyId, dto);
+    const existing = await this.findExistingRequest(
+      this.db,
+      propertyId,
+      applicationId,
+    );
+    if (existing) return this.acknowledgeReplay(existing, fingerprint);
+
     const config = await this.configService.getPublicConfig(propertyId);
     this.assertRequestMode(config);
     this.assertConfiguredOffer(config, dto.roomTypeId, dto.ratePlanId);
@@ -126,52 +154,78 @@ export class BookingRequestService {
       children: dto.children,
       serviceIds: dto.serviceIds,
     });
-    const card = await this.resolveCard(config.paymentMethodCollection, dto);
-
-    const [request] = await this.db
-      .insert(bookingRequests)
-      .values({
-        propertyId,
-        status: 'pending',
-        arrivalDate: dto.checkIn,
-        departureDate: dto.checkOut,
-        roomTypeId: dto.roomTypeId,
-        ratePlanId: dto.ratePlanId,
-        adults: dto.adults,
-        children: dto.children ?? 0,
-        guestFirstName: dto.guestFirstName,
-        guestLastName: dto.guestLastName,
-        guestEmail: dto.guestEmail,
-        guestPhone: dto.guestPhone ?? null,
-        specialRequests: dto.specialRequests ?? null,
-        serviceIds: structuredClone(dto.serviceIds ?? []),
-        formSnapshot: structuredClone(config.formQuestions),
-        applicationAnswers: structuredClone(applicationAnswers),
-        submittedQuoteSnapshot: structuredClone(quote),
-        currentQuoteSnapshot: null,
-        currencyCode: quote.currencyCode,
-        ...card,
-      })
-      .returning({ id: bookingRequests.id });
-
-    if (!request) {
-      throw new InternalServerErrorException('Booking request could not be created');
-    }
-
-    await this.webhookService.emit(
-      // Request webhook types are completed with the staff lifecycle events.
-      'booking_request.created' as unknown as WebhookEvent,
-      'booking_request',
-      request.id,
-      { requestId: request.id, status: 'pending' },
-      propertyId,
+    this.assertQuoteUsesConfigSnapshot(config, quote);
+    const card = await this.resolveCard(
+      config.paymentMethodCollection,
+      dto,
+      { propertyId, applicationId },
     );
 
-    return {
-      requestId: request.id,
-      status: 'pending',
-      message: ACKNOWLEDGEMENT_MESSAGE,
-    };
+    const result = await this.db.transaction(async (tx) => {
+      const [lockedConfig] = await tx
+        .select()
+        .from(bookingEngineConfig)
+        .where(eq(bookingEngineConfig.propertyId, propertyId))
+        .for('update');
+      if (!lockedConfig || !this.sameRequestConfig(config, lockedConfig)) {
+        throw new ConflictException('Booking request configuration changed; retry submission');
+      }
+
+      const transactionReplay = await this.findExistingRequest(
+        tx,
+        propertyId,
+        applicationId,
+      );
+      if (transactionReplay) {
+        this.acknowledgeReplay(transactionReplay, fingerprint);
+        return { requestId: transactionReplay.id, created: false };
+      }
+
+      const [request] = await tx
+        .insert(bookingRequests)
+        .values({
+          propertyId,
+          submissionIdempotencyKey: applicationId,
+          submissionFingerprint: fingerprint,
+          status: 'pending',
+          arrivalDate: dto.checkIn,
+          departureDate: dto.checkOut,
+          roomTypeId: dto.roomTypeId,
+          ratePlanId: dto.ratePlanId,
+          adults: dto.adults,
+          children: dto.children ?? 0,
+          guestFirstName: dto.guestFirstName,
+          guestLastName: dto.guestLastName,
+          guestEmail: dto.guestEmail,
+          guestPhone: dto.guestPhone ?? null,
+          specialRequests: dto.specialRequests ?? null,
+          serviceIds: structuredClone(dto.serviceIds ?? []),
+          formSnapshot: structuredClone(config.formQuestions),
+          applicationAnswers: structuredClone(applicationAnswers),
+          submittedQuoteSnapshot: structuredClone(quote),
+          currentQuoteSnapshot: null,
+          currencyCode: quote.currencyCode,
+          ...card,
+        })
+        .onConflictDoNothing()
+        .returning({ id: bookingRequests.id });
+
+      if (request) return { requestId: request.id, created: true };
+
+      const concurrent = await this.findExistingRequest(
+        tx,
+        propertyId,
+        applicationId,
+      );
+      if (!concurrent) {
+        throw new ConflictException('Payment method setup has already been used');
+      }
+      this.acknowledgeReplay(concurrent, fingerprint);
+      return { requestId: concurrent.id, created: false };
+    });
+
+    if (result.created) await this.emitCreatedBestEffort(result.requestId, propertyId);
+    return this.acknowledgement(result.requestId);
   }
 
   private assertRequestMode(config: PublicRequestConfig): void {
@@ -236,6 +290,7 @@ export class BookingRequestService {
   private async resolveCard(
     policy: PaymentMethodCollection,
     dto: SubmitBookingRequestDto,
+    provenance: { propertyId: string; applicationId: string },
   ): Promise<CardSnapshot> {
     if (policy === 'disabled' || !dto.setupIntentId) {
       return this.emptyCardSnapshot();
@@ -243,12 +298,16 @@ export class BookingRequestService {
 
     let savedMethod: SavedPaymentMethod;
     try {
-      savedMethod = await this.savedPaymentMethodGateway.resolveSetup(dto.setupIntentId);
+      savedMethod = await this.savedPaymentMethodGateway.resolveSetup(
+        dto.setupIntentId,
+        provenance,
+      );
     } catch {
       throw new BadRequestException('Payment method setup is incomplete or invalid');
     }
 
     return {
+      setupIntentId: savedMethod.setupIntentId,
       stripeCustomerId: savedMethod.customerId,
       stripePaymentMethodId: savedMethod.paymentMethodId,
       cardLastFour: savedMethod.cardLastFour,
@@ -261,6 +320,7 @@ export class BookingRequestService {
 
   private emptyCardSnapshot(): CardSnapshot {
     return {
+      setupIntentId: null,
       stripeCustomerId: null,
       stripePaymentMethodId: null,
       cardLastFour: null,
@@ -305,5 +365,155 @@ export class BookingRequestService {
       current.setUTCDate(current.getUTCDate() + 1);
     }
     return dates;
+  }
+
+  private normalizeApplicationId(value: string): string {
+    const normalized = value?.trim();
+    if (!normalized || normalized.length > 200) {
+      throw new BadRequestException('A valid submission idempotency key is required');
+    }
+    return normalized;
+  }
+
+  private submissionFingerprint(
+    propertyId: string,
+    dto: SubmitBookingRequestDto,
+  ): string {
+    const payload = {
+      propertyId,
+      roomTypeId: dto.roomTypeId,
+      ratePlanId: dto.ratePlanId,
+      checkIn: dto.checkIn,
+      checkOut: dto.checkOut,
+      guestFirstName: dto.guestFirstName,
+      guestLastName: dto.guestLastName,
+      guestEmail: dto.guestEmail,
+      guestPhone: dto.guestPhone ?? null,
+      adults: dto.adults,
+      children: dto.children ?? 0,
+      specialRequests: dto.specialRequests ?? null,
+      serviceIds: dto.serviceIds ?? [],
+      applicationAnswers: dto.applicationAnswers,
+      setupIntentId: dto.setupIntentId?.trim() || null,
+      consentAccepted: dto.consentAccepted ?? null,
+      consentText: dto.consentText?.trim() || null,
+      consentVersion: dto.consentVersion?.trim() || null,
+    };
+    return createHash('sha256').update(this.stableSerialize(payload)).digest('hex');
+  }
+
+  private stableSerialize(value: unknown): string {
+    if (value === null || typeof value !== 'object') {
+      return JSON.stringify(value) ?? 'undefined';
+    }
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => this.stableSerialize(item)).join(',')}]`;
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${this.stableSerialize(record[key])}`)
+      .join(',')}}`;
+  }
+
+  private async findExistingRequest(
+    db: Pick<BookingRequestDatabase, 'select'>,
+    propertyId: string,
+    applicationId: string,
+  ): Promise<ExistingRequest | undefined> {
+    const candidates = await db
+      .select({
+        id: bookingRequests.id,
+        propertyId: bookingRequests.propertyId,
+        submissionIdempotencyKey: bookingRequests.submissionIdempotencyKey,
+        submissionFingerprint: bookingRequests.submissionFingerprint,
+      })
+      .from(bookingRequests)
+      .where(and(
+        eq(bookingRequests.propertyId, propertyId),
+        eq(bookingRequests.submissionIdempotencyKey, applicationId),
+      ));
+    return candidates.find((candidate) =>
+      candidate.propertyId === propertyId
+      && candidate.submissionIdempotencyKey === applicationId);
+  }
+
+  private acknowledgeReplay(
+    existing: ExistingRequest,
+    fingerprint: string,
+  ): BookingRequestAcknowledgement {
+    if (existing.submissionFingerprint !== fingerprint) {
+      throw new ConflictException('Submission idempotency key was already used');
+    }
+    return this.acknowledgement(existing.id);
+  }
+
+  private acknowledgement(requestId: string): BookingRequestAcknowledgement {
+    return {
+      requestId,
+      status: 'pending',
+      message: ACKNOWLEDGEMENT_MESSAGE,
+    };
+  }
+
+  private async emitCreatedBestEffort(requestId: string, propertyId: string): Promise<void> {
+    try {
+      await this.webhookService.emit(
+        // Request webhook types are completed with the staff lifecycle events.
+        'booking_request.created' as unknown as WebhookEvent,
+        'booking_request',
+        requestId,
+        { requestId, status: 'pending' },
+        propertyId,
+      );
+    } catch (error: unknown) {
+      this.logger.error(
+        `Booking request ${requestId} was committed but its created consequence failed`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
+  private assertQuoteUsesConfigSnapshot(
+    config: PublicRequestConfig,
+    quote: { depositPolicy: unknown },
+  ): void {
+    if (this.stableSerialize(config.depositPolicy) !== this.stableSerialize(quote.depositPolicy)) {
+      throw new ConflictException('Booking request configuration changed; retry submission');
+    }
+  }
+
+  private sameRequestConfig(
+    initial: PublicRequestConfig,
+    locked: LockedRequestConfig,
+  ): boolean {
+    const lockedFormQuestions = validateQuestionDefinitions(
+      (locked.formQuestions ?? []) as BookingFormQuestion[],
+    )
+      .filter((question) => question.isActive)
+      .sort((a, b) => a.order - b.order);
+    const initialSnapshot = {
+      propertyId: initial.propertyId,
+      isEnabled: initial.isEnabled,
+      bookingMode: initial.bookingMode,
+      paymentMethodCollection: initial.paymentMethodCollection,
+      stripePublishableKey: initial.stripePublishableKey,
+      sellableRoomTypeIds: initial.sellableRoomTypeIds,
+      sellableRatePlanIds: initial.sellableRatePlanIds,
+      depositPolicy: initial.depositPolicy,
+      formQuestions: initial.formQuestions,
+    };
+    const lockedSnapshot = {
+      propertyId: locked.propertyId,
+      isEnabled: locked.isEnabled,
+      bookingMode: locked.bookingMode,
+      paymentMethodCollection: locked.paymentMethodCollection,
+      stripePublishableKey: locked.stripePublishableKey,
+      sellableRoomTypeIds: locked.sellableRoomTypeIds,
+      sellableRatePlanIds: locked.sellableRatePlanIds,
+      depositPolicy: locked.depositPolicy,
+      formQuestions: lockedFormQuestions,
+    };
+    return this.stableSerialize(initialSnapshot) === this.stableSerialize(lockedSnapshot);
   }
 }

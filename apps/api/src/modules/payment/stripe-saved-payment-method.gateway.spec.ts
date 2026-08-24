@@ -26,6 +26,11 @@ function config(secretKey = 'sk_test_saved_method'): ConfigService {
 }
 
 describe('StripeSavedPaymentMethodGateway', () => {
+  const provenance = {
+    propertyId: 'aaaaaaaa-0000-4000-a000-000000000001',
+    applicationId: 'submission-attempt-1',
+  };
+
   let gateway: StripeSavedPaymentMethodGateway;
   let stripe: {
     customers: { create: ReturnType<typeof vi.fn> };
@@ -57,7 +62,11 @@ describe('StripeSavedPaymentMethodGateway', () => {
     });
 
     await expect(
-      gateway.createSetup('guest@example.com', 'request-card:req_123'),
+      gateway.createSetup(
+        'guest@example.com',
+        'request-card:req_123',
+        provenance,
+      ),
     ).resolves.toEqual({
       setupIntentId: 'seti_trusted',
       clientSecret: 'seti_secret_safe_for_guest',
@@ -72,6 +81,11 @@ describe('StripeSavedPaymentMethodGateway', () => {
         customer: 'cus_trusted',
         usage: 'off_session',
         payment_method_types: ['card'],
+        metadata: {
+          haip_property_id: provenance.propertyId,
+          haip_application_hash:
+            'cf18a22e39cd5bba19be060f31c6a9e68094cefbaf2c4a23c5738bf78c687a3a',
+        },
       },
       { idempotencyKey: 'request-card:req_123' },
     );
@@ -85,7 +99,7 @@ describe('StripeSavedPaymentMethodGateway', () => {
       payment_method: 'pm_untrusted',
     });
 
-    await expect(gateway.resolveSetup('seti_unconfirmed')).rejects.toThrow(
+    await expect(gateway.resolveSetup('seti_unconfirmed', provenance)).rejects.toThrow(
       /has not succeeded/,
     );
     expect(stripe.paymentMethods.retrieve).not.toHaveBeenCalled();
@@ -97,6 +111,11 @@ describe('StripeSavedPaymentMethodGateway', () => {
       status: 'succeeded',
       customer: 'cus_trusted',
       payment_method: 'pm_trusted',
+      metadata: {
+        haip_property_id: provenance.propertyId,
+        haip_application_hash:
+          'cf18a22e39cd5bba19be060f31c6a9e68094cefbaf2c4a23c5738bf78c687a3a',
+      },
     });
     stripe.paymentMethods.retrieve.mockResolvedValue({
       id: 'pm_trusted',
@@ -111,7 +130,7 @@ describe('StripeSavedPaymentMethodGateway', () => {
       },
     });
 
-    const result = await gateway.resolveSetup('seti_trusted');
+    const result = await gateway.resolveSetup('seti_trusted', provenance);
 
     expect(stripe.setupIntents.retrieve).toHaveBeenCalledWith('seti_trusted');
     expect(stripe.paymentMethods.retrieve).toHaveBeenCalledWith('pm_trusted');
@@ -132,6 +151,11 @@ describe('StripeSavedPaymentMethodGateway', () => {
       status: 'succeeded',
       customer: 'cus_trusted',
       payment_method: 'pm_bank',
+      metadata: {
+        haip_property_id: provenance.propertyId,
+        haip_application_hash:
+          'cf18a22e39cd5bba19be060f31c6a9e68094cefbaf2c4a23c5738bf78c687a3a',
+      },
     });
     stripe.paymentMethods.retrieve.mockResolvedValue({
       id: 'pm_bank',
@@ -140,7 +164,33 @@ describe('StripeSavedPaymentMethodGateway', () => {
       card: null,
     });
 
-    await expect(gateway.resolveSetup('seti_bank')).rejects.toThrow(/card payment method/);
+    await expect(
+      gateway.resolveSetup('seti_bank', provenance),
+    ).rejects.toThrow(/card payment method/);
+  });
+
+  it('rejects a successful SetupIntent issued for another property or application', async () => {
+    stripe.setupIntents.retrieve.mockResolvedValue({
+      id: 'seti_wrong_scope',
+      status: 'succeeded',
+      customer: 'cus_trusted',
+      payment_method: 'pm_trusted',
+      metadata: {
+        haip_property_id: provenance.propertyId,
+        haip_application_hash:
+          'cf18a22e39cd5bba19be060f31c6a9e68094cefbaf2c4a23c5738bf78c687a3a',
+      },
+    });
+
+    await expect(gateway.resolveSetup('seti_wrong_scope', {
+      ...provenance,
+      propertyId: 'ffffffff-0000-4000-a000-000000000001',
+    })).rejects.toThrow(/provenance/i);
+    await expect(gateway.resolveSetup('seti_wrong_scope', {
+      ...provenance,
+      applicationId: 'submission-attempt-2',
+    })).rejects.toThrow(/provenance/i);
+    expect(stripe.paymentMethods.retrieve).not.toHaveBeenCalled();
   });
 
   it('rejects a PaymentMethod attached to a different Stripe customer', async () => {
@@ -149,6 +199,11 @@ describe('StripeSavedPaymentMethodGateway', () => {
       status: 'succeeded',
       customer: 'cus_setup_owner',
       payment_method: 'pm_mismatched',
+      metadata: {
+        haip_property_id: provenance.propertyId,
+        haip_application_hash:
+          'cf18a22e39cd5bba19be060f31c6a9e68094cefbaf2c4a23c5738bf78c687a3a',
+      },
     });
     stripe.paymentMethods.retrieve.mockResolvedValue({
       id: 'pm_mismatched',
@@ -160,7 +215,7 @@ describe('StripeSavedPaymentMethodGateway', () => {
       },
     });
 
-    await expect(gateway.resolveSetup('seti_mismatch')).rejects.toThrow(
+    await expect(gateway.resolveSetup('seti_mismatch', provenance)).rejects.toThrow(
       /PaymentMethod.*does not belong.*cus_setup_owner/,
     );
   });

@@ -67,6 +67,8 @@ export const bookingRequestEmailDeliveryStatusEnum = pgEnum('booking_request_ema
 export const bookingRequests = pgTable('booking_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   propertyId: uuid('property_id').notNull().references(() => properties.id),
+  submissionIdempotencyKey: varchar('submission_idempotency_key', { length: 200 }).notNull(),
+  submissionFingerprint: varchar('submission_fingerprint', { length: 64 }).notNull(),
   status: bookingRequestStatusEnum('status').notNull().default('pending'),
   arrivalDate: date('arrival_date').notNull(),
   departureDate: date('departure_date').notNull(),
@@ -85,6 +87,7 @@ export const bookingRequests = pgTable('booking_requests', {
   submittedQuoteSnapshot: jsonb('submitted_quote_snapshot').notNull(),
   currentQuoteSnapshot: jsonb('current_quote_snapshot'),
   currencyCode: varchar('currency_code', { length: 3 }).notNull(),
+  setupIntentId: varchar('setup_intent_id', { length: 255 }),
   stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
   stripePaymentMethodId: varchar('stripe_payment_method_id', { length: 255 }),
   cardLastFour: varchar('card_last_four', { length: 4 }),
@@ -103,6 +106,11 @@ export const bookingRequests = pgTable('booking_requests', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
+  propertySubmissionKeyUnique:
+    uniqueIndex('booking_requests_property_submission_key_unique')
+      .on(table.propertyId, table.submissionIdempotencyKey),
+  setupIntentUnique: uniqueIndex('booking_requests_setup_intent_unique')
+    .on(table.setupIntentId),
   acceptedReservationUnique: uniqueIndex('booking_requests_accepted_reservation_unique')
     .on(table.acceptedReservationId),
 }));

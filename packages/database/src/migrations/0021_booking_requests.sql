@@ -47,6 +47,8 @@ ALTER TABLE booking_engine_config ALTER COLUMN form_questions SET NOT NULL;
 CREATE TABLE IF NOT EXISTS booking_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   property_id uuid NOT NULL REFERENCES properties(id),
+  submission_idempotency_key varchar(200) NOT NULL,
+  submission_fingerprint varchar(64) NOT NULL,
   status booking_request_status NOT NULL DEFAULT 'pending',
   arrival_date date NOT NULL,
   departure_date date NOT NULL,
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS booking_requests (
   submitted_quote_snapshot jsonb NOT NULL,
   current_quote_snapshot jsonb,
   currency_code varchar(3) NOT NULL,
+  setup_intent_id varchar(255),
   stripe_customer_id varchar(255),
   stripe_payment_method_id varchar(255),
   card_last_four varchar(4),
@@ -86,6 +89,10 @@ CREATE TABLE IF NOT EXISTS booking_requests (
 
 CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_accepted_reservation_unique
   ON booking_requests (accepted_reservation_id);
+CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_property_submission_key_unique
+  ON booking_requests (property_id, submission_idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_setup_intent_unique
+  ON booking_requests (setup_intent_id);
 CREATE INDEX IF NOT EXISTS booking_requests_property_status_idx
   ON booking_requests (property_id, status);
 

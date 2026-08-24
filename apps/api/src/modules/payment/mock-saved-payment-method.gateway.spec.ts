@@ -9,14 +9,27 @@ import { PaymentModule } from './payment.module';
 import { StripeSavedPaymentMethodGateway } from './stripe-saved-payment-method.gateway';
 
 describe('MockSavedPaymentMethodGateway', () => {
+  const provenance = {
+    propertyId: 'aaaaaaaa-0000-4000-a000-000000000001',
+    applicationId: 'submission-attempt-1',
+  };
+
   it('creates a deterministic successful card setup that can be resolved', async () => {
     const gateway = new MockSavedPaymentMethodGateway();
 
-    const first = await gateway.createSetup('guest@example.com', 'request-card:req_123');
-    const retry = await gateway.createSetup('guest@example.com', 'request-card:req_123');
+    const first = await gateway.createSetup(
+      'guest@example.com',
+      'request-card:req_123',
+      provenance,
+    );
+    const retry = await gateway.createSetup(
+      'guest@example.com',
+      'request-card:req_123',
+      provenance,
+    );
 
     expect(retry).toEqual(first);
-    await expect(gateway.resolveSetup(first.setupIntentId)).resolves.toEqual({
+    await expect(gateway.resolveSetup(first.setupIntentId, provenance)).resolves.toEqual({
       setupIntentId: first.setupIntentId,
       customerId: first.customerId,
       paymentMethodId: expect.stringMatching(/^pm_mock_/),
@@ -28,9 +41,30 @@ describe('MockSavedPaymentMethodGateway', () => {
   it('does not resolve a setup identifier it did not create', async () => {
     const gateway = new MockSavedPaymentMethodGateway();
 
-    await expect(gateway.resolveSetup('seti_from_the_browser')).rejects.toThrow(
+    await expect(gateway.resolveSetup('seti_from_the_browser', provenance)).rejects.toThrow(
       /Unknown mock SetupIntent/,
     );
+  });
+
+  it('binds a setup to its property and application provenance', async () => {
+    const gateway = new MockSavedPaymentMethodGateway();
+    const setup = await gateway.createSetup(
+      'guest@example.com',
+      'request-card:req_scoped',
+      provenance,
+    );
+
+    await expect(gateway.resolveSetup(setup.setupIntentId, provenance)).resolves.toMatchObject({
+      setupIntentId: setup.setupIntentId,
+    });
+    await expect(gateway.resolveSetup(setup.setupIntentId, {
+      ...provenance,
+      propertyId: 'ffffffff-0000-4000-a000-000000000001',
+    })).rejects.toThrow(/provenance/i);
+    await expect(gateway.resolveSetup(setup.setupIntentId, {
+      ...provenance,
+      applicationId: 'submission-attempt-2',
+    })).rejects.toThrow(/provenance/i);
   });
 
   it('returns an idempotent successful off-session charge result', async () => {
@@ -140,10 +174,11 @@ describe('PaymentModule saved-payment-method registration', () => {
     } as ConfigService;
     const gateway = provider.useFactory(alternativeConfig);
 
-    await expect(gateway.createSetup('guest@example.com', 'setup-key')).rejects.toThrow(
+    const provenance = { propertyId: 'property-test', applicationId: 'application-test' };
+    await expect(gateway.createSetup('guest@example.com', 'setup-key', provenance)).rejects.toThrow(
       /Saved payment methods are not supported.*adyen/,
     );
-    await expect(gateway.resolveSetup('seti_test')).rejects.toThrow(
+    await expect(gateway.resolveSetup('seti_test', provenance)).rejects.toThrow(
       /Saved payment methods are not supported.*adyen/,
     );
     await expect(gateway.charge({

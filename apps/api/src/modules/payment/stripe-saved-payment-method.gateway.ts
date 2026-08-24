@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
+import { createHash } from 'node:crypto';
 import Decimal from 'decimal.js';
 import Stripe from 'stripe';
 import type {
@@ -7,7 +8,11 @@ import type {
   SavedPaymentMethodChargeInput,
   SavedPaymentMethodChargeResult,
   SavedPaymentMethodGateway,
+  SavedPaymentMethodProvenance,
 } from './interfaces/saved-payment-method-gateway.interface';
+
+const PROPERTY_METADATA_KEY = 'haip_property_id';
+const APPLICATION_METADATA_KEY = 'haip_application_hash';
 
 @Injectable()
 export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGateway {
@@ -28,7 +33,11 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
     });
   }
 
-  async createSetup(email: string, idempotencyKey: string): Promise<{
+  async createSetup(
+    email: string,
+    idempotencyKey: string,
+    provenance: SavedPaymentMethodProvenance,
+  ): Promise<{
     setupIntentId: string;
     clientSecret: string;
     customerId: string;
@@ -40,6 +49,10 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
         customer: customer.id,
         usage: 'off_session',
         payment_method_types: ['card'],
+        metadata: {
+          [PROPERTY_METADATA_KEY]: provenance.propertyId,
+          [APPLICATION_METADATA_KEY]: this.applicationHash(provenance.applicationId),
+        },
       },
       options,
     );
@@ -55,10 +68,20 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
     };
   }
 
-  async resolveSetup(setupIntentId: string): Promise<SavedPaymentMethod> {
+  async resolveSetup(
+    setupIntentId: string,
+    expectedProvenance: SavedPaymentMethodProvenance,
+  ): Promise<SavedPaymentMethod> {
     const setupIntent = await this.stripe.setupIntents.retrieve(setupIntentId);
     if (setupIntent.status !== 'succeeded') {
       throw new Error(`Stripe SetupIntent '${setupIntentId}' has not succeeded`);
+    }
+    if (
+      setupIntent.metadata?.[PROPERTY_METADATA_KEY] !== expectedProvenance.propertyId
+      || setupIntent.metadata?.[APPLICATION_METADATA_KEY]
+        !== this.applicationHash(expectedProvenance.applicationId)
+    ) {
+      throw new Error(`Stripe SetupIntent '${setupIntentId}' provenance does not match`);
     }
 
     const customerId = this.expandedId(setupIntent.customer);
@@ -126,6 +149,10 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
 
   private expandedId(value: string | { id: string } | null): string | null {
     return typeof value === 'string' ? value : value?.id ?? null;
+  }
+
+  private applicationHash(applicationId: string): string {
+    return createHash('sha256').update(applicationId).digest('hex');
   }
 
   private normalizeCurrencyCode(currencyCode: string): string {

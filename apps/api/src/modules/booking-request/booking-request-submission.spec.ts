@@ -3,8 +3,12 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { bookingRequests } from '@telivityhaip/database';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { bookingEngineConfig, bookingRequests } from '@telivityhaip/database';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BookingThrottleGuard } from '../booking-engine/booking-throttle.guard';
 import { BookingRequestPublicController } from './booking-request-public.controller';
 import { BookingRequestService } from './booking-request.service';
 import { CreateRequestCardSetupDto } from './dto/create-request-card-setup.dto';
@@ -32,6 +36,7 @@ const publicConfig = {
   bookingMode: 'request' as const,
   paymentMethodCollection: 'disabled' as const,
   stripePublishableKey: 'pk_test_public',
+  depositPolicy: { type: 'none' as const, refundable: true },
   sellableRoomTypeIds: [ROOM_TYPE_ID],
   sellableRatePlanIds: [RATE_PLAN_ID],
   formQuestions: [formQuestion],
@@ -64,7 +69,8 @@ const quote = {
   },
 };
 
-const submitDto: SubmitBookingRequestDto = {
+const submitDto = {
+  idempotencyKey: 'widget-attempt-1',
   roomTypeId: ROOM_TYPE_ID,
   ratePlanId: RATE_PLAN_ID,
   checkIn: '2026-10-01',
@@ -78,16 +84,58 @@ const submitDto: SubmitBookingRequestDto = {
   specialRequests: 'A quiet room, please.',
   serviceIds: [],
   applicationAnswers: { [QUESTION_ID]: 'Leisure' },
-};
+} as SubmitBookingRequestDto;
 
 function makeHarness() {
   let insertedValues: Record<string, unknown> | undefined;
-  const returning = vi.fn().mockResolvedValue([{ id: REQUEST_ID }]);
+  const storedRequests: Array<{
+    id: string;
+    propertyId: string;
+    submissionIdempotencyKey: string;
+    submissionFingerprint: string;
+    setupIntentId: string | null;
+  }> = [];
+  const lockedConfig = {
+    ...structuredClone(publicConfig),
+    bookingMode: publicConfig.bookingMode as 'instant' | 'request',
+    paymentMethodCollection: publicConfig.paymentMethodCollection as
+      | 'disabled'
+      | 'optional'
+      | 'required',
+  };
+  let pendingValues: Record<string, unknown> | undefined;
+  const returning = vi.fn(async () => {
+    const key = String(pendingValues?.['submissionIdempotencyKey'] ?? '');
+    if (key && storedRequests.some((row) => row.submissionIdempotencyKey === key)) {
+      return [];
+    }
+    const setupIntentId = pendingValues?.['setupIntentId'];
+    if (
+      setupIntentId
+      && storedRequests.some((row) => row.setupIntentId === setupIntentId)
+    ) {
+      return [];
+    }
+    if (key) {
+      storedRequests.push({
+        id: REQUEST_ID,
+        propertyId: String(pendingValues?.['propertyId'] ?? ''),
+        submissionIdempotencyKey: key,
+        submissionFingerprint: String(pendingValues?.['submissionFingerprint'] ?? ''),
+        setupIntentId: typeof setupIntentId === 'string' ? setupIntentId : null,
+      });
+    }
+    return [{ id: REQUEST_ID }];
+  });
   const values = vi.fn((input: Record<string, unknown>) => {
     insertedValues = input;
-    return { returning };
+    pendingValues = input;
+    return {
+      returning,
+      onConflictDoNothing: vi.fn(() => ({ returning })),
+    };
   });
-  const db = {
+  const db: Record<string, unknown> = {
     insert: vi.fn((table: unknown) => {
       if (table !== bookingRequests) {
         throw new Error('Submission attempted a non-request database write');
@@ -95,6 +143,35 @@ function makeHarness() {
       return { values };
     }),
   };
+  db['select'] = vi.fn(() => {
+    let table: unknown;
+    const chain: Record<string, unknown> & PromiseLike<unknown> = {
+      from: vi.fn((selectedTable: unknown) => {
+        table = selectedTable;
+        return chain;
+      }),
+      where: vi.fn(() => chain),
+      for: vi.fn(async () => table === bookingEngineConfig ? [lockedConfig] : []),
+      then: (resolve, reject) => Promise.resolve(
+        table === bookingRequests ? storedRequests : [],
+      ).then(resolve, reject),
+    };
+    return chain;
+  });
+  let transactionQueue = Promise.resolve();
+  db['transaction'] = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
+    const previous = transactionQueue;
+    let release = () => undefined;
+    transactionQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await callback(db);
+    } finally {
+      release();
+    }
+  });
   const config = {
     getPublicConfig: vi.fn().mockResolvedValue(structuredClone(publicConfig)),
   };
@@ -145,6 +222,8 @@ function makeHarness() {
     savedPaymentMethod,
     webhook,
     values,
+    lockedConfig,
+    storedRequests,
     get insertedValues() {
       return insertedValues;
     },
@@ -163,6 +242,76 @@ describe('BookingRequestPublicController validation contract', () => {
       BookingRequestPublicController.prototype,
       'submit',
     )?.[0]).toBe(SubmitBookingRequestDto);
+  });
+
+  it('throttles both public write endpoints', () => {
+    const setupGuards = Reflect.getMetadata(
+      GUARDS_METADATA,
+      BookingRequestPublicController.prototype.createSetup,
+    ) as unknown[];
+    const submitGuards = Reflect.getMetadata(
+      GUARDS_METADATA,
+      BookingRequestPublicController.prototype.submit,
+    ) as unknown[];
+
+    expect(setupGuards).toContain(BookingThrottleGuard);
+    expect(submitGuards).toContain(BookingThrottleGuard);
+  });
+
+  it('enforces the setup-route throttle guard once its property budget is exhausted', () => {
+    const originalNodeEnv = process.env['NODE_ENV'];
+    process.env['NODE_ENV'] = 'production';
+    try {
+      const config = {
+        get: (key: string, fallback: string) => {
+          if (key === 'BOOKING_RATE_LIMIT_MAX') return '1';
+          if (key === 'BOOKING_RATE_LIMIT_WINDOW_MS') return '60000';
+          if (key === 'RATE_LIMIT_DISABLED') return 'false';
+          return fallback;
+        },
+      } as unknown as ConstructorParameters<typeof BookingThrottleGuard>[0];
+      const guard = new BookingThrottleGuard(config);
+      const context = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            ip: '203.0.113.10',
+            bookingEngine: { propertyId: PROPERTY_ID },
+          }),
+        }),
+      } as unknown as Parameters<BookingThrottleGuard['canActivate']>[0];
+
+      expect(guard.canActivate(context)).toBe(true);
+      expect(() => guard.canActivate(context)).toThrow(/Too many booking attempts/);
+    } finally {
+      if (originalNodeEnv === undefined) delete process.env['NODE_ENV'];
+      else process.env['NODE_ENV'] = originalNodeEnv;
+    }
+  });
+});
+
+describe('SubmitBookingRequestDto calendar dates and replay key', () => {
+  async function errors(overrides: Record<string, unknown>) {
+    return validate(plainToInstance(SubmitBookingRequestDto, {
+      ...submitDto,
+      ...overrides,
+    }));
+  }
+
+  it.each([
+    ['2026-10-01T12:00:00Z', '2026-10-03'],
+    ['2026-02-30', '2026-03-03'],
+    ['2026-10-03', '2026-10-03'],
+    ['2026-10-04', '2026-10-03'],
+  ])('rejects a non-canonical stay from %s to %s', async (checkIn, checkOut) => {
+    const result = await errors({ checkIn, checkOut });
+
+    expect(result.some((error) => ['checkIn', 'checkOut'].includes(error.property))).toBe(true);
+  });
+
+  it('requires a durable client submission idempotency key', async () => {
+    const result = await errors({ idempotencyKey: undefined });
+
+    expect(result.some((error) => error.property === 'idempotencyKey')).toBe(true);
   });
 });
 
@@ -208,6 +357,7 @@ describe('BookingRequestService public card setup', () => {
     expect(harness.savedPaymentMethod.createSetup).toHaveBeenCalledWith(
       'ada@example.com',
       `booking-request:${PROPERTY_ID}:widget-attempt-1`,
+      { propertyId: PROPERTY_ID, applicationId: 'widget-attempt-1' },
     );
   });
 });
@@ -283,6 +433,16 @@ describe('BookingRequestService.submit', () => {
     expect(harness.db.insert).not.toHaveBeenCalled();
   });
 
+  it('rejects date-times before they can bypass complete-stay availability checks', async () => {
+    await expect(harness.service.submit(PROPERTY_ID, {
+      ...submitDto,
+      checkIn: '2026-10-01T12:00:00Z',
+    })).rejects.toBeInstanceOf(BadRequestException);
+    expect(harness.ratePlan.assertSellable).not.toHaveBeenCalled();
+    expect(harness.availability.searchAvailability).not.toHaveBeenCalled();
+    expect(harness.db.insert).not.toHaveBeenCalled();
+  });
+
   it('requires a successful setup and explicit consent under the required policy', async () => {
     harness.config.getPublicConfig.mockResolvedValue({
       ...structuredClone(publicConfig),
@@ -305,6 +465,7 @@ describe('BookingRequestService.submit', () => {
       ...structuredClone(publicConfig),
       paymentMethodCollection: 'optional',
     });
+    harness.lockedConfig.paymentMethodCollection = 'optional';
 
     await expect(harness.service.submit(PROPERTY_ID, submitDto)).resolves.toEqual({
       requestId: REQUEST_ID,
@@ -330,6 +491,7 @@ describe('BookingRequestService.submit', () => {
         ...structuredClone(publicConfig),
         paymentMethodCollection,
       });
+      harness.lockedConfig.paymentMethodCollection = paymentMethodCollection;
       const dto = {
         ...submitDto,
         setupIntentId: 'seti_client_reference_only',
@@ -342,8 +504,10 @@ describe('BookingRequestService.submit', () => {
 
       expect(harness.savedPaymentMethod.resolveSetup).toHaveBeenCalledWith(
         'seti_client_reference_only',
+        { propertyId: PROPERTY_ID, applicationId: 'widget-attempt-1' },
       );
       expect(harness.insertedValues).toMatchObject({
+        setupIntentId: 'seti_trusted',
         stripeCustomerId: 'cus_trusted',
         stripePaymentMethodId: 'pm_trusted',
         cardLastFour: '4242',
@@ -472,5 +636,96 @@ describe('BookingRequestService.submit', () => {
     expect(JSON.stringify(harness.webhook.emit.mock.calls)).not.toContain('Leisure');
     expect(JSON.stringify(harness.webhook.emit.mock.calls)).not.toContain('consent');
     expect(JSON.stringify(harness.webhook.emit.mock.calls)).not.toContain('seti_');
+  });
+
+  it('returns the existing acknowledgement for an exact replay without repeating work', async () => {
+    const first = await harness.service.submit(PROPERTY_ID, submitDto);
+    const replay = await harness.service.submit(PROPERTY_ID, structuredClone(submitDto));
+
+    expect(replay).toEqual(first);
+    expect(harness.values).toHaveBeenCalledOnce();
+    expect(harness.bookingEngine.quote).toHaveBeenCalledOnce();
+    expect(harness.webhook.emit).toHaveBeenCalledOnce();
+  });
+
+  it('conflicts when a replay key is reused for a different submission payload', async () => {
+    await harness.service.submit(PROPERTY_ID, submitDto);
+
+    await expect(harness.service.submit(PROPERTY_ID, {
+      ...submitDto,
+      guestLastName: 'Byron',
+    })).rejects.toBeInstanceOf(ConflictException);
+    expect(harness.values).toHaveBeenCalledOnce();
+    expect(harness.webhook.emit).toHaveBeenCalledOnce();
+  });
+
+  it('rejects reuse of one trusted SetupIntent under another application key', async () => {
+    harness.config.getPublicConfig.mockResolvedValue({
+      ...structuredClone(publicConfig),
+      paymentMethodCollection: 'required',
+    });
+    harness.lockedConfig.paymentMethodCollection = 'required';
+    const withCard = {
+      ...submitDto,
+      setupIntentId: 'seti_client_reference_only',
+      consentAccepted: true,
+      consentText: 'Save this card for staff-initiated payments; no charge is made now.',
+      consentVersion: 'request-card-v1',
+    } satisfies SubmitBookingRequestDto;
+    await harness.service.submit(PROPERTY_ID, withCard);
+
+    await expect(harness.service.submit(PROPERTY_ID, {
+      ...withCard,
+      idempotencyKey: 'widget-attempt-2',
+    })).rejects.toBeInstanceOf(ConflictException);
+    expect(harness.webhook.emit).toHaveBeenCalledOnce();
+  });
+
+  it('collapses concurrent exact replays into one request and one created event', async () => {
+    const [first, replay] = await Promise.all([
+      harness.service.submit(PROPERTY_ID, structuredClone(submitDto)),
+      harness.service.submit(PROPERTY_ID, structuredClone(submitDto)),
+    ]);
+
+    expect(replay).toEqual(first);
+    expect(harness.values).toHaveBeenCalledOnce();
+    expect(harness.webhook.emit).toHaveBeenCalledOnce();
+  });
+
+  it('acknowledges the durable request when its post-commit event/audit consequence fails', async () => {
+    harness.webhook.emit.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    await expect(harness.service.submit(PROPERTY_ID, submitDto)).resolves.toEqual({
+      requestId: REQUEST_ID,
+      status: 'pending',
+      message: 'Your booking request has been received and is pending review.',
+    });
+    await expect(harness.service.submit(PROPERTY_ID, structuredClone(submitDto))).resolves.toEqual({
+      requestId: REQUEST_ID,
+      status: 'pending',
+      message: 'Your booking request has been received and is pending review.',
+    });
+    expect(harness.values).toHaveBeenCalledOnce();
+    expect(harness.webhook.emit).toHaveBeenCalledOnce();
+  });
+
+  it('does not commit when the locked final config has switched to instant mode', async () => {
+    harness.lockedConfig.bookingMode = 'instant';
+
+    await expect(harness.service.submit(PROPERTY_ID, submitDto)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(harness.values).not.toHaveBeenCalled();
+    expect(harness.webhook.emit).not.toHaveBeenCalled();
+  });
+
+  it('does not commit a card-policy snapshot that changed during submission', async () => {
+    harness.lockedConfig.paymentMethodCollection = 'required';
+
+    await expect(harness.service.submit(PROPERTY_ID, submitDto)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(harness.values).not.toHaveBeenCalled();
+    expect(harness.webhook.emit).not.toHaveBeenCalled();
   });
 });

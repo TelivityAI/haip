@@ -6,6 +6,11 @@ export type SavedPaymentMethod = {
   cardBrand: string;
 };
 
+export type SavedPaymentMethodProvenance = {
+  propertyId: string;
+  applicationId: string;
+};
+
 export type SavedPaymentMethodChargeInput = {
   customerId: string;
   paymentMethodId: string;
@@ -22,12 +27,19 @@ export type SavedPaymentMethodChargeResult = {
 };
 
 export interface SavedPaymentMethodGateway {
-  createSetup(email: string, idempotencyKey: string): Promise<{
+  createSetup(
+    email: string,
+    idempotencyKey: string,
+    provenance: SavedPaymentMethodProvenance,
+  ): Promise<{
     setupIntentId: string;
     clientSecret: string;
     customerId: string;
   }>;
-  resolveSetup(setupIntentId: string): Promise<SavedPaymentMethod>;
+  resolveSetup(
+    setupIntentId: string,
+    expectedProvenance: SavedPaymentMethodProvenance,
+  ): Promise<SavedPaymentMethod>;
   charge(input: SavedPaymentMethodChargeInput): Promise<SavedPaymentMethodChargeResult>;
 }
 
