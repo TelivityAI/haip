@@ -54,6 +54,14 @@ describe('booking request money', () => {
       .toThrow(/movement/);
     expect(() => assertAllocationAmount({ amount: '101', movementAmount: '200', installmentAmount: '100' }))
       .toThrow(/installment/);
+    expect(() => assertAllocationAmount({
+      amount: '60', movementAmount: '100', installmentAmount: '100',
+      alreadyAllocatedMovementAmount: '50',
+    })).toThrow(/movement/);
+    expect(() => assertAllocationAmount({
+      amount: '60', movementAmount: '100', installmentAmount: '100',
+      alreadyAllocatedInstallmentAmount: '50',
+    })).toThrow(/installment/);
   });
 
   it('requires each captured movement to be fully resolved on denial', () => {
@@ -61,12 +69,12 @@ describe('booking request money', () => {
       [{ id: 'payment-1', status: 'captured', amount: '100.00' }],
       [
         { paymentId: 'payment-1', type: 'external_return', amount: '40.00' },
-        { paymentId: 'payment-1', type: 'retained', amount: '60.00' },
+        { paymentId: 'payment-1', type: 'retained', amount: '60.00', reason: 'Cancellation fee retained' },
       ],
     )).not.toThrow();
     expect(() => assertDenialMoneyResolved(
       [{ id: 'payment-1', status: 'captured', amount: '100.00' }],
-      [{ paymentId: 'payment-1', type: 'retained', amount: '99.99' }],
+      [{ paymentId: 'payment-1', type: 'retained', amount: '99.99', reason: 'Partial retention' }],
     )).toThrow(/payment-1/);
   });
 
@@ -79,5 +87,27 @@ describe('booking request money', () => {
       [{ id: 'payment-1', status: 'captured', amount: '100.00' }],
       [{ paymentId: 'payment-1', type: 'refund', amount: '100.01' }],
     )).toThrow(/payment-1/);
+  });
+
+  it('requires a non-blank reason when money is retained', () => {
+    expect(() => assertDenialMoneyResolved(
+      [{ id: 'payment-1', status: 'captured', amount: '100.00' }],
+      [{ paymentId: 'payment-1', type: 'retained', amount: '100.00' }],
+    )).toThrow(/reason/);
+    expect(() => assertDenialMoneyResolved(
+      [{ id: 'payment-1', status: 'captured', amount: '100.00' }],
+      [{ paymentId: 'payment-1', type: 'retained', amount: '100.00', reason: '  ' }],
+    )).toThrow(/reason/);
+  });
+
+  it('does not require a fully refunded movement whose net amount is zero', () => {
+    expect(() => assertDenialMoneyResolved(
+      [{ id: 'payment-1', status: 'captured', amount: '100.00', netAmount: '0.00' }],
+      [],
+    )).not.toThrow();
+    expect(() => assertDenialMoneyResolved(
+      [{ id: 'payment-1', status: 'captured', amount: '100.00', netAmount: '0.00' }],
+      [{ paymentId: 'payment-1', type: 'refund', amount: '100.00' }],
+    )).not.toThrow();
   });
 });

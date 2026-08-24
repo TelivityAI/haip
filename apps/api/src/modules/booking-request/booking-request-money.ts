@@ -1,7 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 
-export type MoneyValue = string | number | Decimal;
+export type MoneyValue = string | Decimal;
 export type BookingRequestPriceSource = 'submitted' | 'current' | 'custom';
 
 export type ResolveAcceptedTotalInput = {
@@ -32,6 +32,13 @@ export type AllocationAmountInput = {
   amount: MoneyValue;
   movementAmount: MoneyValue;
   installmentAmount: MoneyValue;
+  /** Amount already allocated against this payment movement. */
+  alreadyAllocatedMovementAmount?: MoneyValue | null;
+  /** Amount already allocated against this installment. */
+  alreadyAllocatedInstallmentAmount?: MoneyValue | null;
+  /** Alternative form when the caller has already computed remaining capacity. */
+  remainingMovementAmount?: MoneyValue | null;
+  remainingInstallmentAmount?: MoneyValue | null;
 };
 
 export type CapturedMovement = {
@@ -50,6 +57,7 @@ export type DenialResolution = {
   movementId?: string;
   type: 'refund' | 'external_return' | 'retained';
   amount: MoneyValue;
+  reason?: string | null;
 };
 
 function decimal(value: MoneyValue, field: string): Decimal {
@@ -66,6 +74,14 @@ function positive(value: MoneyValue, field: string): Decimal {
   const result = decimal(value, field);
   if (result.lte(0)) {
     throw new ConflictException(`${field} must be positive`);
+  }
+  return result;
+}
+
+function nonNegative(value: MoneyValue, field: string): Decimal {
+  const result = decimal(value, field);
+  if (result.lt(0)) {
+    throw new ConflictException(`${field} must be non-negative`);
   }
   return result;
 }
@@ -165,6 +181,25 @@ export function assertAllocationAmount(input: AllocationAmountInput): void {
   if (amount.gt(installment)) {
     throw new ConflictException('Allocation amount cannot exceed the installment amount');
   }
+
+  const alreadyMovement = input.alreadyAllocatedMovementAmount == null
+    ? new Decimal(0)
+    : nonNegative(input.alreadyAllocatedMovementAmount, 'Already allocated movement amount');
+  const alreadyInstallment = input.alreadyAllocatedInstallmentAmount == null
+    ? new Decimal(0)
+    : nonNegative(input.alreadyAllocatedInstallmentAmount, 'Already allocated installment amount');
+  if (input.remainingMovementAmount != null && amount.gt(nonNegative(input.remainingMovementAmount, 'Remaining movement amount'))) {
+    throw new ConflictException('Allocation amount cannot exceed the remaining payment movement amount');
+  }
+  if (input.remainingInstallmentAmount != null && amount.gt(nonNegative(input.remainingInstallmentAmount, 'Remaining installment amount'))) {
+    throw new ConflictException('Allocation amount cannot exceed the remaining installment amount');
+  }
+  if (alreadyMovement.plus(amount).gt(movement)) {
+    throw new ConflictException('Cumulative allocation cannot exceed the payment movement amount');
+  }
+  if (alreadyInstallment.plus(amount).gt(installment)) {
+    throw new ConflictException('Cumulative allocation cannot exceed the installment amount');
+  }
 }
 
 function movementKey(movement: CapturedMovement): string | undefined {
@@ -177,8 +212,7 @@ function isCapturedMovement(movement: CapturedMovement): boolean {
   }
   // Refund/correction child rows are not independent captured money.
   if (movement.type === 'refund' || movement.type === 'external_return') return false;
-  positive(movement.netAmount ?? movement.amount, 'Captured payment amount');
-  return true;
+  return decimal(movement.netAmount ?? movement.amount, 'Captured payment amount').gt(0);
 }
 
 /**
@@ -190,16 +224,23 @@ export function assertDenialMoneyResolved(
   resolutions: readonly DenialResolution[],
 ): void {
   const captured = movements.filter(isCapturedMovement);
+  const movementKeys = new Set(movements.map(movementKey).filter((key): key is string => key != null));
   const capturedKeys = new Set(captured.map(movementKey).filter((key): key is string => key != null));
 
   const sums = new Map<string, Decimal>();
   let unkeyed = new Decimal(0);
   for (const resolution of resolutions) {
+    if (resolution.type === 'retained' && !resolution.reason?.trim()) {
+      throw new ConflictException('A reason is required for retained money');
+    }
     const amount = positive(resolution.amount, `${resolution.type} resolution`);
     const key = resolution.paymentId ?? resolution.movementId;
-    if (key != null && !capturedKeys.has(key)) {
+    if (key != null && !movementKeys.has(key)) {
       throw new ConflictException(`Resolution references unknown captured movement '${key}'`);
     }
+    // A zero-net movement has already been fully returned. Its historical
+    // resolution is valid, but it is not part of the remaining denial check.
+    if (key != null && !capturedKeys.has(key)) continue;
     if (key == null) {
       unkeyed = unkeyed.plus(amount);
     } else {
@@ -208,7 +249,11 @@ export function assertDenialMoneyResolved(
   }
 
   if (captured.length === 0) {
-    if (resolutions.length > 0) {
+    const hasRelevantResolution = resolutions.some((resolution) => {
+      const key = resolution.paymentId ?? resolution.movementId;
+      return key == null || capturedKeys.has(key);
+    });
+    if (hasRelevantResolution) {
       throw new ConflictException('Resolution references no captured movement');
     }
     return;
