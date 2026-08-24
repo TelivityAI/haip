@@ -1,6 +1,26 @@
 import { pgTable, uuid, varchar, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 
+export type BookingMode = 'instant' | 'request';
+export type PaymentMethodCollection = 'required' | 'optional' | 'disabled';
+export type BookingFormQuestionType =
+  | 'short_text'
+  | 'long_text'
+  | 'single_select'
+  | 'multi_select'
+  | 'yes_no'
+  | 'date';
+
+export type BookingFormQuestion = {
+  id: string;
+  label: string;
+  type: BookingFormQuestionType;
+  options?: string[];
+  order: number;
+  isActive: boolean;
+  isRequired: boolean;
+};
+
 /**
  * Booking Engine — guest-facing direct (commission-free) booking.
  *
@@ -56,6 +76,12 @@ export const bookingEngineConfig = pgTable('booking_engine_config', {
   logoMediaId: uuid('logo_media_id'),
   primaryColor: varchar('primary_color', { length: 9 }),
   accentColor: varchar('accent_color', { length: 9 }),
+  bookingMode: varchar('booking_mode', { length: 10 }).$type<BookingMode>().notNull().default('instant'),
+  paymentMethodCollection: varchar('payment_method_collection', { length: 10 })
+    .$type<PaymentMethodCollection>()
+    .notNull()
+    .default('disabled'),
+  formQuestions: jsonb('form_questions').$type<BookingFormQuestion[]>().notNull().default([]),
   // Allow-lists: only these room types / rate plans are publicly sellable. Empty
   // = nothing is sold (fail-closed) until the operator opts inventory in.
   sellableRoomTypeIds: jsonb('sellable_room_type_ids').$type<string[]>().notNull().default([]),

@@ -238,7 +238,29 @@ export {
   bookingEngineCredentials,
   bookingEngineConfig,
 } from './booking-engine.js';
-export type { DepositPolicy } from './booking-engine.js';
+export type {
+  BookingFormQuestion,
+  BookingFormQuestionType,
+  BookingMode,
+  DepositPolicy,
+  PaymentMethodCollection,
+} from './booking-engine.js';
+
+// Booking Requests — request-first direct booking persistence
+export {
+  bookingRequestStatusEnum,
+  bookingRequestPriceSourceEnum,
+  bookingRequestInstallmentMilestoneEnum,
+  bookingRequestInstallmentStatusEnum,
+  bookingRequestPaymentResolutionTypeEnum,
+  bookingRequestEmailDeliveryKindEnum,
+  bookingRequestEmailDeliveryStatusEnum,
+  bookingRequests,
+  bookingRequestInstallments,
+  bookingRequestPaymentAllocations,
+  bookingRequestPaymentResolutions,
+  bookingRequestEmailDeliveries,
+} from './booking-request.js';
 
 // Stay extras / packages (upsells & ancillaries)
 export {

@@ -3,6 +3,7 @@ import { properties } from './property.js';
 import { reservations, bookings } from './reservation.js';
 import { guests } from './guest.js';
 import { houseAccounts } from './house-account.js';
+import { bookingRequests } from './booking-request.js';
 
 /**
  * Folio types (KB 5.4):
@@ -154,6 +155,8 @@ export const payments = pgTable('payments', {
   // (KB 13 — house accounts reuse the payments ledger but have no folio).
   folioId: uuid('folio_id').references(() => folios.id),
   houseAccountId: uuid('house_account_id').references(() => houseAccounts.id),
+  bookingRequestId: uuid('booking_request_id').references(() => bookingRequests.id),
+  idempotencyKey: varchar('idempotency_key', { length: 255 }),
 
   method: paymentMethodEnum('method').notNull(),
   status: paymentStatusEnum('status').notNull().default('pending'),
@@ -182,4 +185,7 @@ export const payments = pgTable('payments', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  propertyIdempotencyKeyUnique: uniqueIndex('payments_property_idempotency_key_unique')
+    .on(table.propertyId, table.idempotencyKey),
+}));

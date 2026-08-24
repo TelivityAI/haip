@@ -30,6 +30,13 @@ async function main() {
     // Idempotent add: append pix for DBs that already had payment_method without it
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'payment_method' AND e.enumlabel = 'pix') THEN ALTER TYPE payment_method ADD VALUE 'pix'; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_status') THEN CREATE TYPE payment_status AS ENUM ('pending','authorized','captured','settled','refunded','partially_refunded','failed','voided'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_request_status') THEN CREATE TYPE booking_request_status AS ENUM ('pending','accepted','denied'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_request_price_source') THEN CREATE TYPE booking_request_price_source AS ENUM ('submitted','current','custom'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_request_installment_milestone') THEN CREATE TYPE booking_request_installment_milestone AS ENUM ('date','arrival','checkout','manual'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_request_installment_status') THEN CREATE TYPE booking_request_installment_status AS ENUM ('unpaid','partial','paid'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_request_payment_resolution_type') THEN CREATE TYPE booking_request_payment_resolution_type AS ENUM ('refund','external_return','retained'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_request_email_delivery_kind') THEN CREATE TYPE booking_request_email_delivery_kind AS ENUM ('receipt','accepted','denied','payment','refund','failure'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_request_email_delivery_status') THEN CREATE TYPE booking_request_email_delivery_status AS ENUM ('pending','sent','failed'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'housekeeping_task_status') THEN CREATE TYPE housekeeping_task_status AS ENUM ('pending','assigned','in_progress','completed','inspected','skipped'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'housekeeping_task_type') THEN CREATE TYPE housekeeping_task_type AS ENUM ('checkout','stayover','deep_clean','inspection','turndown','maintenance'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'hk_occupancy') THEN CREATE TYPE hk_occupancy AS ENUM ('unknown','vacant','occupied'); END IF; END $$`,
@@ -1109,6 +1116,9 @@ async function main() {
       logo_media_id uuid,
       primary_color varchar(9),
       accent_color varchar(9),
+      booking_mode varchar(10) NOT NULL DEFAULT 'instant',
+      payment_method_collection varchar(10) NOT NULL DEFAULT 'disabled',
+      form_questions jsonb NOT NULL DEFAULT '[]'::jsonb,
       sellable_room_type_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
       sellable_rate_plan_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
       deposit_policy jsonb NOT NULL DEFAULT '{"type":"first_night","refundable":true}'::jsonb,
@@ -1117,6 +1127,107 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // Booking Requests — separate request-first aggregate. Every row carries
+    // property scope because later services must filter it with every ID.
+    `CREATE TABLE IF NOT EXISTS booking_requests (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      status booking_request_status NOT NULL DEFAULT 'pending',
+      arrival_date date NOT NULL,
+      departure_date date NOT NULL,
+      room_type_id uuid NOT NULL REFERENCES room_types(id),
+      rate_plan_id uuid NOT NULL REFERENCES rate_plans(id),
+      adults integer NOT NULL DEFAULT 1,
+      children integer NOT NULL DEFAULT 0,
+      guest_first_name varchar(100) NOT NULL,
+      guest_last_name varchar(100) NOT NULL,
+      guest_email varchar(255) NOT NULL,
+      guest_phone varchar(50),
+      special_requests text,
+      service_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      form_snapshot jsonb NOT NULL DEFAULT '[]'::jsonb,
+      application_answers jsonb NOT NULL DEFAULT '{}'::jsonb,
+      submitted_quote_snapshot jsonb NOT NULL,
+      current_quote_snapshot jsonb,
+      currency_code varchar(3) NOT NULL,
+      stripe_customer_id varchar(255),
+      stripe_payment_method_id varchar(255),
+      card_last_four varchar(4),
+      card_brand varchar(20),
+      consent_text text,
+      consent_version varchar(40),
+      consented_at timestamptz,
+      accepted_price_source booking_request_price_source,
+      accepted_total numeric(12,2),
+      custom_price_reason text,
+      accepted_reservation_id uuid REFERENCES reservations(id),
+      accepted_folio_id uuid REFERENCES folios(id),
+      decided_by uuid,
+      decided_at timestamptz,
+      denial_reason text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_accepted_reservation_unique ON booking_requests (accepted_reservation_id)`,
+    `CREATE INDEX IF NOT EXISTS booking_requests_property_status_idx ON booking_requests (property_id, status)`,
+    `CREATE TABLE IF NOT EXISTS booking_request_installments (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      booking_request_id uuid NOT NULL REFERENCES booking_requests(id),
+      label varchar(200) NOT NULL,
+      sort_order integer NOT NULL DEFAULT 0,
+      fixed_amount numeric(12,2),
+      percentage numeric(5,2),
+      resolved_amount numeric(12,2),
+      due_milestone booking_request_installment_milestone NOT NULL DEFAULT 'manual',
+      due_date date,
+      allocated_amount numeric(12,2) NOT NULL DEFAULT 0,
+      status booking_request_installment_status NOT NULL DEFAULT 'unpaid',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS booking_request_installments_property_request_idx ON booking_request_installments (property_id, booking_request_id)`,
+    `CREATE TABLE IF NOT EXISTS booking_request_payment_allocations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      booking_request_id uuid NOT NULL REFERENCES booking_requests(id),
+      payment_id uuid NOT NULL REFERENCES payments(id),
+      installment_id uuid NOT NULL REFERENCES booking_request_installments(id),
+      amount numeric(12,2) NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS booking_request_payment_allocations_payment_installment_unique ON booking_request_payment_allocations (payment_id, installment_id)`,
+    `CREATE INDEX IF NOT EXISTS booking_request_payment_allocations_property_request_idx ON booking_request_payment_allocations (property_id, booking_request_id)`,
+    `CREATE TABLE IF NOT EXISTS booking_request_payment_resolutions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      booking_request_id uuid NOT NULL REFERENCES booking_requests(id),
+      payment_id uuid NOT NULL REFERENCES payments(id),
+      type booking_request_payment_resolution_type NOT NULL,
+      amount numeric(12,2) NOT NULL,
+      reason text,
+      resolved_by uuid,
+      resolved_at timestamptz NOT NULL DEFAULT now(),
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS booking_request_payment_resolutions_property_request_idx ON booking_request_payment_resolutions (property_id, booking_request_id)`,
+    `CREATE TABLE IF NOT EXISTS booking_request_email_deliveries (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      booking_request_id uuid NOT NULL REFERENCES booking_requests(id),
+      kind booking_request_email_delivery_kind NOT NULL,
+      status booking_request_email_delivery_status NOT NULL DEFAULT 'pending',
+      recipient varchar(255) NOT NULL,
+      subject varchar(500) NOT NULL,
+      body_text text NOT NULL,
+      error_message text,
+      attempts integer NOT NULL DEFAULT 0,
+      last_attempt_at timestamptz,
+      sent_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS booking_request_email_deliveries_property_request_idx ON booking_request_email_deliveries (property_id, booking_request_id)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS bookings_property_external_channel_unique ON bookings (property_id, external_confirmation, channel_code) WHERE external_confirmation IS NOT NULL AND channel_code IS NOT NULL`,
     // Stay extras / packages
     `CREATE TABLE IF NOT EXISTS services (
@@ -1445,6 +1556,31 @@ async function main() {
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS parent_charge_id uuid`,
     `ALTER TABLE payments ALTER COLUMN folio_id DROP NOT NULL`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS house_account_id uuid`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS booking_request_id uuid REFERENCES booking_requests(id)`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS idempotency_key varchar(255)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS payments_property_idempotency_key_unique ON payments (property_id, idempotency_key)`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS booking_mode varchar(10)`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS payment_method_collection varchar(10)`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS form_questions jsonb`,
+    `ALTER TABLE booking_engine_config ALTER COLUMN booking_mode SET DEFAULT 'instant'`,
+    `ALTER TABLE booking_engine_config ALTER COLUMN payment_method_collection SET DEFAULT 'disabled'`,
+    `ALTER TABLE booking_engine_config ALTER COLUMN form_questions SET DEFAULT '[]'::jsonb`,
+    `UPDATE booking_engine_config SET booking_mode = COALESCE(booking_mode, 'instant'), payment_method_collection = COALESCE(payment_method_collection, 'disabled'), form_questions = COALESCE(form_questions, '[]'::jsonb)`,
+    `ALTER TABLE booking_engine_config ALTER COLUMN booking_mode SET NOT NULL`,
+    `ALTER TABLE booking_engine_config ALTER COLUMN payment_method_collection SET NOT NULL`,
+    `ALTER TABLE booking_engine_config ALTER COLUMN form_questions SET NOT NULL`,
+    `DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM payments
+        WHERE folio_id IS NULL AND house_account_id IS NULL AND booking_request_id IS NULL
+      ) THEN
+        RAISE EXCEPTION 'Cannot add payments_financial_target_check: legacy payment rows have no folio, house account, or booking request target';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_financial_target_check') THEN
+        ALTER TABLE payments ADD CONSTRAINT payments_financial_target_check
+          CHECK (folio_id IS NOT NULL OR house_account_id IS NOT NULL OR booking_request_id IS NOT NULL);
+      END IF;
+    END $$`,
     // Group linkage on reservations (KB 14.3) — added via ALTER to avoid a
     // circular FK at table-create time (group_profiles references nothing of
     // reservations, but reservations is created before group_profiles).
