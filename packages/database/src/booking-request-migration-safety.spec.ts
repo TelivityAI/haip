@@ -80,9 +80,14 @@ describe('booking request payment integrity migration safety', () => {
   it('repairs net allocations and derived installment state in both migration paths', () => {
     for (const source of [financialRecoveryMigration, pushSchema]) {
       expect(source).toContain('booking_request_net_allocation_repair');
+      expect(source).toContain('task7-net-allocation-v1:');
+      expect(source).toContain('audit_logs_booking_request_allocation_repair_unique');
+      expect(source).toMatch(/INSERT INTO audit_logs/i);
       expect(source).toMatch(/DELETE FROM booking_request_payment_allocations/i);
       expect(source).toMatch(/UPDATE booking_request_payment_allocations/i);
       expect(source).toMatch(/UPDATE booking_request_installments/i);
+      expect(source).toMatch(/allocated_amount\s+IS\s+DISTINCT\s+FROM/i);
+      expect(source).toMatch(/status\s+IS\s+DISTINCT\s+FROM/i);
     }
   });
 });

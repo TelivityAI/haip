@@ -1626,6 +1626,9 @@ async function main() {
     `CREATE UNIQUE INDEX IF NOT EXISTS booking_request_installments_property_request_id_unique ON booking_request_installments (property_id, booking_request_id, id)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS payments_property_request_id_unique ON payments (property_id, booking_request_id, id)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS payments_property_request_parent_id_unique ON payments (property_id, booking_request_id, original_payment_id, id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_booking_request_allocation_repair_unique
+      ON audit_logs (entity_type, entity_id, ((new_value ->> 'repairKey')))
+      WHERE entity_type = 'booking_request_payment_allocation' AND new_value ? 'repairKey'`,
     `DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'booking_request_installments_amount_kind_check') THEN
         ALTER TABLE booking_request_installments ADD CONSTRAINT booking_request_installments_amount_kind_check
@@ -1740,7 +1743,7 @@ async function main() {
       $booking_request_resolution_provenance$`,
     `CREATE UNIQUE INDEX IF NOT EXISTS br_payment_resolutions_property_provider_tx_unique
       ON booking_request_payment_resolutions (property_id, provider_transaction_id)`,
-    `-- booking_request_net_allocation_repair
+    `-- booking_request_net_allocation_repair: audited atomically and observationally idempotent
       WITH net_capacity AS (
         SELECT parent.property_id, parent.booking_request_id, parent.id AS payment_id,
           GREATEST(parent.amount + COALESCE(SUM(child.amount) FILTER (WHERE child.status = 'captured'), 0), 0) AS net_amount
@@ -1752,7 +1755,9 @@ async function main() {
         WHERE parent.booking_request_id IS NOT NULL AND parent.original_payment_id IS NULL
         GROUP BY parent.property_id, parent.booking_request_id, parent.id, parent.amount
       ), ranked AS (
-        SELECT allocation.id, capacity.net_amount,
+        SELECT allocation.id, allocation.property_id, allocation.booking_request_id,
+          allocation.payment_id, allocation.installment_id, allocation.amount AS old_amount,
+          capacity.net_amount,
           COALESCE(SUM(allocation.amount) OVER (
             PARTITION BY allocation.property_id, allocation.booking_request_id, allocation.payment_id
             ORDER BY allocation.created_at, allocation.id
@@ -1763,37 +1768,56 @@ async function main() {
           ON capacity.property_id = allocation.property_id
           AND capacity.booking_request_id = allocation.booking_request_id
           AND capacity.payment_id = allocation.payment_id
+      ), changes AS (
+        SELECT ranked.*,
+          GREATEST(LEAST(ranked.old_amount, ranked.net_amount - ranked.used_before), 0) AS new_amount,
+          'task7-net-allocation-v1:' || ranked.id::text || ':' || ranked.old_amount::text || ':'
+            || GREATEST(LEAST(ranked.old_amount, ranked.net_amount - ranked.used_before), 0)::text AS repair_key
+        FROM ranked
+        WHERE ranked.old_amount IS DISTINCT FROM
+          GREATEST(LEAST(ranked.old_amount, ranked.net_amount - ranked.used_before), 0)
+      ), audit_evidence AS (
+        INSERT INTO audit_logs (
+          property_id, action, entity_type, entity_id, previous_value, new_value, description
+        )
+        SELECT changes.property_id,
+          CASE WHEN changes.new_amount = 0 THEN 'delete' ELSE 'update' END,
+          'booking_request_payment_allocation',
+          changes.id,
+          jsonb_build_object('amount', changes.old_amount::text),
+          jsonb_build_object(
+            'repairKey', changes.repair_key,
+            'bookingRequestId', changes.booking_request_id,
+            'paymentId', changes.payment_id,
+            'installmentId', changes.installment_id,
+            'oldAmount', changes.old_amount::text,
+            'newAmount', changes.new_amount::text
+          ),
+          'System repaired Booking Request payment allocation to net captured capacity'
+        FROM changes
+        WHERE NOT EXISTS (
+          SELECT 1 FROM audit_logs existing
+          WHERE existing.entity_type = 'booking_request_payment_allocation'
+            AND existing.entity_id = changes.id
+            AND existing.new_value ->> 'repairKey' = changes.repair_key
+        )
+        ON CONFLICT DO NOTHING
+        RETURNING entity_id
+      ), deleted AS (
+        DELETE FROM booking_request_payment_allocations allocation
+        USING changes
+        WHERE allocation.id = changes.id AND changes.new_amount = 0
+        RETURNING allocation.id
+      ), updated AS (
+        UPDATE booking_request_payment_allocations allocation
+        SET amount = changes.new_amount
+        FROM changes
+        WHERE allocation.id = changes.id
+          AND changes.new_amount > 0
+          AND allocation.amount IS DISTINCT FROM changes.new_amount
+        RETURNING allocation.id
       )
-      DELETE FROM booking_request_payment_allocations allocation
-      USING ranked
-      WHERE allocation.id = ranked.id AND ranked.used_before >= ranked.net_amount`,
-    `WITH net_capacity AS (
-        SELECT parent.property_id, parent.booking_request_id, parent.id AS payment_id,
-          GREATEST(parent.amount + COALESCE(SUM(child.amount) FILTER (WHERE child.status = 'captured'), 0), 0) AS net_amount
-        FROM payments parent
-        LEFT JOIN payments child
-          ON child.property_id = parent.property_id
-          AND child.booking_request_id = parent.booking_request_id
-          AND child.original_payment_id = parent.id
-        WHERE parent.booking_request_id IS NOT NULL AND parent.original_payment_id IS NULL
-        GROUP BY parent.property_id, parent.booking_request_id, parent.id, parent.amount
-      ), ranked AS (
-        SELECT allocation.id, allocation.amount, capacity.net_amount,
-          COALESCE(SUM(allocation.amount) OVER (
-            PARTITION BY allocation.property_id, allocation.booking_request_id, allocation.payment_id
-            ORDER BY allocation.created_at, allocation.id
-            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-          ), 0) AS used_before
-        FROM booking_request_payment_allocations allocation
-        JOIN net_capacity capacity
-          ON capacity.property_id = allocation.property_id
-          AND capacity.booking_request_id = allocation.booking_request_id
-          AND capacity.payment_id = allocation.payment_id
-      )
-      UPDATE booking_request_payment_allocations allocation
-      SET amount = LEAST(ranked.amount, ranked.net_amount - ranked.used_before)
-      FROM ranked
-      WHERE allocation.id = ranked.id AND ranked.amount > ranked.net_amount - ranked.used_before`,
+      SELECT COUNT(*) FROM audit_evidence`,
     `WITH installment_totals AS (
         SELECT installment.id, installment.resolved_amount, COALESCE(SUM(allocation.amount), 0) AS amount
         FROM booking_request_installments installment
@@ -1802,17 +1826,26 @@ async function main() {
           AND allocation.booking_request_id = installment.booking_request_id
           AND allocation.installment_id = installment.id
         GROUP BY installment.id, installment.resolved_amount
+      ), derived AS (
+        SELECT total.id,
+          LEAST(total.amount, total.resolved_amount) AS allocated_amount,
+          CASE
+            WHEN total.amount <= 0 THEN 'unpaid'
+            WHEN total.amount >= total.resolved_amount THEN 'paid'
+            ELSE 'partial'
+          END::booking_request_installment_status AS status
+        FROM installment_totals total
       )
       UPDATE booking_request_installments installment
-      SET allocated_amount = LEAST(total.amount, total.resolved_amount),
-        status = CASE
-          WHEN total.amount <= 0 THEN 'unpaid'
-          WHEN total.amount >= total.resolved_amount THEN 'paid'
-          ELSE 'partial'
-        END::booking_request_installment_status,
+      SET allocated_amount = derived.allocated_amount,
+        status = derived.status,
         updated_at = now()
-      FROM installment_totals total
-      WHERE installment.id = total.id`,
+      FROM derived
+      WHERE installment.id = derived.id
+        AND (
+          installment.allocated_amount IS DISTINCT FROM derived.allocated_amount
+          OR installment.status IS DISTINCT FROM derived.status
+        )`,
     `ALTER TABLE booking_request_payment_resolutions
       DROP CONSTRAINT IF EXISTS booking_request_payment_resolutions_retained_reason_check,
       DROP CONSTRAINT IF EXISTS booking_request_payment_resolutions_lifecycle_check`,

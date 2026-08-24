@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { eq } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
 import {
   auditLogs,
   bookingRequestConsequences,
@@ -18,6 +19,10 @@ import { BookingRequestPaymentService } from './booking-request-payment.service'
 
 const databaseUrl = process.env['PAYMENT_DB_TEST_URL'];
 const describeDatabase = databaseUrl ? describe : describe.skip;
+const financialRecoveryMigration = readFileSync(
+  new URL('../../../../../packages/database/src/migrations/0024_booking_request_financial_recovery.sql', import.meta.url),
+  'utf8',
+);
 
 describeDatabase('Booking Request payment PostgreSQL concurrency contract', () => {
   const propertyId = '71000000-0000-4000-a000-000000000001';
@@ -28,6 +33,17 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
   const installmentId = '71000000-0000-4000-a000-000000000006';
   const secondPaymentId = '71000000-0000-4000-a000-000000000007';
   const secondMovementId = '71000000-0000-4000-a000-000000000008';
+  const repairPaymentId = '71000000-0000-4000-a000-000000000009';
+  const repairMovementId = '71000000-0000-4000-a000-000000000010';
+  const repairInstallmentId = '71000000-0000-4000-a000-000000000011';
+  const repairAllocationId = '71000000-0000-4000-a000-000000000012';
+  const unchangedPaymentId = '71000000-0000-4000-a000-000000000013';
+  const unchangedInstallmentId = '71000000-0000-4000-a000-000000000014';
+  const unchangedAllocationId = '71000000-0000-4000-a000-000000000015';
+  const deletedPaymentId = '71000000-0000-4000-a000-000000000016';
+  const deletedMovementId = '71000000-0000-4000-a000-000000000017';
+  const deletedInstallmentId = '71000000-0000-4000-a000-000000000018';
+  const deletedAllocationId = '71000000-0000-4000-a000-000000000019';
   const otherPropertyId = '72000000-0000-4000-a000-000000000001';
   const otherRoomTypeId = '72000000-0000-4000-a000-000000000002';
   const otherRatePlanId = '72000000-0000-4000-a000-000000000003';
@@ -364,5 +380,183 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
     })).rejects.toMatchObject({
       constraint_name: 'booking_request_payment_resolutions_parent_movement_fkey',
     });
+  });
+
+  it('audits allocation repair once and leaves repeat/unchanged timestamps untouched', async () => {
+    const originalTimestamp = new Date('2026-08-24T10:00:00.000Z');
+    await db.insert(payments).values([{
+      id: repairPaymentId,
+      propertyId,
+      bookingRequestId: requestId,
+      method: 'cash',
+      status: 'captured',
+      amount: '100.00',
+      currencyCode: 'EUR',
+    }, {
+      id: unchangedPaymentId,
+      propertyId,
+      bookingRequestId: requestId,
+      method: 'cash',
+      status: 'captured',
+      amount: '10.00',
+      currencyCode: 'EUR',
+    }, {
+      id: deletedPaymentId,
+      propertyId,
+      bookingRequestId: requestId,
+      method: 'cash',
+      status: 'captured',
+      amount: '25.00',
+      currencyCode: 'EUR',
+    }]);
+    await db.insert(payments).values([{
+      id: repairMovementId,
+      propertyId,
+      bookingRequestId: requestId,
+      originalPaymentId: repairPaymentId,
+      method: 'cash',
+      status: 'captured',
+      amount: '-40.00',
+      currencyCode: 'EUR',
+    }, {
+      id: deletedMovementId,
+      propertyId,
+      bookingRequestId: requestId,
+      originalPaymentId: deletedPaymentId,
+      method: 'cash',
+      status: 'captured',
+      amount: '-25.00',
+      currencyCode: 'EUR',
+    }]);
+    await db.insert(bookingRequestInstallments).values([{
+      id: repairInstallmentId,
+      propertyId,
+      bookingRequestId: requestId,
+      label: 'Stale allocation',
+      fixedAmount: '100.00',
+      resolvedAmount: '100.00',
+      allocatedAmount: '100.00',
+      status: 'paid',
+      dueMilestone: 'manual',
+      updatedAt: originalTimestamp,
+    }, {
+      id: unchangedInstallmentId,
+      propertyId,
+      bookingRequestId: requestId,
+      label: 'Already correct',
+      fixedAmount: '10.00',
+      resolvedAmount: '10.00',
+      allocatedAmount: '10.00',
+      status: 'paid',
+      dueMilestone: 'manual',
+      updatedAt: originalTimestamp,
+    }, {
+      id: deletedInstallmentId,
+      propertyId,
+      bookingRequestId: requestId,
+      label: 'Fully returned allocation',
+      fixedAmount: '25.00',
+      resolvedAmount: '25.00',
+      allocatedAmount: '25.00',
+      status: 'paid',
+      dueMilestone: 'manual',
+      updatedAt: originalTimestamp,
+    }]);
+    await db.insert(bookingRequestPaymentAllocations).values([{
+      id: repairAllocationId,
+      propertyId,
+      bookingRequestId: requestId,
+      paymentId: repairPaymentId,
+      installmentId: repairInstallmentId,
+      amount: '100.00',
+    }, {
+      id: unchangedAllocationId,
+      propertyId,
+      bookingRequestId: requestId,
+      paymentId: unchangedPaymentId,
+      installmentId: unchangedInstallmentId,
+      amount: '10.00',
+    }, {
+      id: deletedAllocationId,
+      propertyId,
+      bookingRequestId: requestId,
+      paymentId: deletedPaymentId,
+      installmentId: deletedInstallmentId,
+      amount: '25.00',
+    }]);
+
+    await client.unsafe(financialRecoveryMigration);
+    const [changedAfterFirst] = await db.select().from(bookingRequestInstallments)
+      .where(eq(bookingRequestInstallments.id, repairInstallmentId));
+    const [unchangedAfterFirst] = await db.select().from(bookingRequestInstallments)
+      .where(eq(bookingRequestInstallments.id, unchangedInstallmentId));
+    const [allocationAfterFirst] = await db.select().from(bookingRequestPaymentAllocations)
+      .where(eq(bookingRequestPaymentAllocations.id, repairAllocationId));
+    const deletedAllocationAfterFirst = await db.select().from(bookingRequestPaymentAllocations)
+      .where(eq(bookingRequestPaymentAllocations.id, deletedAllocationId));
+    const [deletedInstallmentAfterFirst] = await db.select().from(bookingRequestInstallments)
+      .where(eq(bookingRequestInstallments.id, deletedInstallmentId));
+    const auditsAfterFirst = await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, repairAllocationId));
+
+    expect(allocationAfterFirst.amount).toBe('60.00');
+    expect(deletedAllocationAfterFirst).toHaveLength(0);
+    expect(deletedInstallmentAfterFirst).toMatchObject({ allocatedAmount: '0.00', status: 'unpaid' });
+    expect(changedAfterFirst).toMatchObject({ allocatedAmount: '60.00', status: 'partial' });
+    expect(changedAfterFirst.updatedAt.getTime()).toBeGreaterThan(originalTimestamp.getTime());
+    expect(unchangedAfterFirst).toMatchObject({
+      allocatedAmount: '10.00', status: 'paid', updatedAt: originalTimestamp,
+    });
+    expect(auditsAfterFirst).toEqual([expect.objectContaining({
+      propertyId,
+      action: 'update',
+      entityType: 'booking_request_payment_allocation',
+      entityId: repairAllocationId,
+      previousValue: { amount: '100.00' },
+      newValue: expect.objectContaining({
+        bookingRequestId: requestId,
+        paymentId: repairPaymentId,
+        installmentId: repairInstallmentId,
+        oldAmount: '100.00',
+        newAmount: '60.00',
+      }),
+    })]);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, deletedAllocationId))).toEqual([
+      expect.objectContaining({
+        propertyId,
+        action: 'delete',
+        entityType: 'booking_request_payment_allocation',
+        previousValue: { amount: '25.00' },
+        newValue: expect.objectContaining({
+          bookingRequestId: requestId,
+          paymentId: deletedPaymentId,
+          installmentId: deletedInstallmentId,
+          oldAmount: '25.00',
+          newAmount: '0.00',
+        }),
+      }),
+    ]);
+
+    const changedTimestamp = changedAfterFirst.updatedAt.getTime();
+    const deletedTimestamp = deletedInstallmentAfterFirst.updatedAt.getTime();
+    await client.unsafe(financialRecoveryMigration);
+    const [changedAfterReplay] = await db.select().from(bookingRequestInstallments)
+      .where(eq(bookingRequestInstallments.id, repairInstallmentId));
+    const [unchangedAfterReplay] = await db.select().from(bookingRequestInstallments)
+      .where(eq(bookingRequestInstallments.id, unchangedInstallmentId));
+    const auditsAfterReplay = await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, repairAllocationId));
+    const [deletedInstallmentAfterReplay] = await db.select().from(bookingRequestInstallments)
+      .where(eq(bookingRequestInstallments.id, deletedInstallmentId));
+
+    expect(changedAfterReplay.updatedAt.getTime()).toBe(changedTimestamp);
+    expect(unchangedAfterReplay.updatedAt.getTime()).toBe(originalTimestamp.getTime());
+    expect(deletedInstallmentAfterReplay.updatedAt.getTime()).toBe(deletedTimestamp);
+    expect(auditsAfterReplay).toHaveLength(1);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, deletedAllocationId))).toHaveLength(1);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, unchangedAllocationId))).toHaveLength(0);
   });
 });

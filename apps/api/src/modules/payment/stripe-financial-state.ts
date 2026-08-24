@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 
 export type PaymentIntentEvent =
+  | 'processing'
   | 'succeeded'
   | 'payment_failed'
   | 'canceled'
@@ -46,7 +47,10 @@ type PaymentDecision = {
   status: 'captured' | 'failed' | 'voided' | PaymentIntentLedgerStatus;
 };
 
-const targetStatus: Record<PaymentIntentEvent, 'captured' | 'failed' | 'voided'> = {
+const targetStatus: Record<
+  Exclude<PaymentIntentEvent, 'processing'>,
+  'captured' | 'failed' | 'voided'
+> = {
   succeeded: 'captured',
   payment_failed: 'failed',
   canceled: 'voided',
@@ -59,6 +63,11 @@ export function decidePaymentIntentTransition(
   event: PaymentIntentEvent,
   requestStatus?: 'pending' | 'accepted' | 'denied',
 ): PaymentDecision {
+  if (event === 'processing') {
+    return current === 'pending'
+      ? { action: 'repair', status: current }
+      : { action: 'unexpected', status: current };
+  }
   const target = targetStatus[event];
   if (event === 'succeeded' && requestStatus === 'denied' && current !== 'captured') {
     throw new ConflictException(

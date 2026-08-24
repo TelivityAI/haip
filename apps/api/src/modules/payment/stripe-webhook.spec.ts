@@ -54,9 +54,27 @@ function payment(overrides: Record<string, unknown> = {}) {
     currencyCode: 'USD',
     gatewayProvider: 'stripe',
     gatewayTransactionId: 'pi_request_1',
+    gatewayPaymentToken: 'pm_saved',
     originalPaymentId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function unknownPaymentIntent(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'pi_recovered_from_metadata',
+    amount: 2500,
+    amount_received: 2500,
+    currency: 'usd',
+    customer: 'cus_saved',
+    payment_method: 'pm_saved',
+    metadata: {
+      haip_payment_id: PAYMENT_ID,
+      haip_property_id: PROPERTY_ID,
+      haip_booking_request_id: REQUEST_ID,
+    },
     ...overrides,
   };
 }
@@ -300,14 +318,7 @@ describe('StripeWebhookController financial finalization', () => {
         amount: '25.00',
       })],
     });
-    const pi = {
-      id: 'pi_recovered_from_metadata',
-      metadata: {
-        haip_payment_id: PAYMENT_ID,
-        haip_property_id: PROPERTY_ID,
-        haip_booking_request_id: REQUEST_ID,
-      },
-    };
+    const pi = unknownPaymentIntent();
 
     await h.controller.handlePaymentIntentSucceeded(pi);
     await h.controller.handlePaymentIntentSucceeded(pi);
@@ -336,6 +347,54 @@ describe('StripeWebhookController financial finalization', () => {
     });
     expect(replay).not.toHaveProperty('gatewayTransactionId');
     expect(gateway.charge).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['configured amount', { amount: 2600 }],
+    ['received amount', { amount_received: 2400 }],
+    ['currency', { currency: 'eur' }],
+    ['customer', { customer: 'cus_copied_metadata' }],
+    ['payment method', { payment_method: 'pm_copied_metadata' }],
+  ])('rejects copied metadata with the wrong %s before binding', async (_label, overrides) => {
+    const h = await harness({
+      requests: [request({
+        currencyCode: 'USD',
+        stripeCustomerId: 'cus_saved',
+        stripePaymentMethodId: 'pm_saved',
+      })],
+      payments: [payment({ gatewayTransactionId: null, amount: '25.00' })],
+    });
+
+    await expect(h.controller.handlePaymentIntentSucceeded(
+      unknownPaymentIntent(overrides),
+    )).rejects.toThrow(/amount|currency|customer|payment method|identity/i);
+    expect(h.state.payments[0]).toMatchObject({
+      status: 'pending',
+      gatewayTransactionId: null,
+    });
+    expect(h.state.consequences).toHaveLength(0);
+  });
+
+  it('binds a processing PaymentIntent using configured amount while received amount is zero', async () => {
+    const h = await harness({
+      requests: [request({
+        currencyCode: 'USD',
+        stripeCustomerId: 'cus_saved',
+        stripePaymentMethodId: 'pm_saved',
+      })],
+      payments: [payment({ gatewayTransactionId: null, amount: '25.00' })],
+    });
+
+    await h.controller.handlePaymentIntentProcessing(unknownPaymentIntent({
+      id: 'pi_processing_from_metadata',
+      amount_received: 0,
+    }));
+
+    expect(h.state.payments[0]).toMatchObject({
+      status: 'pending',
+      gatewayTransactionId: 'pi_processing_from_metadata',
+    });
+    expect(h.state.consequences).toHaveLength(0);
   });
 
   it.each([

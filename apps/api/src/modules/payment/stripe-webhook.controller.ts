@@ -43,6 +43,7 @@ import {
  * Uses raw body for signature verification (Stripe requirement).
  *
  * Events handled:
+ * - payment_intent.processing → durable pending provider identity
  * - payment_intent.succeeded → captured
  * - payment_intent.payment_failed → failed
  * - payment_intent.canceled → voided
@@ -119,6 +120,10 @@ export class StripeWebhookController {
           await this.handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
           break;
 
+        case 'payment_intent.processing':
+          await this.handlePaymentIntentProcessing(event.data.object as Stripe.PaymentIntent);
+          break;
+
         case 'payment_intent.payment_failed':
           await this.handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
           break;
@@ -156,6 +161,10 @@ export class StripeWebhookController {
 
   private async handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
     await this.finalizePaymentIntent(pi, 'succeeded');
+  }
+
+  private async handlePaymentIntentProcessing(pi: Stripe.PaymentIntent) {
+    await this.finalizePaymentIntent(pi, 'processing');
   }
 
   private async handlePaymentIntentFailed(pi: Stripe.PaymentIntent) {
@@ -226,6 +235,7 @@ export class StripeWebhookController {
             'Stripe PaymentIntent does not match the provider identity already bound to the payment',
           );
         }
+        this.assertPaymentIntentBindingIdentity(pi, event, payment, request);
         if (!payment.gatewayTransactionId) {
           const boundRows = await tx
             .update(payments)
@@ -316,7 +326,7 @@ export class StripeWebhookController {
           ?? { ...payment, folioId };
       }
 
-      if (request && decision.action !== 'unexpected') {
+      if (request && decision.action !== 'unexpected' && current.status !== 'pending') {
         const financialEvent = current.status === 'captured'
           ? 'payment.received' as const
           : 'payment.failed' as const;
@@ -334,7 +344,10 @@ export class StripeWebhookController {
           },
         });
       }
-      if (folioId && (current.status === 'captured' || decision.action === 'repair')) {
+      if (folioId && (
+        current.status === 'captured'
+        || (decision.action === 'repair' && current.status !== 'pending')
+      )) {
         await this.folioService.recalculateBalance(folioId, payment.propertyId, tx);
       }
       return {
@@ -705,6 +718,52 @@ export class StripeWebhookController {
       newValue: { providerStatus, stripeRefundId: refundId },
       description: 'Unexpected Stripe refund state ignored monotonically',
     });
+  }
+
+  private assertPaymentIntentBindingIdentity(
+    paymentIntent: Stripe.PaymentIntent,
+    event: PaymentIntentEvent,
+    payment: typeof payments.$inferSelect,
+    request: typeof bookingRequests.$inferSelect | undefined,
+  ): void {
+    if (!request) {
+      throw new ConflictException('Stripe PaymentIntent metadata requires a booking request');
+    }
+    const paymentCurrency = payment.currencyCode.trim().toUpperCase();
+    const requestCurrency = request.currencyCode.trim().toUpperCase();
+    const providerCurrency = paymentIntent.currency?.trim().toUpperCase();
+    if (paymentCurrency !== requestCurrency || providerCurrency !== paymentCurrency) {
+      throw new ConflictException('Stripe PaymentIntent currency identity does not match');
+    }
+    const expectedAmount = new Decimal(payment.amount);
+    const configuredAmount = this.fromStripeMinorUnits(paymentIntent.amount, providerCurrency);
+    if (!configuredAmount.eq(expectedAmount)) {
+      throw new ConflictException('Stripe PaymentIntent configured amount does not match');
+    }
+    if (event === 'succeeded') {
+      const receivedAmount = this.fromStripeMinorUnits(
+        paymentIntent.amount_received,
+        providerCurrency,
+      );
+      if (!receivedAmount.eq(expectedAmount)) {
+        throw new ConflictException('Stripe PaymentIntent received amount does not match');
+      }
+    }
+    const customerId = this.stripeObjectId(paymentIntent.customer);
+    const paymentMethodId = this.stripeObjectId(paymentIntent.payment_method);
+    if (!request.stripeCustomerId || customerId !== request.stripeCustomerId) {
+      throw new ConflictException('Stripe PaymentIntent customer identity does not match');
+    }
+    if (!request.stripePaymentMethodId
+      || paymentMethodId !== request.stripePaymentMethodId
+      || payment.gatewayPaymentToken !== request.stripePaymentMethodId
+      || payment.method !== 'credit_card') {
+      throw new ConflictException('Stripe PaymentIntent payment method identity does not match');
+    }
+  }
+
+  private stripeObjectId(value: string | { id: string } | null): string | null {
+    return typeof value === 'string' ? value : value?.id ?? null;
   }
 
   private fromStripeMinorUnits(amount: number, currencyCode: string): Decimal {
