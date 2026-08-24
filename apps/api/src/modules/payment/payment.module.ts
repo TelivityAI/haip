@@ -6,7 +6,13 @@ import { PaymentController } from './payment.controller';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { PaymentService } from './payment.service';
 import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
-import { createPaymentGateway } from './payment-gateway.factory';
+import {
+  createPaymentGateway,
+  resolvePaymentGatewayProvider,
+} from './payment-gateway.factory';
+import { SAVED_PAYMENT_METHOD_GATEWAY } from './interfaces/saved-payment-method-gateway.interface';
+import { MockSavedPaymentMethodGateway } from './mock-saved-payment-method.gateway';
+import { StripeSavedPaymentMethodGateway } from './stripe-saved-payment-method.gateway';
 
 /**
  * Payment module with configurable gateway.
@@ -29,7 +35,15 @@ import { createPaymentGateway } from './payment-gateway.factory';
       useFactory: (configService: ConfigService) => createPaymentGateway(configService),
       inject: [ConfigService],
     },
+    {
+      provide: SAVED_PAYMENT_METHOD_GATEWAY,
+      useFactory: (configService: ConfigService) =>
+        resolvePaymentGatewayProvider(configService) === 'mock'
+          ? new MockSavedPaymentMethodGateway()
+          : new StripeSavedPaymentMethodGateway(configService),
+      inject: [ConfigService],
+    },
   ],
-  exports: [PaymentService],
+  exports: [PaymentService, SAVED_PAYMENT_METHOD_GATEWAY],
 })
 export class PaymentModule {}
