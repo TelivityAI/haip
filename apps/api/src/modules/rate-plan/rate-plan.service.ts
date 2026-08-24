@@ -60,7 +60,9 @@ export class RatePlanService {
     ratePlanId: string,
     checkIn: string,
     checkOut: string,
+    db?: any,
   ): Promise<void> {
+    const conn = db ?? this.db;
     const nights = Math.ceil(
       (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86_400_000,
     );
@@ -69,7 +71,7 @@ export class RatePlanService {
     }
 
     // Plan lookup is scoped by both ids — never infer propertyId from the row.
-    const [plan] = await this.db
+    const [plan] = await conn
       .select()
       .from(ratePlans)
       .where(and(eq(ratePlans.id, ratePlanId), eq(ratePlans.propertyId, propertyId)));
@@ -89,7 +91,7 @@ export class RatePlanService {
     }
 
     // Restrictions overlapping the stay (scoped by property — multi-tenancy).
-    const restrictions = await this.db
+    const restrictions = await conn
       .select()
       .from(rateRestrictions)
       .where(

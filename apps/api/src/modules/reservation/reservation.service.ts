@@ -50,9 +50,14 @@ export class ReservationService {
     private readonly ratePlanService: RatePlanService,
   ) {}
 
-  async create(dto: CreateReservationDto, opts?: { confirmationNumber?: string }) {
+  async create(
+    dto: CreateReservationDto,
+    opts?: { confirmationNumber?: string },
+    tx?: any,
+  ) {
+    const db = tx ?? this.db;
     // Check guest is not DNR
-    const [guest] = await this.db
+    const [guest] = await db
       .select()
       .from(guests)
       .where(eq(guests.id, dto.guestId));
@@ -86,31 +91,53 @@ export class ReservationService {
     // ratePlanId in the DTO. Without scoping these to dto.propertyId, a caller
     // at property A could reference property B's rate plan / room type and
     // leak its details back on read. Verify same-property before any insert.
-    await this.assertSamePropertyFk(roomTypes, dto.roomTypeId, dto.propertyId, 'room type');
-    await this.assertSamePropertyFk(ratePlans, dto.ratePlanId, dto.propertyId, 'rate plan');
+    await this.assertSamePropertyFk(
+      roomTypes,
+      dto.roomTypeId,
+      dto.propertyId,
+      'room type',
+      db,
+    );
+    await this.assertSamePropertyFk(
+      ratePlans,
+      dto.ratePlanId,
+      dto.propertyId,
+      'rate plan',
+      db,
+    );
 
     // RatePlanService.assertSellable docs: BOOK path MUST call this. PMS create
     // was the gap — Connect / booking-engine already gate; keep propertyId scoped.
-    await this.ratePlanService.assertSellable(
-      dto.propertyId,
-      dto.ratePlanId,
-      dto.arrivalDate,
-      dto.departureDate,
-    );
+    if (tx) {
+      await this.ratePlanService.assertSellable(
+        dto.propertyId,
+        dto.ratePlanId,
+        dto.arrivalDate,
+        dto.departureDate,
+        db,
+      );
+    } else {
+      await this.ratePlanService.assertSellable(
+        dto.propertyId,
+        dto.ratePlanId,
+        dto.arrivalDate,
+        dto.departureDate,
+      );
+    }
 
     // TOCTOU: availability check + insert run inside the same transaction so the
     // race window between "there's space" and "we wrote the booking" is minimized.
     // Postgres default isolation is READ COMMITTED, so concurrent txs can still
     // double-book in theory; for stronger guarantees promote to SERIALIZABLE.
     // See Bug 5 — kept at default to avoid driver-compat surprises.
-    const result = await this.db.transaction(async (tx: any) => {
+    const createInTransaction = async (transaction: any) => {
       // Check inventory availability inside the tx
       const availability = await this.availabilityService.searchAvailability(
         dto.propertyId,
         dto.arrivalDate,
         dto.departureDate,
         dto.roomTypeId,
-        tx,
+        transaction,
       );
       const roomTypeAvail = availability.find((a: any) => a.roomTypeId === dto.roomTypeId);
       if (!roomTypeAvail || roomTypeAvail.available <= 0) {
@@ -119,7 +146,7 @@ export class ReservationService {
         );
       }
 
-      const [booking] = await tx
+      const [booking] = await transaction
         .insert(bookings)
         .values({
           propertyId: dto.propertyId,
@@ -131,7 +158,7 @@ export class ReservationService {
         })
         .returning();
 
-      const [reservation] = await tx
+      const [reservation] = await transaction
         .insert(reservations)
         .values({
           propertyId: dto.propertyId,
@@ -152,7 +179,7 @@ export class ReservationService {
         .returning();
 
       // Named occupants roster — primary mirrors reservations.guestId.
-      await tx.insert(reservationGuests).values({
+      await transaction.insert(reservationGuests).values({
         propertyId: dto.propertyId,
         reservationId: reservation.id,
         guestId: dto.guestId,
@@ -160,21 +187,26 @@ export class ReservationService {
       });
 
       return { ...reservation, booking };
-    });
+    };
+    const result = tx
+      ? await createInTransaction(tx)
+      : await this.db.transaction(createInTransaction);
 
     // Emit reservation.created so channel manager / ARI can push updated availability.
-    await this.webhookService.emit(
-      'reservation.created',
-      'reservation',
-      result.id,
-      {
-        reservationId: result.id,
-        arrivalDate: result.arrivalDate,
-        departureDate: result.departureDate,
-        roomTypeId: result.roomTypeId,
-      },
-      dto.propertyId,
-    );
+    if (!tx) {
+      await this.webhookService.emit(
+        'reservation.created',
+        'reservation',
+        result.id,
+        {
+          reservationId: result.id,
+          arrivalDate: result.arrivalDate,
+          departureDate: result.departureDate,
+          roomTypeId: result.roomTypeId,
+        },
+        dto.propertyId,
+      );
+    }
 
     return result;
   }
@@ -1325,8 +1357,9 @@ export class ReservationService {
     id: string,
     propertyId: string,
     label: string,
+    db: any = this.db,
   ): Promise<void> {
-    const [row] = await this.db
+    const [row] = await db
       .select({ id: table.id })
       .from(table)
       .where(and(eq(table.id, id), eq(table.propertyId, propertyId)));

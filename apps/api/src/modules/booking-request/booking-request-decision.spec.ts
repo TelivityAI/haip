@@ -1,0 +1,1049 @@
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import {
+  auditLogs,
+  bookingRequestConsequences,
+  bookingRequestPaymentResolutions,
+  bookingRequests,
+  bookings,
+  folios,
+  guests,
+  payments,
+  ratePlanComponents,
+  reservationGuests,
+  reservationServices,
+  reservations,
+  roomTypes,
+  services,
+} from '@telivityhaip/database';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PERMISSIONS_KEY } from '../auth/permissions.decorator';
+import { AncillaryService } from '../ancillary/ancillary.service';
+import { FolioService } from '../folio/folio.service';
+import { GuestService } from '../guest/guest.service';
+import { ReservationService } from '../reservation/reservation.service';
+import { BookingRequestService } from './booking-request.service';
+
+const PROPERTY_ID = 'aaaaaaaa-0000-4000-a000-000000000001';
+const OTHER_PROPERTY_ID = 'aaaaaaaa-0000-4000-a000-000000000002';
+const REQUEST_ID = 'bbbbbbbb-0000-4000-a000-000000000001';
+const ROOM_TYPE_ID = 'cccccccc-0000-4000-a000-000000000001';
+const RATE_PLAN_ID = 'dddddddd-0000-4000-a000-000000000001';
+const RESERVATION_ID = 'eeeeeeee-0000-4000-a000-000000000001';
+const FOLIO_ID = 'ffffffff-0000-4000-a000-000000000001';
+const GUEST_ID = '11111111-0000-4000-a000-000000000001';
+const PAYMENT_ID = '22222222-0000-4000-a000-000000000001';
+
+const submittedQuote = {
+  propertyId: PROPERTY_ID,
+  roomTypeId: ROOM_TYPE_ID,
+  ratePlanId: RATE_PLAN_ID,
+  checkIn: '2026-10-01',
+  checkOut: '2026-10-03',
+  nights: 2,
+  currencyCode: 'EUR',
+  lineItems: [],
+  roomTotal: '200.00',
+  taxTotal: '20.00',
+  services: [],
+  servicesTotal: '0.00',
+  servicesTaxTotal: '0.00',
+  grandTotal: '220.00',
+  depositPolicy: { type: 'none', refundable: true },
+  depositDue: '0.00',
+  cancellationPolicy: {
+    type: 'flexible',
+    description: 'Free cancellation before arrival.',
+    freeCancelHoursBeforeArrival: 24,
+  },
+};
+
+const currentQuote = {
+  ...structuredClone(submittedQuote),
+  roomTotal: '240.00',
+  taxTotal: '20.00',
+  grandTotal: '260.00',
+};
+
+type RequestRow = {
+  id: string;
+  propertyId: string;
+  status: 'pending' | 'accepted' | 'denied';
+  arrivalDate: string;
+  departureDate: string;
+  roomTypeId: string;
+  ratePlanId: string;
+  adults: number;
+  children: number;
+  guestFirstName: string;
+  guestLastName: string;
+  guestEmail: string;
+  guestPhone: string | null;
+  specialRequests: string | null;
+  serviceIds: string[];
+  submittedQuoteSnapshot: typeof submittedQuote;
+  currentQuoteSnapshot: typeof currentQuote | null;
+  currencyCode: string;
+  acceptedPriceSource: 'submitted' | 'current' | 'custom' | null;
+  acceptedTotal: string | null;
+  customPriceReason: string | null;
+  acceptedReservationId: string | null;
+  acceptedFolioId: string | null;
+  decidedBy: string | null;
+  decidedAt: Date | null;
+  denialReason: string | null;
+  stripePaymentMethodId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function pendingRequest(overrides: Partial<RequestRow> = {}): RequestRow {
+  return {
+    id: REQUEST_ID,
+    propertyId: PROPERTY_ID,
+    status: 'pending',
+    arrivalDate: '2026-10-01',
+    departureDate: '2026-10-03',
+    roomTypeId: ROOM_TYPE_ID,
+    ratePlanId: RATE_PLAN_ID,
+    adults: 2,
+    children: 1,
+    guestFirstName: 'Ada',
+    guestLastName: 'Lovelace',
+    guestEmail: 'ada@example.com',
+    guestPhone: '+34 600 000 000',
+    specialRequests: 'A quiet room, please.',
+    serviceIds: [],
+    submittedQuoteSnapshot: structuredClone(submittedQuote),
+    currentQuoteSnapshot: null,
+    currencyCode: 'EUR',
+    acceptedPriceSource: null,
+    acceptedTotal: null,
+    customPriceReason: null,
+    acceptedReservationId: null,
+    acceptedFolioId: null,
+    decidedBy: null,
+    decidedAt: null,
+    denialReason: null,
+    stripePaymentMethodId: null,
+    createdAt: new Date('2026-08-24T10:00:00.000Z'),
+    updatedAt: new Date('2026-08-24T10:00:00.000Z'),
+    ...overrides,
+  };
+}
+
+type State = {
+  requests: RequestRow[];
+  guests: Array<Record<string, unknown>>;
+  reservations: Array<Record<string, unknown>>;
+  folios: Array<Record<string, unknown>>;
+  payments: Array<Record<string, unknown>>;
+  resolutions: Array<Record<string, unknown>>;
+  audits: Array<Record<string, unknown>>;
+  consequences: Array<Record<string, unknown>>;
+};
+
+function cloneState(state: State): State {
+  return structuredClone(state);
+}
+
+function restoreState(state: State, snapshot: State): void {
+  for (const key of Object.keys(snapshot) as Array<keyof State>) {
+    state[key].splice(0, state[key].length, ...structuredClone(snapshot[key]));
+  }
+}
+
+function makeDatabase(state: State) {
+  let rowLockQueue = Promise.resolve();
+  let transactionActive = false;
+
+  const rowsFor = (table: unknown): Array<Record<string, unknown>> => {
+    if (table === bookingRequests) return state.requests;
+    if (table === guests) return state.guests;
+    if (table === reservations) return state.reservations;
+    if (table === folios) return state.folios;
+    if (table === payments) return state.payments;
+    if (table === bookingRequestPaymentResolutions) return state.resolutions;
+    if (table === auditLogs) return state.audits;
+    if (table === bookingRequestConsequences) return state.consequences;
+    return [];
+  };
+
+  const createSelect = (
+    selection?: Record<string, unknown>,
+    acquireLock?: () => Promise<void>,
+  ) => {
+    let table: unknown;
+    let offset = 0;
+    let limit: number | undefined;
+    const resolveRows = () => {
+      const rows = structuredClone(rowsFor(table));
+      if (selection && Object.keys(selection).length === 1 && 'count' in selection) {
+        return [{ count: rows.length }];
+      }
+      return rows.slice(offset, limit == null ? undefined : offset + limit);
+    };
+    const chain: Record<string, unknown> & PromiseLike<unknown> = {
+      from: vi.fn((selectedTable: unknown) => {
+        table = selectedTable;
+        return chain;
+      }),
+      leftJoin: vi.fn(() => chain),
+      innerJoin: vi.fn(() => chain),
+      where: vi.fn(() => chain),
+      for: vi.fn(async () => {
+        await acquireLock?.();
+        return resolveRows();
+      }),
+      orderBy: vi.fn(() => chain),
+      limit: vi.fn((value: number) => {
+        limit = value;
+        return chain;
+      }),
+      offset: vi.fn((value: number) => {
+        offset = value;
+        return chain;
+      }),
+      then: (resolve, reject) => Promise.resolve(resolveRows()).then(resolve, reject),
+    };
+    return chain;
+  };
+
+  const db: Record<string, unknown> = {};
+  db['select'] = vi.fn((selection?: Record<string, unknown>) =>
+    createSelect(selection));
+
+  db['insert'] = vi.fn((table: unknown) => ({
+    values: vi.fn((values: Record<string, unknown>) => {
+      const insert = () => {
+        const row = {
+          id: values['id'] ?? `row-${rowsFor(table).length + 1}`,
+          ...structuredClone(values),
+        };
+        rowsFor(table).push(row);
+        return row;
+      };
+      const direct = Promise.resolve().then(() => insert()).then(() => undefined);
+      return Object.assign(direct, {
+        returning: vi.fn(async () => [insert()]),
+        onConflictDoNothing: vi.fn(() => ({
+          returning: vi.fn(async () => [insert()]),
+        })),
+      });
+    }),
+  }));
+
+  db['update'] = vi.fn((table: unknown) => ({
+    set: vi.fn((changes: Record<string, unknown>) => {
+      const apply = () => {
+        const rows = rowsFor(table);
+        for (const row of rows) Object.assign(row, structuredClone(changes));
+        return structuredClone(rows);
+      };
+      return {
+        where: vi.fn(() => {
+          const direct = Promise.resolve().then(() => apply()).then(() => undefined);
+          return Object.assign(direct, {
+            returning: vi.fn(async () => apply()),
+          });
+        }),
+      };
+    }),
+  }));
+
+  db['delete'] = vi.fn(() => {
+    throw new Error('Booking Request decisions must not delete business records');
+  });
+
+  db['transaction'] = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
+    let release = () => undefined;
+    let acquired = false;
+    const tx = {
+      ...db,
+      select: vi.fn((selection?: Record<string, unknown>) => createSelect(
+        selection,
+        async () => {
+          const previous = rowLockQueue;
+          rowLockQueue = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          await previous;
+          acquired = true;
+        },
+      )),
+    };
+    const snapshot = cloneState(state);
+    transactionActive = true;
+    try {
+      return await callback(tx);
+    } catch (error) {
+      restoreState(state, snapshot);
+      throw error;
+    } finally {
+      transactionActive = false;
+      if (acquired) release();
+    }
+  });
+
+  return {
+    db,
+    isTransactionActive: () => transactionActive,
+  };
+}
+
+function makeHarness(requests: RequestRow[] = [pendingRequest()]) {
+  const state: State = {
+    requests: structuredClone(requests),
+    guests: [],
+    reservations: [],
+    folios: [],
+    payments: [],
+    resolutions: [],
+    audits: [],
+    consequences: [],
+  };
+  const database = makeDatabase(state);
+  let reservationCreates = 0;
+  let hasAvailability = true;
+  const dispatchTransactionStates: boolean[] = [];
+  const quoteTransactionStates: boolean[] = [];
+
+  const config = { getPublicConfig: vi.fn() };
+  const bookingEngine = {
+    quote: vi.fn(async () => {
+      quoteTransactionStates.push(database.isTransactionActive());
+      return structuredClone(currentQuote);
+    }),
+  };
+  const availability = { searchAvailability: vi.fn() };
+  const ratePlan = { assertSellable: vi.fn() };
+  const savedPaymentMethod = {
+    createSetup: vi.fn(),
+    resolveSetup: vi.fn(),
+    charge: vi.fn(() => {
+      throw new Error('Acceptance must never charge a payment method');
+    }),
+  };
+  const webhook = {
+    dispatchPersisted: vi.fn(async () => {
+      dispatchTransactionStates.push(database.isTransactionActive());
+    }),
+    emit: vi.fn(async () => {
+      dispatchTransactionStates.push(database.isTransactionActive());
+    }),
+  };
+  const guest = {
+    create: vi.fn(async (dto: Record<string, unknown>) => {
+      const row = { id: GUEST_ID, ...structuredClone(dto) };
+      state.guests.push(row);
+      return row;
+    }),
+  };
+  const reservation = {
+    create: vi.fn(async (dto: Record<string, unknown>) => {
+      reservationCreates += 1;
+      if (!hasAvailability) {
+        throw new BadRequestException('No availability for requested stay');
+      }
+      const row = {
+        id: RESERVATION_ID,
+        bookingId: '33333333-0000-4000-a000-000000000001',
+        status: 'pending',
+        ...structuredClone(dto),
+      };
+      state.reservations.push(row);
+      return row;
+    }),
+  };
+  const folio = {
+    createAutoFolio: vi.fn(async (input: Record<string, unknown>) => {
+      const row = {
+        id: FOLIO_ID,
+        propertyId: input['propertyId'],
+        reservationId: input['id'],
+        guestId: input['guestId'],
+        currencyCode: input['currencyCode'],
+      };
+      state.folios.push(row);
+      return row;
+    }),
+    recalculateBalance: vi.fn(async () => undefined),
+  };
+  const ancillary = {
+    attachToReservation: vi.fn(async () => ({
+      id: '44444444-0000-4000-a000-000000000001',
+    })),
+    ensurePackageComponents: vi.fn(async () => []),
+  };
+
+  const service = new (BookingRequestService as any)(
+    database.db,
+    config,
+    bookingEngine,
+    availability,
+    ratePlan,
+    savedPaymentMethod,
+    webhook,
+    guest,
+    reservation,
+    folio,
+    ancillary,
+  ) as BookingRequestService & Record<string, (...args: any[]) => Promise<any>>;
+
+  return {
+    service,
+    state,
+    database,
+    bookingEngine,
+    savedPaymentMethod,
+    webhook,
+    guest,
+    reservation,
+    folio,
+    ancillary,
+    setAvailability(value: boolean) {
+      hasAvailability = value;
+    },
+    get reservationCreates() {
+      return reservationCreates;
+    },
+    dispatchTransactionStates,
+    quoteTransactionStates,
+  };
+}
+
+async function call(
+  service: BookingRequestService & Record<string, (...args: any[]) => Promise<any>>,
+  method: 'list' | 'findById' | 'accept' | 'deny',
+  args: unknown[],
+): Promise<any> {
+  const fn = service[method];
+  if (typeof fn !== 'function') return undefined;
+  return fn.apply(service, args);
+}
+
+const actor = {
+  userId: '55555555-0000-4000-a000-000000000001',
+  userEmail: 'agent@example.com',
+  ipAddress: '203.0.113.10',
+};
+
+describe('Booking Request staff HTTP contract', () => {
+  it('registers concrete DTO validation and read/write permissions', async () => {
+    const controllerModule = await import('./booking-request.controller').catch(() => null);
+    const listDtoModule = await import('./dto/list-booking-requests.dto').catch(() => null);
+    const acceptDtoModule = await import('./dto/accept-booking-request.dto').catch(() => null);
+    const denyDtoModule = await import('./dto/deny-booking-request.dto').catch(() => null);
+
+    expect(controllerModule).not.toBeNull();
+    expect(listDtoModule).not.toBeNull();
+    expect(acceptDtoModule).not.toBeNull();
+    expect(denyDtoModule).not.toBeNull();
+    if (!controllerModule || !listDtoModule || !acceptDtoModule || !denyDtoModule) return;
+
+    const Controller = controllerModule.BookingRequestController;
+    const reflector = new Reflector();
+    expect(reflector.get(PERMISSIONS_KEY, Controller.prototype.list)).toEqual([
+      'reservations.read',
+    ]);
+    expect(reflector.get(PERMISSIONS_KEY, Controller.prototype.findById)).toEqual([
+      'reservations.read',
+    ]);
+    expect(reflector.get(PERMISSIONS_KEY, Controller.prototype.accept)).toEqual([
+      'reservations.write',
+    ]);
+    expect(reflector.get(PERMISSIONS_KEY, Controller.prototype.deny)).toEqual([
+      'reservations.write',
+    ]);
+
+    expect(Reflect.getMetadata(
+      'design:paramtypes',
+      Controller.prototype,
+      'accept',
+    )).toContain(acceptDtoModule.AcceptBookingRequestDto);
+    expect(Reflect.getMetadata(
+      'design:paramtypes',
+      Controller.prototype,
+      'deny',
+    )).toContain(denyDtoModule.DenyBookingRequestDto);
+  });
+
+  it('requires property scope and validates custom pricing/denial input', async () => {
+    const listDtoModule = await import('./dto/list-booking-requests.dto').catch(() => null);
+    const acceptDtoModule = await import('./dto/accept-booking-request.dto').catch(() => null);
+    const denyDtoModule = await import('./dto/deny-booking-request.dto').catch(() => null);
+    expect(listDtoModule && acceptDtoModule && denyDtoModule).toBeTruthy();
+    if (!listDtoModule || !acceptDtoModule || !denyDtoModule) return;
+
+    const missingScope = await validate(plainToInstance(
+      listDtoModule.ListBookingRequestsDto,
+      {},
+    ));
+    const invalidSource = await validate(plainToInstance(
+      acceptDtoModule.AcceptBookingRequestDto,
+      { priceSource: 'charged' },
+    ));
+    const blankDenial = await validate(plainToInstance(
+      denyDtoModule.DenyBookingRequestDto,
+      { reason: '' },
+    ));
+    expect(missingScope.some((error) => error.property === 'propertyId')).toBe(true);
+    expect(invalidSource.some((error) => error.property === 'priceSource')).toBe(true);
+    expect(blankDenial.some((error) => error.property === 'reason')).toBe(true);
+  });
+});
+
+describe('BookingRequestService staff reads', () => {
+  it('lists only the requested property and never leaks cross-property rows', async () => {
+    const harness = makeHarness([
+      pendingRequest(),
+      pendingRequest({ id: 'bbbbbbbb-0000-4000-a000-000000000002', propertyId: OTHER_PROPERTY_ID }),
+    ]);
+    const result = await call(harness.service, 'list', [{
+      propertyId: PROPERTY_ID,
+      page: 1,
+      limit: 20,
+    }]);
+
+    expect(result?.data?.map((row: RequestRow) => row.id)).toEqual([REQUEST_ID]);
+  });
+
+  it('returns not found for a request id that exists under another property', async () => {
+    const harness = makeHarness([
+      pendingRequest({ propertyId: OTHER_PROPERTY_ID }),
+    ]);
+
+    await expect(call(
+      harness.service,
+      'findById',
+      [REQUEST_ID, PROPERTY_ID],
+    )).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('BookingRequestService acceptance', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ['submitted', undefined, undefined, '220.00'],
+    ['current', undefined, undefined, '260.00'],
+    ['custom', '240.00', 'Goodwill rate', '240.00'],
+  ] as const)(
+    'accepts the %s price without charging and records the decision actor',
+    async (priceSource, customTotal, customReason, expectedTotal) => {
+      const harness = makeHarness();
+      const result = await call(harness.service, 'accept', [
+        REQUEST_ID,
+        PROPERTY_ID,
+        { priceSource, customTotal, customReason },
+        actor,
+      ]);
+
+      expect(result.id).toBe(RESERVATION_ID);
+      expect(result.totalAmount).toBe(expectedTotal);
+      expect(harness.state.requests[0]).toMatchObject({
+        status: 'accepted',
+        acceptedPriceSource: priceSource,
+        acceptedTotal: expectedTotal,
+        customPriceReason: customReason ?? null,
+        acceptedReservationId: RESERVATION_ID,
+        acceptedFolioId: FOLIO_ID,
+        decidedBy: actor.userId,
+        currentQuoteSnapshot: currentQuote,
+      });
+      expect(harness.savedPaymentMethod.charge).not.toHaveBeenCalled();
+      expect(harness.state.audits).toContainEqual(expect.objectContaining({
+        userId: actor.userId,
+        userEmail: actor.userEmail,
+        ipAddress: actor.ipAddress,
+      }));
+      expect(harness.state.audits.map((entry) => entry['description'])).toEqual(
+        expect.arrayContaining([
+          'Webhook event: booking_request.accepted',
+          'Webhook event: reservation.created',
+          'Webhook event: folio.created',
+        ]),
+      );
+      expect(harness.quoteTransactionStates).toEqual([false]);
+      expect(harness.dispatchTransactionStates.every((active) => !active)).toBe(true);
+    },
+  );
+
+  it('rejects custom pricing without a reason before creating business records', async () => {
+    const harness = makeHarness();
+
+    await expect(call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { priceSource: 'custom', customTotal: '240.00' },
+      actor,
+    ])).rejects.toThrow(/reason/i);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+    expect(harness.state.reservations).toHaveLength(0);
+    expect(harness.state.guests).toHaveLength(0);
+  });
+
+  it('leaves the request pending when canonical reservation creation finds no availability', async () => {
+    const harness = makeHarness();
+    harness.setAvailability(false);
+
+    const acceptance = call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { priceSource: 'current' },
+      actor,
+    ]);
+    await expect(acceptance).rejects.toBeInstanceOf(ConflictException);
+    await expect(acceptance).rejects.toThrow(/availability/i);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+    expect(harness.state.reservations).toHaveLength(0);
+    expect(harness.state.folios).toHaveLength(0);
+  });
+
+  it('returns a conflict and leaves the request pending when the pre-transaction quote finds no availability', async () => {
+    const harness = makeHarness();
+    harness.bookingEngine.quote.mockRejectedValueOnce(
+      new BadRequestException('No availability for the requested room type and dates'),
+    );
+
+    await expect(call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { priceSource: 'submitted' },
+      actor,
+    ])).rejects.toBeInstanceOf(ConflictException);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+    expect(harness.state.reservations).toHaveLength(0);
+  });
+
+  it('serializes simultaneous acceptance and creates exactly one reservation', async () => {
+    const harness = makeHarness();
+
+    const [first, second] = await Promise.all([
+      call(harness.service, 'accept', [
+        REQUEST_ID,
+        PROPERTY_ID,
+        { priceSource: 'submitted' },
+        actor,
+      ]),
+      call(harness.service, 'accept', [
+        REQUEST_ID,
+        PROPERTY_ID,
+        { priceSource: 'submitted' },
+        actor,
+      ]),
+    ]);
+
+    expect(first.id).toBe(RESERVATION_ID);
+    expect(second.id).toBe(RESERVATION_ID);
+    expect(harness.reservationCreates).toBe(1);
+    expect(harness.state.reservations).toHaveLength(1);
+  });
+
+  it('returns the linked reservation when an accepted request is replayed', async () => {
+    const accepted = pendingRequest({
+      status: 'accepted',
+      acceptedReservationId: RESERVATION_ID,
+      acceptedFolioId: FOLIO_ID,
+      acceptedPriceSource: 'submitted',
+      acceptedTotal: '220.00',
+    });
+    const harness = makeHarness([accepted]);
+    harness.state.reservations.push({
+      id: RESERVATION_ID,
+      propertyId: PROPERTY_ID,
+      totalAmount: '220.00',
+    });
+
+    const result = await call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { priceSource: 'submitted' },
+      actor,
+    ]);
+
+    expect(result).toMatchObject({ id: RESERVATION_ID, propertyId: PROPERTY_ID });
+    expect(harness.reservationCreates).toBe(0);
+  });
+
+  it('links pre-acceptance payments to the new folio without losing request provenance', async () => {
+    const harness = makeHarness();
+    harness.state.payments.push({
+      id: PAYMENT_ID,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      status: 'captured',
+      amount: '100.00',
+    });
+
+    await call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { priceSource: 'submitted' },
+      actor,
+    ]);
+
+    expect(harness.state.payments[0]).toMatchObject({
+      id: PAYMENT_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: FOLIO_ID,
+    });
+  });
+
+  it('treats cross-property acceptance as not found', async () => {
+    const harness = makeHarness([pendingRequest({ propertyId: OTHER_PROPERTY_ID })]);
+
+    await expect(call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { priceSource: 'submitted' },
+      actor,
+    ])).rejects.toBeInstanceOf(NotFoundException);
+    expect(harness.state.reservations).toHaveLength(0);
+  });
+});
+
+describe('BookingRequestService denial', () => {
+  it('blocks denial while captured money remains unresolved and preserves all rows', async () => {
+    const harness = makeHarness();
+    harness.state.payments.push({
+      id: PAYMENT_ID,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      originalPaymentId: null,
+      status: 'captured',
+      amount: '100.00',
+    });
+
+    await expect(call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Unable to accommodate' },
+      actor,
+    ])).rejects.toThrow(/unresolved money/i);
+    expect(harness.state.requests).toHaveLength(1);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+    expect(harness.state.payments).toHaveLength(1);
+  });
+
+  it('denies after money is resolved, records actor, and delivers consequences after commit', async () => {
+    const harness = makeHarness();
+    harness.state.payments.push({
+      id: PAYMENT_ID,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      originalPaymentId: null,
+      status: 'captured',
+      amount: '100.00',
+    });
+    harness.state.resolutions.push({
+      id: '66666666-0000-4000-a000-000000000001',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      paymentId: PAYMENT_ID,
+      type: 'retained',
+      amount: '100.00',
+      reason: 'Non-refundable supplier cost',
+    });
+
+    const result = await call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Unable to accommodate' },
+      actor,
+    ]);
+
+    expect(result).toMatchObject({
+      id: REQUEST_ID,
+      status: 'denied',
+      denialReason: 'Unable to accommodate',
+      decidedBy: actor.userId,
+    });
+    expect(harness.state.requests).toHaveLength(1);
+    expect(harness.state.payments).toHaveLength(1);
+    expect(harness.state.resolutions).toHaveLength(1);
+    expect(harness.state.audits).toContainEqual(expect.objectContaining({
+      userId: actor.userId,
+      userEmail: actor.userEmail,
+      ipAddress: actor.ipAddress,
+    }));
+    expect(harness.dispatchTransactionStates.length).toBeGreaterThan(0);
+    expect(harness.dispatchTransactionStates.every((active) => !active)).toBe(true);
+  });
+
+  it('treats cross-property denial as not found', async () => {
+    const harness = makeHarness([pendingRequest({ propertyId: OTHER_PROPERTY_ID })]);
+
+    await expect(call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Unable to accommodate' },
+      actor,
+    ])).rejects.toBeInstanceOf(NotFoundException);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+  });
+});
+
+describe('canonical creation transaction seams', () => {
+  it('GuestService.create uses the caller transaction', async () => {
+    const mainDb = {
+      insert: vi.fn(() => {
+        throw new Error('main database used');
+      }),
+    };
+    const tx = {
+      insert: vi.fn((table: unknown) => {
+        expect(table).toBe(guests);
+        return {
+          values: vi.fn(() => ({
+            returning: vi.fn(async () => [{ id: GUEST_ID }]),
+          })),
+        };
+      }),
+    };
+    const service = new GuestService(mainDb as any);
+
+    const result = await (service.create as any)({
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      email: 'ada@example.com',
+    }, tx);
+
+    expect(result).toEqual({ id: GUEST_ID });
+    expect(mainDb.insert).not.toHaveBeenCalled();
+  });
+
+  it('FolioService.createAutoFolio uses the caller transaction and emits no pre-commit webhook', async () => {
+    const mainDb = {
+      select: vi.fn(() => {
+        throw new Error('main database used');
+      }),
+      insert: vi.fn(() => {
+        throw new Error('main database used');
+      }),
+    };
+    const webhook = { emit: vi.fn() };
+    const tx = {
+      select: vi.fn(() => {
+        let table: unknown;
+        const chain: Record<string, unknown> & PromiseLike<unknown> = {
+          from: vi.fn((value: unknown) => {
+            table = value;
+            return chain;
+          }),
+          where: vi.fn(() => chain),
+          then: (resolve, reject) => Promise.resolve(
+            table === folios ? [{ maxNumber: null }] : [{ id: 'exists' }],
+          ).then(resolve, reject),
+        };
+        return chain;
+      }),
+      insert: vi.fn((table: unknown) => {
+        expect(table).toBe(folios);
+        return {
+          values: vi.fn((values: Record<string, unknown>) => ({
+            returning: vi.fn(async () => [{ id: FOLIO_ID, ...values }]),
+          })),
+        };
+      }),
+    };
+    const service = new FolioService(mainDb as any, webhook as any, {} as any);
+
+    const result = await (service.createAutoFolio as any)({
+      id: RESERVATION_ID,
+      propertyId: PROPERTY_ID,
+      bookingId: '33333333-0000-4000-a000-000000000001',
+      guestId: GUEST_ID,
+      currencyCode: 'EUR',
+    }, tx);
+
+    expect(result.id).toBe(FOLIO_ID);
+    expect(mainDb.insert).not.toHaveBeenCalled();
+    expect(webhook.emit).not.toHaveBeenCalled();
+  });
+
+  it('ReservationService.create performs every lookup and insert in the caller transaction', async () => {
+    const mainDb = {
+      select: vi.fn(() => {
+        throw new Error('main database used');
+      }),
+      transaction: vi.fn(() => {
+        throw new Error('nested transaction opened');
+      }),
+    };
+    const tx = {
+      select: vi.fn(() => {
+        let table: unknown;
+        const chain: Record<string, unknown> & PromiseLike<unknown> = {
+          from: vi.fn((value: unknown) => {
+            table = value;
+            return chain;
+          }),
+          where: vi.fn(() => chain),
+          then: (resolve, reject) => Promise.resolve(
+            table === guests
+              ? [{ id: GUEST_ID, isDnr: false }]
+              : [{ id: table === roomTypes ? ROOM_TYPE_ID : RATE_PLAN_ID }],
+          ).then(resolve, reject),
+        };
+        return chain;
+      }),
+      insert: vi.fn((_table: unknown) => ({
+        values: vi.fn((values: Record<string, unknown>) => {
+          const row = _table === bookings
+            ? { id: '33333333-0000-4000-a000-000000000001', ...values }
+            : _table === reservations
+              ? { id: RESERVATION_ID, ...values }
+              : values;
+          return {
+            returning: vi.fn(async () => [row]),
+            then: (resolve: (value: unknown) => unknown) => Promise.resolve(undefined).then(resolve),
+          };
+        }),
+      })),
+    };
+    const availability = {
+      searchAvailability: vi.fn(async () => [{
+        roomTypeId: ROOM_TYPE_ID,
+        available: 1,
+      }]),
+    };
+    const webhook = { emit: vi.fn() };
+    const ratePlan = { assertSellable: vi.fn(async () => undefined) };
+    const service = new ReservationService(
+      mainDb as any,
+      availability as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      webhook as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      ratePlan as any,
+    );
+
+    const result = await (service.create as any)({
+      propertyId: PROPERTY_ID,
+      guestId: GUEST_ID,
+      arrivalDate: '2026-10-01',
+      departureDate: '2026-10-03',
+      roomTypeId: ROOM_TYPE_ID,
+      ratePlanId: RATE_PLAN_ID,
+      totalAmount: '220.00',
+      currencyCode: 'EUR',
+      source: 'direct',
+    }, {}, tx);
+
+    expect(result.id).toBe(RESERVATION_ID);
+    expect(mainDb.transaction).not.toHaveBeenCalled();
+    expect(availability.searchAvailability).toHaveBeenCalledWith(
+      PROPERTY_ID,
+      '2026-10-01',
+      '2026-10-03',
+      ROOM_TYPE_ID,
+      tx,
+    );
+    expect(ratePlan.assertSellable).toHaveBeenCalledWith(
+      PROPERTY_ID,
+      RATE_PLAN_ID,
+      '2026-10-01',
+      '2026-10-03',
+      tx,
+    );
+    expect(tx.insert).toHaveBeenCalledWith(reservationGuests);
+    expect(webhook.emit).not.toHaveBeenCalled();
+  });
+
+  it('AncillaryService attach and package ensure use the caller transaction without emitting', async () => {
+    const mainDb = {
+      select: vi.fn(() => {
+        throw new Error('main database used');
+      }),
+      insert: vi.fn(() => {
+        throw new Error('main database used');
+      }),
+    };
+    const inserted: Array<Record<string, unknown>> = [];
+    const tx = {
+      select: vi.fn((selection?: Record<string, unknown>) => {
+        let table: unknown;
+        const chain: Record<string, unknown> & PromiseLike<unknown> = {
+          from: vi.fn((value: unknown) => {
+            table = value;
+            return chain;
+          }),
+          where: vi.fn(() => chain),
+          then: (resolve, reject) => Promise.resolve(
+            table === reservations
+              ? [{ id: RESERVATION_ID, propertyId: PROPERTY_ID, ratePlanId: RATE_PLAN_ID }]
+              : table === services
+                ? [{
+                    id: '77777777-0000-4000-a000-000000000001',
+                    propertyId: PROPERTY_ID,
+                    isActive: true,
+                    price: '25.00',
+                    currencyCode: 'EUR',
+                    postingRule: 'once',
+                    chargeType: 'fee',
+                    name: 'Breakfast',
+                  }]
+                : table === ratePlanComponents
+                  ? [{
+                      serviceId: '77777777-0000-4000-a000-000000000001',
+                      quantity: 1,
+                      includedInRate: true,
+                      amountOverride: null,
+                    }]
+                  : table === reservationServices && selection
+                    ? []
+                    : [],
+          ).then(resolve, reject),
+        };
+        return chain;
+      }),
+      insert: vi.fn((_table: unknown) => ({
+        values: vi.fn((values: Record<string, unknown>) => ({
+          returning: vi.fn(async () => {
+            const row = {
+              id: `88888888-0000-4000-a000-${String(inserted.length + 1).padStart(12, '0')}`,
+              ...values,
+            };
+            inserted.push(row);
+            return [row];
+          }),
+        })),
+      })),
+    };
+    const webhook = { emit: vi.fn() };
+    const service = new AncillaryService(mainDb as any, {} as any, webhook as any);
+
+    const selected = await (service.attachToReservation as any)(RESERVATION_ID, {
+      propertyId: PROPERTY_ID,
+      serviceId: '77777777-0000-4000-a000-000000000001',
+      sourceChannel: 'booking_engine',
+    }, tx);
+    const packaged = await (service.ensurePackageComponents as any)(
+      RESERVATION_ID,
+      PROPERTY_ID,
+      tx,
+    );
+
+    expect(selected.reservationId).toBe(RESERVATION_ID);
+    expect(packaged).toHaveLength(1);
+    expect(mainDb.select).not.toHaveBeenCalled();
+    expect(mainDb.insert).not.toHaveBeenCalled();
+    expect(webhook.emit).not.toHaveBeenCalled();
+  });
+});

@@ -66,8 +66,9 @@ export class AncillaryService {
     return row;
   }
 
-  async findServiceById(id: string, propertyId: string) {
-    const [row] = await this.db
+  async findServiceById(id: string, propertyId: string, tx?: any) {
+    const db = tx ?? this.db;
+    const [row] = await db
       .select()
       .from(services)
       .where(and(eq(services.id, id), eq(services.propertyId, propertyId)));
@@ -197,8 +198,9 @@ export class AncillaryService {
 
   // --- Reservation services ---
 
-  private async findReservation(reservationId: string, propertyId: string) {
-    const [reservation] = await this.db
+  private async findReservation(reservationId: string, propertyId: string, tx?: any) {
+    const db = tx ?? this.db;
+    const [reservation] = await db
       .select()
       .from(reservations)
       .where(
@@ -252,9 +254,14 @@ export class AncillaryService {
     return !!existing;
   }
 
-  async attachToReservation(reservationId: string, dto: AttachReservationServiceDto) {
-    const reservation = await this.findReservation(reservationId, dto.propertyId);
-    const service = await this.findServiceById(dto.serviceId, dto.propertyId);
+  async attachToReservation(
+    reservationId: string,
+    dto: AttachReservationServiceDto,
+    tx?: any,
+  ) {
+    const db = tx ?? this.db;
+    const reservation = await this.findReservation(reservationId, dto.propertyId, db);
+    const service = await this.findServiceById(dto.serviceId, dto.propertyId, db);
 
     if (!service.isActive) {
       throw new BadRequestException('Service is not active');
@@ -263,7 +270,7 @@ export class AncillaryService {
     const quantity = dto.quantity ?? 1;
     const unitPrice = dto.unitPrice ?? service.price;
 
-    const [row] = await this.db
+    const [row] = await db
       .insert(reservationServices)
       .values({
         propertyId: dto.propertyId,
@@ -282,20 +289,22 @@ export class AncillaryService {
       })
       .returning();
 
-    await this.webhookService.emit(
-      'reservation.service_attached',
-      'reservation_service',
-      row.id,
-      {
-        reservationId,
-        serviceId: service.id,
-        serviceName: service.name,
-        quantity,
-        unitPrice,
-        postingRule: row.postingRule,
-      },
-      dto.propertyId,
-    );
+    if (!tx) {
+      await this.webhookService.emit(
+        'reservation.service_attached',
+        'reservation_service',
+        row.id,
+        {
+          reservationId,
+          serviceId: service.id,
+          serviceName: service.name,
+          quantity,
+          unitPrice,
+          postingRule: row.postingRule,
+        },
+        dto.propertyId,
+      );
+    }
 
     return row;
   }
@@ -354,10 +363,11 @@ export class AncillaryService {
    * Attach package rate-plan components that are not yet on the reservation.
    * Intended to be called from check-in / book flows.
    */
-  async ensurePackageComponents(reservationId: string, propertyId: string) {
-    const reservation = await this.findReservation(reservationId, propertyId);
+  async ensurePackageComponents(reservationId: string, propertyId: string, tx?: any) {
+    const db = tx ?? this.db;
+    const reservation = await this.findReservation(reservationId, propertyId, db);
 
-    const components = await this.db
+    const components = await db
       .select()
       .from(ratePlanComponents)
       .where(
@@ -371,7 +381,7 @@ export class AncillaryService {
       return [];
     }
 
-    const existing = await this.db
+    const existing = await db
       .select({ serviceId: reservationServices.serviceId })
       .from(reservationServices)
       .where(
@@ -388,7 +398,7 @@ export class AncillaryService {
         continue;
       }
 
-      const service = await this.findServiceById(component.serviceId, propertyId);
+      const service = await this.findServiceById(component.serviceId, propertyId, db);
       let unitPrice: string;
       if (component.amountOverride != null) {
         unitPrice = component.amountOverride;
@@ -398,7 +408,7 @@ export class AncillaryService {
         unitPrice = service.price;
       }
 
-      const [row] = await this.db
+      const [row] = await db
         .insert(reservationServices)
         .values({
           propertyId,
@@ -414,20 +424,22 @@ export class AncillaryService {
         })
         .returning();
 
-      await this.webhookService.emit(
-        'reservation.service_attached',
-        'reservation_service',
-        row.id,
-        {
-          reservationId,
-          serviceId: service.id,
-          serviceName: service.name,
-          sourceChannel: 'package',
-          quantity: row.quantity,
-          unitPrice,
-        },
-        propertyId,
-      );
+      if (!tx) {
+        await this.webhookService.emit(
+          'reservation.service_attached',
+          'reservation_service',
+          row.id,
+          {
+            reservationId,
+            serviceId: service.id,
+            serviceName: service.name,
+            sourceChannel: 'package',
+            quantity: row.quantity,
+            unitPrice,
+          },
+          propertyId,
+        );
+      }
 
       attached.push(row);
     }

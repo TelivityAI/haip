@@ -120,7 +120,13 @@ export const bookingRequests = pgTable('booking_requests', {
  * Kinds are strings rather than a database enum so later receipt/decision/payment
  * consequences can extend this outbox without another enum migration.
  */
-export type BookingRequestConsequenceKind = 'created_event';
+export type BookingRequestConsequenceKind =
+  | 'created_event'
+  | 'accepted_event'
+  | 'denied_event'
+  | 'reservation_created_event'
+  | 'folio_created_event'
+  | `service:${string}`;
 export type BookingRequestConsequenceStatus = 'pending' | 'processing' | 'completed';
 
 export const bookingRequestConsequences = pgTable('booking_request_consequences', {

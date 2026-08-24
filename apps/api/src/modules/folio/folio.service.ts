@@ -51,13 +51,15 @@ export class FolioService {
       .insert(folios)
       .values({ ...dto, folioNumber })
       .returning();
-    await this.webhookService.emit(
-      'folio.created',
-      'folio',
-      folio.id,
-      { folioNumber: folio.folioNumber, type: folio.type },
-      folio.propertyId,
-    );
+    if (!tx) {
+      await this.webhookService.emit(
+        'folio.created',
+        'folio',
+        folio.id,
+        { folioNumber: folio.folioNumber, type: folio.type },
+        folio.propertyId,
+      );
+    }
     return folio;
   }
 
@@ -584,7 +586,7 @@ export class FolioService {
     bookingId?: string | null;
     guestId: string;
     currencyCode: string;
-  }) {
+  }, tx?: any) {
     return this.create({
       propertyId: reservation.propertyId,
       reservationId: reservation.id,
@@ -592,7 +594,7 @@ export class FolioService {
       guestId: reservation.guestId,
       type: 'guest',
       currencyCode: reservation.currencyCode,
-    });
+    }, tx);
   }
 
   private async generateFolioNumber(propertyId: string, tx?: any): Promise<string> {

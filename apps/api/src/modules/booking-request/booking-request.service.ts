@@ -5,21 +5,41 @@ import {
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   auditLogs,
   bookingEngineConfig,
   bookingRequestConsequences,
+  bookingRequestPaymentResolutions,
   bookingRequests,
+  payments,
+  reservations,
 } from '@telivityhaip/database';
 import type {
   BookingFormQuestion,
   PaymentMethodCollection,
 } from '@telivityhaip/database';
 import { createHash } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  ilike,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import {
+  actorFields,
+  type AuditActor,
+} from '../../common/audit/audit-actor';
 import { DRIZZLE } from '../../database/database.module';
+import { AncillaryService } from '../ancillary/ancillary.service';
 import { BookingEngineConfigService } from '../booking-engine/booking-engine-config.service';
 import { BookingEngineService } from '../booking-engine/booking-engine.service';
 import {
@@ -32,14 +52,34 @@ import {
   type SavedPaymentMethodGateway,
 } from '../payment/interfaces/saved-payment-method-gateway.interface';
 import { RatePlanService } from '../rate-plan/rate-plan.service';
+import { FolioService } from '../folio/folio.service';
+import { GuestService } from '../guest/guest.service';
 import { AvailabilityService } from '../reservation/availability.service';
+import { ReservationService } from '../reservation/reservation.service';
 import {
   WebhookService,
   type WebhookPayload,
 } from '../webhook/webhook.service';
 import { assertCanonicalStayDates } from './booking-request-date.validator';
+import {
+  assertDenialMoneyResolved,
+  resolveAcceptedTotal,
+  type BookingRequestPriceSource,
+} from './booking-request-money';
+import { assertBookingRequestTransition } from './booking-request-state';
+import type { AcceptBookingRequestDto } from './dto/accept-booking-request.dto';
 import type { CreateRequestCardSetupDto } from './dto/create-request-card-setup.dto';
+import type { DenyBookingRequestDto } from './dto/deny-booking-request.dto';
+import type { ListBookingRequestsDto } from './dto/list-booking-requests.dto';
 import type { SubmitBookingRequestDto } from './dto/submit-booking-request.dto';
+
+export type AcceptBookingRequestInput = {
+  priceSource: BookingRequestPriceSource;
+  customTotal?: string;
+  customReason?: string;
+};
+
+export type { AuditActor } from '../../common/audit/audit-actor';
 
 export type BookingRequestAcknowledgement = {
   requestId: string;
@@ -77,6 +117,10 @@ type CreatedConsequence = typeof bookingRequestConsequences.$inferSelect;
 const ACKNOWLEDGEMENT_MESSAGE =
   'Your booking request has been received and is pending review.';
 const CREATED_CONSEQUENCE_KIND = 'created_event' as const;
+const ACCEPTED_CONSEQUENCE_KIND = 'accepted_event' as const;
+const DENIED_CONSEQUENCE_KIND = 'denied_event' as const;
+const RESERVATION_CREATED_CONSEQUENCE_KIND = 'reservation_created_event' as const;
+const FOLIO_CREATED_CONSEQUENCE_KIND = 'folio_created_event' as const;
 const CONSEQUENCE_CLAIM_LEASE_MS = 5 * 60 * 1000;
 
 @Injectable()
@@ -96,7 +140,359 @@ export class BookingRequestService {
     @Inject(SAVED_PAYMENT_METHOD_GATEWAY)
     private readonly savedPaymentMethodGateway: SavedPaymentMethodGateway,
     @Inject(WebhookService) private readonly webhookService: WebhookService,
+    @Inject(GuestService) private readonly guestService: GuestService,
+    @Inject(ReservationService)
+    private readonly reservationService: ReservationService,
+    @Inject(FolioService) private readonly folioService: FolioService,
+    @Inject(AncillaryService) private readonly ancillaryService: AncillaryService,
   ) {}
+
+  async list(dto: ListBookingRequestsDto) {
+    const conditions = [eq(bookingRequests.propertyId, dto.propertyId)];
+    if (dto.status) conditions.push(eq(bookingRequests.status, dto.status));
+    if (dto.arrivalDateFrom) {
+      conditions.push(gte(bookingRequests.arrivalDate, dto.arrivalDateFrom));
+    }
+    if (dto.arrivalDateTo) {
+      conditions.push(lte(bookingRequests.arrivalDate, dto.arrivalDateTo));
+    }
+    if (dto.departureDateFrom) {
+      conditions.push(gte(bookingRequests.departureDate, dto.departureDateFrom));
+    }
+    if (dto.departureDateTo) {
+      conditions.push(lte(bookingRequests.departureDate, dto.departureDateTo));
+    }
+    const guestQuery = dto.guest?.trim();
+    if (guestQuery) {
+      conditions.push(or(
+        ilike(bookingRequests.guestFirstName, `%${guestQuery}%`),
+        ilike(bookingRequests.guestLastName, `%${guestQuery}%`),
+        ilike(bookingRequests.guestEmail, `%${guestQuery}%`),
+      )!);
+    }
+    if (dto.hasCard === true) {
+      conditions.push(isNotNull(bookingRequests.stripePaymentMethodId));
+    } else if (dto.hasCard === false) {
+      conditions.push(isNull(bookingRequests.stripePaymentMethodId));
+    }
+
+    const page = dto.page ?? 1;
+    const limit = dto.limit ?? 20;
+    const offset = (page - 1) * limit;
+    const where = and(...conditions);
+    const [selected, countRows] = await Promise.all([
+      this.db
+        .select()
+        .from(bookingRequests)
+        .where(where)
+        .orderBy(desc(bookingRequests.createdAt))
+        .limit(limit)
+        .offset(offset),
+      this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(bookingRequests)
+        .where(where),
+    ]);
+    // The SQL predicate is authoritative. The final check is deliberate
+    // defense-in-depth for adapters/test doubles that return an over-broad rowset.
+    const data = selected.filter((row) => row.propertyId === dto.propertyId);
+    const total = Number(countRows[0]?.count ?? 0);
+    return { data, total, page, limit, hasMore: offset + data.length < total };
+  }
+
+  async findById(id: string, propertyId: string) {
+    return this.findRequest(this.db, id, propertyId);
+  }
+
+  async accept(
+    id: string,
+    propertyId: string,
+    input: AcceptBookingRequestInput | AcceptBookingRequestDto,
+    actor?: AuditActor,
+  ) {
+    const initial = await this.findRequest(this.db, id, propertyId);
+    if (initial.status === 'accepted') {
+      const linked = await this.findLinkedReservation(this.db, initial, propertyId);
+      await this.deliverConsequencesBestEffort(id, propertyId);
+      return linked;
+    }
+    if (initial.status === 'denied') {
+      throw new ConflictException('Cannot accept a denied booking request');
+    }
+
+    const currentQuote = await this.bookingEngineService.quote(propertyId, {
+      roomTypeId: initial.roomTypeId,
+      ratePlanId: initial.ratePlanId,
+      checkIn: initial.arrivalDate,
+      checkOut: initial.departureDate,
+      adults: initial.adults,
+      children: initial.children,
+      serviceIds: initial.serviceIds,
+    }).catch((error: unknown) => this.throwAcceptanceError(error));
+    const preliminaryPrice = resolveAcceptedTotal({
+      source: input.priceSource,
+      submittedTotal: this.quoteTotal(initial.submittedQuoteSnapshot),
+      currentTotal: currentQuote.grandTotal,
+      customTotal: input.customTotal,
+      customReason: input.customReason,
+    });
+
+    const result = await this.db.transaction(async (tx) => {
+      const locked = await this.lockRequest(tx, id, propertyId);
+      if (locked.status === 'accepted') {
+        return {
+          reservation: await this.findLinkedReservation(tx, locked, propertyId),
+        };
+      }
+      if (locked.status === 'denied') {
+        throw new ConflictException('Cannot accept a denied booking request');
+      }
+
+      assertBookingRequestTransition(locked.status, 'accepted');
+      const price = resolveAcceptedTotal({
+        source: preliminaryPrice.source,
+        submittedTotal: this.quoteTotal(locked.submittedQuoteSnapshot),
+        currentTotal: currentQuote.grandTotal,
+        customTotal: input.customTotal,
+        customReason: input.customReason,
+      });
+      const guest = await this.guestService.create({
+        firstName: locked.guestFirstName,
+        lastName: locked.guestLastName,
+        email: locked.guestEmail,
+        phone: locked.guestPhone ?? undefined,
+      }, tx);
+      const reservation = await this.reservationService.create({
+        propertyId,
+        guestId: guest.id,
+        arrivalDate: locked.arrivalDate,
+        departureDate: locked.departureDate,
+        roomTypeId: locked.roomTypeId,
+        ratePlanId: locked.ratePlanId,
+        totalAmount: price.total.toFixed(2),
+        currencyCode: locked.currencyCode,
+        adults: locked.adults,
+        children: locked.children,
+        specialRequests: locked.specialRequests ?? undefined,
+        source: 'direct',
+        channelCode: 'booking_request',
+      }, undefined, tx);
+      const folio = await this.folioService.createAutoFolio({
+        id: reservation.id,
+        propertyId,
+        bookingId: reservation.bookingId,
+        guestId: guest.id,
+        currencyCode: locked.currencyCode,
+      }, tx);
+
+      const attachedServices: Array<Record<string, unknown>> = [];
+      for (const serviceId of new Set(locked.serviceIds ?? [])) {
+        attachedServices.push(await this.ancillaryService.attachToReservation(
+          reservation.id,
+          { propertyId, serviceId, sourceChannel: 'booking_engine' },
+          tx,
+        ));
+      }
+      attachedServices.push(...await this.ancillaryService.ensurePackageComponents(
+        reservation.id,
+        propertyId,
+        tx,
+      ));
+
+      const linkedPayments = await tx
+        .update(payments)
+        .set({ folioId: folio.id, updatedAt: new Date() })
+        .where(and(
+          eq(payments.propertyId, propertyId),
+          eq(payments.bookingRequestId, id),
+        ))
+        .returning({ id: payments.id });
+      if (linkedPayments.length > 0) {
+        await this.folioService.recalculateBalance(folio.id, propertyId, tx);
+      }
+
+      const decidedAt = new Date();
+      const [updated] = await tx
+        .update(bookingRequests)
+        .set({
+          status: 'accepted',
+          currentQuoteSnapshot: structuredClone(currentQuote),
+          acceptedPriceSource: price.source,
+          acceptedTotal: price.total.toFixed(2),
+          customPriceReason: price.customReason ?? null,
+          acceptedReservationId: reservation.id,
+          acceptedFolioId: folio.id,
+          decidedBy: actor?.userId ?? null,
+          decidedAt,
+          updatedAt: decidedAt,
+        })
+        .where(and(
+          eq(bookingRequests.id, id),
+          eq(bookingRequests.propertyId, propertyId),
+          eq(bookingRequests.status, 'pending'),
+        ))
+        .returning();
+      if (!updated) {
+        throw new ConflictException('Booking request decision changed concurrently');
+      }
+
+      await this.insertConsequence(tx, propertyId, id, ACCEPTED_CONSEQUENCE_KIND, {
+        event: 'booking_request.accepted',
+        entityType: 'booking_request',
+        entityId: id,
+        propertyId,
+        data: {
+          requestId: id,
+          reservationId: reservation.id,
+          folioId: folio.id,
+          priceSource: price.source,
+          acceptedTotal: price.total.toFixed(2),
+        },
+        timestamp: decidedAt.toISOString(),
+      });
+      await this.insertConsequence(
+        tx,
+        propertyId,
+        id,
+        RESERVATION_CREATED_CONSEQUENCE_KIND,
+        {
+          event: 'reservation.created',
+          entityType: 'reservation',
+          entityId: reservation.id,
+          propertyId,
+          data: {
+            reservationId: reservation.id,
+            arrivalDate: reservation.arrivalDate,
+            departureDate: reservation.departureDate,
+            roomTypeId: reservation.roomTypeId,
+          },
+          timestamp: decidedAt.toISOString(),
+        },
+      );
+      await this.insertConsequence(tx, propertyId, id, FOLIO_CREATED_CONSEQUENCE_KIND, {
+        event: 'folio.created',
+        entityType: 'folio',
+        entityId: folio.id,
+        propertyId,
+        data: { folioNumber: folio.folioNumber, type: folio.type },
+        timestamp: decidedAt.toISOString(),
+      });
+      for (const attached of attachedServices) {
+        if (typeof attached['id'] !== 'string') continue;
+        await this.insertConsequence(tx, propertyId, id, `service:${attached['id']}`, {
+          event: 'reservation.service_attached',
+          entityType: 'reservation_service',
+          entityId: attached['id'],
+          propertyId,
+          data: {
+            reservationId: reservation.id,
+            serviceId: attached['serviceId'] ?? null,
+          },
+          timestamp: decidedAt.toISOString(),
+        });
+      }
+      await tx.insert(auditLogs).values({
+        propertyId,
+        action: 'update',
+        entityType: 'booking_request',
+        entityId: id,
+        ...actorFields(actor),
+        previousValue: { status: 'pending' },
+        newValue: {
+          status: 'accepted',
+          reservationId: reservation.id,
+          folioId: folio.id,
+          priceSource: price.source,
+          acceptedTotal: price.total.toFixed(2),
+          customPriceReason: price.customReason ?? null,
+        },
+        description: 'Booking request accepted',
+      });
+      return { reservation };
+    }).catch((error: unknown) => this.throwAcceptanceError(error));
+
+    await this.deliverConsequencesBestEffort(id, propertyId);
+    return result.reservation;
+  }
+
+  async deny(
+    id: string,
+    propertyId: string,
+    input: DenyBookingRequestDto,
+    actor?: AuditActor,
+  ) {
+    const reason = input.reason?.trim();
+    if (!reason) throw new BadRequestException('A denial reason is required');
+
+    const denied = await this.db.transaction(async (tx) => {
+      const locked = await this.lockRequest(tx, id, propertyId);
+      assertBookingRequestTransition(locked.status, 'denied');
+
+      const movementRows = await tx
+        .select()
+        .from(payments)
+        .where(and(
+          eq(payments.propertyId, propertyId),
+          eq(payments.bookingRequestId, id),
+        ));
+      const resolutionRows = await tx
+        .select()
+        .from(bookingRequestPaymentResolutions)
+        .where(and(
+          eq(bookingRequestPaymentResolutions.propertyId, propertyId),
+          eq(bookingRequestPaymentResolutions.bookingRequestId, id),
+        ));
+      const scopedMovements = movementRows.filter((row) =>
+        row.propertyId === propertyId
+        && row.bookingRequestId === id
+        && row.originalPaymentId == null);
+      const scopedResolutions = resolutionRows.filter((row) =>
+        row.propertyId === propertyId && row.bookingRequestId === id);
+      assertDenialMoneyResolved(scopedMovements, scopedResolutions);
+
+      const decidedAt = new Date();
+      const [updated] = await tx
+        .update(bookingRequests)
+        .set({
+          status: 'denied',
+          denialReason: reason,
+          decidedBy: actor?.userId ?? null,
+          decidedAt,
+          updatedAt: decidedAt,
+        })
+        .where(and(
+          eq(bookingRequests.id, id),
+          eq(bookingRequests.propertyId, propertyId),
+          eq(bookingRequests.status, 'pending'),
+        ))
+        .returning();
+      if (!updated) {
+        throw new ConflictException('Booking request decision changed concurrently');
+      }
+      await this.insertConsequence(tx, propertyId, id, DENIED_CONSEQUENCE_KIND, {
+        event: 'booking_request.denied',
+        entityType: 'booking_request',
+        entityId: id,
+        propertyId,
+        data: { requestId: id, status: 'denied' },
+        timestamp: decidedAt.toISOString(),
+      });
+      await tx.insert(auditLogs).values({
+        propertyId,
+        action: 'update',
+        entityType: 'booking_request',
+        entityId: id,
+        ...actorFields(actor),
+        previousValue: { status: 'pending' },
+        newValue: { status: 'denied', denialReason: reason },
+        description: 'Booking request denied',
+      });
+      return updated;
+    });
+
+    await this.deliverConsequencesBestEffort(id, propertyId);
+    return denied;
+  }
 
   async createPaymentMethodSetup(
     propertyId: string,
@@ -452,6 +848,123 @@ export class BookingRequestService {
       .join(',')}}`;
   }
 
+  private async findRequest(
+    db: any,
+    id: string,
+    propertyId: string,
+  ): Promise<typeof bookingRequests.$inferSelect> {
+    const candidates = await db
+      .select()
+      .from(bookingRequests)
+      .where(and(
+        eq(bookingRequests.id, id),
+        eq(bookingRequests.propertyId, propertyId),
+      ));
+    const request = candidates.find((candidate: typeof bookingRequests.$inferSelect) =>
+      candidate.id === id && candidate.propertyId === propertyId);
+    if (!request) {
+      throw new NotFoundException(`Booking request ${id} not found`);
+    }
+    return request;
+  }
+
+  private async lockRequest(
+    tx: any,
+    id: string,
+    propertyId: string,
+  ): Promise<typeof bookingRequests.$inferSelect> {
+    const candidates = await tx
+      .select()
+      .from(bookingRequests)
+      .where(and(
+        eq(bookingRequests.id, id),
+        eq(bookingRequests.propertyId, propertyId),
+      ))
+      .for('update');
+    const request = candidates.find((candidate: typeof bookingRequests.$inferSelect) =>
+      candidate.id === id && candidate.propertyId === propertyId);
+    if (!request) {
+      throw new NotFoundException(`Booking request ${id} not found`);
+    }
+    return request;
+  }
+
+  private async findLinkedReservation(
+    db: any,
+    request: Pick<
+      typeof bookingRequests.$inferSelect,
+      'id' | 'acceptedReservationId'
+    >,
+    propertyId: string,
+  ): Promise<typeof reservations.$inferSelect> {
+    if (!request.acceptedReservationId) {
+      throw new ConflictException(
+        `Accepted booking request ${request.id} has no linked reservation`,
+      );
+    }
+    const candidates = await db
+      .select()
+      .from(reservations)
+      .where(and(
+        eq(reservations.id, request.acceptedReservationId),
+        eq(reservations.propertyId, propertyId),
+      ));
+    const reservation = candidates.find((candidate: typeof reservations.$inferSelect) =>
+      candidate.id === request.acceptedReservationId
+      && candidate.propertyId === propertyId);
+    if (!reservation) {
+      throw new ConflictException(
+        `Accepted booking request ${request.id} has no recoverable reservation`,
+      );
+    }
+    return reservation;
+  }
+
+  private quoteTotal(snapshot: unknown): string | null {
+    if (!snapshot || typeof snapshot !== 'object') return null;
+    const total = (snapshot as Record<string, unknown>)['grandTotal'];
+    return typeof total === 'string' ? total : null;
+  }
+
+  private throwAcceptanceError(error: unknown): never {
+    if (
+      error instanceof BadRequestException
+      && /availability/i.test(error.message)
+    ) {
+      throw new ConflictException(error.message);
+    }
+    throw error;
+  }
+
+  private async insertConsequence(
+    tx: any,
+    propertyId: string,
+    requestId: string,
+    kind: string,
+    payload: WebhookPayload,
+  ): Promise<void> {
+    const persistedPayload = structuredClone(payload) as unknown as Record<
+      string,
+      unknown
+    >;
+    await tx.insert(bookingRequestConsequences).values({
+      propertyId,
+      bookingRequestId: requestId,
+      kind: kind as CreatedConsequence['kind'],
+      payload: persistedPayload,
+      status: 'pending',
+      attempts: 0,
+    });
+    await tx.insert(auditLogs).values({
+      propertyId,
+      action: 'create',
+      entityType: payload.entityType,
+      entityId: payload.entityId,
+      description: `Webhook event: ${payload.event}`,
+      newValue: persistedPayload,
+    });
+  }
+
   private async findExistingRequest(
     db: Pick<BookingRequestDatabase, 'select'>,
     propertyId: string,
@@ -510,51 +1023,75 @@ export class BookingRequestService {
     requestId: string,
     propertyId: string,
   ): Promise<void> {
+    await this.deliverConsequencesBestEffort(requestId, propertyId);
+  }
+
+  private async deliverConsequencesBestEffort(
+    requestId: string,
+    propertyId: string,
+  ): Promise<void> {
     try {
-      const consequence = await this.claimCreatedConsequence(requestId, propertyId);
-      if (!consequence) return;
-
-      try {
-        await this.webhookService.dispatchPersisted(
-          consequence.payload as unknown as WebhookPayload,
-          consequence.id,
-        );
-      } catch (error: unknown) {
-        await this.recordConsequenceFailure(consequence, error);
-        this.logger.error(
-          `Booking request ${requestId} was committed but its created consequence failed`,
-          error instanceof Error ? error.stack : undefined,
-        );
-        return;
-      }
-
-      const completedAt = new Date();
-      await this.db
-        .update(bookingRequestConsequences)
-        .set({
-          status: 'completed',
-          claimedAt: null,
-          lastError: null,
-          completedAt,
-          updatedAt: completedAt,
-        })
+      const candidates = await this.db
+        .select()
+        .from(bookingRequestConsequences)
         .where(and(
-          eq(bookingRequestConsequences.id, consequence.id),
           eq(bookingRequestConsequences.propertyId, propertyId),
-          eq(bookingRequestConsequences.status, 'processing'),
-          eq(bookingRequestConsequences.claimedAt, consequence.claimedAt!),
+          eq(bookingRequestConsequences.bookingRequestId, requestId),
         ));
+      const pendingKinds = candidates
+        .filter((candidate) =>
+          candidate.propertyId === propertyId
+          && candidate.bookingRequestId === requestId
+          && candidate.status !== 'completed')
+        .map((candidate) => candidate.kind);
+
+      for (const kind of pendingKinds) {
+        const consequence = await this.claimConsequence(requestId, propertyId, kind);
+        if (!consequence) continue;
+
+        try {
+          await this.webhookService.dispatchPersisted(
+            consequence.payload as unknown as WebhookPayload,
+            consequence.id,
+          );
+        } catch (error: unknown) {
+          await this.recordConsequenceFailure(consequence, error);
+          this.logger.error(
+            `Booking request ${requestId} was committed but consequence '${kind}' failed`,
+            error instanceof Error ? error.stack : undefined,
+          );
+          continue;
+        }
+
+        const completedAt = new Date();
+        await this.db
+          .update(bookingRequestConsequences)
+          .set({
+            status: 'completed',
+            claimedAt: null,
+            lastError: null,
+            completedAt,
+            updatedAt: completedAt,
+          })
+          .where(and(
+            eq(bookingRequestConsequences.id, consequence.id),
+            eq(bookingRequestConsequences.propertyId, propertyId),
+            eq(bookingRequestConsequences.status, 'processing'),
+            eq(bookingRequestConsequences.claimedAt, consequence.claimedAt!),
+          ));
+      }
     } catch (error: unknown) {
       this.logger.error(
-        `Booking request ${requestId} was committed but its created consequence state could not be updated`,
+        `Booking request ${requestId} was committed but consequence state could not be updated`,
         error instanceof Error ? error.stack : undefined,
       );
     }
   }
 
-  private async claimCreatedConsequence(
+  private async claimConsequence(
     requestId: string,
     propertyId: string,
+    kind: string,
   ): Promise<CreatedConsequence | undefined> {
     return this.db.transaction(async (tx) => {
       const rows = await tx
@@ -563,13 +1100,16 @@ export class BookingRequestService {
         .where(and(
           eq(bookingRequestConsequences.propertyId, propertyId),
           eq(bookingRequestConsequences.bookingRequestId, requestId),
-          eq(bookingRequestConsequences.kind, CREATED_CONSEQUENCE_KIND),
+          eq(
+            bookingRequestConsequences.kind,
+            kind as CreatedConsequence['kind'],
+          ),
         ))
         .for('update');
       const consequence = rows.find((candidate) =>
         candidate.propertyId === propertyId
         && candidate.bookingRequestId === requestId
-        && candidate.kind === CREATED_CONSEQUENCE_KIND);
+        && candidate.kind === kind);
 
       if (!consequence || consequence.status === 'completed') return undefined;
       if (
