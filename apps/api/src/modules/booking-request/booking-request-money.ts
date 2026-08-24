@@ -212,7 +212,15 @@ function isCapturedMovement(movement: CapturedMovement): boolean {
   }
   // Refund/correction child rows are not independent captured money.
   if (movement.type === 'refund' || movement.type === 'external_return') return false;
-  return decimal(movement.netAmount ?? movement.amount, 'Captured payment amount').gt(0);
+  const capturedAmount = decimal(movement.amount, 'Captured payment amount');
+  if (capturedAmount.lt(0)) {
+    throw new ConflictException('Captured payment amount must not be negative');
+  }
+  const netAmount = decimal(movement.netAmount ?? movement.amount, 'Captured payment amount');
+  if (netAmount.lt(0)) {
+    throw new ConflictException('Captured payment net amount must not be negative');
+  }
+  return netAmount.gt(0);
 }
 
 /**

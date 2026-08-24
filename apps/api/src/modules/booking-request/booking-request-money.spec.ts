@@ -110,4 +110,15 @@ describe('booking request money', () => {
       [{ paymentId: 'payment-1', type: 'refund', amount: '100.00' }],
     )).not.toThrow();
   });
+
+  it('rejects negative captured or net movement amounts', () => {
+    expect(() => assertDenialMoneyResolved(
+      [{ id: 'payment-1', status: 'captured', amount: '-1.00' }],
+      [],
+    )).toThrow(/negative/);
+    expect(() => assertDenialMoneyResolved(
+      [{ id: 'payment-1', status: 'captured', amount: '100.00', netAmount: '-0.01' }],
+      [],
+    )).toThrow(/negative/);
+  });
 });
