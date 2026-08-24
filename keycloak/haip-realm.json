@@ -23,7 +23,9 @@
       { "name": "general_manager", "description": "General manager — full operations; not user/role admin" },
       { "name": "revenue_manager", "description": "Revenue manager — rates, channels, revenue, group commercial" },
       { "name": "accounting", "description": "Accounting — folios, house accounts, tax, night audit, reports" },
-      { "name": "reservations", "description": "Reservations desk — bookings and guests without cashier posting" }
+      { "name": "reservations", "description": "Reservations desk — bookings and guests without cashier posting" },
+      { "name": "integration_inventory", "description": "Service integration — room inventory and ops (narrow API scope)" },
+      { "name": "integration_reservations", "description": "Service integration — reservations and guests (narrow API scope)" }
     ]
   },
 

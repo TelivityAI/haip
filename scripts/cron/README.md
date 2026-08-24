@@ -28,6 +28,8 @@ export KEYCLOAK_CLIENT_SECRET=<secret>
 
 Scripts fetch a short-lived token automatically before each run.
 
+Full Keycloak + local user linking guide: [docs/integrations/service-principal.md](../../docs/integrations/service-principal.md).
+
 ### Option B — Pre-issued token
 
 If you refresh tokens externally, set `HAIP_CRON_TOKEN` to a valid Bearer JWT and omit Keycloak client vars.

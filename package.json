@@ -27,7 +27,8 @@
     "harden:live": "node ops/harden/cli/harden.mjs live",
     "harden": "node ops/harden/cli/harden.mjs all",
     "clean": "pnpm -r run clean && rm -rf node_modules",
-    "integrations:demo": "bash integrations/demos/run.sh"
+    "integrations:demo": "bash integrations/demos/run.sh",
+    "integration:link": "pnpm --filter @telivityhaip/database link-integration"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
