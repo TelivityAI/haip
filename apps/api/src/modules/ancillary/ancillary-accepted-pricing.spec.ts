@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AncillaryService } from './ancillary.service';
+import { WebhookService } from '../webhook/webhook.service';
 
 function stagedSelect(stages: any[][]) {
   let index = 0;
@@ -17,7 +18,167 @@ function stagedSelect(stages: any[][]) {
   });
 }
 
+function recordedWebhookService() {
+  const audits: Record<string, unknown>[] = [];
+  const eventEmitter = { emit: vi.fn() };
+  const webhook = new WebhookService({
+    insert: vi.fn(() => ({
+      values: vi.fn(async (row: Record<string, unknown>) => {
+        audits.push(row);
+      }),
+    })),
+  } as any, eventEmitter as any);
+  return { webhook, eventEmitter, audits };
+}
+
+function idempotentSnapshotPoster() {
+  const ledgerGroups: Array<{ base: { id: string }; tax: { id: string } }> = [];
+  const postChargeFromSnapshotWithOutcome = vi.fn(async () => {
+    const wasCreated = ledgerGroups.length === 0;
+    if (wasCreated) {
+      ledgerGroups.push({
+        base: { id: 'charge-1' },
+        tax: { id: 'tax-1' },
+      });
+    }
+    return { charge: ledgerGroups[0].base, wasCreated };
+  });
+  return {
+    ledgerGroups,
+    folio: {
+      postCharge: vi.fn(),
+      postChargeFromSnapshotWithOutcome,
+      postChargeFromSnapshot: vi.fn(async (...args: unknown[]) =>
+        (await postChargeFromSnapshotWithOutcome(...args)).charge),
+    },
+  };
+}
+
 describe('AncillaryService accepted operational pricing', () => {
+  it('lets only the concurrent once-service ledger winner transition and emit', async () => {
+    const reservation = {
+      id: 'res-1',
+      propertyId: 'prop-1',
+      guestId: 'guest-1',
+      arrivalDate: '2026-10-01',
+      acceptedPricingSnapshot: {
+        currencyCode: 'EUR',
+        services: [{
+          serviceId: 'svc-1',
+          lineItems: [{ date: '2026-10-01', amount: '15.00', taxAmount: '2.00' }],
+        }],
+      },
+    };
+    const rs = {
+      id: 'rs-1',
+      propertyId: 'prop-1',
+      reservationId: 'res-1',
+      serviceId: 'svc-1',
+      unitPrice: '99.00',
+      quantity: 1,
+      chargeType: 'parking',
+      currencyCode: 'EUR',
+      postingRule: 'once',
+      status: 'confirmed',
+    };
+    const update = vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => ({
+          returning: vi.fn(async () => [{ ...rs, status: 'posted' }]),
+        })),
+      })),
+    }));
+    const createDb = (postedChargeRows: Array<{ id: string }>) => ({
+      select: stagedSelect([
+        [reservation],
+        [{ id: 'folio-1' }],
+        [{ rs, serviceName: 'Parking' }],
+        postedChargeRows,
+      ]),
+      update,
+    });
+    const { ledgerGroups, folio } = idempotentSnapshotPoster();
+    const { webhook, eventEmitter, audits } = recordedWebhookService();
+    const first = new AncillaryService(createDb([]) as any, folio as any, webhook);
+    // Models the interleaving where this caller's preflight observes the
+    // winner's just-committed group after both selected a confirmed service.
+    const second = new AncillaryService(
+      createDb([{ id: 'charge-1' }]) as any,
+      folio as any,
+      webhook,
+    );
+
+    const results = await Promise.all([
+      first.postOnceForReservation('res-1', 'prop-1'),
+      second.postOnceForReservation('res-1', 'prop-1'),
+    ]);
+
+    expect(ledgerGroups).toHaveLength(1);
+    expect(update).toHaveBeenCalledOnce();
+    expect(eventEmitter.emit).toHaveBeenCalledOnce();
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'reservation.service_posted',
+      expect.objectContaining({ entityId: 'rs-1', propertyId: 'prop-1' }),
+    );
+    expect(audits).toHaveLength(1);
+    expect(results.map((result) => result.count).sort()).toEqual([0, 1]);
+  });
+
+  it('lets only the concurrent per-night ledger winner emit', async () => {
+    const reservation = {
+      id: 'res-1',
+      propertyId: 'prop-1',
+      guestId: 'guest-1',
+      status: 'checked_in',
+      acceptedPricingSnapshot: {
+        currencyCode: 'EUR',
+        services: [{
+          serviceId: 'svc-1',
+          lineItems: [{ date: '2026-10-02', amount: '15.00', taxAmount: '2.00' }],
+        }],
+      },
+    };
+    const rs = {
+      id: 'rs-1',
+      propertyId: 'prop-1',
+      reservationId: 'res-1',
+      serviceId: 'svc-1',
+      unitPrice: '99.00',
+      quantity: 1,
+      chargeType: 'parking',
+      currencyCode: 'EUR',
+      postingRule: 'per_night',
+      status: 'confirmed',
+    };
+    const createDb = () => ({
+      select: stagedSelect([
+        [{ rs, serviceName: 'Parking', reservation }],
+        [{ id: 'folio-1' }],
+        [],
+      ]),
+    });
+    const { ledgerGroups, folio } = idempotentSnapshotPoster();
+    const { webhook, eventEmitter, audits } = recordedWebhookService();
+    const first = new AncillaryService(createDb() as any, folio as any, webhook);
+    const second = new AncillaryService(createDb() as any, folio as any, webhook);
+
+    const results = await Promise.all([
+      first.postPerNightForProperty('prop-1', '2026-10-02'),
+      second.postPerNightForProperty('prop-1', '2026-10-02'),
+    ]);
+
+    expect(ledgerGroups).toHaveLength(1);
+    expect(eventEmitter.emit).toHaveBeenCalledOnce();
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'reservation.service_posted',
+      expect.objectContaining({ entityId: 'rs-1', propertyId: 'prop-1' }),
+    );
+    expect(audits).toHaveLength(1);
+    expect(results.flatMap((result) => result.posted)).toHaveLength(1);
+    expect(results.flatMap((result) => result.skipped)).toEqual(['rs-1']);
+    expect(results.flatMap((result) => result.errors)).toEqual([]);
+  });
+
   it('uses a stable source key when concurrent check-in attempts post a once service', async () => {
     const reservation = {
       id: 'res-1',
@@ -61,7 +222,10 @@ describe('AncillaryService accepted operational pricing', () => {
     };
     const folio = {
       postCharge: vi.fn(),
-      postChargeFromSnapshot: vi.fn().mockResolvedValue({ id: 'charge-1' }),
+      postChargeFromSnapshotWithOutcome: vi.fn().mockResolvedValue({
+        charge: { id: 'charge-1' },
+        wasCreated: true,
+      }),
     };
     const service = new AncillaryService(
       db as any,
@@ -71,7 +235,7 @@ describe('AncillaryService accepted operational pricing', () => {
 
     await service.postOnceForReservation('res-1', 'prop-1');
 
-    expect(folio.postChargeFromSnapshot).toHaveBeenCalledWith(
+    expect(folio.postChargeFromSnapshotWithOutcome).toHaveBeenCalledWith(
       'folio-1',
       expect.objectContaining({ amount: '15.00', currencyCode: 'EUR' }),
       '2.00',
@@ -119,14 +283,17 @@ describe('AncillaryService accepted operational pricing', () => {
     };
     const folio = {
       postCharge: vi.fn(),
-      postChargeFromSnapshot: vi.fn().mockResolvedValue({ id: 'charge-1' }),
+      postChargeFromSnapshotWithOutcome: vi.fn().mockResolvedValue({
+        charge: { id: 'charge-1' },
+        wasCreated: true,
+      }),
     };
     const webhook = { emit: vi.fn() };
     const service = new AncillaryService(db as any, folio as any, webhook as any);
 
     const result = await service.postPerNightForProperty('prop-1', '2026-10-02');
 
-    expect(folio.postChargeFromSnapshot).toHaveBeenCalledWith(
+    expect(folio.postChargeFromSnapshotWithOutcome).toHaveBeenCalledWith(
       'folio-1',
       expect.objectContaining({ amount: '15.00', currencyCode: 'EUR' }),
       '2.00',

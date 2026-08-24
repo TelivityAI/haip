@@ -517,19 +517,26 @@ describe('FolioService', () => {
       };
       const sourceKey = 'accepted-pricing:reservation-service:rs-1:once';
 
-      const results = await Promise.all([
-        (svc.postChargeFromSnapshot as any)(
+      const outcomes = await Promise.all([
+        (svc as any).postChargeFromSnapshotWithOutcome(
           'folio-001', input, '2.00', undefined, sourceKey,
         ),
-        (svc.postChargeFromSnapshot as any)(
+        (svc as any).postChargeFromSnapshotWithOutcome(
           'folio-001', input, '2.00', undefined, sourceKey,
         ),
       ]);
 
       expect(ledger.map((row) => row.type)).toEqual(['parking', 'tax']);
-      expect(results[0].id).toBe(results[1].id);
-      expect(results[0].taxCharges).toEqual(results[1].taxCharges);
+      expect(outcomes.map((outcome) => outcome.wasCreated).sort()).toEqual([false, true]);
+      expect(outcomes[0].charge.id).toBe(outcomes[1].charge.id);
+      expect(outcomes[0].charge.taxCharges).toEqual(outcomes[1].charge.taxCharges);
       expect(webhook.emit).toHaveBeenCalledTimes(2);
+
+      const publicReplay = await svc.postChargeFromSnapshot(
+        'folio-001', input as any, '2.00', undefined, sourceKey,
+      );
+      expect(publicReplay).not.toHaveProperty('wasCreated');
+      expect(JSON.parse(JSON.stringify(publicReplay))).not.toHaveProperty('wasCreated');
     });
   });
 
@@ -647,6 +654,7 @@ describe('FolioService', () => {
         parentChargeId: base.id,
       };
       const inserted: Array<Record<string, any>> = [];
+      const chargeLookupPredicates: Array<{ columns: string[]; params: unknown[] }> = [];
       let nextId = 1;
       const db: any = {
         transaction: vi.fn(async (callback: (tx: any) => Promise<unknown>) => callback(db)),
@@ -656,6 +664,12 @@ describe('FolioService', () => {
               if (projection?.['total']) return [{ total: '0' }];
               if (table === payments) return [{ total: '0' }];
               const parts = sqlPredicateParts(predicate);
+              if (table === charges) {
+                chargeLookupPredicates.push({
+                  columns: [...parts.columns],
+                  params: [...parts.params],
+                });
+              }
               if (parts.columns.includes('parent_charge_id')) {
                 const children = [taxChild, adjustmentChild];
                 return parts.params.includes('tax')
@@ -713,6 +727,10 @@ describe('FolioService', () => {
         svc.reverseCharge('folio-001', base.id, 'prop-001'),
       ).rejects.toThrow(/already been reversed/i);
       expect(inserted).toHaveLength(3);
+      expect(chargeLookupPredicates.length).toBeGreaterThan(0);
+      expect(chargeLookupPredicates.every((predicate) =>
+        predicate.columns.includes('property_id')
+        && predicate.params.includes('prop-001'))).toBe(true);
     });
   });
 

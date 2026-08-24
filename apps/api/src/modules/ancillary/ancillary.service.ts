@@ -491,7 +491,16 @@ export class AncillaryService {
       reservation.arrivalDate ?? new Date().toISOString().slice(0, 10);
 
     for (const { rs, serviceName } of rows) {
-      if (await this.hasPostedCharge(folio.id, propertyId, rs.id)) {
+      const acceptedLine = this.acceptedServiceLine(
+        reservation,
+        rs.serviceId,
+        serviceDate,
+        true,
+      );
+      // Accepted pricing uses the database source-key claim as its authority.
+      // A preflight read can race with the winner and must not grant the loser
+      // permission to transition the service row.
+      if (!acceptedLine && await this.hasPostedCharge(folio.id, propertyId, rs.id)) {
         if (rs.status === 'confirmed') {
           await this.db
             .update(reservationServices)
@@ -506,18 +515,13 @@ export class AncillaryService {
         continue;
       }
 
-      const acceptedLine = this.acceptedServiceLine(
-        reservation,
-        rs.serviceId,
-        serviceDate,
-        true,
-      );
       const amount = acceptedLine?.amount
         ?? new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
       const description = `${serviceName} ${this.svcTag(rs.id)}`;
 
       // FolioService rejects non-positive amounts except adjustments/reversals.
       // Zero-priced included lines are marked posted without a ledger row.
+      let wasCreated = true;
       if (new Decimal(amount).greaterThan(0)) {
         const chargeInput = {
           propertyId,
@@ -529,17 +533,22 @@ export class AncillaryService {
           guestId: reservation.guestId,
         };
         if (acceptedLine) {
-          await this.folioService.postChargeFromSnapshot(
+          const outcome = await this.folioService.postChargeFromSnapshotWithOutcome(
             folio.id,
             chargeInput,
             acceptedLine.taxAmount,
             undefined,
             `accepted-pricing:reservation-service:${rs.id}:once`,
           );
+          wasCreated = outcome.wasCreated;
         } else {
           await this.folioService.postCharge(folio.id, chargeInput);
         }
       }
+
+      // A concurrent source-key loser observes the winner's immutable ledger
+      // group as success, but must not repeat the domain transition or event.
+      if (!wasCreated) continue;
 
       const [updated] = await this.db
         .update(reservationServices)
@@ -548,9 +557,12 @@ export class AncillaryService {
           and(
             eq(reservationServices.id, rs.id),
             eq(reservationServices.propertyId, propertyId),
+            eq(reservationServices.status, 'confirmed' as any),
           ),
         )
         .returning();
+
+      if (!updated) continue;
 
       await this.webhookService.emit(
         'reservation.service_posted',
@@ -658,15 +670,23 @@ export class AncillaryService {
           serviceDate: new Date(date + 'T00:00:00Z').toISOString(),
           guestId: reservation.guestId,
         };
-        const charge = acceptedLine
-          ? await this.folioService.postChargeFromSnapshot(
+        const outcome = acceptedLine
+          ? await this.folioService.postChargeFromSnapshotWithOutcome(
               folio.id,
               chargeInput,
               acceptedLine.taxAmount,
               undefined,
               `accepted-pricing:reservation-service:${rs.id}:night:${date}`,
             )
-          : await this.folioService.postCharge(folio.id, chargeInput);
+          : {
+              charge: await this.folioService.postCharge(folio.id, chargeInput),
+              wasCreated: true,
+            };
+        if (!outcome.wasCreated) {
+          skipped.push(rs.id);
+          continue;
+        }
+        const charge = outcome.charge;
 
         // Stay confirmed until stay ends — idempotency via charge existence.
         await this.webhookService.emit(

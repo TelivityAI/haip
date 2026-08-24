@@ -441,6 +441,27 @@ export class FolioService {
     adjustment?: { amount: string; reason: string },
     sourceKey?: string,
   ) {
+    const outcome = await this.postChargeFromSnapshotWithOutcome(
+      folioId,
+      dto,
+      taxAmount,
+      adjustment,
+      sourceKey,
+    );
+    return outcome.charge;
+  }
+
+  /**
+   * Internal domain-service seam for source-key consumers. HTTP-facing charge
+   * shapes continue to use postChargeFromSnapshot and never expose wasCreated.
+   */
+  async postChargeFromSnapshotWithOutcome(
+    folioId: string,
+    dto: CreateChargeDto,
+    taxAmount: string,
+    adjustment?: { amount: string; reason: string },
+    sourceKey?: string,
+  ) {
     const result = await this.db.transaction(async (tx: any) => {
       const base = await this.postCharge(folioId, {
         ...dto,
@@ -501,7 +522,7 @@ export class FolioService {
     if (!result.wasCreated) {
       const { wasCreated: _wasCreated, ...existing } = result;
       void _wasCreated;
-      return existing;
+      return { charge: existing, wasCreated: false as const };
     }
 
     await this.webhookService.emit(
@@ -546,7 +567,7 @@ export class FolioService {
     }
     const { wasCreated: _wasCreated, ...posted } = result;
     void _wasCreated;
-    return posted;
+    return { charge: posted, wasCreated: true as const };
   }
 
   async reverseCharge(folioId: string, chargeId: string, propertyId: string) {
@@ -584,6 +605,7 @@ export class FolioService {
           and(
             eq(charges.originalChargeId, chargeId),
             eq(charges.isReversal, true),
+            eq(charges.propertyId, propertyId),
           ),
         );
       if (existing) {
@@ -619,6 +641,7 @@ export class FolioService {
           and(
             eq(charges.parentChargeId, chargeId),
             eq(charges.isReversal, false),
+            eq(charges.propertyId, propertyId),
           ),
         );
       const childCharges = typeof childQuery.for === 'function'
@@ -630,7 +653,11 @@ export class FolioService {
           .select()
           .from(charges)
           .where(
-            and(eq(charges.originalChargeId, childCharge.id), eq(charges.isReversal, true)),
+            and(
+              eq(charges.originalChargeId, childCharge.id),
+              eq(charges.isReversal, true),
+              eq(charges.propertyId, propertyId),
+            ),
           );
         if (existingChildReversal) continue;
 
