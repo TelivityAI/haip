@@ -54,7 +54,12 @@ export class ReservationController {
   // --- Action routes BEFORE :id to avoid conflicts ---
 
   @Post('search-availability')
-  @RequirePermissions('reservations.write')
+  // A QUERY, not a mutation. POST only because it takes a body; it
+  // reads availability and changes nothing. Gating it on
+  // reservations.write locks out every read-only caller -- notably a
+  // server integration holding reservations.read, which is exactly the
+  // shape integration_reservations describes.
+  @RequirePermissions('reservations.read')
   @ApiOperation({ summary: 'Search room availability for a date range' })
   @ApiResponse({ status: 200, description: 'Availability results' })
   searchAvailability(@Body() dto: SearchAvailabilityDto) {
