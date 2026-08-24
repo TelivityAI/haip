@@ -74,6 +74,7 @@ export interface AcceptedPricingSnapshot {
   services: AcceptedPricingService[];
   servicesTotal: string;
   servicesTaxTotal: string;
+  customReason: string | null;
   adjustment: null | {
     amount: string;
     reason: string;

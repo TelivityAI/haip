@@ -106,6 +106,9 @@ export const charges = pgTable('charges', {
   isReversal: boolean('is_reversal').notNull().default(false),
   originalChargeId: uuid('original_charge_id').references((): any => charges.id), // FK to self for reversals
   parentChargeId: uuid('parent_charge_id').references((): any => charges.id), // FK to self — tax charges linked to their parent charge
+  // Stable, namespaced identity for conflict-safe system posting. Legacy and
+  // manually entered rows remain NULL and cannot collide with these keys.
+  sourceKey: varchar('source_key', { length: 255 }),
 
   // Night audit lock (KB 5.8: transactions locked after day close)
   isLocked: boolean('is_locked').notNull().default(false),
@@ -116,7 +119,10 @@ export const charges = pgTable('charges', {
   postedAt: timestamp('posted_at', { withTimezone: true }).notNull().defaultNow(),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  propertyFolioSourceKeyUnique: uniqueIndex('charges_property_folio_source_key_unique')
+    .on(table.propertyId, table.folioId, table.sourceKey),
+}));
 
 /**
  * Payment methods.

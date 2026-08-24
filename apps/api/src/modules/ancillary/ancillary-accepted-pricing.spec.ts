@@ -18,6 +18,68 @@ function stagedSelect(stages: any[][]) {
 }
 
 describe('AncillaryService accepted operational pricing', () => {
+  it('uses a stable source key when concurrent check-in attempts post a once service', async () => {
+    const reservation = {
+      id: 'res-1',
+      propertyId: 'prop-1',
+      guestId: 'guest-1',
+      arrivalDate: '2026-10-01',
+      acceptedPricingSnapshot: {
+        currencyCode: 'EUR',
+        services: [{
+          serviceId: 'svc-1',
+          lineItems: [{ date: '2026-10-01', amount: '15.00', taxAmount: '2.00' }],
+        }],
+      },
+    };
+    const rs = {
+      id: 'rs-1',
+      propertyId: 'prop-1',
+      reservationId: 'res-1',
+      serviceId: 'svc-1',
+      unitPrice: '99.00',
+      quantity: 1,
+      chargeType: 'parking',
+      currencyCode: 'EUR',
+      postingRule: 'once',
+      status: 'confirmed',
+    };
+    const db = {
+      select: stagedSelect([
+        [reservation],
+        [{ id: 'folio-1' }],
+        [{ rs, serviceName: 'Parking' }],
+        [],
+      ]),
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({
+            returning: vi.fn(async () => [{ ...rs, status: 'posted' }]),
+          })),
+        })),
+      })),
+    };
+    const folio = {
+      postCharge: vi.fn(),
+      postChargeFromSnapshot: vi.fn().mockResolvedValue({ id: 'charge-1' }),
+    };
+    const service = new AncillaryService(
+      db as any,
+      folio as any,
+      { emit: vi.fn() } as any,
+    );
+
+    await service.postOnceForReservation('res-1', 'prop-1');
+
+    expect(folio.postChargeFromSnapshot).toHaveBeenCalledWith(
+      'folio-1',
+      expect.objectContaining({ amount: '15.00', currencyCode: 'EUR' }),
+      '2.00',
+      undefined,
+      'accepted-pricing:reservation-service:rs-1:once',
+    );
+  });
+
   it('posts the frozen per-night service and tax instead of live catalog pricing', async () => {
     const reservation = {
       id: 'res-1',
@@ -68,6 +130,8 @@ describe('AncillaryService accepted operational pricing', () => {
       'folio-1',
       expect.objectContaining({ amount: '15.00', currencyCode: 'EUR' }),
       '2.00',
+      undefined,
+      'accepted-pricing:reservation-service:rs-1:night:2026-10-02',
     );
     expect(folio.postCharge).not.toHaveBeenCalled();
     expect(result.posted).toEqual([

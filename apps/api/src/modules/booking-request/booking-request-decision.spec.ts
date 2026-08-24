@@ -624,6 +624,8 @@ describe('BookingRequestService acceptance', () => {
         folioId: FOLIO_ID,
         totalAmount: expectedTotal,
         currencyCode: 'EUR',
+        priceSource,
+        customReason: customReason ?? null,
       });
       expect(harness.state.requests[0]).toMatchObject({
         status: 'accepted',
@@ -672,6 +674,48 @@ describe('BookingRequestService acceptance', () => {
     expect(harness.state.requests[0]?.status).toBe('pending');
     expect(harness.state.reservations).toHaveLength(0);
     expect(harness.state.guests).toHaveLength(0);
+  });
+
+  it('persists, audits, and returns an equal-total custom reason independently of adjustment', async () => {
+    const harness = makeHarness();
+
+    const result = await call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      {
+        priceSource: 'custom',
+        customTotal: '260.00',
+        customReason: 'Matched a written offer',
+      },
+      actor,
+    ]);
+
+    expect(result).toMatchObject({
+      requestId: REQUEST_ID,
+      status: 'accepted',
+      priceSource: 'custom',
+      customReason: 'Matched a written offer',
+      totalAmount: '260.00',
+    });
+    expect(harness.state.requests[0]).toMatchObject({
+      acceptedPriceSource: 'custom',
+      acceptedTotal: '260.00',
+      customPriceReason: 'Matched a written offer',
+    });
+    expect(harness.reservation.create.mock.calls[0]?.[1]).toMatchObject({
+      acceptedPricingSnapshot: expect.objectContaining({
+        source: 'custom',
+        customReason: 'Matched a written offer',
+        adjustment: null,
+      }),
+    });
+    expect(harness.state.audits).toContainEqual(expect.objectContaining({
+      description: 'Booking request accepted',
+      newValue: expect.objectContaining({
+        priceSource: 'custom',
+        customPriceReason: 'Matched a written offer',
+      }),
+    }));
   });
 
   it('leaves the request pending when canonical reservation creation finds no availability', async () => {
@@ -750,6 +794,8 @@ describe('BookingRequestService acceptance', () => {
       folioId: FOLIO_ID,
       totalAmount: '220.00',
       currencyCode: 'EUR',
+      priceSource: 'submitted',
+      customReason: null,
     });
     expect(harness.reservationCreates).toBe(1);
     expect(harness.state.reservations).toHaveLength(1);
@@ -844,6 +890,8 @@ describe('BookingRequestService acceptance', () => {
       folioId: FOLIO_ID,
       totalAmount: '220.00',
       currencyCode: 'EUR',
+      priceSource: 'submitted',
+      customReason: null,
     });
     expect(harness.reservationCreates).toBe(0);
   });

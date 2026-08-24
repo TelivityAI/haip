@@ -390,7 +390,7 @@ export class BookingRequestService {
           currentQuoteSnapshot: structuredClone(currentQuote),
           acceptedPriceSource: pricing.source,
           acceptedTotal: pricing.grandTotal,
-          customPriceReason: pricing.adjustment?.reason ?? null,
+          customPriceReason: pricing.customReason,
           acceptedReservationId: reservation.id,
           acceptedFolioId: folio.id,
           decidedBy: actor?.userId ?? null,
@@ -480,7 +480,7 @@ export class BookingRequestService {
           folioId: folio.id,
           priceSource: pricing.source,
           acceptedTotal: pricing.grandTotal,
-          customPriceReason: pricing.adjustment?.reason ?? null,
+          customPriceReason: pricing.customReason,
         },
         description: 'Booking request accepted',
       });

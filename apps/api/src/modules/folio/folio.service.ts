@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
@@ -17,6 +18,8 @@ import { ListFoliosDto } from './dto/list-folios.dto';
 import { TransferChargeDto } from './dto/transfer-charge.dto';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { ListChargesDto } from './dto/list-charges.dto';
+
+const CHARGE_WAS_CREATED = Symbol('chargeWasCreated');
 
 @Injectable()
 export class FolioService {
@@ -286,7 +289,12 @@ export class FolioService {
       .where(and(eq(folios.id, folioId), eq(folios.propertyId, propertyId)));
   }
 
-  async postCharge(folioId: string, dto: CreateChargeDto, tx?: any) {
+  async postCharge(
+    folioId: string,
+    dto: CreateChargeDto,
+    tx?: any,
+    persistence?: { parentChargeId?: string; sourceKey?: string },
+  ) {
     const db = tx ?? this.db;
     const folio = await this.findById(folioId, dto.propertyId, tx);
     if (folio.status !== 'open') {
@@ -332,7 +340,7 @@ export class FolioService {
       }
     }
 
-    const [charge] = await db
+    const insert = db
       .insert(charges)
       .values({
         propertyId: dto.propertyId,
@@ -347,9 +355,33 @@ export class FolioService {
         serviceDate: new Date(dto.serviceDate),
         isReversal: dto.isReversal ?? false,
         originalChargeId: dto.originalChargeId,
+        parentChargeId: persistence?.parentChargeId,
+        sourceKey: persistence?.sourceKey,
         postedBy: dto.postedBy,
-      })
-      .returning();
+      });
+    const [charge] = persistence?.sourceKey
+      ? await insert
+          .onConflictDoNothing({
+            target: [charges.propertyId, charges.folioId, charges.sourceKey],
+          })
+          .returning()
+      : await insert.returning();
+    if (!charge && persistence?.sourceKey) {
+      const [existing] = await db
+        .select()
+        .from(charges)
+        .where(and(
+          eq(charges.propertyId, dto.propertyId),
+          eq(charges.folioId, folioId),
+          eq(charges.sourceKey, persistence.sourceKey),
+        ));
+      if (!existing) {
+        throw new ConflictException('Charge source key was claimed without a persisted charge');
+      }
+      const replay = { ...existing, taxCharges: [] };
+      Object.defineProperty(replay, CHARGE_WAS_CREATED, { value: false });
+      return replay;
+    }
 
     // Auto-post tax charges if this is a taxable charge (not a tax or reversal itself)
     const taxCharges: any[] = [];
@@ -396,7 +428,9 @@ export class FolioService {
       );
     }
 
-    return { ...charge, taxCharges };
+    const result = { ...charge, taxCharges };
+    Object.defineProperty(result, CHARGE_WAS_CREATED, { value: true });
+    return result;
   }
 
   /** Post an immutable accepted base/tax pair atomically without live tax lookup. */
@@ -405,15 +439,33 @@ export class FolioService {
     dto: CreateChargeDto,
     taxAmount: string,
     adjustment?: { amount: string; reason: string },
+    sourceKey?: string,
   ) {
     const result = await this.db.transaction(async (tx: any) => {
       const base = await this.postCharge(folioId, {
         ...dto,
         skipTaxCalculation: true,
-      }, tx);
+      }, tx, { sourceKey });
+      if ((base as any)[CHARGE_WAS_CREATED] === false) {
+        const children = await tx
+          .select()
+          .from(charges)
+          .where(and(
+            eq(charges.propertyId, dto.propertyId),
+            eq(charges.folioId, folioId),
+            eq(charges.parentChargeId, base.id),
+            eq(charges.isReversal, false),
+          ));
+        return {
+          ...base,
+          taxCharges: children.filter((child: any) => child.type === 'tax'),
+          adjustmentCharges: children.filter((child: any) => child.type === 'adjustment'),
+          wasCreated: false,
+        };
+      }
       const taxCharges: any[] = [];
       if (new Decimal(taxAmount).greaterThan(0)) {
-        taxCharges.push(await this.postCharge(folioId, {
+        const frozenTax = await this.postCharge(folioId, {
           propertyId: dto.propertyId,
           type: 'tax',
           description: `${dto.description} tax`.slice(0, 255),
@@ -422,11 +474,14 @@ export class FolioService {
           serviceDate: dto.serviceDate,
           postedBy: dto.postedBy,
           skipTaxCalculation: true,
-        }, tx));
+        }, tx, { parentChargeId: base.id });
+        const { taxCharges: _nestedTaxes, ...taxCharge } = frozenTax;
+        void _nestedTaxes;
+        taxCharges.push(taxCharge);
       }
       const adjustmentCharges: any[] = [];
       if (adjustment && !new Decimal(adjustment.amount).isZero()) {
-        adjustmentCharges.push(await this.postCharge(folioId, {
+        const frozenAdjustment = await this.postCharge(folioId, {
           propertyId: dto.propertyId,
           type: 'adjustment',
           description: `Accepted price adjustment: ${adjustment.reason}`.slice(0, 255),
@@ -435,10 +490,19 @@ export class FolioService {
           serviceDate: dto.serviceDate,
           postedBy: dto.postedBy,
           skipTaxCalculation: true,
-        }, tx));
+        }, tx, { parentChargeId: base.id });
+        const { taxCharges: _nestedTaxes, ...adjustmentCharge } = frozenAdjustment;
+        void _nestedTaxes;
+        adjustmentCharges.push(adjustmentCharge);
       }
-      return { ...base, taxCharges, adjustmentCharges };
+      return { ...base, taxCharges, adjustmentCharges, wasCreated: true };
     });
+
+    if (!result.wasCreated) {
+      const { wasCreated: _wasCreated, ...existing } = result;
+      void _wasCreated;
+      return existing;
+    }
 
     await this.webhookService.emit(
       'folio.charge_posted',
@@ -480,110 +544,123 @@ export class FolioService {
         dto.propertyId,
       );
     }
-    return result;
+    const { wasCreated: _wasCreated, ...posted } = result;
+    void _wasCreated;
+    return posted;
   }
 
   async reverseCharge(folioId: string, chargeId: string, propertyId: string) {
-    const [original] = await this.db
-      .select()
-      .from(charges)
-      .where(
-        and(
-          eq(charges.id, chargeId),
-          eq(charges.folioId, folioId),
-          eq(charges.propertyId, propertyId),
-        ),
-      );
-    if (!original) {
-      throw new NotFoundException(`Charge ${chargeId} not found`);
-    }
-    if (original.isLocked) {
-      throw new BadRequestException('Cannot reverse a locked charge');
-    }
-    // Operational integrity: a reversal cannot itself be reversed. Undo a
-    // mistaken reversal by re-posting the original charge.
-    if (original.isReversal) {
-      throw new BadRequestException('Cannot reverse a reversal transaction');
-    }
-
-    // Check if already reversed
-    const [existing] = await this.db
-      .select()
-      .from(charges)
-      .where(
-        and(
-          eq(charges.originalChargeId, chargeId),
-          eq(charges.isReversal, true),
-        ),
-      );
-    if (existing) {
-      throw new BadRequestException('Charge has already been reversed');
-    }
-
-    const negatedAmount = new Decimal(original.amount).negated().toFixed(2);
-    const negatedTax = new Decimal(original.taxAmount).negated().toFixed(2);
-
-    const [reversal] = await this.db
-      .insert(charges)
-      .values({
-        propertyId,
-        folioId,
-        type: original.type,
-        description: `Reversal: ${original.description}`,
-        amount: negatedAmount,
-        currencyCode: original.currencyCode,
-        taxAmount: negatedTax,
-        taxRate: original.taxRate,
-        taxCode: original.taxCode,
-        serviceDate: original.serviceDate,
-        isReversal: true,
-        originalChargeId: chargeId,
-      })
-      .returning();
-
-    // Cascade: reverse all child tax charges linked to this charge
-    const childTaxCharges = await this.db
-      .select()
-      .from(charges)
-      .where(
-        and(
-          eq(charges.parentChargeId, chargeId),
-          eq(charges.type, 'tax' as any),
-          eq(charges.isReversal, false),
-        ),
-      );
-
-    for (const taxCharge of childTaxCharges) {
-      // Check not already reversed
-      const [existingTaxReversal] = await this.db
+    const reverseInTransaction = async (db: any) => {
+      const originalQuery = db
         .select()
         .from(charges)
         .where(
-          and(eq(charges.originalChargeId, taxCharge.id), eq(charges.isReversal, true)),
+          and(
+            eq(charges.id, chargeId),
+            eq(charges.folioId, folioId),
+            eq(charges.propertyId, propertyId),
+          ),
         );
-      if (existingTaxReversal) continue;
+      const [original] = typeof originalQuery.for === 'function'
+        ? await originalQuery.for('update')
+        : await originalQuery;
+      if (!original) {
+        throw new NotFoundException(`Charge ${chargeId} not found`);
+      }
+      if (original.isLocked) {
+        throw new BadRequestException('Cannot reverse a locked charge');
+      }
+      // Operational integrity: a reversal cannot itself be reversed. Undo a
+      // mistaken reversal by re-posting the original charge.
+      if (original.isReversal) {
+        throw new BadRequestException('Cannot reverse a reversal transaction');
+      }
 
-      await this.db
+      // The original row lock serializes competing whole-group reversals.
+      const [existing] = await db
+        .select()
+        .from(charges)
+        .where(
+          and(
+            eq(charges.originalChargeId, chargeId),
+            eq(charges.isReversal, true),
+          ),
+        );
+      if (existing) {
+        throw new BadRequestException('Charge has already been reversed');
+      }
+
+      const [reversal] = await db
         .insert(charges)
         .values({
           propertyId,
           folioId,
-          type: 'tax',
-          description: `Reversal: ${taxCharge.description}`,
-          amount: new Decimal(taxCharge.amount).negated().toFixed(2),
-          currencyCode: taxCharge.currencyCode,
-          taxAmount: '0',
-          taxRate: taxCharge.taxRate,
-          taxCode: taxCharge.taxCode,
-          serviceDate: taxCharge.serviceDate,
+          type: original.type,
+          description: `Reversal: ${original.description}`,
+          amount: new Decimal(original.amount).negated().toFixed(2),
+          currencyCode: original.currencyCode,
+          taxAmount: new Decimal(original.taxAmount).negated().toFixed(2),
+          taxRate: original.taxRate,
+          taxCode: original.taxCode,
+          serviceDate: original.serviceDate,
           isReversal: true,
-          originalChargeId: taxCharge.id,
-          parentChargeId: reversal.id,
+          originalChargeId: chargeId,
         })
         .returning();
-    }
 
-    await this.recalculateBalance(folioId, propertyId);
+      // Cascade every immutable component linked to the base. Canonical
+      // live-tax rows and frozen tax/custom-adjustment rows all share
+      // parentChargeId. Locking children also makes a concurrent direct child
+      // reversal resolve before this group decides whether it still needs one.
+      const childQuery = db
+        .select()
+        .from(charges)
+        .where(
+          and(
+            eq(charges.parentChargeId, chargeId),
+            eq(charges.isReversal, false),
+          ),
+        );
+      const childCharges = typeof childQuery.for === 'function'
+        ? await childQuery.for('update')
+        : await childQuery;
+
+      for (const childCharge of childCharges) {
+        const [existingChildReversal] = await db
+          .select()
+          .from(charges)
+          .where(
+            and(eq(charges.originalChargeId, childCharge.id), eq(charges.isReversal, true)),
+          );
+        if (existingChildReversal) continue;
+
+        await db
+          .insert(charges)
+          .values({
+            propertyId,
+            folioId,
+            type: childCharge.type,
+            description: `Reversal: ${childCharge.description}`,
+            amount: new Decimal(childCharge.amount).negated().toFixed(2),
+            currencyCode: childCharge.currencyCode,
+            taxAmount: new Decimal(childCharge.taxAmount ?? '0').negated().toFixed(2),
+            taxRate: childCharge.taxRate,
+            taxCode: childCharge.taxCode,
+            serviceDate: childCharge.serviceDate,
+            isReversal: true,
+            originalChargeId: childCharge.id,
+            parentChargeId: reversal.id,
+          })
+          .returning();
+      }
+
+      await this.recalculateBalance(folioId, propertyId, db);
+      return reversal;
+    };
+
+    const reversal = typeof this.db.transaction === 'function'
+      ? await this.db.transaction(reverseInTransaction)
+      : await reverseInTransaction(this.db);
 
     await this.webhookService.emit(
       'folio.charge_posted',

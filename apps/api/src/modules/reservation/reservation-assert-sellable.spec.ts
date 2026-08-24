@@ -186,6 +186,83 @@ describe('ReservationService.create — assertSellable (BOOK path)', () => {
     } as any)).rejects.toThrow(/2026-07-03/);
   });
 
+  it.each([
+    [{ departureDate: '2026-07-04' }, 'stay dates'],
+    [{ totalAmount: '325.00' }, 'accepted total'],
+    [{ ratePlanId: 'rp-002' }, 'rate plan'],
+    [{ roomTypeId: 'rt-002' }, 'room type'],
+    [{ adults: 3 }, 'occupancy'],
+  ] as const)(
+    'requires a Stay Amendment before changing accepted pricing via %s',
+    async (change, _label) => {
+      const { svc, db } = await mkService(vi.fn().mockResolvedValue(undefined));
+      vi.spyOn(svc as any, 'findByIdRaw').mockResolvedValue({
+        id: 'res-1',
+        propertyId: PROPERTY,
+        status: 'confirmed',
+        arrivalDate: '2026-07-01',
+        departureDate: '2026-07-03',
+        roomTypeId: ROOM_TYPE,
+        ratePlanId: RATE_PLAN,
+        totalAmount: '300.00',
+        adults: 2,
+        children: 0,
+        acceptedPricingSnapshot: { version: 1, source: 'submitted' },
+      });
+
+      await expect(svc.modify('res-1', PROPERTY, change as any)).rejects.toThrow(
+        /Stay Amendment.*accepted pricing/i,
+      );
+      expect(db.transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it('retains safe metadata edits on an accepted-pricing reservation', async () => {
+    const updated = {
+      id: 'res-1',
+      propertyId: PROPERTY,
+      status: 'confirmed',
+      arrivalDate: '2026-07-01',
+      departureDate: '2026-07-03',
+      roomTypeId: ROOM_TYPE,
+      ratePlanId: RATE_PLAN,
+      totalAmount: '300.00',
+      adults: 2,
+      children: 0,
+      specialRequests: 'Late arrival',
+      doNotMove: true,
+      acceptedPricingSnapshot: { version: 1, source: 'submitted' },
+    };
+    const returning = vi.fn().mockResolvedValue([updated]);
+    const where = vi.fn().mockReturnValue({ returning });
+    const set = vi.fn().mockReturnValue({ where });
+    const update = vi.fn().mockReturnValue({ set });
+    const db = mkDb();
+    db.transaction.mockImplementation(async (callback: (tx: any) => Promise<unknown>) =>
+      callback({ update }));
+    const { svc } = await mkService(vi.fn().mockResolvedValue(undefined), db);
+    vi.spyOn(svc as any, 'findByIdRaw').mockResolvedValue({
+      ...updated,
+      specialRequests: null,
+      doNotMove: false,
+    });
+
+    const result = await svc.modify('res-1', PROPERTY, {
+      specialRequests: 'Late arrival',
+      doNotMove: true,
+    });
+
+    expect(result).toMatchObject({
+      specialRequests: 'Late arrival',
+      doNotMove: true,
+      acceptedPricingSnapshot: expect.any(Object),
+    });
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({
+      specialRequests: 'Late arrival',
+      doNotMove: true,
+    }));
+  });
+
   it('serializes two canonical creates competing for the final room', async () => {
     let reservationCount = 0;
     let bookingCount = 0;

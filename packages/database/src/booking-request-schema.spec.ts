@@ -5,6 +5,7 @@ import {
   bookingRequestConsequences,
   bookingRequests,
   bookingRequestInstallments,
+  charges,
   payments,
   reservations,
   webhookDeliveries,
@@ -31,6 +32,7 @@ describe('booking request schema', () => {
     expect(bookingEngineConfig.paymentMethodCollection).toBeDefined();
     expect(payments.bookingRequestId).toBeDefined();
     expect(payments.idempotencyKey).toBeDefined();
+    expect(charges.sourceKey).toBeDefined();
     expect(webhookDeliveries.logicalEventId).toBeDefined();
     expect(reservations.acceptedPricingSnapshot).toBeDefined();
 
@@ -49,5 +51,8 @@ describe('booking request schema', () => {
     expect(deliveryIndexNames).toContain(
       'webhook_deliveries_property_subscription_logical_event_unique',
     );
+
+    const chargeIndexNames = getTableConfig(charges).indexes.map((index) => index.config.name);
+    expect(chargeIndexNames).toContain('charges_property_folio_source_key_unique');
   });
 });

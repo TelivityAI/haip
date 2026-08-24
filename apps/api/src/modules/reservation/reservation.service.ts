@@ -1067,6 +1067,28 @@ export class ReservationService {
   async modify(id: string, propertyId: string, dto: ModifyReservationDto) {
     const reservation = await this.findByIdRaw(id, propertyId);
 
+    // Booking Request acceptance freezes the operational tariff. Until the
+    // audited Stay Amendment workflow owns coordinated snapshot + folio
+    // changes, do not let the generic modify path make that tariff stale.
+    if (reservation.acceptedPricingSnapshot) {
+      const changesAcceptedPricing =
+        (dto.arrivalDate !== undefined && dto.arrivalDate !== reservation.arrivalDate)
+        || (dto.departureDate !== undefined && dto.departureDate !== reservation.departureDate)
+        || (dto.roomTypeId !== undefined && dto.roomTypeId !== reservation.roomTypeId)
+        || (dto.ratePlanId !== undefined && dto.ratePlanId !== reservation.ratePlanId)
+        || (
+          dto.totalAmount !== undefined
+          && !new Decimal(dto.totalAmount).equals(reservation.totalAmount)
+        )
+        || (dto.adults !== undefined && dto.adults !== reservation.adults)
+        || (dto.children !== undefined && dto.children !== reservation.children);
+      if (changesAcceptedPricing) {
+        throw new ConflictException(
+          'A Stay Amendment is required before changing accepted pricing, stay dates, room type, rate plan, occupancy, or total',
+        );
+      }
+    }
+
     // Can only modify before check-out
     const nonModifiable: ReservationStatus[] = ['checked_out', 'no_show', 'cancelled'];
     if (nonModifiable.includes(reservation.status as ReservationStatus)) {

@@ -63,7 +63,10 @@ function normalizeQuote(
   quote: QuoteRecord,
   source: BookingRequestPriceSource,
   requestCurrencyCode: string,
-): Omit<AcceptedPricingSnapshot, 'version' | 'source' | 'adjustment'> {
+): Omit<
+  AcceptedPricingSnapshot,
+  'version' | 'source' | 'customReason' | 'adjustment'
+> {
   const rawNights = quote['lineItems'];
   if (!Array.isArray(rawNights) || rawNights.length === 0) {
     throw new ConflictException('Accepted quote has no nightly pricing');
@@ -204,7 +207,13 @@ export function buildAcceptedPricingSnapshot(
   const basis = input.source === 'submitted' ? submitted : current;
   const normalized = normalizeQuote(basis, input.source, input.requestCurrencyCode);
   if (input.source !== 'custom') {
-    return { version: 1, source: input.source, ...normalized, adjustment: null };
+    return {
+      version: 1,
+      source: input.source,
+      ...normalized,
+      customReason: null,
+      adjustment: null,
+    };
   }
 
   const reason = input.customReason?.trim();
@@ -227,6 +236,7 @@ export function buildAcceptedPricingSnapshot(
     source: 'custom',
     ...normalized,
     grandTotal: custom.toFixed(2),
+    customReason: reason,
     adjustment: adjustment.isZero()
       ? null
       : {

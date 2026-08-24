@@ -90,6 +90,7 @@ describe('buildAcceptedPricingSnapshot', () => {
           { date: '2026-10-02', amount: '15.00', taxAmount: '2.00' },
         ],
       }],
+      customReason: null,
       adjustment: null,
     });
   });
@@ -112,6 +113,24 @@ describe('buildAcceptedPricingSnapshot', () => {
     });
     expect(snapshot.nights[0]?.roomAmount).toBe('120.00');
     expect(snapshot.services[0]?.lineTotal).toBe('30.00');
+  });
+
+  it('preserves the mandatory custom reason when the custom total equals current', () => {
+    const snapshot = buildAcceptedPricingSnapshot({
+      source: 'custom',
+      requestCurrencyCode: 'EUR',
+      submittedQuote: submitted,
+      currentQuote: current,
+      customTotal: '294.00',
+      customReason: 'Matched a written offer',
+    });
+
+    expect(snapshot).toMatchObject({
+      source: 'custom',
+      grandTotal: '294.00',
+      customReason: 'Matched a written offer',
+      adjustment: null,
+    });
   });
 
   it('rejects a quote currency that differs from the request currency', () => {

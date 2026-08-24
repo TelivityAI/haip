@@ -533,6 +533,8 @@ export class AncillaryService {
             folio.id,
             chargeInput,
             acceptedLine.taxAmount,
+            undefined,
+            `accepted-pricing:reservation-service:${rs.id}:once`,
           );
         } else {
           await this.folioService.postCharge(folio.id, chargeInput);
@@ -661,6 +663,8 @@ export class AncillaryService {
               folio.id,
               chargeInput,
               acceptedLine.taxAmount,
+              undefined,
+              `accepted-pricing:reservation-service:${rs.id}:night:${date}`,
             )
           : await this.folioService.postCharge(folio.id, chargeInput);
 

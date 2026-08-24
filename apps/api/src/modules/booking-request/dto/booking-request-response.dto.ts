@@ -48,6 +48,8 @@ export interface AcceptedBookingRequestDecisionDto {
   folioId: string | null;
   totalAmount: string;
   currencyCode: string;
+  priceSource: BookingRequestRow['acceptedPriceSource'];
+  customReason: string | null;
 }
 
 export interface DeniedBookingRequestDecisionDto {
@@ -111,7 +113,12 @@ export function toBookingRequestDetail(
 export function toAcceptedBookingRequestDecision(
   request: Pick<
     BookingRequestRow,
-    'id' | 'acceptedFolioId' | 'acceptedTotal' | 'currencyCode'
+    | 'id'
+    | 'acceptedFolioId'
+    | 'acceptedTotal'
+    | 'currencyCode'
+    | 'acceptedPriceSource'
+    | 'customPriceReason'
   >,
   reservation: Pick<ReservationRow, 'id' | 'totalAmount' | 'currencyCode'>,
 ): AcceptedBookingRequestDecisionDto {
@@ -122,6 +129,8 @@ export function toAcceptedBookingRequestDecision(
     folioId: request.acceptedFolioId,
     totalAmount: request.acceptedTotal ?? reservation.totalAmount,
     currencyCode: reservation.currencyCode ?? request.currencyCode,
+    priceSource: request.acceptedPriceSource,
+    customReason: request.customPriceReason,
   };
 }
 
