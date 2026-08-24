@@ -56,14 +56,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS br_payment_resolutions_property_provider_tx_un
   ON booking_request_payment_resolutions (property_id, provider_transaction_id);
 CREATE UNIQUE INDEX IF NOT EXISTS payments_property_request_parent_id_unique
   ON payments (property_id, booking_request_id, original_payment_id, id);
-CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_booking_request_allocation_repair_unique
-  ON audit_logs (entity_type, entity_id, ((new_value ->> 'repairKey')))
-  WHERE entity_type = 'booking_request_payment_allocation'
-    AND new_value ? 'repairKey';
-CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_booking_request_installment_repair_unique
-  ON audit_logs (entity_type, entity_id, ((new_value ->> 'repairKey')))
-  WHERE entity_type = 'booking_request_installment'
-    AND new_value ? 'repairKey';
+DROP INDEX IF EXISTS audit_logs_booking_request_allocation_repair_unique;
+DROP INDEX IF EXISTS audit_logs_booking_request_installment_repair_unique;
 
 -- booking_request_net_allocation_repair: releases allocations made stale by
 -- completed refund/return movements from the pre-reconciliation release. Rows
@@ -175,7 +169,6 @@ BEGIN
            ),
            'System repaired Booking Request payment allocation to net captured capacity'
     FROM mutations mutation
-    ON CONFLICT DO NOTHING
     RETURNING entity_id
   )
   SELECT COUNT(*) INTO repaired_count FROM audit_evidence;
@@ -244,7 +237,6 @@ BEGIN
            ),
            'System repaired Booking Request installment derived payment state'
     FROM updated repaired
-    ON CONFLICT DO NOTHING
     RETURNING entity_id
   )
   SELECT COUNT(*) INTO repaired_count FROM audit_evidence;

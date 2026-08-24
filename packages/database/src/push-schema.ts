@@ -1626,12 +1626,8 @@ async function main() {
     `CREATE UNIQUE INDEX IF NOT EXISTS booking_request_installments_property_request_id_unique ON booking_request_installments (property_id, booking_request_id, id)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS payments_property_request_id_unique ON payments (property_id, booking_request_id, id)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS payments_property_request_parent_id_unique ON payments (property_id, booking_request_id, original_payment_id, id)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_booking_request_allocation_repair_unique
-      ON audit_logs (entity_type, entity_id, ((new_value ->> 'repairKey')))
-      WHERE entity_type = 'booking_request_payment_allocation' AND new_value ? 'repairKey'`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_booking_request_installment_repair_unique
-      ON audit_logs (entity_type, entity_id, ((new_value ->> 'repairKey')))
-      WHERE entity_type = 'booking_request_installment' AND new_value ? 'repairKey'`,
+    `DROP INDEX IF EXISTS audit_logs_booking_request_allocation_repair_unique`,
+    `DROP INDEX IF EXISTS audit_logs_booking_request_installment_repair_unique`,
     `DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'booking_request_installments_amount_kind_check') THEN
         ALTER TABLE booking_request_installments ADD CONSTRAINT booking_request_installments_amount_kind_check
@@ -1842,7 +1838,6 @@ async function main() {
           ),
           'System repaired Booking Request payment allocation to net captured capacity'
         FROM mutations mutation
-        ON CONFLICT DO NOTHING
         RETURNING entity_id
       )
       SELECT COUNT(*) INTO repaired_count FROM audit_evidence;
@@ -1909,7 +1904,6 @@ async function main() {
           ),
           'System repaired Booking Request installment derived payment state'
         FROM updated repaired
-        ON CONFLICT DO NOTHING
         RETURNING entity_id
       )
       SELECT COUNT(*) INTO repaired_count FROM audit_evidence;

@@ -410,6 +410,49 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.state.consequences).toHaveLength(0);
   });
 
+  it.each([
+    ['handlePaymentIntentProcessing', { amount: 2600 }],
+    ['handlePaymentIntentProcessing', { currency: 'eur' }],
+    ['handlePaymentIntentProcessing', { customer: 'cus_wrong' }],
+    ['handlePaymentIntentProcessing', { payment_method: 'pm_wrong' }],
+    ['handlePaymentIntentSucceeded', { amount: 2600 }],
+    ['handlePaymentIntentSucceeded', { currency: 'eur' }],
+    ['handlePaymentIntentSucceeded', { customer: 'cus_wrong' }],
+    ['handlePaymentIntentSucceeded', { payment_method: 'pm_wrong' }],
+    ['handlePaymentIntentFailed', { amount: 2600 }],
+    ['handlePaymentIntentFailed', { currency: 'eur' }],
+    ['handlePaymentIntentFailed', { customer: 'cus_wrong' }],
+    ['handlePaymentIntentFailed', { payment_method: 'pm_wrong' }],
+    ['handlePaymentIntentCanceled', { amount: 2600 }],
+    ['handlePaymentIntentCanceled', { currency: 'eur' }],
+    ['handlePaymentIntentCanceled', { customer: 'cus_wrong' }],
+    ['handlePaymentIntentCanceled', { payment_method: 'pm_wrong' }],
+    ['handlePaymentIntentRequiresAction', { amount: 2600 }],
+    ['handlePaymentIntentRequiresAction', { currency: 'eur' }],
+    ['handlePaymentIntentRequiresAction', { customer: 'cus_wrong' }],
+    ['handlePaymentIntentRequiresAction', { payment_method: 'pm_wrong' }],
+  ] as const)('%s rejects copied metadata identity before binding', async (method, overrides) => {
+    const h = await harness({
+      payments: [payment({ gatewayTransactionId: null, amount: '25.00' })],
+    });
+
+    await expect(h.controller[method](unknownPaymentIntent(overrides)))
+      .rejects.toThrow(/amount|currency|customer|payment method|identity/i);
+
+    expect(h.state.payments[0]).toMatchObject({
+      status: 'pending',
+      gatewayTransactionId: null,
+    });
+    expect(h.state.consequences).toHaveLength(0);
+    expect(h.state.audits).toEqual([
+      expect.objectContaining({
+        propertyId: PROPERTY_ID,
+        entityId: PAYMENT_ID,
+        description: expect.stringMatching(/identity mismatch/i),
+      }),
+    ]);
+  });
+
   it('audits provider binding once and audits a later folio relink only when it changes', async () => {
     const h = await harness({
       requests: [request({ status: 'accepted', acceptedFolioId: FOLIO_ID })],
@@ -557,7 +600,9 @@ describe('StripeWebhookController financial finalization', () => {
   it('makes provider failure/requires-action terminal and emits a durable failed consequence', async () => {
     for (const method of ['handlePaymentIntentFailed', 'handlePaymentIntentRequiresAction']) {
       const h = await harness();
-      await h.controller[method]({ id: 'pi_request_1', last_payment_error: { message: 'Declined' } });
+      await h.controller[method](knownPaymentIntent({
+        last_payment_error: { message: 'Declined' },
+      }));
       expect(h.state.payments[0]!.status).toBe('failed');
       expect(h.state.consequences[0]!.kind).toMatch(/^payment_failed:/);
       await h.controller.handlePaymentIntentSucceeded(knownPaymentIntent());

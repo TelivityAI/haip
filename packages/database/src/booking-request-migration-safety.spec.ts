@@ -82,13 +82,18 @@ describe('booking request payment integrity migration safety', () => {
       expect(source).toContain('booking_request_net_allocation_repair');
       expect(source).toContain('task7-net-allocation-v1:');
       expect(source).toContain('task7-installment-derived-v1:');
-      expect(source).toContain('audit_logs_booking_request_allocation_repair_unique');
-      expect(source).toContain('audit_logs_booking_request_installment_repair_unique');
+      expect(source).toMatch(/DROP INDEX IF EXISTS audit_logs_booking_request_allocation_repair_unique/i);
+      expect(source).toMatch(/DROP INDEX IF EXISTS audit_logs_booking_request_installment_repair_unique/i);
+      expect(source).not.toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_booking_request_(allocation|installment)_repair_unique/i);
       expect(source).toContain('booking_request_financial_repair_lock');
       expect(source).toMatch(/ORDER BY parent\.property_id, parent\.booking_request_id, parent\.id[\s\S]*FOR UPDATE/i);
       expect(source).toMatch(/ORDER BY allocation\.property_id, allocation\.booking_request_id,[\s\S]*FOR UPDATE/i);
       expect(source).toMatch(/ORDER BY installment\.property_id, installment\.booking_request_id, installment\.id[\s\S]*FOR UPDATE/i);
       expect(source).toMatch(/RETURNING[\s\S]*old_amount[\s\S]*new_amount/i);
+      const repairBlock = source.match(
+        /booking_request_net_allocation_repair[\s\S]*?\$booking_request_financial_repair_lock\$/,
+      )?.[0];
+      expect(repairBlock).not.toContain('ON CONFLICT');
       expect(source).toMatch(/INSERT INTO audit_logs/i);
       expect(source).toMatch(/DELETE FROM booking_request_payment_allocations/i);
       expect(source).toMatch(/UPDATE booking_request_payment_allocations/i);

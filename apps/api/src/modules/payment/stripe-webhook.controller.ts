@@ -237,7 +237,7 @@ export class StripeWebhookController {
         }
       }
 
-      if (request && (event === 'processing' || event === 'succeeded')) {
+      if (request) {
         try {
           this.assertPaymentIntentBindingIdentity(pi, event, payment, request);
         } catch (error) {

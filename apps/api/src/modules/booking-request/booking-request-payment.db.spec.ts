@@ -597,6 +597,36 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
     expect(await db.select().from(auditLogs)
       .where(eq(auditLogs.entityId, unchangedInstallmentId))).toHaveLength(0);
 
+    const runtimeResetTimestamp = new Date('2026-08-24T19:00:00.000Z');
+    await db.update(bookingRequestPaymentAllocations)
+      .set({ amount: '100.00' })
+      .where(eq(bookingRequestPaymentAllocations.id, repairAllocationId));
+    await db.update(bookingRequestInstallments)
+      .set({ allocatedAmount: '100.00', status: 'paid', updatedAt: runtimeResetTimestamp })
+      .where(eq(bookingRequestInstallments.id, repairInstallmentId));
+
+    await client.unsafe(financialRecoveryMigration);
+    const [repairedAgainAllocation] = await db.select().from(bookingRequestPaymentAllocations)
+      .where(eq(bookingRequestPaymentAllocations.id, repairAllocationId));
+    const [repairedAgainInstallment] = await db.select().from(bookingRequestInstallments)
+      .where(eq(bookingRequestInstallments.id, repairInstallmentId));
+    expect(repairedAgainAllocation.amount).toBe('60.00');
+    expect(repairedAgainInstallment).toMatchObject({ allocatedAmount: '60.00', status: 'partial' });
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, repairAllocationId))).toHaveLength(2);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, repairInstallmentId))).toHaveLength(2);
+
+    const secondRepairTimestamp = repairedAgainInstallment.updatedAt.getTime();
+    await client.unsafe(financialRecoveryMigration);
+    const [immediateReplayInstallment] = await db.select().from(bookingRequestInstallments)
+      .where(eq(bookingRequestInstallments.id, repairInstallmentId));
+    expect(immediateReplayInstallment.updatedAt.getTime()).toBe(secondRepairTimestamp);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, repairAllocationId))).toHaveLength(2);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, repairInstallmentId))).toHaveLength(2);
+
     const runtimeTimestamp = new Date('2026-08-24T20:00:00.000Z');
     const runtimeClient = postgres(databaseUrl!, { max: 1 });
     let markLocked!: () => void;
@@ -640,8 +670,8 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
       updatedAt: runtimeTimestamp,
     });
     expect(await db.select().from(auditLogs)
-      .where(eq(auditLogs.entityId, repairAllocationId))).toHaveLength(1);
+      .where(eq(auditLogs.entityId, repairAllocationId))).toHaveLength(2);
     expect(await db.select().from(auditLogs)
-      .where(eq(auditLogs.entityId, repairInstallmentId))).toHaveLength(1);
+      .where(eq(auditLogs.entityId, repairInstallmentId))).toHaveLength(2);
   });
 });
