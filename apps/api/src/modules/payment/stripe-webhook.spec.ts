@@ -38,6 +38,9 @@ function request(overrides: Record<string, unknown> = {}) {
     propertyId: PROPERTY_ID,
     status: 'pending',
     acceptedFolioId: null,
+    currencyCode: 'USD',
+    stripeCustomerId: 'cus_saved',
+    stripePaymentMethodId: 'pm_saved',
     ...overrides,
   };
 }
@@ -77,6 +80,16 @@ function unknownPaymentIntent(overrides: Record<string, unknown> = {}) {
     },
     ...overrides,
   };
+}
+
+function knownPaymentIntent(overrides: Record<string, unknown> = {}) {
+  return unknownPaymentIntent({
+    id: 'pi_request_1',
+    amount: 10000,
+    amount_received: 10000,
+    metadata: {},
+    ...overrides,
+  });
 }
 
 function resolution(id: string, overrides: Record<string, unknown> = {}) {
@@ -291,7 +304,7 @@ describe('StripeWebhookController financial finalization', () => {
 
   it('finalizes a pending request PaymentIntent under request→payment locks with fresh folio', async () => {
     const h = await harness({ requests: [request({ status: 'accepted', acceptedFolioId: FOLIO_ID })] });
-    await h.controller.handlePaymentIntentSucceeded({ id: 'pi_request_1' });
+    await h.controller.handlePaymentIntentSucceeded(knownPaymentIntent());
     expect(h.state.payments[0]).toMatchObject({ status: 'captured', folioId: FOLIO_ID });
     expect(h.state.consequences).toEqual([
       expect.objectContaining({ kind: expect.stringMatching(/^payment_received:/), status: 'pending' }),
@@ -397,6 +410,74 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.state.consequences).toHaveLength(0);
   });
 
+  it('audits provider binding once and audits a later folio relink only when it changes', async () => {
+    const h = await harness({
+      requests: [request({ status: 'accepted', acceptedFolioId: FOLIO_ID })],
+      payments: [payment({ gatewayTransactionId: null, amount: '25.00' })],
+    });
+    const pi = unknownPaymentIntent({ amount_received: 0 });
+
+    await h.controller.handlePaymentIntentProcessing(pi);
+    await h.controller.handlePaymentIntentProcessing(pi);
+    expect(h.state.audits).toEqual([
+      expect.objectContaining({
+        propertyId: PROPERTY_ID,
+        previousValue: expect.objectContaining({
+          bookingRequestId: REQUEST_ID,
+          gatewayTransactionId: null,
+        }),
+        newValue: expect.objectContaining({
+          bookingRequestId: REQUEST_ID,
+          gatewayTransactionId: pi.id,
+        }),
+      }),
+      expect.objectContaining({
+        propertyId: PROPERTY_ID,
+        previousValue: expect.objectContaining({ bookingRequestId: REQUEST_ID, folioId: null }),
+        newValue: expect.objectContaining({ bookingRequestId: REQUEST_ID, folioId: FOLIO_ID }),
+      }),
+    ]);
+
+    await h.controller.handlePaymentIntentProcessing(pi);
+    expect(h.state.audits).toHaveLength(2);
+  });
+
+  it.each([
+    ['received amount', { amount_received: 9900 }],
+    ['currency', { currency: 'eur' }],
+    ['customer', { customer: 'cus_wrong' }],
+    ['payment method', { payment_method: 'pm_wrong' }],
+  ])('rejects an existing-id succeeded event with wrong %s and audits without mutation', async (
+    _label,
+    succeededOverrides,
+  ) => {
+    const h = await harness();
+    await h.controller.handlePaymentIntentProcessing(knownPaymentIntent({ amount_received: 0 }));
+    const before = structuredClone(h.state.payments[0]);
+
+    await expect(h.controller.handlePaymentIntentSucceeded(
+      knownPaymentIntent(succeededOverrides),
+    )).rejects.toThrow(/amount|currency|customer|payment method|identity/i);
+
+    expect(h.state.payments[0]).toEqual(before);
+    expect(h.state.consequences).toHaveLength(0);
+    expect(h.state.audits).toEqual([
+      expect.objectContaining({
+        propertyId: PROPERTY_ID,
+        entityId: PAYMENT_ID,
+        previousValue: expect.objectContaining({
+          bookingRequestId: REQUEST_ID,
+          status: 'pending',
+        }),
+        newValue: expect.objectContaining({
+          bookingRequestId: REQUEST_ID,
+          providerEvent: 'succeeded',
+          reason: expect.stringMatching(/identity/i),
+        }),
+      }),
+    ]);
+  });
+
   it.each([
     ['missing', undefined],
     ['cross-property', {
@@ -448,8 +529,8 @@ describe('StripeWebhookController financial finalization', () => {
       requests: [request({ status: 'accepted', acceptedFolioId: FOLIO_ID })],
       payments: [payment({ status: 'captured', folioId: null })],
     });
-    await h.controller.handlePaymentIntentSucceeded({ id: 'pi_request_1' });
-    await h.controller.handlePaymentIntentSucceeded({ id: 'pi_request_1' });
+    await h.controller.handlePaymentIntentSucceeded(knownPaymentIntent());
+    await h.controller.handlePaymentIntentSucceeded(knownPaymentIntent());
     expect(h.state.payments[0]!.folioId).toBe(FOLIO_ID);
     expect(h.state.consequences).toHaveLength(1);
     expect(h.folioService.recalculateBalance).toHaveBeenCalledTimes(2);
@@ -457,7 +538,7 @@ describe('StripeWebhookController financial finalization', () => {
 
   it.each(['failed', 'voided'] as const)('does not regress terminal %s to captured', async (status) => {
     const h = await harness({ payments: [payment({ status })] });
-    await h.controller.handlePaymentIntentSucceeded({ id: 'pi_request_1' });
+    await h.controller.handlePaymentIntentSucceeded(knownPaymentIntent());
     expect(h.state.payments[0]!.status).toBe(status);
     expect(h.state.consequences).toHaveLength(0);
     expect(h.state.audits).toEqual(expect.arrayContaining([
@@ -467,7 +548,7 @@ describe('StripeWebhookController financial finalization', () => {
 
   it('durably audits and rejects a capture reported after denial', async () => {
     const h = await harness({ requests: [request({ status: 'denied' })] });
-    await expect(h.controller.handlePaymentIntentSucceeded({ id: 'pi_request_1' }))
+    await expect(h.controller.handlePaymentIntentSucceeded(knownPaymentIntent()))
       .rejects.toThrow(/denial|denied/i);
     expect(h.state.payments[0]!.status).toBe('pending');
     expect(h.state.audits).toHaveLength(1);
@@ -479,7 +560,7 @@ describe('StripeWebhookController financial finalization', () => {
       await h.controller[method]({ id: 'pi_request_1', last_payment_error: { message: 'Declined' } });
       expect(h.state.payments[0]!.status).toBe('failed');
       expect(h.state.consequences[0]!.kind).toMatch(/^payment_failed:/);
-      await h.controller.handlePaymentIntentSucceeded({ id: 'pi_request_1' });
+      await h.controller.handlePaymentIntentSucceeded(knownPaymentIntent());
       expect(h.state.payments[0]!.status).toBe('failed');
     }
   });

@@ -537,6 +537,38 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
         }),
       }),
     ]);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, repairInstallmentId))).toEqual([
+      expect.objectContaining({
+        propertyId,
+        action: 'update',
+        entityType: 'booking_request_installment',
+        previousValue: { allocatedAmount: '100.00', status: 'paid' },
+        newValue: expect.objectContaining({
+          bookingRequestId: requestId,
+          oldAllocatedAmount: '100.00',
+          newAllocatedAmount: '60.00',
+          oldStatus: 'paid',
+          newStatus: 'partial',
+        }),
+      }),
+    ]);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, deletedInstallmentId))).toEqual([
+      expect.objectContaining({
+        propertyId,
+        action: 'update',
+        entityType: 'booking_request_installment',
+        previousValue: { allocatedAmount: '25.00', status: 'paid' },
+        newValue: expect.objectContaining({
+          bookingRequestId: requestId,
+          oldAllocatedAmount: '25.00',
+          newAllocatedAmount: '0.00',
+          oldStatus: 'paid',
+          newStatus: 'unpaid',
+        }),
+      }),
+    ]);
 
     const changedTimestamp = changedAfterFirst.updatedAt.getTime();
     const deletedTimestamp = deletedInstallmentAfterFirst.updatedAt.getTime();
@@ -557,6 +589,59 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
     expect(await db.select().from(auditLogs)
       .where(eq(auditLogs.entityId, deletedAllocationId))).toHaveLength(1);
     expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, repairInstallmentId))).toHaveLength(1);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, deletedInstallmentId))).toHaveLength(1);
+    expect(await db.select().from(auditLogs)
       .where(eq(auditLogs.entityId, unchangedAllocationId))).toHaveLength(0);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, unchangedInstallmentId))).toHaveLength(0);
+
+    const runtimeTimestamp = new Date('2026-08-24T20:00:00.000Z');
+    const runtimeClient = postgres(databaseUrl!, { max: 1 });
+    let markLocked!: () => void;
+    let releaseRuntime!: () => void;
+    const runtimeLocked = new Promise<void>((resolve) => { markLocked = resolve; });
+    const release = new Promise<void>((resolve) => { releaseRuntime = resolve; });
+    const runtimeReduction = runtimeClient.begin(async (sql) => {
+      await sql.unsafe(
+        'SELECT id FROM payments WHERE id = $1 ORDER BY id FOR UPDATE',
+        [repairPaymentId],
+      );
+      await sql.unsafe(
+        'UPDATE booking_request_installments SET allocated_amount = $1, status = $2, updated_at = $3 WHERE id = $4',
+        ['30.00', 'partial', runtimeTimestamp, repairInstallmentId],
+      );
+      await sql.unsafe(
+        'UPDATE booking_request_payment_allocations SET amount = $1 WHERE id = $2',
+        ['30.00', repairAllocationId],
+      );
+      markLocked();
+      await release;
+    });
+    await runtimeLocked;
+    let migrationSettled = false;
+    const concurrentRepair = client.unsafe(financialRecoveryMigration)
+      .finally(() => { migrationSettled = true; });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(migrationSettled).toBe(false);
+    releaseRuntime();
+    await Promise.all([runtimeReduction, concurrentRepair]);
+    await runtimeClient.end();
+
+    const [allocationAfterRace] = await db.select().from(bookingRequestPaymentAllocations)
+      .where(eq(bookingRequestPaymentAllocations.id, repairAllocationId));
+    const [installmentAfterRace] = await db.select().from(bookingRequestInstallments)
+      .where(eq(bookingRequestInstallments.id, repairInstallmentId));
+    expect(allocationAfterRace.amount).toBe('30.00');
+    expect(installmentAfterRace).toMatchObject({
+      allocatedAmount: '30.00',
+      status: 'partial',
+      updatedAt: runtimeTimestamp,
+    });
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, repairAllocationId))).toHaveLength(1);
+    expect(await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, repairInstallmentId))).toHaveLength(1);
   });
 });

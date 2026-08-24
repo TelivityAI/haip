@@ -235,7 +235,25 @@ export class StripeWebhookController {
             'Stripe PaymentIntent does not match the provider identity already bound to the payment',
           );
         }
-        this.assertPaymentIntentBindingIdentity(pi, event, payment, request);
+      }
+
+      if (request && (event === 'processing' || event === 'succeeded')) {
+        try {
+          this.assertPaymentIntentBindingIdentity(pi, event, payment, request);
+        } catch (error) {
+          if (!(error instanceof ConflictException)) throw error;
+          const reason = error.message;
+          await this.auditPaymentIntentIdentityMismatch(tx, payment, event, reason);
+          return {
+            changed: false,
+            payment,
+            identityMismatch: reason,
+            legacyEvent: undefined,
+          };
+        }
+      }
+
+      if (correlation) {
         if (!payment.gatewayTransactionId) {
           const boundRows = await tx
             .update(payments)
@@ -251,6 +269,21 @@ export class StripeWebhookController {
           if (!bound) {
             throw new ConflictException('Stripe PaymentIntent payment identity changed while binding');
           }
+          await tx.insert(auditLogs).values({
+            propertyId: payment.propertyId,
+            action: 'update',
+            entityType: 'payment',
+            entityId: payment.id,
+            previousValue: {
+              bookingRequestId: payment.bookingRequestId,
+              gatewayTransactionId: null,
+            },
+            newValue: {
+              bookingRequestId: payment.bookingRequestId,
+              gatewayTransactionId: pi.id,
+            },
+            description: 'Stripe PaymentIntent provider identity bound from signed metadata',
+          });
           payment = bound;
         }
       }
@@ -324,6 +357,15 @@ export class StripeWebhookController {
           .returning();
         current = updated.find((row: typeof payments.$inferSelect) => row.id === payment.id)
           ?? { ...payment, folioId };
+        await tx.insert(auditLogs).values({
+          propertyId: payment.propertyId,
+          action: 'update',
+          entityType: 'payment',
+          entityId: payment.id,
+          previousValue: { bookingRequestId: payment.bookingRequestId, folioId: payment.folioId },
+          newValue: { bookingRequestId: payment.bookingRequestId, folioId },
+          description: 'Stripe PaymentIntent replay repaired accepted folio linkage',
+        });
       }
 
       if (request && decision.action !== 'unexpected' && current.status !== 'pending') {
@@ -367,6 +409,9 @@ export class StripeWebhookController {
       throw new ConflictException(
         'Provider captured the payment after booking request denial; operator reconciliation required',
       );
+    }
+    if (outcome.identityMismatch) {
+      throw new ConflictException(outcome.identityMismatch);
     }
     if (outcome.legacyEvent) {
       await this.webhookService.emit(
@@ -700,6 +745,31 @@ export class StripeWebhookController {
       previousValue: { status: payment.status },
       newValue: details,
       description: 'Unexpected Stripe PaymentIntent state ignored monotonically',
+    });
+  }
+
+  private async auditPaymentIntentIdentityMismatch(
+    tx: any,
+    payment: typeof payments.$inferSelect,
+    event: PaymentIntentEvent,
+    reason: string,
+  ): Promise<void> {
+    await tx.insert(auditLogs).values({
+      propertyId: payment.propertyId,
+      action: 'update',
+      entityType: 'payment',
+      entityId: payment.id,
+      previousValue: {
+        bookingRequestId: payment.bookingRequestId,
+        status: payment.status,
+        folioId: payment.folioId,
+      },
+      newValue: {
+        bookingRequestId: payment.bookingRequestId,
+        providerEvent: event,
+        reason: `PaymentIntent financial/provider identity mismatch: ${reason}`,
+      },
+      description: 'Stripe PaymentIntent identity mismatch rejected without ledger mutation',
     });
   }
 

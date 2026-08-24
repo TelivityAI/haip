@@ -1629,6 +1629,9 @@ async function main() {
     `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_booking_request_allocation_repair_unique
       ON audit_logs (entity_type, entity_id, ((new_value ->> 'repairKey')))
       WHERE entity_type = 'booking_request_payment_allocation' AND new_value ? 'repairKey'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_booking_request_installment_repair_unique
+      ON audit_logs (entity_type, entity_id, ((new_value ->> 'repairKey')))
+      WHERE entity_type = 'booking_request_installment' AND new_value ? 'repairKey'`,
     `DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'booking_request_installments_amount_kind_check') THEN
         ALTER TABLE booking_request_installments ADD CONSTRAINT booking_request_installments_amount_kind_check
@@ -1743,7 +1746,28 @@ async function main() {
       $booking_request_resolution_provenance$`,
     `CREATE UNIQUE INDEX IF NOT EXISTS br_payment_resolutions_property_provider_tx_unique
       ON booking_request_payment_resolutions (property_id, provider_transaction_id)`,
-    `-- booking_request_net_allocation_repair: audited atomically and observationally idempotent
+    `-- booking_request_net_allocation_repair: locked, causally exact, and audited from RETURNING
+      DO $booking_request_financial_repair_lock$
+      DECLARE
+        repaired_count bigint;
+      BEGIN
+        PERFORM parent.id
+        FROM payments parent
+        WHERE parent.booking_request_id IS NOT NULL AND parent.original_payment_id IS NULL
+        ORDER BY parent.property_id, parent.booking_request_id, parent.id
+        FOR UPDATE;
+
+        PERFORM allocation.id
+        FROM booking_request_payment_allocations allocation
+        ORDER BY allocation.property_id, allocation.booking_request_id,
+          allocation.payment_id, allocation.created_at, allocation.id
+        FOR UPDATE;
+
+        PERFORM installment.id
+        FROM booking_request_installments installment
+        ORDER BY installment.property_id, installment.booking_request_id, installment.id
+        FOR UPDATE;
+
       WITH net_capacity AS (
         SELECT parent.property_id, parent.booking_request_id, parent.id AS payment_id,
           GREATEST(parent.amount + COALESCE(SUM(child.amount) FILTER (WHERE child.status = 'captured'), 0), 0) AS net_amount
@@ -1770,82 +1794,127 @@ async function main() {
           AND capacity.payment_id = allocation.payment_id
       ), changes AS (
         SELECT ranked.*,
-          GREATEST(LEAST(ranked.old_amount, ranked.net_amount - ranked.used_before), 0) AS new_amount,
-          'task7-net-allocation-v1:' || ranked.id::text || ':' || ranked.old_amount::text || ':'
-            || GREATEST(LEAST(ranked.old_amount, ranked.net_amount - ranked.used_before), 0)::text AS repair_key
+          GREATEST(LEAST(ranked.old_amount, ranked.net_amount - ranked.used_before), 0) AS new_amount
         FROM ranked
-        WHERE ranked.old_amount IS DISTINCT FROM
+        WHERE ranked.old_amount >
           GREATEST(LEAST(ranked.old_amount, ranked.net_amount - ranked.used_before), 0)
-      ), audit_evidence AS (
-        INSERT INTO audit_logs (
-          property_id, action, entity_type, entity_id, previous_value, new_value, description
-        )
-        SELECT changes.property_id,
-          CASE WHEN changes.new_amount = 0 THEN 'delete' ELSE 'update' END,
-          'booking_request_payment_allocation',
-          changes.id,
-          jsonb_build_object('amount', changes.old_amount::text),
-          jsonb_build_object(
-            'repairKey', changes.repair_key,
-            'bookingRequestId', changes.booking_request_id,
-            'paymentId', changes.payment_id,
-            'installmentId', changes.installment_id,
-            'oldAmount', changes.old_amount::text,
-            'newAmount', changes.new_amount::text
-          ),
-          'System repaired Booking Request payment allocation to net captured capacity'
-        FROM changes
-        WHERE NOT EXISTS (
-          SELECT 1 FROM audit_logs existing
-          WHERE existing.entity_type = 'booking_request_payment_allocation'
-            AND existing.entity_id = changes.id
-            AND existing.new_value ->> 'repairKey' = changes.repair_key
-        )
-        ON CONFLICT DO NOTHING
-        RETURNING entity_id
       ), deleted AS (
         DELETE FROM booking_request_payment_allocations allocation
         USING changes
-        WHERE allocation.id = changes.id AND changes.new_amount = 0
-        RETURNING allocation.id
+        WHERE allocation.id = changes.id
+          AND allocation.amount = changes.old_amount
+          AND changes.new_amount = 0
+        RETURNING allocation.id, allocation.property_id, allocation.booking_request_id,
+          allocation.payment_id, allocation.installment_id,
+          changes.old_amount, changes.new_amount
       ), updated AS (
         UPDATE booking_request_payment_allocations allocation
         SET amount = changes.new_amount
         FROM changes
         WHERE allocation.id = changes.id
+          AND allocation.amount = changes.old_amount
           AND changes.new_amount > 0
-          AND allocation.amount IS DISTINCT FROM changes.new_amount
-        RETURNING allocation.id
+          AND changes.new_amount < changes.old_amount
+        RETURNING allocation.id, allocation.property_id, allocation.booking_request_id,
+          allocation.payment_id, allocation.installment_id,
+          changes.old_amount, changes.new_amount
+      ), mutations AS (
+        SELECT * FROM deleted
+        UNION ALL
+        SELECT * FROM updated
+      ), audit_evidence AS (
+        INSERT INTO audit_logs (
+          property_id, action, entity_type, entity_id, previous_value, new_value, description
+        )
+        SELECT mutation.property_id,
+          CASE WHEN mutation.new_amount = 0 THEN 'delete' ELSE 'update' END,
+          'booking_request_payment_allocation',
+          mutation.id,
+          jsonb_build_object('amount', mutation.old_amount::text),
+          jsonb_build_object(
+            'repairKey', 'task7-net-allocation-v1:' || mutation.id::text || ':'
+              || mutation.old_amount::text || ':' || mutation.new_amount::text,
+            'bookingRequestId', mutation.booking_request_id,
+            'paymentId', mutation.payment_id,
+            'installmentId', mutation.installment_id,
+            'oldAmount', mutation.old_amount::text,
+            'newAmount', mutation.new_amount::text
+          ),
+          'System repaired Booking Request payment allocation to net captured capacity'
+        FROM mutations mutation
+        ON CONFLICT DO NOTHING
+        RETURNING entity_id
       )
-      SELECT COUNT(*) FROM audit_evidence`,
-    `WITH installment_totals AS (
-        SELECT installment.id, installment.resolved_amount, COALESCE(SUM(allocation.amount), 0) AS amount
+      SELECT COUNT(*) INTO repaired_count FROM audit_evidence;
+
+      WITH installment_totals AS (
+        SELECT installment.id, installment.property_id, installment.booking_request_id,
+          installment.allocated_amount AS old_allocated_amount,
+          installment.status AS old_status,
+          installment.resolved_amount,
+          COALESCE(SUM(allocation.amount), 0) AS amount
         FROM booking_request_installments installment
         LEFT JOIN booking_request_payment_allocations allocation
           ON allocation.property_id = installment.property_id
           AND allocation.booking_request_id = installment.booking_request_id
           AND allocation.installment_id = installment.id
-        GROUP BY installment.id, installment.resolved_amount
-      ), derived AS (
-        SELECT total.id,
-          LEAST(total.amount, total.resolved_amount) AS allocated_amount,
+        GROUP BY installment.id, installment.property_id, installment.booking_request_id,
+          installment.allocated_amount, installment.status, installment.resolved_amount
+      ), changes AS (
+        SELECT total.*,
+          LEAST(total.amount, total.resolved_amount)::numeric(12,2) AS new_allocated_amount,
           CASE
             WHEN total.amount <= 0 THEN 'unpaid'
             WHEN total.amount >= total.resolved_amount THEN 'paid'
             ELSE 'partial'
-          END::booking_request_installment_status AS status
+          END::booking_request_installment_status AS new_status
         FROM installment_totals total
+      ), updated AS (
+        UPDATE booking_request_installments installment
+        SET allocated_amount = changes.new_allocated_amount,
+          status = changes.new_status,
+          updated_at = now()
+        FROM changes
+        WHERE installment.id = changes.id
+          AND installment.allocated_amount = changes.old_allocated_amount
+          AND installment.status = changes.old_status
+          AND (
+            changes.old_allocated_amount IS DISTINCT FROM changes.new_allocated_amount
+            OR changes.old_status IS DISTINCT FROM changes.new_status
+          )
+        RETURNING installment.id, installment.property_id, installment.booking_request_id,
+          changes.old_allocated_amount, changes.old_status,
+          changes.new_allocated_amount, changes.new_status
+      ), audit_evidence AS (
+        INSERT INTO audit_logs (
+          property_id, action, entity_type, entity_id, previous_value, new_value, description
+        )
+        SELECT repaired.property_id,
+          'update',
+          'booking_request_installment',
+          repaired.id,
+          jsonb_build_object(
+            'allocatedAmount', repaired.old_allocated_amount::text,
+            'status', repaired.old_status
+          ),
+          jsonb_build_object(
+            'repairKey', 'task7-installment-derived-v1:' || repaired.id::text || ':'
+              || repaired.old_allocated_amount::text || ':' || repaired.old_status::text || ':'
+              || repaired.new_allocated_amount::text || ':' || repaired.new_status::text,
+            'bookingRequestId', repaired.booking_request_id,
+            'oldAllocatedAmount', repaired.old_allocated_amount::text,
+            'newAllocatedAmount', repaired.new_allocated_amount::text,
+            'oldStatus', repaired.old_status,
+            'newStatus', repaired.new_status
+          ),
+          'System repaired Booking Request installment derived payment state'
+        FROM updated repaired
+        ON CONFLICT DO NOTHING
+        RETURNING entity_id
       )
-      UPDATE booking_request_installments installment
-      SET allocated_amount = derived.allocated_amount,
-        status = derived.status,
-        updated_at = now()
-      FROM derived
-      WHERE installment.id = derived.id
-        AND (
-          installment.allocated_amount IS DISTINCT FROM derived.allocated_amount
-          OR installment.status IS DISTINCT FROM derived.status
-        )`,
+      SELECT COUNT(*) INTO repaired_count FROM audit_evidence;
+      END
+      $booking_request_financial_repair_lock$`,
     `ALTER TABLE booking_request_payment_resolutions
       DROP CONSTRAINT IF EXISTS booking_request_payment_resolutions_retained_reason_check,
       DROP CONSTRAINT IF EXISTS booking_request_payment_resolutions_lifecycle_check`,
