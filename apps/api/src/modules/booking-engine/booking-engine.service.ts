@@ -327,6 +327,11 @@ export class BookingEngineService {
     if (!config.isEnabled) {
       throw new ForbiddenException('Direct booking is not enabled for this property');
     }
+    if (config.bookingMode !== 'instant') {
+      throw new ForbiddenException(
+        'Instant booking is unavailable while booking requests require staff review',
+      );
+    }
     this.assertSellable(config, dto.roomTypeId, dto.ratePlanId);
     // Enforce rate restrictions (stop-sell / CTA / CTD / min-max LOS). SEARCH only
     // surfaces these — the BOOK path is the real gate against booking a closed date.

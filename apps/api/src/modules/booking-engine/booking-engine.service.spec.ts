@@ -151,6 +151,7 @@ describe('BookingEngineService.book', () => {
     const { svc, config } = makeService();
     config.getPublicConfig.mockResolvedValue({
       isEnabled: true,
+      bookingMode: 'instant',
       sellableRoomTypeIds: [],
       sellableRatePlanIds: [RP],
       depositPolicy: { type: 'first_night', refundable: true },
@@ -167,6 +168,25 @@ describe('BookingEngineService.book', () => {
       depositPolicy: { type: 'first_night', refundable: true },
     });
     await expect(svc.book(PROP, bookDto as any)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects request mode before creating a guest, reservation, folio, or payment', async () => {
+    const { svc, config, guest, reservation, folio, payment } = makeService();
+    config.getPublicConfig.mockResolvedValue({
+      isEnabled: true,
+      bookingMode: 'request',
+      paymentMethodCollection: 'disabled',
+      formQuestions: [],
+      sellableRoomTypeIds: [RT],
+      sellableRatePlanIds: [RP],
+      depositPolicy: { type: 'first_night', refundable: true },
+    });
+
+    await expect(svc.book(PROP, bookDto as any)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(guest.create).not.toHaveBeenCalled();
+    expect(reservation.create).not.toHaveBeenCalled();
+    expect(folio.createAutoFolio).not.toHaveBeenCalled();
+    expect(payment.authorizePayment).not.toHaveBeenCalled();
   });
 
   it('requires a payment token when a deposit is due', async () => {

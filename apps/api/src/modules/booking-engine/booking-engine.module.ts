@@ -40,6 +40,6 @@ import { PolicyModule } from '../policy/policy.module';
     BookingEngineScopeGuard,
     BookingThrottleGuard,
   ],
-  exports: [BookingEngineConfigService],
+  exports: [BookingEngineService, BookingEngineConfigService],
 })
 export class BookingEngineModule {}

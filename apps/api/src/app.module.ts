@@ -35,6 +35,7 @@ import { PolicyModule } from './modules/policy/policy.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
+import { BookingRequestModule } from './modules/booking-request/booking-request.module';
 import { ImportModule } from './modules/import/import.module';
 import { MigrationModule } from './modules/migration/migration.module';
 import { AccountingExportModule } from './modules/accounting-export/accounting-export.module';
@@ -90,6 +91,7 @@ const imports: any[] = [
   GroupsModule,
   AdminModule,
   BookingEngineModule,
+  BookingRequestModule,
   ImportModule,
   MigrationModule,
   AccountingExportModule,
