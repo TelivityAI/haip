@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import {
   auditLogs,
   bookingRequestConsequences,
+  bookingRequestEmailDeliveries,
   bookingRequestPaymentResolutions,
   bookingRequests,
   payments,
@@ -30,6 +31,7 @@ type State = {
   resolutions: any[];
   consequences: any[];
   audits: any[];
+  emails: any[];
 };
 
 function request(overrides: Record<string, unknown> = {}) {
@@ -41,6 +43,8 @@ function request(overrides: Record<string, unknown> = {}) {
     currencyCode: 'USD',
     stripeCustomerId: 'cus_saved',
     stripePaymentMethodId: 'pm_saved',
+    guestFirstName: 'Ada',
+    guestEmail: 'ada@example.com',
     ...overrides,
   };
 }
@@ -119,6 +123,7 @@ function rowsFor(state: State, table: unknown): any[] {
   if (table === bookingRequestPaymentResolutions) return state.resolutions;
   if (table === bookingRequestConsequences) return state.consequences;
   if (table === auditLogs) return state.audits;
+  if (table === bookingRequestEmailDeliveries) return state.emails;
   throw new Error('Unexpected table in Stripe webhook test');
 }
 
@@ -184,6 +189,12 @@ function makeDb(state: State) {
           row.propertyId === input['propertyId']
           && row.bookingRequestId === input['bookingRequestId']
           && row.kind === input['kind'])) {
+          return [];
+        }
+        if (table === bookingRequestEmailDeliveries && rows.some((row) =>
+          row.propertyId === input['propertyId']
+          && row.bookingRequestId === input['bookingRequestId']
+          && row.logicalKey === input['logicalKey'])) {
           return [];
         }
         if (table === payments && input['idempotencyKey'] && rows.some((row) =>
@@ -252,6 +263,7 @@ async function harness(overrides: Partial<State> = {}) {
     resolutions: [],
     consequences: [],
     audits: [],
+    emails: [],
     ...structuredClone(overrides),
   };
   const db = makeDb(state);
@@ -309,6 +321,10 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.state.consequences).toEqual([
       expect.objectContaining({ kind: expect.stringMatching(/^payment_received:/), status: 'pending' }),
     ]);
+    expect(h.state.emails).toEqual([
+      expect.objectContaining({ kind: 'payment', logicalKey: expect.stringMatching(/^payment:/) }),
+    ]);
+    expect(JSON.stringify(h.state.emails)).not.toMatch(/pi_request|pm_saved|cus_saved|https?:\/\//i);
     expect(h.folioService.recalculateBalance).toHaveBeenCalledWith(FOLIO_ID, PROPERTY_ID, h.db);
     expect(h.webhookService.emit).not.toHaveBeenCalled();
   });
@@ -341,6 +357,7 @@ describe('StripeWebhookController financial finalization', () => {
       gatewayTransactionId: 'pi_recovered_from_metadata',
     });
     expect(h.state.consequences).toHaveLength(1);
+    expect(h.state.emails).toHaveLength(1);
 
     const gateway = { charge: vi.fn() };
     const service = new (BookingRequestPaymentService as any)(
@@ -348,6 +365,7 @@ describe('StripeWebhookController financial finalization', () => {
       gateway,
       h.folioService,
       { refund: vi.fn() },
+      { deliverForRequestBestEffort: vi.fn() },
     ) as BookingRequestPaymentService;
     const replay = await service.chargeSavedCard(
       REQUEST_ID,
@@ -576,6 +594,7 @@ describe('StripeWebhookController financial finalization', () => {
     await h.controller.handlePaymentIntentSucceeded(knownPaymentIntent());
     expect(h.state.payments[0]!.folioId).toBe(FOLIO_ID);
     expect(h.state.consequences).toHaveLength(1);
+    expect(h.state.emails).toHaveLength(1);
     expect(h.folioService.recalculateBalance).toHaveBeenCalledTimes(2);
   });
 
@@ -605,6 +624,9 @@ describe('StripeWebhookController financial finalization', () => {
       }));
       expect(h.state.payments[0]!.status).toBe('failed');
       expect(h.state.consequences[0]!.kind).toMatch(/^payment_failed:/);
+      expect(h.state.emails).toEqual([
+        expect.objectContaining({ kind: 'failure', logicalKey: expect.stringMatching(/^failure:/) }),
+      ]);
       await h.controller.handlePaymentIntentSucceeded(knownPaymentIntent());
       expect(h.state.payments[0]!.status).toBe('failed');
     }
@@ -625,6 +647,10 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.state.payments.filter((row) => row.originalPaymentId === PAYMENT_ID)).toEqual([
       expect.objectContaining({ amount: '-25.00', gatewayTransactionId: 're_second' }),
     ]);
+    expect(h.state.emails).toEqual([
+      expect.objectContaining({ kind: 'refund', logicalKey: expect.stringMatching(/^refund:/) }),
+    ]);
+    expect(JSON.stringify(h.state.emails)).not.toContain('re_second');
   });
 
   it('handles two 25 refunds out of order and replays without double ledger rows', async () => {

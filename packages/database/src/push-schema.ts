@@ -1246,6 +1246,7 @@ async function main() {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id uuid NOT NULL REFERENCES properties(id),
       booking_request_id uuid NOT NULL REFERENCES booking_requests(id),
+      logical_key varchar(200) NOT NULL,
       kind booking_request_email_delivery_kind NOT NULL,
       status booking_request_email_delivery_status NOT NULL DEFAULT 'pending',
       recipient varchar(255) NOT NULL,
@@ -1253,11 +1254,17 @@ async function main() {
       body_text text NOT NULL,
       error_message text,
       attempts integer NOT NULL DEFAULT 0,
+      claimed_at timestamptz,
       last_attempt_at timestamptz,
       sent_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE booking_request_email_deliveries ADD COLUMN IF NOT EXISTS logical_key varchar(200)`,
+    `ALTER TABLE booking_request_email_deliveries ADD COLUMN IF NOT EXISTS claimed_at timestamptz`,
+    `UPDATE booking_request_email_deliveries SET logical_key = 'task8-legacy:' || id::text WHERE logical_key IS NULL`,
+    `ALTER TABLE booking_request_email_deliveries ALTER COLUMN logical_key SET NOT NULL`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS booking_request_email_deliveries_logical_key_unique ON booking_request_email_deliveries (property_id, booking_request_id, logical_key)`,
     `CREATE INDEX IF NOT EXISTS booking_request_email_deliveries_property_request_idx ON booking_request_email_deliveries (property_id, booking_request_id)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS bookings_property_external_channel_unique ON bookings (property_id, external_confirmation, channel_code) WHERE external_confirmation IS NOT NULL AND channel_code IS NOT NULL`,
     // Stay extras / packages
@@ -1946,6 +1953,10 @@ async function main() {
         ALTER TABLE booking_request_installments ADD CONSTRAINT booking_request_installments_request_fkey
           FOREIGN KEY (property_id, booking_request_id) REFERENCES booking_requests(property_id, id) NOT VALID;
       END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'booking_request_email_deliveries_request_fkey') THEN
+        ALTER TABLE booking_request_email_deliveries ADD CONSTRAINT booking_request_email_deliveries_request_fkey
+          FOREIGN KEY (property_id, booking_request_id) REFERENCES booking_requests(property_id, id) NOT VALID;
+      END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_booking_request_fkey') THEN
         ALTER TABLE payments ADD CONSTRAINT payments_booking_request_fkey
           FOREIGN KEY (property_id, booking_request_id) REFERENCES booking_requests(property_id, id) NOT VALID;
@@ -1964,6 +1975,7 @@ async function main() {
     `ALTER TABLE payments VALIDATE CONSTRAINT payments_booking_request_child_shape_check`,
     `ALTER TABLE booking_request_installments VALIDATE CONSTRAINT booking_request_installments_request_fkey`,
     `ALTER TABLE booking_request_consequences VALIDATE CONSTRAINT booking_request_consequences_request_fkey`,
+    `ALTER TABLE booking_request_email_deliveries VALIDATE CONSTRAINT booking_request_email_deliveries_request_fkey`,
     `ALTER TABLE payments VALIDATE CONSTRAINT payments_booking_request_fkey`,
     `ALTER TABLE payments VALIDATE CONSTRAINT payments_booking_request_parent_fkey`,
     `ALTER TABLE booking_request_payment_resolutions VALIDATE CONSTRAINT booking_request_payment_resolutions_parent_movement_fkey`,

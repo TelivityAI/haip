@@ -35,6 +35,11 @@ import {
   sql,
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  BookingRequestAcceptedWebhook,
+  BookingRequestCreatedWebhook,
+  BookingRequestDeniedWebhook,
+} from '@telivityhaip/shared';
 import {
   actorFields,
   type AuditActor,
@@ -69,6 +74,12 @@ import {
 } from './booking-request-money';
 import { assertBookingRequestTransition } from './booking-request-state';
 import { buildAcceptedPricingSnapshot } from './booking-request-pricing';
+import {
+  acceptedBookingRequestEmail,
+  deniedBookingRequestEmail,
+  requestReceivedEmail,
+} from './booking-request-email.templates';
+import { BookingRequestMailerService } from './booking-request-mailer.service';
 import type { AcceptBookingRequestDto } from './dto/accept-booking-request.dto';
 import type { CreateRequestCardSetupDto } from './dto/create-request-card-setup.dto';
 import type { DenyBookingRequestDto } from './dto/deny-booking-request.dto';
@@ -121,6 +132,7 @@ type ExistingRequest = {
 
 type LockedRequestConfig = typeof bookingEngineConfig.$inferSelect;
 type CreatedConsequence = typeof bookingRequestConsequences.$inferSelect;
+type EmailQueueExecutor = NonNullable<Parameters<BookingRequestMailerService['queue']>[1]>;
 
 const ACKNOWLEDGEMENT_MESSAGE =
   'Your booking request has been received and is pending review.';
@@ -153,6 +165,8 @@ export class BookingRequestService {
     private readonly reservationService: ReservationService,
     @Inject(FolioService) private readonly folioService: FolioService,
     @Inject(AncillaryService) private readonly ancillaryService: AncillaryService,
+    @Inject(BookingRequestMailerService)
+    private readonly mailer: BookingRequestMailerService,
   ) {}
 
   async list(dto: ListBookingRequestsDto) {
@@ -267,7 +281,9 @@ export class BookingRequestService {
     const initial = await this.findRequest(this.db, id, propertyId);
     if (initial.status === 'accepted') {
       const linked = await this.findLinkedReservation(this.db, initial, propertyId);
+      await this.queueAcceptedEmailBestEffort(initial, propertyId);
       await this.deliverConsequencesBestEffort(id, propertyId);
+      await this.deliverEmailsBestEffort(id, propertyId);
       return toAcceptedBookingRequestDecision(initial, linked);
     }
     if (initial.status === 'denied') {
@@ -407,7 +423,7 @@ export class BookingRequestService {
         throw new ConflictException('Booking request decision changed concurrently');
       }
 
-      await this.insertConsequence(tx, propertyId, id, ACCEPTED_CONSEQUENCE_KIND, {
+      const acceptedEvent = {
         event: 'booking_request.accepted',
         entityType: 'booking_request',
         entityId: id,
@@ -420,7 +436,14 @@ export class BookingRequestService {
           acceptedTotal: pricing.grandTotal,
         },
         timestamp: decidedAt.toISOString(),
-      });
+      } satisfies BookingRequestAcceptedWebhook;
+      await this.insertConsequence(
+        tx,
+        propertyId,
+        id,
+        ACCEPTED_CONSEQUENCE_KIND,
+        acceptedEvent,
+      );
       await this.insertConsequence(
         tx,
         propertyId,
@@ -484,10 +507,12 @@ export class BookingRequestService {
         },
         description: 'Booking request accepted',
       });
+      await this.queueAcceptedEmail(updated, tx);
       return { reservation, request: updated };
     }).catch((error: unknown) => this.throwAcceptanceError(error));
 
     await this.deliverConsequencesBestEffort(id, propertyId);
+    await this.deliverEmailsBestEffort(id, propertyId);
     return toAcceptedBookingRequestDecision(result.request, result.reservation);
   }
 
@@ -503,7 +528,7 @@ export class BookingRequestService {
     const denied = await this.db.transaction(async (tx) => {
       const locked = await this.lockRequest(tx, id, propertyId);
       if (locked.status === 'denied') {
-        return locked;
+        return { request: locked, replay: true };
       }
       assertBookingRequestTransition(locked.status, 'denied');
 
@@ -570,14 +595,21 @@ export class BookingRequestService {
       if (!updated) {
         throw new ConflictException('Booking request decision changed concurrently');
       }
-      await this.insertConsequence(tx, propertyId, id, DENIED_CONSEQUENCE_KIND, {
+      const deniedEvent = {
         event: 'booking_request.denied',
         entityType: 'booking_request',
         entityId: id,
         propertyId,
         data: { requestId: id, status: 'denied' },
         timestamp: decidedAt.toISOString(),
-      });
+      } satisfies BookingRequestDeniedWebhook;
+      await this.insertConsequence(
+        tx,
+        propertyId,
+        id,
+        DENIED_CONSEQUENCE_KIND,
+        deniedEvent,
+      );
       await tx.insert(auditLogs).values({
         propertyId,
         action: 'update',
@@ -588,11 +620,16 @@ export class BookingRequestService {
         newValue: { status: 'denied', denialReason: reason },
         description: 'Booking request denied',
       });
-      return updated;
+      await this.queueDeniedEmail(updated, tx);
+      return { request: updated, replay: false };
     });
 
+    if (denied.replay) {
+      await this.queueDeniedEmailBestEffort(denied.request, propertyId);
+    }
     await this.deliverConsequencesBestEffort(id, propertyId);
-    return toDeniedBookingRequestDecision(denied);
+    await this.deliverEmailsBestEffort(id, propertyId);
+    return toDeniedBookingRequestDecision(denied.request);
   }
 
   async createPaymentMethodSetup(
@@ -635,6 +672,7 @@ export class BookingRequestService {
     if (existing) {
       const acknowledgement = this.acknowledgeReplay(existing, fingerprint);
       await this.deliverCreatedConsequenceBestEffort(existing.id, propertyId);
+      await this.deliverEmailsBestEffort(existing.id, propertyId);
       return acknowledgement;
     }
 
@@ -742,6 +780,14 @@ export class BookingRequestService {
           description: 'Webhook event: booking_request.created',
           newValue: structuredClone(createdPayload),
         });
+        await this.queueReceiptEmail({
+          id: request.id,
+          propertyId,
+          guestFirstName: dto.guestFirstName,
+          guestEmail: dto.guestEmail,
+          arrivalDate: dto.checkIn,
+          departureDate: dto.checkOut,
+        }, tx);
         return { requestId: request.id };
       }
 
@@ -758,6 +804,7 @@ export class BookingRequestService {
     });
 
     await this.deliverCreatedConsequenceBestEffort(result.requestId, propertyId);
+    await this.deliverEmailsBestEffort(result.requestId, propertyId);
     return this.acknowledgement(result.requestId);
   }
 
@@ -1103,7 +1150,7 @@ export class BookingRequestService {
   private createdEventPayload(
     requestId: string,
     propertyId: string,
-  ): WebhookPayload {
+  ): BookingRequestCreatedWebhook {
     return {
       event: 'booking_request.created',
       entityType: 'booking_request',
@@ -1112,6 +1159,123 @@ export class BookingRequestService {
       data: { requestId, status: 'pending' },
       timestamp: new Date().toISOString(),
     };
+  }
+
+  private async queueReceiptEmail(
+    request: Pick<
+      typeof bookingRequests.$inferSelect,
+      'id' | 'propertyId' | 'guestFirstName' | 'guestEmail' | 'arrivalDate' | 'departureDate'
+    >,
+    executor: EmailQueueExecutor,
+  ): Promise<void> {
+    const content = requestReceivedEmail({
+      guestFirstName: request.guestFirstName,
+      arrivalDate: request.arrivalDate,
+      departureDate: request.departureDate,
+    });
+    await this.mailer.queue({
+      propertyId: request.propertyId,
+      bookingRequestId: request.id,
+      logicalKey: 'request:receipt',
+      kind: 'receipt',
+      recipient: request.guestEmail,
+      ...content,
+    }, executor);
+  }
+
+  private async queueAcceptedEmail(
+    request: Pick<
+      typeof bookingRequests.$inferSelect,
+      | 'id'
+      | 'propertyId'
+      | 'guestFirstName'
+      | 'guestEmail'
+      | 'arrivalDate'
+      | 'departureDate'
+      | 'acceptedTotal'
+      | 'currencyCode'
+    >,
+    executor: EmailQueueExecutor,
+  ): Promise<void> {
+    if (!request.acceptedTotal) return;
+    const content = acceptedBookingRequestEmail({
+      guestFirstName: request.guestFirstName,
+      arrivalDate: request.arrivalDate,
+      departureDate: request.departureDate,
+      acceptedTotal: request.acceptedTotal,
+      currencyCode: request.currencyCode,
+    });
+    await this.mailer.queue({
+      propertyId: request.propertyId,
+      bookingRequestId: request.id,
+      logicalKey: 'decision:accepted',
+      kind: 'accepted',
+      recipient: request.guestEmail,
+      ...content,
+    }, executor);
+  }
+
+  private async queueDeniedEmail(
+    request: Pick<
+      typeof bookingRequests.$inferSelect,
+      'id' | 'propertyId' | 'guestFirstName' | 'guestEmail' | 'arrivalDate' | 'departureDate'
+    >,
+    executor: EmailQueueExecutor,
+  ): Promise<void> {
+    const content = deniedBookingRequestEmail({
+      guestFirstName: request.guestFirstName,
+      arrivalDate: request.arrivalDate,
+      departureDate: request.departureDate,
+    });
+    await this.mailer.queue({
+      propertyId: request.propertyId,
+      bookingRequestId: request.id,
+      logicalKey: 'decision:denied',
+      kind: 'denied',
+      recipient: request.guestEmail,
+      ...content,
+    }, executor);
+  }
+
+  private async queueAcceptedEmailBestEffort(
+    request: Parameters<BookingRequestService['queueAcceptedEmail']>[0],
+    propertyId: string,
+  ): Promise<void> {
+    try {
+      await this.queueAcceptedEmail(request, this.db);
+    } catch (error: unknown) {
+      this.logEmailConsequenceFailure(request.id, propertyId, error);
+    }
+  }
+
+  private async queueDeniedEmailBestEffort(
+    request: Parameters<BookingRequestService['queueDeniedEmail']>[0],
+    propertyId: string,
+  ): Promise<void> {
+    try {
+      await this.queueDeniedEmail(request, this.db);
+    } catch (error: unknown) {
+      this.logEmailConsequenceFailure(request.id, propertyId, error);
+    }
+  }
+
+  private async deliverEmailsBestEffort(requestId: string, propertyId: string): Promise<void> {
+    try {
+      await this.mailer.deliverForRequestBestEffort(requestId, propertyId);
+    } catch (error: unknown) {
+      this.logEmailConsequenceFailure(requestId, propertyId, error);
+    }
+  }
+
+  private logEmailConsequenceFailure(
+    requestId: string,
+    _propertyId: string,
+    error: unknown,
+  ): void {
+    this.logger.error(
+      `Booking request ${requestId} was committed but its email consequence failed`,
+      error instanceof Error ? error.stack : undefined,
+    );
   }
 
   private async deliverCreatedConsequenceBestEffort(

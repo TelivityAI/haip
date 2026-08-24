@@ -17,6 +17,7 @@ import {
 } from '../../common/audit/audit-actor';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { BookingRequestPaymentService } from './booking-request-payment.service';
+import { BookingRequestMailerService } from './booking-request-mailer.service';
 import { BookingRequestService } from './booking-request.service';
 // DTOs must remain runtime imports for Nest validation metadata.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -44,6 +45,8 @@ export class BookingRequestController {
     @Inject(BookingRequestService) private readonly service: BookingRequestService,
     @Inject(BookingRequestPaymentService)
     private readonly paymentService: BookingRequestPaymentService,
+    @Inject(BookingRequestMailerService)
+    private readonly mailer: BookingRequestMailerService,
   ) {}
 
   @Get()
@@ -62,6 +65,29 @@ export class BookingRequestController {
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
   ) {
     return this.service.findById(id, propertyId);
+  }
+
+  @Get(':id/emails')
+  @RequirePermissions('reservations.read')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'List Booking Request email delivery history' })
+  listEmailDeliveries(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.mailer.listForRequest(id, propertyId);
+  }
+
+  @Post(':id/emails/:deliveryId/retry')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Retry a Booking Request email delivery' })
+  retryEmailDelivery(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('deliveryId', ParseUUIDPipe) deliveryId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.mailer.retry(deliveryId, id, propertyId);
   }
 
   @Post(':id/accept')

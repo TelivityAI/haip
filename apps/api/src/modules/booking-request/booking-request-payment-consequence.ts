@@ -1,4 +1,16 @@
-import { bookingRequestConsequences } from '@telivityhaip/database';
+import {
+  bookingRequestConsequences,
+  bookingRequestEmailDeliveries,
+  bookingRequests,
+} from '@telivityhaip/database';
+import type { BookingRequestConsequenceKind } from '@telivityhaip/database';
+import { and, eq } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import {
+  failedBookingRequestPaymentEmail,
+  paymentReceivedBookingRequestEmail,
+  refundedBookingRequestPaymentEmail,
+} from './booking-request-email.templates';
 
 export type BookingRequestFinancialEvent =
   | 'payment.received'
@@ -14,6 +26,7 @@ const kindPrefix: Record<BookingRequestFinancialEvent, string> = {
   'payment.external_returned': 'external_returned',
   'payment.retained': 'payment_retained',
 };
+type FinancialConsequenceExecutor = Pick<PostgresJsDatabase, 'insert' | 'select'>;
 
 /**
  * Atomically persists a replayable financial webhook consequence.
@@ -21,7 +34,7 @@ const kindPrefix: Record<BookingRequestFinancialEvent, string> = {
  * or Stripe delivery replay repairs a missing outbox row without duplicating it.
  */
 export async function ensureBookingRequestFinancialConsequence(
-  tx: any,
+  tx: FinancialConsequenceExecutor,
   input: {
     event: BookingRequestFinancialEvent;
     logicalId: string;
@@ -33,7 +46,10 @@ export async function ensureBookingRequestFinancialConsequence(
   },
 ): Promise<void> {
   const compactLogicalId = input.logicalId.replaceAll('-', '');
-  const kind = `${kindPrefix[input.event]}:${compactLogicalId}`.slice(0, 50);
+  const kind = `${kindPrefix[input.event]}:${compactLogicalId}`.slice(
+    0,
+    50,
+  ) as BookingRequestConsequenceKind;
   const payload = {
     event: input.event,
     entityType: input.entityType,
@@ -53,4 +69,84 @@ export async function ensureBookingRequestFinancialConsequence(
       attempts: 0,
     })
     .onConflictDoNothing();
+  await ensureFinancialEmail(tx, input);
+}
+
+async function ensureFinancialEmail(
+  tx: FinancialConsequenceExecutor,
+  input: Parameters<typeof ensureBookingRequestFinancialConsequence>[1],
+): Promise<void> {
+  if (input.event === 'payment.retained') return;
+  const amount = firstString(
+    input.data['amount'],
+    input.data['refundAmount'],
+    input.data['returnAmount'],
+  );
+  const currencyCode = firstString(input.data['currencyCode']);
+  if (!amount || !currencyCode) return;
+
+  const requests = await tx
+    .select()
+    .from(bookingRequests)
+    .where(and(
+      eq(bookingRequests.id, input.bookingRequestId),
+      eq(bookingRequests.propertyId, input.propertyId),
+    ));
+  const request = requests.find((row: typeof bookingRequests.$inferSelect) =>
+    row.id === input.bookingRequestId && row.propertyId === input.propertyId);
+  if (!request) return;
+
+  let kind: typeof bookingRequestEmailDeliveries.$inferInsert.kind;
+  let logicalPrefix: string;
+  let content: { subject: string; bodyText: string };
+  if (input.event === 'payment.received') {
+    kind = 'payment';
+    logicalPrefix = 'payment';
+    content = paymentReceivedBookingRequestEmail({
+      guestFirstName: request.guestFirstName,
+      amount,
+      currencyCode,
+      source: input.data['source'] === 'external' ? 'external' : 'saved_card',
+    });
+  } else if (
+    input.event === 'payment.refunded'
+    || input.event === 'payment.external_returned'
+  ) {
+    kind = 'refund';
+    logicalPrefix = 'refund';
+    content = refundedBookingRequestPaymentEmail({
+      guestFirstName: request.guestFirstName,
+      amount,
+      currencyCode,
+      source: input.event === 'payment.external_returned' ? 'external_return' : 'refund',
+    });
+  } else {
+    kind = 'failure';
+    logicalPrefix = 'failure';
+    content = failedBookingRequestPaymentEmail({
+      guestFirstName: request.guestFirstName,
+      amount,
+      currencyCode,
+      operation: input.data['type'] === 'refund' ? 'refund' : 'charge',
+    });
+  }
+
+  await tx
+    .insert(bookingRequestEmailDeliveries)
+    .values({
+      propertyId: input.propertyId,
+      bookingRequestId: input.bookingRequestId,
+      logicalKey: `${logicalPrefix}:${input.logicalId}`,
+      kind,
+      status: 'pending',
+      recipient: request.guestEmail,
+      subject: content.subject,
+      bodyText: content.bodyText,
+      attempts: 0,
+    })
+    .onConflictDoNothing();
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === 'string' && value.length > 0);
 }

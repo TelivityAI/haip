@@ -5,6 +5,7 @@ import { validate } from 'class-validator';
 import {
   auditLogs,
   bookingRequestConsequences,
+  bookingRequestEmailDeliveries,
   bookingRequestInstallments,
   bookingRequestPaymentAllocations,
   bookingRequestPaymentResolutions,
@@ -40,6 +41,7 @@ type State = {
   resolutions: Array<Record<string, any>>;
   audits: Array<Record<string, any>>;
   consequences: Array<Record<string, any>>;
+  emails: Array<Record<string, any>>;
 };
 
 function request(overrides: Record<string, unknown> = {}) {
@@ -55,6 +57,8 @@ function request(overrides: Record<string, unknown> = {}) {
     stripePaymentMethodId: 'pm_saved',
     cardLastFour: '4242',
     cardBrand: 'visa',
+    guestFirstName: 'Ada',
+    guestEmail: 'ada@example.com',
     ...overrides,
   };
 }
@@ -109,6 +113,7 @@ function tableRows(state: State, table: unknown): Array<Record<string, any>> {
   if (table === bookingRequestPaymentResolutions) return state.resolutions;
   if (table === auditLogs) return state.audits;
   if (table === bookingRequestConsequences) return state.consequences;
+  if (table === bookingRequestEmailDeliveries) return state.emails;
   throw new Error('Unexpected table in payment test');
 }
 
@@ -171,6 +176,16 @@ function makeDatabase(state: State) {
           if (duplicate) {
             if (ignoreConflict) return [];
             throw new Error('duplicate booking request consequence');
+          }
+        }
+        if (table === bookingRequestEmailDeliveries) {
+          const duplicate = rows.some((row) =>
+            row.propertyId === input['propertyId']
+            && row.bookingRequestId === input['bookingRequestId']
+            && row.logicalKey === input['logicalKey']);
+          if (duplicate) {
+            if (ignoreConflict) return [];
+            throw new Error('duplicate booking request email');
           }
         }
         sequence += 1;
@@ -256,6 +271,7 @@ function makeHarness(overrides: Partial<State> = {}) {
     resolutions: [],
     audits: [],
     consequences: [],
+    emails: [],
     ...structuredClone(overrides),
   };
   const database = makeDatabase(state);
@@ -279,11 +295,15 @@ function makeHarness(overrides: Partial<State> = {}) {
   const folioService = {
     recalculateBalance: vi.fn(),
   };
+  const mailer = {
+    deliverForRequestBestEffort: vi.fn().mockResolvedValue(undefined),
+  };
   const service = new (BookingRequestPaymentService as any)(
     database.db,
     gateway,
     folioService,
     refundGateway,
+    mailer,
   ) as BookingRequestPaymentService;
   return {
     service,
@@ -292,6 +312,7 @@ function makeHarness(overrides: Partial<State> = {}) {
     gateway,
     folioService,
     refundGateway,
+    mailer,
     gatewayTransactionStates,
   };
 }
@@ -636,6 +657,21 @@ describe('BookingRequestPaymentService saved-card charges', () => {
     expect(harness.state.consequences).toEqual([
       expect.objectContaining({ kind: expect.stringMatching(/^payment_received:/) }),
     ]);
+    expect(harness.state.emails).toEqual([
+      expect.objectContaining({
+        logicalKey: expect.stringMatching(/^payment:/),
+        kind: 'payment',
+        status: 'pending',
+        recipient: 'ada@example.com',
+      }),
+    ]);
+    expect(JSON.stringify(harness.state.emails)).not.toMatch(
+      /cus_saved|pm_saved|pi_saved|booking-request-charge|https?:\/\//i,
+    );
+    expect(harness.mailer.deliverForRequestBestEffort).toHaveBeenCalledWith(
+      REQUEST_ID,
+      PROPERTY_ID,
+    );
   });
 
   it('returns a webhook-recovered capture on later API replay without another provider call', async () => {
@@ -899,6 +935,9 @@ describe('BookingRequestPaymentService saved-card charges', () => {
       expect(harness.state.consequences).toEqual([
         expect.objectContaining({ kind: expect.stringMatching(/^payment_failed:/) }),
       ]);
+      expect(harness.state.emails).toEqual([
+        expect.objectContaining({ kind: 'failure', logicalKey: expect.stringMatching(/^failure:/) }),
+      ]);
     }
   });
 
@@ -1049,6 +1088,9 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     expect(harness.state.consequences).toEqual([
       expect.objectContaining({ kind: expect.stringMatching(/^payment_received:/) }),
     ]);
+    expect(harness.state.emails).toHaveLength(1);
+    expect(harness.state.emails[0]).toMatchObject({ kind: 'payment' });
+    expect(JSON.stringify(harness.state.emails[0])).not.toContain('wire-abc');
 
     await expect(harness.service.recordExternalPayment(
       REQUEST_ID,
@@ -1208,6 +1250,9 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     });
     expect(harness.state.consequences).toEqual([
       expect.objectContaining({ kind: expect.stringMatching(/^payment_refunded:/) }),
+    ]);
+    expect(harness.state.emails).toEqual([
+      expect.objectContaining({ kind: 'refund', logicalKey: expect.stringMatching(/^refund:/) }),
     ]);
   });
 
@@ -1710,6 +1755,10 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     expect(harness.state.consequences).toEqual([
       expect.objectContaining({ kind: expect.stringMatching(/^external_returned:/) }),
     ]);
+    expect(harness.state.emails).toEqual([
+      expect.objectContaining({ kind: 'refund', logicalKey: expect.stringMatching(/^refund:/) }),
+    ]);
+    expect(JSON.stringify(harness.state.emails[0])).not.toContain('return-1');
   });
 
   it('fingerprints the complete external-return record for exact replay', async () => {
@@ -1888,6 +1937,7 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       reason: 'Non-refundable supplier cost',
       resolvedBy: actor.userId,
     });
+    expect(harness.state.emails).toHaveLength(0);
   });
 
   it('allows retention only while the request decision is pending', async () => {

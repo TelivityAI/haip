@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { BookingRequestService } from './booking-request.service';
+import { BookingRequestMailerService } from './booking-request-mailer.service';
 
 const SCAN_INTERVAL_MS = 30_000;
 
@@ -21,6 +22,8 @@ implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(BookingRequestService)
     private readonly bookingRequests: BookingRequestService,
+    @Inject(BookingRequestMailerService)
+    private readonly mailer: BookingRequestMailerService,
   ) {}
 
   onModuleInit(): void {
@@ -42,6 +45,14 @@ implements OnModuleInit, OnModuleDestroy {
     } catch (error: unknown) {
       this.logger.error(
         'Booking request consequence recovery scan failed',
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+    try {
+      await this.mailer.processPendingDeliveries();
+    } catch (error: unknown) {
+      this.logger.error(
+        'Booking request email recovery scan failed',
         error instanceof Error ? error.stack : undefined,
       );
     } finally {

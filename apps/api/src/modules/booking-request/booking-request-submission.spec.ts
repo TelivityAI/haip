@@ -93,6 +93,7 @@ const submitDto = {
 } as SubmitBookingRequestDto;
 
 function makeHarness() {
+  let transactionActive = false;
   let insertedValues: Record<string, unknown> | undefined;
   const storedRequests: Array<{
     id: string;
@@ -240,9 +241,11 @@ function makeHarness() {
       release = resolve;
     });
     await previous;
+    transactionActive = true;
     try {
       return await callback(db);
     } finally {
+      transactionActive = false;
       release();
     }
   });
@@ -279,6 +282,15 @@ function makeHarness() {
     emit: vi.fn().mockResolvedValue(undefined),
     dispatchPersisted: vi.fn().mockResolvedValue(undefined),
   };
+  const mailer = {
+    queue: vi.fn(async () => {
+      expect(transactionActive).toBe(true);
+      return 'email-delivery-1';
+    }),
+    deliverForRequestBestEffort: vi.fn(async () => {
+      expect(transactionActive).toBe(false);
+    }),
+  };
   const service = new BookingRequestService(
     db as unknown as ConstructorParameters<typeof BookingRequestService>[0],
     config as unknown as ConstructorParameters<typeof BookingRequestService>[1],
@@ -287,6 +299,11 @@ function makeHarness() {
     ratePlan as unknown as ConstructorParameters<typeof BookingRequestService>[4],
     savedPaymentMethod as unknown as ConstructorParameters<typeof BookingRequestService>[5],
     webhook as unknown as ConstructorParameters<typeof BookingRequestService>[6],
+    undefined as unknown as ConstructorParameters<typeof BookingRequestService>[7],
+    undefined as unknown as ConstructorParameters<typeof BookingRequestService>[8],
+    undefined as unknown as ConstructorParameters<typeof BookingRequestService>[9],
+    undefined as unknown as ConstructorParameters<typeof BookingRequestService>[10],
+    mailer as unknown as ConstructorParameters<typeof BookingRequestService>[11],
   );
 
   return {
@@ -298,6 +315,7 @@ function makeHarness() {
     bookingEngine,
     savedPaymentMethod,
     webhook,
+    mailer,
     values,
     consequenceValues,
     auditValues,
@@ -740,6 +758,33 @@ describe('BookingRequestService.submit', () => {
     expect(JSON.stringify(harness.webhook.dispatchPersisted.mock.calls)).not.toContain('Leisure');
     expect(JSON.stringify(harness.webhook.dispatchPersisted.mock.calls)).not.toContain('consent');
     expect(JSON.stringify(harness.webhook.dispatchPersisted.mock.calls)).not.toContain('seti_');
+    expect(harness.mailer.queue).toHaveBeenCalledWith(expect.objectContaining({
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      logicalKey: 'request:receipt',
+      kind: 'receipt',
+      recipient: 'ada@example.com',
+    }), harness.db);
+    expect(JSON.stringify(harness.mailer.queue.mock.calls)).not.toMatch(
+      /Leisure|consent|seti_|pm_|cus_|widget-attempt|https?:\/\//i,
+    );
+    expect(harness.mailer.deliverForRequestBestEffort).toHaveBeenCalledWith(
+      REQUEST_ID,
+      PROPERTY_ID,
+    );
+  });
+
+  it('does not roll back a submitted request when post-commit email delivery fails', async () => {
+    harness.mailer.deliverForRequestBestEffort.mockRejectedValueOnce(
+      new Error('transport unavailable'),
+    );
+
+    await expect(harness.service.submit(PROPERTY_ID, submitDto)).resolves.toMatchObject({
+      requestId: REQUEST_ID,
+      status: 'pending',
+    });
+    expect(harness.storedRequests).toHaveLength(1);
+    expect(harness.storedConsequences).toHaveLength(1);
   });
 
   it('returns the existing acknowledgement for an exact replay without repeating work', async () => {

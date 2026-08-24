@@ -3,6 +3,7 @@ import { getTableConfig } from 'drizzle-orm/pg-core';
 import {
   bookingEngineConfig,
   bookingRequestConsequences,
+  bookingRequestEmailDeliveries,
   bookingRequests,
   bookingRequestInstallments,
   bookingRequestPaymentAllocations,
@@ -38,6 +39,8 @@ describe('booking request schema', () => {
     expect(bookingRequestPaymentResolutions.movementId).toBeDefined();
     expect(bookingRequestPaymentResolutions.attempts).toBeDefined();
     expect(bookingRequestPaymentResolutions.lastError).toBeDefined();
+    expect(bookingRequestEmailDeliveries.logicalKey).toBeDefined();
+    expect(bookingRequestEmailDeliveries.claimedAt).toBeDefined();
     expect(bookingEngineConfig.bookingMode).toBeDefined();
     expect(bookingEngineConfig.paymentMethodCollection).toBeDefined();
     expect(payments.bookingRequestId).toBeDefined();
@@ -93,6 +96,13 @@ describe('booking request schema', () => {
     );
     expect(getTableConfig(bookingRequestInstallments).foreignKeys.map((key) => key.getName()))
       .toContain('booking_request_installments_request_fkey');
+    const emailConfig = getTableConfig(bookingRequestEmailDeliveries);
+    expect(emailConfig.indexes.map((index) => index.config.name)).toContain(
+      'booking_request_email_deliveries_logical_key_unique',
+    );
+    expect(emailConfig.foreignKeys.map((key) => key.getName())).toContain(
+      'booking_request_email_deliveries_request_fkey',
+    );
     expect(getTableConfig(payments).checks.map((check) => check.name)).toEqual(
       expect.arrayContaining([
         'payments_booking_request_parent_positive_check',

@@ -382,7 +382,8 @@ export class StripeWebhookController {
           data: {
             folioId,
             status: current.status,
-            stripePaymentIntentId: pi.id,
+            amount: current.amount,
+            currencyCode: current.currencyCode,
           },
         });
       }
@@ -615,7 +616,13 @@ export class StripeWebhookController {
           bookingRequestId: claim.bookingRequestId,
           entityType: 'booking_request_payment_resolution',
           entityId: claim.id,
-          data: { paymentId: parent.id, type: 'refund', providerStatus, stripeRefundId: refund.id },
+          data: {
+            paymentId: parent.id,
+            type: 'refund',
+            amount: claim.amount,
+            currencyCode: parent.currencyCode,
+            providerStatus,
+          },
         });
         return { blocked: false };
       }
@@ -708,7 +715,7 @@ export class StripeWebhookController {
           folioId: request.acceptedFolioId,
           originalPaymentId: parent.id,
           refundAmount: amount.toFixed(2),
-          stripeRefundId: refund.id,
+          currencyCode: parent.currencyCode,
           resolutionId: claim.id,
         },
       });

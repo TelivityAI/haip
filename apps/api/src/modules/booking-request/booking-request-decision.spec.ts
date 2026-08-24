@@ -389,6 +389,17 @@ function makeHarness(requests: RequestRow[] = [pendingRequest()]) {
     })),
     ensurePackageComponents: vi.fn(async () => []),
   };
+  const emailQueueTransactionStates: boolean[] = [];
+  const emailDeliveryTransactionStates: boolean[] = [];
+  const mailer = {
+    queue: vi.fn(async () => {
+      emailQueueTransactionStates.push(database.isTransactionActive());
+      return 'email-delivery-1';
+    }),
+    deliverForRequestBestEffort: vi.fn(async () => {
+      emailDeliveryTransactionStates.push(database.isTransactionActive());
+    }),
+  };
 
   const service = new (BookingRequestService as any)(
     database.db,
@@ -402,6 +413,7 @@ function makeHarness(requests: RequestRow[] = [pendingRequest()]) {
     reservation,
     folio,
     ancillary,
+    mailer,
   ) as BookingRequestService & Record<string, (...args: any[]) => Promise<any>>;
 
   return {
@@ -415,6 +427,9 @@ function makeHarness(requests: RequestRow[] = [pendingRequest()]) {
     reservation,
     folio,
     ancillary,
+    mailer,
+    emailQueueTransactionStates,
+    emailDeliveryTransactionStates,
     setAvailability(value: boolean) {
       hasAvailability = value;
     },
@@ -799,6 +814,13 @@ describe('BookingRequestService acceptance', () => {
     });
     expect(harness.reservationCreates).toBe(1);
     expect(harness.state.reservations).toHaveLength(1);
+    expect(harness.mailer.queue).toHaveBeenCalledWith(expect.objectContaining({
+      logicalKey: 'decision:accepted',
+      kind: 'accepted',
+      recipient: 'ada@example.com',
+    }), expect.anything());
+    expect(harness.emailQueueTransactionStates).toEqual([true]);
+    expect(harness.emailDeliveryTransactionStates.every((active) => !active)).toBe(true);
   });
 
   it('keeps one of two different requests pending when they compete for the last room', async () => {
@@ -1132,6 +1154,28 @@ describe('BookingRequestService denial', () => {
     }));
     expect(harness.dispatchTransactionStates.length).toBeGreaterThan(0);
     expect(harness.dispatchTransactionStates.every((active) => !active)).toBe(true);
+    expect(harness.mailer.queue).toHaveBeenCalledWith(expect.objectContaining({
+      logicalKey: 'decision:denied',
+      kind: 'denied',
+      recipient: 'ada@example.com',
+    }), expect.anything());
+    expect(harness.emailQueueTransactionStates).toEqual([true]);
+    expect(harness.emailDeliveryTransactionStates).toEqual([false]);
+  });
+
+  it('keeps a denied decision committed when post-commit email delivery fails', async () => {
+    const harness = makeHarness();
+    harness.mailer.deliverForRequestBestEffort.mockRejectedValueOnce(
+      new Error('transport unavailable'),
+    );
+
+    await expect(call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Unable to accommodate' },
+      actor,
+    ])).resolves.toMatchObject({ status: 'denied' });
+    expect(harness.state.requests[0]?.status).toBe('denied');
   });
 
   it('replays a denied decision and retries its pending consequence idempotently', async () => {

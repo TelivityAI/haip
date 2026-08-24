@@ -33,6 +33,7 @@ import {
 import { remainingCapturedAmount } from '../payment/payment-ledger';
 import { reconcileBookingRequestPaymentAllocations } from './booking-request-allocation-reconciler';
 import { ensureBookingRequestFinancialConsequence } from './booking-request-payment-consequence';
+import { BookingRequestMailerService } from './booking-request-mailer.service';
 import { assertAllocationAmount, resolveInstallmentAmount } from './booking-request-money';
 import type {
   AllocateBookingRequestPaymentDto,
@@ -70,6 +71,8 @@ export class BookingRequestPaymentService {
     private readonly savedPaymentMethodGateway: SavedPaymentMethodGateway,
     @Inject(FolioService) private readonly folioService: FolioService,
     @Inject(PAYMENT_GATEWAY) private readonly paymentGateway: PaymentGateway,
+    @Inject(BookingRequestMailerService)
+    private readonly mailer: BookingRequestMailerService,
   ) {}
 
   async listInstallments(bookingRequestId: string, propertyId: string) {
@@ -514,6 +517,7 @@ export class BookingRequestPaymentService {
     });
 
     if (!prepared.isNew && prepared.payment.status !== 'pending') {
+      await this.deliverEmailsBestEffort(bookingRequestId, propertyId);
       return this.paymentResponse(prepared.payment);
     }
 
@@ -674,6 +678,7 @@ export class BookingRequestPaymentService {
       }
       return updated;
     });
+    await this.deliverEmailsBestEffort(bookingRequestId, propertyId);
     return this.paymentResponse(finalized);
   }
 
@@ -750,7 +755,7 @@ export class BookingRequestPaymentService {
             status: existing.status,
             amount: existing.amount,
             currencyCode: existing.currencyCode,
-            externalReference: reference,
+            source: 'external',
           },
         });
         return { payment: existing, isNew: false };
@@ -786,7 +791,7 @@ export class BookingRequestPaymentService {
           status: created.status,
           amount: created.amount,
           currencyCode: created.currencyCode,
-          externalReference: reference,
+          source: 'external',
         },
       });
       if (created.folioId) {
@@ -794,6 +799,7 @@ export class BookingRequestPaymentService {
       }
       return { payment: created, isNew: true };
     });
+    await this.deliverEmailsBestEffort(bookingRequestId, propertyId);
     return this.paymentResponse(result.payment);
   }
 
@@ -863,6 +869,7 @@ export class BookingRequestPaymentService {
               folioId: movement.folioId,
               originalPaymentId: original.id,
               refundAmount: amount.toFixed(2),
+              currencyCode: original.currencyCode,
               resolutionId: replay.id,
             },
           });
@@ -909,6 +916,7 @@ export class BookingRequestPaymentService {
       return { request, original, amount, claim, terminal: false as const };
     });
     if (prepared.terminal) {
+      await this.deliverEmailsBestEffort(bookingRequestId, propertyId);
       return {
         movement: this.paymentResponse(prepared.movement),
         resolution: this.resolutionResponse(prepared.claim),
@@ -977,6 +985,7 @@ export class BookingRequestPaymentService {
         providerStatus,
         actor,
       });
+      await this.deliverEmailsBestEffort(bookingRequestId, propertyId);
       throw new ConflictException(`Refund failed: ${gatewayResult.errorMessage ?? 'Gateway declined'}`);
     }
 
@@ -989,6 +998,7 @@ export class BookingRequestPaymentService {
       gatewayResult,
       actor,
     });
+    await this.deliverEmailsBestEffort(bookingRequestId, propertyId);
     return {
       ...finalized,
       resolution: this.resolutionResponse(finalized.resolution),
@@ -1068,7 +1078,8 @@ export class BookingRequestPaymentService {
             originalPaymentId: original.id,
             returnAmount: amount.toFixed(2),
             resolutionId: resolution.id,
-            externalReference: reference,
+            currencyCode: original.currencyCode,
+            source: 'external_return',
           },
         });
         return { movement: existing, resolution, isNew: false };
@@ -1138,7 +1149,8 @@ export class BookingRequestPaymentService {
           originalPaymentId: original.id,
           returnAmount: amount.toFixed(2),
           resolutionId: resolution.id,
-          externalReference: reference,
+          currencyCode: original.currencyCode,
+          source: 'external_return',
         },
       });
       await this.reconcileAllocationsForPayment(
@@ -1153,6 +1165,7 @@ export class BookingRequestPaymentService {
       }
       return { movement, resolution, isNew: true };
     });
+    await this.deliverEmailsBestEffort(bookingRequestId, propertyId);
     return {
       movement: this.paymentResponse(result.movement),
       resolution: this.resolutionResponse(result.resolution),
@@ -1372,7 +1385,7 @@ export class BookingRequestPaymentService {
         true,
       );
       this.assertNotDenied(request);
-      await this.findParentPayment(
+      const parent = await this.findParentPayment(
         tx,
         input.bookingRequestId,
         input.paymentId,
@@ -1426,6 +1439,8 @@ export class BookingRequestPaymentService {
         data: {
           paymentId: input.paymentId,
           type: 'refund',
+          amount: claim.amount,
+          currencyCode: parent.currencyCode,
           providerStatus: input.providerStatus ?? 'failed',
         },
       });
@@ -1487,8 +1502,8 @@ export class BookingRequestPaymentService {
             folioId: movement.folioId,
             originalPaymentId: original.id,
             refundAmount: claim.amount,
+            currencyCode: original.currencyCode,
             resolutionId: claim.id,
-            providerRefundId: claim.providerTransactionId,
           },
         });
         return { movement: this.paymentResponse(movement), resolution: claim };
@@ -1586,8 +1601,8 @@ export class BookingRequestPaymentService {
           folioId: movement.folioId,
           originalPaymentId: original.id,
           refundAmount: claim.amount,
+          currencyCode: original.currencyCode,
           resolutionId: claim.id,
-          providerRefundId: input.gatewayResult.transactionId,
         },
       });
       await this.reconcileAllocationsForPayment(
@@ -1602,6 +1617,18 @@ export class BookingRequestPaymentService {
       }
       return { movement: this.paymentResponse(movement), resolution };
     });
+  }
+
+  private async deliverEmailsBestEffort(
+    bookingRequestId: string,
+    propertyId: string,
+  ): Promise<void> {
+    try {
+      await this.mailer.deliverForRequestBestEffort(bookingRequestId, propertyId);
+    } catch {
+      // Delivery is a post-commit consequence. Its durable row is recovered by
+      // the scheduled mail worker and must never fail the completed money move.
+    }
   }
 
   private normalizeInstallment(

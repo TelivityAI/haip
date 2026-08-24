@@ -32,6 +32,11 @@ export const WEBHOOK_EVENTS = {
   'payment.refunded': 'payment.refunded',
   'payment.failed': 'payment.failed',
 
+  // Booking Request events
+  'booking_request.created': 'booking_request.created',
+  'booking_request.accepted': 'booking_request.accepted',
+  'booking_request.denied': 'booking_request.denied',
+
   // Fiscal document / invoice events (regional tax integrations).
   // Core stores only a document reference on the folio; issuance is performed
   // by external integrations subscribed to invoice.requested.
@@ -150,6 +155,44 @@ export const WEBHOOK_EVENTS = {
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;
+
+export type BookingRequestCreatedWebhook = {
+  event: 'booking_request.created';
+  entityType: 'booking_request';
+  entityId: string;
+  propertyId: string;
+  data: { requestId: string; status: 'pending' };
+  timestamp: string;
+};
+
+export type BookingRequestAcceptedWebhook = {
+  event: 'booking_request.accepted';
+  entityType: 'booking_request';
+  entityId: string;
+  propertyId: string;
+  data: {
+    requestId: string;
+    reservationId: string;
+    folioId: string;
+    priceSource: 'submitted' | 'current' | 'custom';
+    acceptedTotal: string;
+  };
+  timestamp: string;
+};
+
+export type BookingRequestDeniedWebhook = {
+  event: 'booking_request.denied';
+  entityType: 'booking_request';
+  entityId: string;
+  propertyId: string;
+  data: { requestId: string; status: 'denied' };
+  timestamp: string;
+};
+
+export type BookingRequestWebhook =
+  | BookingRequestCreatedWebhook
+  | BookingRequestAcceptedWebhook
+  | BookingRequestDeniedWebhook;
 
 /**
  * Brazilian FNRH (Ficha Nacional de Cadastro de Hóspedes) — Ministry of Tourism / Embratur Standards
@@ -276,4 +319,3 @@ export const isFnrhComplete = checkFnrhComplete;
 /** Tier-1 source PMS identifiers for automated migration connectors. */
 export const MIGRATION_SOURCE_PMS = ['mews', 'cloudbeds', 'apaleo', 'ohip'] as const;
 export type MigrationSourcePms = (typeof MIGRATION_SOURCE_PMS)[number];
-

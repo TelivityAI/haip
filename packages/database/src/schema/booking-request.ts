@@ -331,6 +331,7 @@ export const bookingRequestEmailDeliveries = pgTable('booking_request_email_deli
   id: uuid('id').primaryKey().defaultRandom(),
   propertyId: uuid('property_id').notNull().references(() => properties.id),
   bookingRequestId: uuid('booking_request_id').notNull().references(() => bookingRequests.id),
+  logicalKey: varchar('logical_key', { length: 200 }).notNull(),
   kind: bookingRequestEmailDeliveryKindEnum('kind').notNull(),
   status: bookingRequestEmailDeliveryStatusEnum('status').notNull().default('pending'),
   recipient: varchar('recipient', { length: 255 }).notNull(),
@@ -338,8 +339,17 @@ export const bookingRequestEmailDeliveries = pgTable('booking_request_email_deli
   bodyText: text('body_text').notNull(),
   errorMessage: text('error_message'),
   attempts: integer('attempts').notNull().default(0),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }),
   lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
   sentAt: timestamp('sent_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  logicalKeyUnique: uniqueIndex('booking_request_email_deliveries_logical_key_unique')
+    .on(table.propertyId, table.bookingRequestId, table.logicalKey),
+  requestOwnership: foreignKey({
+    name: 'booking_request_email_deliveries_request_fkey',
+    columns: [table.propertyId, table.bookingRequestId],
+    foreignColumns: [bookingRequests.propertyId, bookingRequests.id],
+  }),
+}));

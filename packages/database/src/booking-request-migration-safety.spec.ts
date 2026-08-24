@@ -14,6 +14,10 @@ const financialRecoveryMigration = readFileSync(
   new URL('./migrations/0024_booking_request_financial_recovery.sql', import.meta.url),
   'utf8',
 );
+const emailRecoveryMigration = readFileSync(
+  new URL('./migrations/0025_booking_request_email_recovery.sql', import.meta.url),
+  'utf8',
+);
 
 describe('booking request accepted-pricing migration safety', () => {
   it('fails instead of accepting an already-accepted request without an operational snapshot', () => {
@@ -101,5 +105,25 @@ describe('booking request payment integrity migration safety', () => {
       expect(source).toMatch(/allocated_amount\s+IS\s+DISTINCT\s+FROM/i);
       expect(source).toMatch(/status\s+IS\s+DISTINCT\s+FROM/i);
     }
+  });
+});
+
+describe('booking request email recovery migration safety', () => {
+  it('adds stable logical identity, claim recovery, and aggregate ownership in both paths', () => {
+    for (const source of [emailRecoveryMigration, pushSchema]) {
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS logical_key');
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS claimed_at');
+      expect(source).toContain('booking_request_email_deliveries_logical_key_unique');
+      expect(source).toContain('booking_request_email_deliveries_request_fkey');
+    }
+  });
+
+  it('backfills existing rows before making logical identity required', () => {
+    const addColumn = emailRecoveryMigration.indexOf('ADD COLUMN IF NOT EXISTS logical_key');
+    const backfill = emailRecoveryMigration.indexOf('task8-legacy:');
+    const notNull = emailRecoveryMigration.indexOf('ALTER COLUMN logical_key SET NOT NULL');
+    expect(addColumn).toBeGreaterThanOrEqual(0);
+    expect(backfill).toBeGreaterThan(addColumn);
+    expect(notNull).toBeGreaterThan(backfill);
   });
 });
