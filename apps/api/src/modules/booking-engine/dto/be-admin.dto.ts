@@ -11,6 +11,7 @@ import {
   MaxLength,
   Min,
   ValidateNested,
+  ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -38,6 +39,42 @@ export class CreateBookingKeyDto {
   @IsString()
   @MaxLength(200)
   label!: string;
+}
+
+export class BookingFormQuestionDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  id!: string;
+
+  @ApiProperty({ maxLength: 200 })
+  @IsString()
+  @MaxLength(200)
+  label!: string;
+
+  @ApiProperty({ enum: ['short_text', 'long_text', 'single_select', 'multi_select', 'yes_no', 'date'] })
+  @IsIn(['short_text', 'long_text', 'single_select', 'multi_select', 'yes_no', 'date'])
+  type!: 'short_text' | 'long_text' | 'single_select' | 'multi_select' | 'yes_no' | 'date';
+
+  @ApiPropertyOptional({ type: [String], maxItems: 50 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  options?: string[];
+
+  @ApiProperty({ minimum: 0 })
+  @IsInt()
+  @Min(0)
+  order!: number;
+
+  @ApiProperty()
+  @IsBoolean()
+  isActive!: boolean;
+
+  @ApiProperty()
+  @IsBoolean()
+  isRequired!: boolean;
 }
 
 /** Admin: update per-property booking engine config. */
@@ -90,6 +127,24 @@ export class UpdateBookingEngineConfigDto {
   @IsOptional()
   @IsBoolean()
   autoConfirm?: boolean;
+
+  @ApiPropertyOptional({ enum: ['instant', 'request'] })
+  @IsOptional()
+  @IsIn(['instant', 'request'])
+  bookingMode?: 'instant' | 'request';
+
+  @ApiPropertyOptional({ enum: ['required', 'optional', 'disabled'] })
+  @IsOptional()
+  @IsIn(['required', 'optional', 'disabled'])
+  paymentMethodCollection?: 'required' | 'optional' | 'disabled';
+
+  @ApiPropertyOptional({ type: [BookingFormQuestionDto], maxItems: 50 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => BookingFormQuestionDto)
+  formQuestions?: BookingFormQuestionDto[];
 
   @ApiPropertyOptional({ description: 'Stripe PUBLISHABLE key (safe to expose)' })
   @IsOptional()

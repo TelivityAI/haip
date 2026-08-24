@@ -1,10 +1,16 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, NotFoundException } from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { bookingEngineConfig, bookingEngineCredentials } from '@telivityhaip/database';
-import type { DepositPolicy } from '@telivityhaip/database';
+import type {
+  BookingFormQuestion,
+  BookingMode,
+  DepositPolicy,
+  PaymentMethodCollection,
+} from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { hashBookingKey } from '../auth/booking-key.guard';
+import { validateQuestionDefinitions } from './booking-form-questions';
 
 // Crockford base32 (no I/L/O/U) — unambiguous when copied by a human.
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -30,6 +36,9 @@ export interface UpdateConfigInput {
   depositPolicy?: DepositPolicy;
   autoConfirm?: boolean;
   stripePublishableKey?: string | null;
+  bookingMode?: BookingMode;
+  paymentMethodCollection?: PaymentMethodCollection;
+  formQuestions?: BookingFormQuestion[];
 }
 
 @Injectable()
@@ -57,6 +66,11 @@ export class BookingEngineConfigService {
    */
   async getPublicConfig(propertyId: string) {
     const cfg = await this.getConfig(propertyId);
+    const formQuestions = validateQuestionDefinitions(
+      (cfg.formQuestions ?? []) as BookingFormQuestion[],
+    )
+      .filter((question) => question.isActive)
+      .sort((a, b) => a.order - b.order);
     return {
       propertyId: cfg.propertyId,
       isEnabled: cfg.isEnabled,
@@ -68,14 +82,41 @@ export class BookingEngineConfigService {
       stripePublishableKey: cfg.stripePublishableKey,
       sellableRoomTypeIds: cfg.sellableRoomTypeIds as string[],
       sellableRatePlanIds: cfg.sellableRatePlanIds as string[],
+      bookingMode: cfg.bookingMode as BookingMode,
+      paymentMethodCollection: cfg.paymentMethodCollection as PaymentMethodCollection,
+      formQuestions,
     };
   }
 
   async updateConfig(propertyId: string, input: UpdateConfigInput) {
-    await this.getConfig(propertyId); // ensure row exists
+    const current = await this.getConfig(propertyId); // ensure row exists
+    const bookingMode = input.bookingMode ?? current.bookingMode as BookingMode;
+    const paymentMethodCollection = input.paymentMethodCollection
+      ?? current.paymentMethodCollection as PaymentMethodCollection;
+    const stripePublishableKey = input.stripePublishableKey === undefined
+      ? current.stripePublishableKey
+      : input.stripePublishableKey;
+    const formQuestions = input.formQuestions === undefined
+      ? current.formQuestions as BookingFormQuestion[]
+      : validateQuestionDefinitions(input.formQuestions);
+
+    if (bookingMode === 'request'
+      && paymentMethodCollection === 'required'
+      && (!stripePublishableKey || stripePublishableKey.trim().length === 0)) {
+      throw new BadRequestException(
+        'A Stripe publishable key is required when request-mode card collection is required',
+      );
+    }
+
     const [updated] = await this.db
       .update(bookingEngineConfig)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        ...input,
+        bookingMode,
+        paymentMethodCollection,
+        formQuestions,
+        updatedAt: new Date(),
+      })
       .where(eq(bookingEngineConfig.propertyId, propertyId))
       .returning();
     return updated;

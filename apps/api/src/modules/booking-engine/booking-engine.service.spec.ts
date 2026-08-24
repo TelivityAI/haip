@@ -15,6 +15,9 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
       sellableRoomTypeIds: [RT],
       sellableRatePlanIds: [RP],
       depositPolicy: { type: 'first_night', refundable: true },
+      bookingMode: 'instant',
+      paymentMethodCollection: 'disabled',
+      formQuestions: [],
     }),
     getConfig: vi.fn().mockResolvedValue({ autoConfirm: false }),
   };
