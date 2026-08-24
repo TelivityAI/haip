@@ -6,6 +6,7 @@ import {
   bookingRequests,
   bookingRequestInstallments,
   payments,
+  webhookDeliveries,
 } from './schema/index.js';
 
 describe('booking request schema', () => {
@@ -29,6 +30,7 @@ describe('booking request schema', () => {
     expect(bookingEngineConfig.paymentMethodCollection).toBeDefined();
     expect(payments.bookingRequestId).toBeDefined();
     expect(payments.idempotencyKey).toBeDefined();
+    expect(webhookDeliveries.logicalEventId).toBeDefined();
 
     const indexNames = getTableConfig(bookingRequests).indexes.map((index) => index.config.name);
     expect(indexNames).toContain('booking_requests_property_submission_key_unique');
@@ -38,6 +40,12 @@ describe('booking request schema', () => {
       .indexes.map((index) => index.config.name);
     expect(consequenceIndexNames).toContain(
       'booking_request_consequences_property_request_kind_unique',
+    );
+
+    const deliveryIndexNames = getTableConfig(webhookDeliveries)
+      .indexes.map((index) => index.config.name);
+    expect(deliveryIndexNames).toContain(
+      'webhook_deliveries_property_subscription_logical_event_unique',
     );
   });
 });

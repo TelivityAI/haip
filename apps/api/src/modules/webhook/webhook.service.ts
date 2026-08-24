@@ -11,6 +11,7 @@ export interface WebhookPayload {
   propertyId?: string;
   data: Record<string, unknown>;
   timestamp: string;
+  logicalEventId?: string;
 }
 
 @Injectable()
@@ -25,8 +26,14 @@ export class WebhookService {
    * the domain transaction. Async listeners are awaited so a durable caller
    * can retain and retry its pending consequence on delivery failure.
    */
-  async dispatchPersisted(payload: WebhookPayload): Promise<void> {
-    await this.eventEmitter.emitAsync(payload.event, payload);
+  async dispatchPersisted(
+    payload: WebhookPayload,
+    logicalEventId: string,
+  ): Promise<void> {
+    await this.eventEmitter.emitAsync(payload.event, {
+      ...payload,
+      logicalEventId,
+    } satisfies WebhookPayload);
   }
 
   /**

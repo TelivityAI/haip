@@ -722,6 +722,7 @@ async function main() {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id uuid NOT NULL REFERENCES properties(id),
       subscription_id uuid NOT NULL REFERENCES agent_webhook_subscriptions(id),
+      logical_event_id uuid,
       event_type varchar(100) NOT NULL,
       payload jsonb NOT NULL,
       status webhook_delivery_status NOT NULL DEFAULT 'pending',
@@ -1596,6 +1597,8 @@ async function main() {
     `ALTER TABLE booking_requests ALTER COLUMN submission_fingerprint SET NOT NULL`,
     `CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_property_submission_key_unique ON booking_requests (property_id, submission_idempotency_key)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_setup_intent_unique ON booking_requests (setup_intent_id)`,
+    `ALTER TABLE webhook_deliveries ADD COLUMN IF NOT EXISTS logical_event_id uuid`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS webhook_deliveries_property_subscription_logical_event_unique ON webhook_deliveries (property_id, subscription_id, logical_event_id)`,
     `DO $$ BEGIN
       IF EXISTS (
         SELECT 1 FROM payments

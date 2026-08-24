@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { WebhookService, type WebhookPayload } from './webhook.service';
 
 describe('WebhookService persisted dispatch', () => {
-  it('dispatches an already-audited payload without writing another audit row', async () => {
+  it('adds the stable logical event ID only to the internal dispatch envelope', async () => {
     const db = { insert: vi.fn() };
     const eventEmitter = { emitAsync: vi.fn().mockResolvedValue([]) };
     const service = new WebhookService(
@@ -21,12 +21,19 @@ describe('WebhookService persisted dispatch', () => {
       timestamp: '2026-08-24T17:15:00.000Z',
     };
 
-    await service.dispatchPersisted(payload);
+    await service.dispatchPersisted(
+      payload,
+      'bbbbbbbb-0000-4000-a000-000000000002',
+    );
 
     expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
       'booking_request.created',
-      payload,
+      {
+        ...payload,
+        logicalEventId: 'bbbbbbbb-0000-4000-a000-000000000002',
+      },
     );
+    expect(payload).not.toHaveProperty('logicalEventId');
     expect(db.insert).not.toHaveBeenCalled();
   });
 });

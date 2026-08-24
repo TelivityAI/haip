@@ -136,6 +136,17 @@ CREATE TABLE IF NOT EXISTS booking_request_consequences (
 CREATE UNIQUE INDEX IF NOT EXISTS booking_request_consequences_property_request_kind_unique
   ON booking_request_consequences (property_id, booking_request_id, kind);
 
+-- A persisted Booking Request consequence is also the stable logical identity
+-- of its external webhook. Existing legacy deliveries remain NULL and continue
+-- to use their delivery-row ids.
+ALTER TABLE IF EXISTS webhook_deliveries
+  ADD COLUMN IF NOT EXISTS logical_event_id uuid;
+DO $$ BEGIN
+  IF to_regclass('webhook_deliveries') IS NOT NULL THEN
+    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS webhook_deliveries_property_subscription_logical_event_unique ON webhook_deliveries (property_id, subscription_id, logical_event_id)';
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS booking_request_installments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   property_id uuid NOT NULL REFERENCES properties(id),

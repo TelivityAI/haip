@@ -517,6 +517,7 @@ export class BookingRequestService {
       try {
         await this.webhookService.dispatchPersisted(
           consequence.payload as unknown as WebhookPayload,
+          consequence.id,
         );
       } catch (error: unknown) {
         await this.recordConsequenceFailure(consequence, error);

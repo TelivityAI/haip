@@ -730,7 +730,10 @@ describe('BookingRequestService.submit', () => {
     });
     expect(harness.storedConsequences[0]?.payload).toEqual(payload);
     expect(harness.storedAudits[0]?.['newValue']).toEqual(payload);
-    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledWith(payload);
+    expect(harness.webhook.dispatchPersisted).toHaveBeenCalledWith(
+      payload,
+      CONSEQUENCE_ID,
+    );
     expect(harness.values.mock.invocationCallOrder[0]).toBeLessThan(
       harness.webhook.dispatchPersisted.mock.invocationCallOrder[0]!,
     );

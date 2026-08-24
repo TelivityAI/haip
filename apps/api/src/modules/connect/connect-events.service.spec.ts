@@ -165,7 +165,12 @@ describe('ConnectEventsService', () => {
       }));
 
       const deliveryService = { enqueue: vi.fn().mockResolvedValue({ id: 'del-1' }) };
-      const svc = new ConnectEventsService(mockDb, deliveryService as any);
+      const svc = new ConnectEventsService(
+        mockDb,
+        deliveryService as unknown as ConstructorParameters<
+          typeof ConnectEventsService
+        >[1],
+      );
 
       await svc.handleEvent({
         event: 'reservation.created',
@@ -185,6 +190,42 @@ describe('ConnectEventsService', () => {
         }),
         'sub-1',
       );
+    });
+
+    it('forwards a persisted logical event ID without adding it to the webhook body', async () => {
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([mockSubscription]),
+        }),
+      }));
+
+      const deliveryService = { enqueue: vi.fn().mockResolvedValue({ id: 'del-1' }) };
+      const svc = new ConnectEventsService(mockDb, deliveryService as any);
+      const logicalEventId = 'bbbbbbbb-0000-4000-a000-000000000002';
+
+      await svc.handleEvent({
+        event: 'reservation.created',
+        entityType: 'reservation',
+        entityId: 'res-1',
+        propertyId: 'prop-1',
+        data: { foo: 'bar' },
+        timestamp: '2026-08-24T18:00:00.000Z',
+        logicalEventId,
+      });
+
+      const [deliveryPayload, subscriptionId, forwardedEventId] =
+        deliveryService.enqueue.mock.calls[0]!;
+      expect(deliveryPayload).toEqual({
+        eventType: 'reservation.created',
+        propertyId: 'prop-1',
+        entityType: 'reservation',
+        entityId: 'res-1',
+        data: { foo: 'bar' },
+        timestamp: '2026-08-24T18:00:00.000Z',
+      });
+      expect(deliveryPayload).not.toHaveProperty('logicalEventId');
+      expect(subscriptionId).toBe('sub-1');
+      expect(forwardedEventId).toBe(logicalEventId);
     });
 
     it('does nothing when no subscriptions match', async () => {

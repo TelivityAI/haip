@@ -5,6 +5,7 @@ import { agentWebhookSubscriptions, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import type { CreateSubscriptionDto } from './dto/agent-event-subscription.dto';
 import { WebhookDeliveryService } from '../webhook/webhook-delivery.service';
+import type { WebhookPayload } from '../webhook/webhook.service';
 
 @Injectable()
 export class ConnectEventsService {
@@ -173,7 +174,7 @@ export class ConnectEventsService {
    * Listens to all events via wildcard.
    */
   @OnEvent('**')
-  async handleEvent(payload: any) {
+  async handleEvent(payload: WebhookPayload) {
     if (!payload?.propertyId || !payload?.event) return;
 
     // Find matching subscriptions
@@ -192,17 +193,23 @@ export class ConnectEventsService {
       if (events.some((pattern: string) => this.matchesEventPattern(payload.event, pattern))) {
         if (this.deliveryService) {
           // Enqueue a real HTTP delivery (HMAC-signed, retried).
-          await this.deliveryService.enqueue(
-            {
-              eventType: payload.event,
-              propertyId: payload.propertyId,
-              entityType: payload.entityType,
-              entityId: payload.entityId,
-              data: payload.data ?? {},
-              timestamp: payload.timestamp ?? new Date().toISOString(),
-            },
-            sub.id,
-          );
+          const deliveryPayload = {
+            eventType: payload.event,
+            propertyId: payload.propertyId,
+            entityType: payload.entityType,
+            entityId: payload.entityId,
+            data: payload.data ?? {},
+            timestamp: payload.timestamp ?? new Date().toISOString(),
+          };
+          if (payload.logicalEventId) {
+            await this.deliveryService.enqueue(
+              deliveryPayload,
+              sub.id,
+              payload.logicalEventId,
+            );
+          } else {
+            await this.deliveryService.enqueue(deliveryPayload, sub.id);
+          }
         } else {
           // Fallback — just log the match (for tests / environments without delivery service).
           await this.db
