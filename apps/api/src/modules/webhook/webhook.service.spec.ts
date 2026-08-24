@@ -36,4 +36,23 @@ describe('WebhookService persisted dispatch', () => {
     expect(payload).not.toHaveProperty('logicalEventId');
     expect(db.insert).not.toHaveBeenCalled();
   });
+
+  it('rejects a persisted dispatch name outside the shared WebhookEvent catalog', async () => {
+    const eventEmitter = { emitAsync: vi.fn().mockResolvedValue([]) };
+    const service = new WebhookService(
+      { insert: vi.fn() } as unknown as ConstructorParameters<typeof WebhookService>[0],
+      eventEmitter as unknown as ConstructorParameters<typeof WebhookService>[1],
+    );
+    const payload = {
+      event: 'payment.retained',
+      entityType: 'booking_request_payment_resolution',
+      entityId: 'bbbbbbbb-0000-4000-a000-000000000001',
+      data: {},
+      timestamp: '2026-08-25T00:00:00.000Z',
+    } as unknown as WebhookPayload;
+
+    await expect(service.dispatchPersisted(payload, 'logical-event-1'))
+      .rejects.toThrow(/unknown persisted webhook event/i);
+    expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
+  });
 });

@@ -3,6 +3,7 @@ import {
   date,
   foreignKey,
   integer,
+  index,
   jsonb,
   numeric,
   pgEnum,
@@ -63,6 +64,7 @@ export const bookingRequestEmailDeliveryKindEnum = pgEnum('booking_request_email
 
 export const bookingRequestEmailDeliveryStatusEnum = pgEnum('booking_request_email_delivery_status', [
   'pending',
+  'processing',
   'sent',
   'failed',
 ]);
@@ -339,14 +341,20 @@ export const bookingRequestEmailDeliveries = pgTable('booking_request_email_deli
   bodyText: text('body_text').notNull(),
   errorMessage: text('error_message'),
   attempts: integer('attempts').notNull().default(0),
+  automaticAttempts: integer('automatic_attempts').notNull().default(0),
   claimedAt: timestamp('claimed_at', { withTimezone: true }),
+  nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
   lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+  providerMessageId: varchar('provider_message_id', { length: 500 }),
   sentAt: timestamp('sent_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   logicalKeyUnique: uniqueIndex('booking_request_email_deliveries_logical_key_unique')
     .on(table.propertyId, table.bookingRequestId, table.logicalKey),
+  recoveryIndex: index('booking_request_email_deliveries_recovery_idx')
+    .on(table.status, table.nextAttemptAt, table.claimedAt)
+    .where(sql`${table.status} IN ('pending', 'processing')`),
   requestOwnership: foreignKey({
     name: 'booking_request_email_deliveries_request_fkey',
     columns: [table.propertyId, table.bookingRequestId],

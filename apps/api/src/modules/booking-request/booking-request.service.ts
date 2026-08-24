@@ -434,6 +434,7 @@ export class BookingRequestService {
           folioId: folio.id,
           priceSource: pricing.source,
           acceptedTotal: pricing.grandTotal,
+          currencyCode: locked.currencyCode,
         },
         timestamp: decidedAt.toISOString(),
       } satisfies BookingRequestAcceptedWebhook;

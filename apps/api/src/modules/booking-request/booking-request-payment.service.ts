@@ -1067,7 +1067,7 @@ export class BookingRequestPaymentService {
           await this.folioService.recalculateBalance(existing.folioId, propertyId, tx);
         }
         await ensureBookingRequestFinancialConsequence(tx, {
-          event: 'payment.external_returned',
+          event: 'payment.refunded',
           logicalId: existing.id,
           propertyId,
           bookingRequestId,
@@ -1080,6 +1080,7 @@ export class BookingRequestPaymentService {
             resolutionId: resolution.id,
             currencyCode: original.currencyCode,
             source: 'external_return',
+            method: original.method,
           },
         });
         return { movement: existing, resolution, isNew: false };
@@ -1138,7 +1139,7 @@ export class BookingRequestPaymentService {
         description: 'External booking request payment return recorded',
       });
       await ensureBookingRequestFinancialConsequence(tx, {
-        event: 'payment.external_returned',
+        event: 'payment.refunded',
         logicalId: movement.id,
         propertyId,
         bookingRequestId,
@@ -1151,6 +1152,7 @@ export class BookingRequestPaymentService {
           resolutionId: resolution.id,
           currencyCode: original.currencyCode,
           source: 'external_return',
+          method: original.method,
         },
       });
       await this.reconcileAllocationsForPayment(
@@ -1201,15 +1203,6 @@ export class BookingRequestPaymentService {
           && new Decimal(row.amount).eq(amount)
           && row.reason?.trim() === reason);
       if (existing) {
-        await ensureBookingRequestFinancialConsequence(tx, {
-          event: 'payment.retained',
-          logicalId: existing.id,
-          propertyId,
-          bookingRequestId,
-          entityType: 'booking_request_payment_resolution',
-          entityId: existing.id,
-          data: { paymentId, amount: existing.amount, reason: existing.reason },
-        });
         return existing;
       }
       await this.assertResolutionCapacity(
@@ -1227,15 +1220,6 @@ export class BookingRequestPaymentService {
         amount: amount.toFixed(2),
         reason,
         actor,
-      });
-      await ensureBookingRequestFinancialConsequence(tx, {
-        event: 'payment.retained',
-        logicalId: resolution.id,
-        propertyId,
-        bookingRequestId,
-        entityType: 'booking_request_payment_resolution',
-        entityId: resolution.id,
-        data: { paymentId, amount: resolution.amount, reason: resolution.reason },
       });
       return resolution;
     });

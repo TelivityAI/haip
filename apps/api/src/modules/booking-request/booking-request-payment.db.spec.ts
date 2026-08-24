@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   auditLogs,
   bookingRequestConsequences,
+  bookingRequestEmailDeliveries,
   bookingRequestInstallments,
   bookingRequestPaymentAllocations,
   bookingRequestPaymentResolutions,
@@ -159,6 +160,8 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
       .where(eq(bookingRequestPaymentAllocations.bookingRequestId, requestId));
     await db.delete(bookingRequestConsequences)
       .where(eq(bookingRequestConsequences.bookingRequestId, requestId));
+    await db.delete(bookingRequestEmailDeliveries)
+      .where(eq(bookingRequestEmailDeliveries.bookingRequestId, requestId));
     await db.delete(auditLogs).where(eq(auditLogs.propertyId, propertyId));
     await db.delete(bookingRequestPaymentResolutions)
       .where(eq(bookingRequestPaymentResolutions.bookingRequestId, requestId));

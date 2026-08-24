@@ -1,9 +1,11 @@
 import {
+  auditLogs,
   bookingRequestConsequences,
   bookingRequestEmailDeliveries,
   bookingRequests,
 } from '@telivityhaip/database';
 import type { BookingRequestConsequenceKind } from '@telivityhaip/database';
+import type { WebhookEvent } from '@telivityhaip/shared';
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
@@ -13,18 +15,12 @@ import {
 } from './booking-request-email.templates';
 
 export type BookingRequestFinancialEvent =
-  | 'payment.received'
-  | 'payment.failed'
-  | 'payment.refunded'
-  | 'payment.external_returned'
-  | 'payment.retained';
+  Extract<WebhookEvent, 'payment.received' | 'payment.failed' | 'payment.refunded'>;
 
 const kindPrefix: Record<BookingRequestFinancialEvent, string> = {
   'payment.received': 'payment_received',
   'payment.failed': 'payment_failed',
   'payment.refunded': 'payment_refunded',
-  'payment.external_returned': 'external_returned',
-  'payment.retained': 'payment_retained',
 };
 type FinancialConsequenceExecutor = Pick<PostgresJsDatabase, 'insert' | 'select'>;
 
@@ -76,7 +72,6 @@ async function ensureFinancialEmail(
   tx: FinancialConsequenceExecutor,
   input: Parameters<typeof ensureBookingRequestFinancialConsequence>[1],
 ): Promise<void> {
-  if (input.event === 'payment.retained') return;
   const amount = firstString(
     input.data['amount'],
     input.data['refundAmount'],
@@ -108,17 +103,14 @@ async function ensureFinancialEmail(
       currencyCode,
       source: input.data['source'] === 'external' ? 'external' : 'saved_card',
     });
-  } else if (
-    input.event === 'payment.refunded'
-    || input.event === 'payment.external_returned'
-  ) {
+  } else if (input.event === 'payment.refunded') {
     kind = 'refund';
     logicalPrefix = 'refund';
     content = refundedBookingRequestPaymentEmail({
       guestFirstName: request.guestFirstName,
       amount,
       currencyCode,
-      source: input.event === 'payment.external_returned' ? 'external_return' : 'refund',
+      source: input.data['source'] === 'external_return' ? 'external_return' : 'refund',
     });
   } else {
     kind = 'failure';
@@ -131,7 +123,8 @@ async function ensureFinancialEmail(
     });
   }
 
-  await tx
+  const queuedAt = new Date();
+  const [created] = await tx
     .insert(bookingRequestEmailDeliveries)
     .values({
       propertyId: input.propertyId,
@@ -143,8 +136,25 @@ async function ensureFinancialEmail(
       subject: content.subject,
       bodyText: content.bodyText,
       attempts: 0,
+      automaticAttempts: 0,
+      nextAttemptAt: queuedAt,
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: bookingRequestEmailDeliveries.id });
+  if (created) {
+    await tx.insert(auditLogs).values({
+      propertyId: input.propertyId,
+      action: 'create',
+      entityType: 'booking_request_email_delivery',
+      entityId: created.id,
+      description: `Booking request ${kind} email queued`,
+      newValue: {
+        bookingRequestId: input.bookingRequestId,
+        kind,
+        status: 'pending',
+      },
+    });
+  }
 }
 
 function firstString(...values: unknown[]): string | undefined {

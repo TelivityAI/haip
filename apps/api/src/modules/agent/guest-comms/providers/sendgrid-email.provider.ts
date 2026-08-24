@@ -38,8 +38,17 @@ export class SendgridEmailProvider implements EmailProvider {
     }
 
     const from = message.from ?? this.defaultFrom!;
+    const personalization: {
+      to: Array<{ email: string }>;
+      headers?: Record<string, string>;
+      custom_args?: Record<string, string>;
+    } = { to: [{ email: message.to }] };
+    if (message.messageId) personalization.headers = { 'Message-ID': message.messageId };
+    if (message.idempotencyKey) {
+      personalization.custom_args = { haip_idempotency_key: message.idempotencyKey };
+    }
     const payload = {
-      personalizations: [{ to: [{ email: message.to }] }],
+      personalizations: [personalization],
       from: { email: from },
       subject: message.subject,
       content: [

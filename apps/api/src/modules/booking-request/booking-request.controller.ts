@@ -86,8 +86,9 @@ export class BookingRequestController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('deliveryId', ParseUUIDPipe) deliveryId: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @AuditActorCtx() actor: AuditActor,
   ) {
-    return this.mailer.retry(deliveryId, id, propertyId);
+    return this.mailer.retry(deliveryId, id, propertyId, actor);
   }
 
   @Post(':id/accept')

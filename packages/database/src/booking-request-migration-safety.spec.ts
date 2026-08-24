@@ -18,6 +18,10 @@ const emailRecoveryMigration = readFileSync(
   new URL('./migrations/0025_booking_request_email_recovery.sql', import.meta.url),
   'utf8',
 );
+const emailRetryMigration = readFileSync(
+  new URL('./migrations/0026_booking_request_email_retry_policy.sql', import.meta.url),
+  'utf8',
+);
 
 describe('booking request accepted-pricing migration safety', () => {
   it('fails instead of accepting an already-accepted request without an operational snapshot', () => {
@@ -125,5 +129,16 @@ describe('booking request email recovery migration safety', () => {
     expect(addColumn).toBeGreaterThanOrEqual(0);
     expect(backfill).toBeGreaterThan(addColumn);
     expect(notNull).toBeGreaterThan(backfill);
+  });
+
+  it('adds bounded retry scheduling, provider receipt identity, and a partial recovery index', () => {
+    for (const source of [emailRetryMigration, pushSchema]) {
+      expect(source).toContain("ADD VALUE IF NOT EXISTS 'processing'");
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS next_attempt_at');
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS automatic_attempts');
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS provider_message_id');
+      expect(source).toContain('booking_request_email_deliveries_recovery_idx');
+      expect(source).toMatch(/WHERE status IN \('pending', 'processing'\)/i);
+    }
   });
 });

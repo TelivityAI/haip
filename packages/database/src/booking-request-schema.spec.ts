@@ -41,6 +41,10 @@ describe('booking request schema', () => {
     expect(bookingRequestPaymentResolutions.lastError).toBeDefined();
     expect(bookingRequestEmailDeliveries.logicalKey).toBeDefined();
     expect(bookingRequestEmailDeliveries.claimedAt).toBeDefined();
+    expect(bookingRequestEmailDeliveries.nextAttemptAt).toBeDefined();
+    expect(bookingRequestEmailDeliveries.automaticAttempts).toBeDefined();
+    expect(bookingRequestEmailDeliveries.providerMessageId).toBeDefined();
+    expect(bookingRequestEmailDeliveries.status.enumValues).toContain('processing');
     expect(bookingEngineConfig.bookingMode).toBeDefined();
     expect(bookingEngineConfig.paymentMethodCollection).toBeDefined();
     expect(payments.bookingRequestId).toBeDefined();
@@ -99,6 +103,9 @@ describe('booking request schema', () => {
     const emailConfig = getTableConfig(bookingRequestEmailDeliveries);
     expect(emailConfig.indexes.map((index) => index.config.name)).toContain(
       'booking_request_email_deliveries_logical_key_unique',
+    );
+    expect(emailConfig.indexes.map((index) => index.config.name)).toContain(
+      'booking_request_email_deliveries_recovery_idx',
     );
     expect(emailConfig.foreignKeys.map((key) => key.getName())).toContain(
       'booking_request_email_deliveries_request_fkey',

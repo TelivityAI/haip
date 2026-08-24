@@ -57,6 +57,10 @@ export class SmtpEmailProvider implements EmailProvider {
         subject: message.subject,
         html: message.html,
         text: message.text,
+        messageId: message.messageId,
+        headers: message.idempotencyKey
+          ? { 'X-HAIP-Idempotency-Key': message.idempotencyKey }
+          : undefined,
       });
 
       this.logger.log(`Email sent via SMTP to ${message.to}: ${info.messageId}`);

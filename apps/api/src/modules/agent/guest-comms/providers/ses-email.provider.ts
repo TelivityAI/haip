@@ -37,6 +37,11 @@ export class SesEmailProvider implements EmailProvider {
       Content: {
         Simple: {
           Subject: { Data: message.subject },
+          // SES assigns and overwrites the RFC Message-ID. Preserve our stable
+          // logical identity in a permitted custom header for gateway replay.
+          ...(message.messageId
+            ? { Headers: [{ Name: 'X-HAIP-Message-ID', Value: message.messageId }] }
+            : {}),
           Body: {
             Text: { Data: message.text },
             Html: { Data: message.html },
@@ -52,6 +57,9 @@ export class SesEmailProvider implements EmailProvider {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
           'X-SES-Region': this.region,
+          ...(message.idempotencyKey
+            ? { 'X-HAIP-Idempotency-Key': message.idempotencyKey }
+            : {}),
         },
         body: JSON.stringify(payload),
       });

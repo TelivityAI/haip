@@ -176,6 +176,7 @@ export type BookingRequestAcceptedWebhook = {
     folioId: string;
     priceSource: 'submitted' | 'current' | 'custom';
     acceptedTotal: string;
+    currencyCode: string;
   };
   timestamp: string;
 };

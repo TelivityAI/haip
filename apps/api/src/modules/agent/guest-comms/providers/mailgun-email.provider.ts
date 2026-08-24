@@ -35,6 +35,10 @@ export class MailgunEmailProvider implements EmailProvider {
     form.set('subject', message.subject);
     form.set('text', message.text);
     form.set('html', message.html);
+    if (message.messageId) form.set('h:Message-Id', message.messageId);
+    if (message.idempotencyKey) {
+      form.set('v:haip-idempotency-key', message.idempotencyKey);
+    }
 
     try {
       const auth = Buffer.from(`api:${this.apiKey}`).toString('base64');

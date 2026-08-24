@@ -4,6 +4,10 @@ export interface EmailMessage {
   html: string;
   text: string;
   from?: string;
+  /** Stable caller identity for providers/gateways that support deduplication. */
+  idempotencyKey?: string;
+  /** Stable RFC Message-ID reused when an at-least-once transport is retried. */
+  messageId?: string;
 }
 
 export interface EmailResult {

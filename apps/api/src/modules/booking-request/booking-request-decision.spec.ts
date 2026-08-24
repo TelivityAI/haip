@@ -672,6 +672,13 @@ describe('BookingRequestService acceptance', () => {
           'Webhook event: folio.created',
         ]),
       );
+      expect(harness.state.consequences).toContainEqual(expect.objectContaining({
+        kind: 'accepted_event',
+        payload: expect.objectContaining({
+          event: 'booking_request.accepted',
+          data: expect.objectContaining({ currencyCode: 'EUR' }),
+        }),
+      }));
       expect(harness.quoteTransactionStates).toEqual([true]);
       expect(harness.dispatchTransactionStates.every((active) => !active)).toBe(true);
     },

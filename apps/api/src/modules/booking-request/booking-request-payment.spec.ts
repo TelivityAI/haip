@@ -12,6 +12,7 @@ import {
   bookingRequests,
   payments,
 } from '@telivityhaip/database';
+import { WEBHOOK_EVENTS, type WebhookEvent } from '@telivityhaip/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PERMISSIONS_KEY } from '../auth/permissions.decorator';
 import { BookingRequestController } from './booking-request.controller';
@@ -663,8 +664,14 @@ describe('BookingRequestPaymentService saved-card charges', () => {
         kind: 'payment',
         status: 'pending',
         recipient: 'ada@example.com',
+        automaticAttempts: 0,
+        nextAttemptAt: expect.any(Date),
       }),
     ]);
+    expect(harness.state.audits).toContainEqual(expect.objectContaining({
+      entityType: 'booking_request_email_delivery',
+      description: 'Booking request payment email queued',
+    }));
     expect(JSON.stringify(harness.state.emails)).not.toMatch(
       /cus_saved|pm_saved|pi_saved|booking-request-charge|https?:\/\//i,
     );
@@ -1753,8 +1760,16 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       movementId: result.movement.id,
     });
     expect(harness.state.consequences).toEqual([
-      expect.objectContaining({ kind: expect.stringMatching(/^external_returned:/) }),
+      expect.objectContaining({
+        kind: expect.stringMatching(/^payment_refunded:/),
+        payload: expect.objectContaining({
+          event: 'payment.refunded',
+          data: expect.objectContaining({ source: 'external_return', method: 'cash' }),
+        }),
+      }),
     ]);
+    const event = harness.state.consequences[0]?.['payload']?.['event'] as WebhookEvent;
+    expect(WEBHOOK_EVENTS[event]).toBe(event);
     expect(harness.state.emails).toEqual([
       expect.objectContaining({ kind: 'refund', logicalKey: expect.stringMatching(/^refund:/) }),
     ]);
@@ -1937,6 +1952,7 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       reason: 'Non-refundable supplier cost',
       resolvedBy: actor.userId,
     });
+    expect(harness.state.consequences).toHaveLength(0);
     expect(harness.state.emails).toHaveLength(0);
   });
 

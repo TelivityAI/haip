@@ -36,6 +36,27 @@ describe('EmailService', () => {
     expect(smtp.send).not.toHaveBeenCalled();
   });
 
+  it('passes stable transport identity through to the selected provider', async () => {
+    const provider = {
+      name: 'sendgrid',
+      isConfigured: () => true,
+      send: vi.fn().mockResolvedValue({ sent: true, messageId: 'provider-id' }),
+    };
+    const service = new EmailService([provider]);
+    await service.send({
+      to: 'guest@example.com',
+      subject: 'Hi',
+      html: '<p>Hi</p>',
+      text: 'Hi',
+      idempotencyKey: 'booking-request-email:delivery-1',
+      messageId: '<booking-request-email-delivery-1@haip.local>',
+    });
+    expect(provider.send).toHaveBeenCalledWith(expect.objectContaining({
+      idempotencyKey: 'booking-request-email:delivery-1',
+      messageId: '<booking-request-email-delivery-1@haip.local>',
+    }));
+  });
+
   it('falls back to console when no real provider is configured', async () => {
     const smtp = { name: 'smtp', isConfigured: () => false, send: vi.fn() };
     const sendgrid = { name: 'sendgrid', isConfigured: () => false, send: vi.fn() };
@@ -92,11 +113,19 @@ describe('SendgridEmailProvider', () => {
       subject: 'Confirm',
       html: '<p>Hi</p>',
       text: 'Hi',
+      idempotencyKey: 'stable-delivery-1',
+      messageId: '<stable-delivery-1@haip.local>',
     });
     expect(result.sent).toBe(true);
     expect(global.fetch).toHaveBeenCalledWith(
       'https://api.sendgrid.com/v3/mail/send',
       expect.objectContaining({ method: 'POST' }),
     );
+    const init = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const payload = JSON.parse(String(init?.body));
+    expect(payload.personalizations[0]).toMatchObject({
+      headers: { 'Message-ID': '<stable-delivery-1@haip.local>' },
+      custom_args: { haip_idempotency_key: 'stable-delivery-1' },
+    });
   });
 });

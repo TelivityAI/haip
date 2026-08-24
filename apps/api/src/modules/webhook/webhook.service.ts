@@ -1,11 +1,11 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { auditLogs } from '@telivityhaip/database';
-import { type WebhookEvent } from '@telivityhaip/shared';
+import { WEBHOOK_EVENTS, type WebhookEvent } from '@telivityhaip/shared';
 import { DRIZZLE } from '../../database/database.module';
 
 export interface WebhookPayload {
-  event: string;
+  event: WebhookEvent;
   entityType: string;
   entityId: string;
   propertyId?: string;
@@ -30,6 +30,9 @@ export class WebhookService {
     payload: WebhookPayload,
     logicalEventId: string,
   ): Promise<void> {
+    if (!Object.hasOwn(WEBHOOK_EVENTS, payload.event)) {
+      throw new Error(`Unknown persisted webhook event: ${String(payload.event)}`);
+    }
     await this.eventEmitter.emitAsync(payload.event, {
       ...payload,
       logicalEventId,

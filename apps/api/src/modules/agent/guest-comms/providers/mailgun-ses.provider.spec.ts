@@ -33,9 +33,15 @@ describe('MailgunEmailProvider', () => {
       subject: 'S',
       html: 'h',
       text: 't',
+      idempotencyKey: 'stable-delivery-1',
+      messageId: '<stable-delivery-1@haip.local>',
     });
     expect(result.sent).toBe(true);
     expect(result.messageId).toBe('<mailgun-1>');
+    const init = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    const form = new URLSearchParams(String(init?.body));
+    expect(form.get('h:Message-Id')).toBe('<stable-delivery-1@haip.local>');
+    expect(form.get('v:haip-idempotency-key')).toBe('stable-delivery-1');
   });
 });
 
@@ -73,11 +79,24 @@ describe('SesEmailProvider', () => {
       subject: 'S',
       html: 'h',
       text: 't',
+      idempotencyKey: 'stable-delivery-1',
+      messageId: '<stable-delivery-1@haip.local>',
     });
     expect(result).toEqual({
       sent: true,
       provider: 'amazon-ses',
       messageId: 'ses-1',
     });
+    const init = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    expect(init?.headers).toMatchObject({
+      'X-HAIP-Idempotency-Key': 'stable-delivery-1',
+    });
+    const payload = JSON.parse(String(init?.body));
+    expect(payload.Content.Simple.Headers).toContainEqual({
+      Name: 'X-HAIP-Message-ID', Value: '<stable-delivery-1@haip.local>',
+    });
+    expect(payload.Content.Simple.Headers).not.toContainEqual(expect.objectContaining({
+      Name: 'Message-ID',
+    }));
   });
 });

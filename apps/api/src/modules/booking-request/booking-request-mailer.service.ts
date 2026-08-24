@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   auditLogs,
   bookingRequestEmailDeliveries,
@@ -6,7 +12,12 @@ import {
 } from '@telivityhaip/database';
 import { and, asc, eq, isNull, lte, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import {
+  actorFields,
+  type AuditActor,
+} from '../../common/audit/audit-actor';
 import { DRIZZLE } from '../../database/database.module';
+import type { EmailResult } from '../agent/guest-comms/email.service';
 import { EmailService } from '../agent/guest-comms/email.service';
 
 export type BookingRequestEmailKind =
@@ -22,11 +33,31 @@ export type QueueBookingRequestEmail = {
   bodyText: string;
 };
 
+export type BookingRequestEmailDeliveryView = {
+  id: string;
+  kind: BookingRequestEmailKind;
+  status: typeof bookingRequestEmailDeliveries.$inferSelect['status'];
+  subject: string;
+  bodyText: string;
+  errorMessage: string | null;
+  attempts: number;
+  nextAttemptAt: Date | null;
+  lastAttemptAt: Date | null;
+  sentAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type Delivery = typeof bookingRequestEmailDeliveries.$inferSelect;
 type MailerDatabase = PostgresJsDatabase;
 type QueueExecutor = Pick<MailerDatabase, 'insert' | 'select'>;
+type DeliveryMode = 'automatic' | 'manual';
 
 const CLAIM_LEASE_MS = 5 * 60 * 1000;
+const SEND_TIMEOUT_MS = 60 * 1000;
+const RETRY_BASE_MS = 30 * 1000;
+const RETRY_MAX_MS = 2 * 60 * 1000;
+const MAX_AUTOMATIC_ATTEMPTS = 5;
 
 @Injectable()
 export class BookingRequestMailerService {
@@ -45,6 +76,7 @@ export class BookingRequestMailerService {
     if (!logicalKey || logicalKey.length > 200) {
       throw new Error('A valid Booking Request email logical key is required');
     }
+    const queuedAt = new Date();
     const [created] = await executor
       .insert(bookingRequestEmailDeliveries)
       .values({
@@ -57,6 +89,8 @@ export class BookingRequestMailerService {
         bodyText: input.bodyText,
         status: 'pending',
         attempts: 0,
+        automaticAttempts: 0,
+        nextAttemptAt: queuedAt,
       })
       .onConflictDoNothing()
       .returning({ id: bookingRequestEmailDeliveries.id });
@@ -93,7 +127,10 @@ export class BookingRequestMailerService {
     return existing.id;
   }
 
-  async listForRequest(bookingRequestId: string, propertyId: string): Promise<Delivery[]> {
+  async listForRequest(
+    bookingRequestId: string,
+    propertyId: string,
+  ): Promise<BookingRequestEmailDeliveryView[]> {
     await this.assertRequestScope(bookingRequestId, propertyId);
     const rows = await this.db
       .select()
@@ -103,61 +140,86 @@ export class BookingRequestMailerService {
         eq(bookingRequestEmailDeliveries.bookingRequestId, bookingRequestId),
       ))
       .orderBy(asc(bookingRequestEmailDeliveries.createdAt));
-    return rows.filter((row: Delivery) =>
-      row.propertyId === propertyId && row.bookingRequestId === bookingRequestId);
+    return rows
+      .filter((row: Delivery) =>
+        row.propertyId === propertyId && row.bookingRequestId === bookingRequestId)
+      .map((row: Delivery) => this.toView(row));
   }
 
   async deliver(
     deliveryId: string,
     bookingRequestId: string,
     propertyId: string,
+    mode: DeliveryMode = 'automatic',
+    actor?: AuditActor,
   ): Promise<Delivery | undefined> {
-    const claimed = await this.claim(deliveryId, bookingRequestId, propertyId);
-    if (!claimed || claimed.status === 'sent') return claimed;
+    const claimed = await this.claim(deliveryId, bookingRequestId, propertyId, mode, actor);
+    if (!claimed || claimed.status !== 'processing') return claimed;
 
-    let sent: boolean;
-    try {
-      const result = await this.emailService.send({
-        to: claimed.recipient,
-        subject: claimed.subject,
-        text: claimed.bodyText,
-        html: this.textAsHtml(claimed.bodyText),
-      });
-      sent = result.sent;
-    } catch {
-      sent = false;
-    }
+    const transportIdentity = this.transportIdentity(claimed.id);
+    const transportResult = await this.sendWithTimeout({
+      to: claimed.recipient,
+      subject: claimed.subject,
+      text: claimed.bodyText,
+      html: this.textAsHtml(claimed.bodyText),
+      idempotencyKey: transportIdentity.idempotencyKey,
+      messageId: transportIdentity.messageId,
+    });
 
-    const finishedAt = new Date();
-    const errorMessage = sent ? null : 'Email transport failed';
-    const [updated] = await this.db
-      .update(bookingRequestEmailDeliveries)
-      .set({
-        status: sent ? 'sent' : 'failed',
-        claimedAt: null,
-        errorMessage,
-        sentAt: sent ? finishedAt : null,
-        updatedAt: finishedAt,
-      })
-      .where(and(
-        eq(bookingRequestEmailDeliveries.id, claimed.id),
-        eq(bookingRequestEmailDeliveries.propertyId, propertyId),
-        eq(bookingRequestEmailDeliveries.bookingRequestId, bookingRequestId),
-        eq(bookingRequestEmailDeliveries.claimedAt, claimed.claimedAt!),
-      ))
-      .returning();
-    const result = updated ?? { ...claimed, status: sent ? 'sent' : 'failed', errorMessage };
-    await this.auditAttemptBestEffort(result);
-    return result;
+    return this.finalizeAttempt(claimed, transportResult, mode, actor);
   }
 
   async retry(
     deliveryId: string,
     bookingRequestId: string,
     propertyId: string,
-  ): Promise<Delivery | undefined> {
-    await this.findDelivery(deliveryId, bookingRequestId, propertyId);
-    return this.deliver(deliveryId, bookingRequestId, propertyId);
+    actor: AuditActor,
+  ): Promise<BookingRequestEmailDeliveryView | undefined> {
+    await this.db.transaction(async (tx) => {
+      const row = await this.findDelivery(tx, deliveryId, bookingRequestId, propertyId, true);
+      if (row.status !== 'failed') {
+        throw new ConflictException('Only a failed email delivery can be retried');
+      }
+      const requeuedAt = new Date();
+      const [requeued] = await tx
+        .update(bookingRequestEmailDeliveries)
+        .set({
+          status: 'pending',
+          automaticAttempts: 0,
+          claimedAt: null,
+          nextAttemptAt: requeuedAt,
+          errorMessage: null,
+          providerMessageId: null,
+          updatedAt: requeuedAt,
+        })
+        .where(and(
+          eq(bookingRequestEmailDeliveries.id, deliveryId),
+          eq(bookingRequestEmailDeliveries.bookingRequestId, bookingRequestId),
+          eq(bookingRequestEmailDeliveries.propertyId, propertyId),
+          eq(bookingRequestEmailDeliveries.status, 'failed'),
+        ))
+        .returning();
+      if (!requeued) throw new ConflictException('Email delivery retry state changed');
+      await tx.insert(auditLogs).values({
+        propertyId,
+        action: 'update',
+        entityType: 'booking_request_email_delivery',
+        entityId: deliveryId,
+        ...actorFields(actor),
+        previousValue: { status: 'failed' },
+        newValue: { status: 'pending', automaticAttempts: 0 },
+        description: 'Booking request email manually requeued',
+      });
+    });
+
+    const result = await this.deliver(
+      deliveryId,
+      bookingRequestId,
+      propertyId,
+      'manual',
+      actor,
+    );
+    return result ? this.toView(result) : undefined;
   }
 
   async deliverForRequestBestEffort(
@@ -165,9 +227,10 @@ export class BookingRequestMailerService {
     propertyId: string,
   ): Promise<void> {
     try {
-      const deliveries = await this.listForRequest(bookingRequestId, propertyId);
+      const now = new Date();
+      const deliveries = await this.scopedDeliveries(bookingRequestId, propertyId);
       for (const delivery of deliveries) {
-        if (delivery.status === 'sent') continue;
+        if (!this.isAutomaticallyEligible(delivery, now)) continue;
         await this.deliver(delivery.id, bookingRequestId, propertyId);
       }
     } catch (error: unknown) {
@@ -179,74 +242,305 @@ export class BookingRequestMailerService {
   }
 
   async processPendingDeliveries(limit = 100): Promise<number> {
-    const staleBefore = new Date(Date.now() - CLAIM_LEASE_MS);
+    const now = new Date();
+    const staleBefore = new Date(now.getTime() - CLAIM_LEASE_MS);
     const rows = await this.db
       .select()
       .from(bookingRequestEmailDeliveries)
       .where(and(
         or(
-          eq(bookingRequestEmailDeliveries.status, 'pending'),
-          eq(bookingRequestEmailDeliveries.status, 'failed'),
-        ),
-        or(
-          isNull(bookingRequestEmailDeliveries.claimedAt),
-          lte(bookingRequestEmailDeliveries.claimedAt, staleBefore),
+          and(
+            eq(bookingRequestEmailDeliveries.status, 'pending'),
+            isNull(bookingRequestEmailDeliveries.claimedAt),
+            lte(bookingRequestEmailDeliveries.nextAttemptAt, now),
+          ),
+          and(
+            eq(bookingRequestEmailDeliveries.status, 'processing'),
+            lte(bookingRequestEmailDeliveries.claimedAt, staleBefore),
+            lte(bookingRequestEmailDeliveries.nextAttemptAt, now),
+          ),
         ),
       ))
-      .orderBy(asc(bookingRequestEmailDeliveries.createdAt))
+      .orderBy(asc(bookingRequestEmailDeliveries.nextAttemptAt))
       .limit(Math.max(1, Math.min(limit, 500)));
-    const recoverable = rows.filter((row: Delivery) =>
-      row.status !== 'sent'
-      && (!row.claimedAt || row.claimedAt.getTime() <= staleBefore.getTime()));
-    for (const row of recoverable) {
-      await this.deliver(row.id, row.bookingRequestId, row.propertyId);
+    const candidates = rows.filter((row: Delivery) =>
+      this.isRecoveryCandidate(row, now, staleBefore));
+    for (const row of candidates) {
+      if (row.automaticAttempts >= MAX_AUTOMATIC_ATTEMPTS) {
+        await this.terminalizeExhaustedClaim(row, now, staleBefore);
+      } else {
+        await this.deliver(row.id, row.bookingRequestId, row.propertyId);
+      }
     }
-    return recoverable.length;
+    return candidates.length;
   }
 
   private async claim(
     deliveryId: string,
     bookingRequestId: string,
     propertyId: string,
+    mode: DeliveryMode,
+    actor?: AuditActor,
   ): Promise<Delivery | undefined> {
     return this.db.transaction(async (tx) => {
-      const rows = await tx
-        .select()
-        .from(bookingRequestEmailDeliveries)
-        .where(and(
-          eq(bookingRequestEmailDeliveries.id, deliveryId),
-          eq(bookingRequestEmailDeliveries.bookingRequestId, bookingRequestId),
-          eq(bookingRequestEmailDeliveries.propertyId, propertyId),
-        ))
-        .for('update');
-      const row = rows.find((candidate: Delivery) =>
-        candidate.id === deliveryId
-        && candidate.bookingRequestId === bookingRequestId
-        && candidate.propertyId === propertyId);
-      if (!row) throw new NotFoundException(`Email delivery ${deliveryId} not found`);
-      if (row.status === 'sent') return row;
-      if (row.claimedAt && row.claimedAt.getTime() > Date.now() - CLAIM_LEASE_MS) {
-        return undefined;
-      }
-      const attemptedAt = new Date();
+      const row = await this.findDelivery(tx, deliveryId, bookingRequestId, propertyId, true);
+      const now = new Date();
+      if (row.status === 'sent' || row.status === 'failed') return row;
+      if (mode === 'automatic' && !this.isAutomaticallyEligible(row, now)) return undefined;
+      if (mode === 'manual' && row.status !== 'pending') return undefined;
+
+      const leaseUntil = new Date(now.getTime() + CLAIM_LEASE_MS);
       const [claimed] = await tx
         .update(bookingRequestEmailDeliveries)
         .set({
-          status: 'pending',
+          status: 'processing',
           attempts: row.attempts + 1,
-          claimedAt: attemptedAt,
-          lastAttemptAt: attemptedAt,
+          automaticAttempts: row.automaticAttempts + (mode === 'automatic' ? 1 : 0),
+          claimedAt: now,
+          nextAttemptAt: leaseUntil,
+          lastAttemptAt: now,
           errorMessage: null,
-          updatedAt: attemptedAt,
+          updatedAt: now,
         })
         .where(and(
           eq(bookingRequestEmailDeliveries.id, deliveryId),
           eq(bookingRequestEmailDeliveries.bookingRequestId, bookingRequestId),
           eq(bookingRequestEmailDeliveries.propertyId, propertyId),
+          eq(bookingRequestEmailDeliveries.status, row.status),
+          row.claimedAt
+            ? eq(bookingRequestEmailDeliveries.claimedAt, row.claimedAt)
+            : isNull(bookingRequestEmailDeliveries.claimedAt),
         ))
         .returning();
+      if (!claimed) return undefined;
+      await tx.insert(auditLogs).values({
+        propertyId,
+        action: 'update',
+        entityType: 'booking_request_email_delivery',
+        entityId: deliveryId,
+        ...actorFields(actor),
+        previousValue: { status: row.status, attempts: row.attempts },
+        newValue: {
+          status: 'processing',
+          attempts: claimed.attempts,
+          automaticAttempts: claimed.automaticAttempts,
+        },
+        description: 'Booking request email delivery attempted',
+      });
       return claimed;
     });
+  }
+
+  private async finalizeAttempt(
+    claimed: Delivery,
+    transportResult: EmailResult,
+    mode: DeliveryMode,
+    actor?: AuditActor,
+  ): Promise<Delivery> {
+    const finishedAt = new Date();
+    const shouldRetry = !transportResult.sent
+      && mode === 'automatic'
+      && claimed.automaticAttempts < MAX_AUTOMATIC_ATTEMPTS;
+    const status: Delivery['status'] = transportResult.sent
+      ? 'sent'
+      : shouldRetry ? 'pending' : 'failed';
+    const nextAttemptAt = shouldRetry
+      ? new Date(finishedAt.getTime() + this.backoffMs(claimed.automaticAttempts))
+      : null;
+    const errorMessage = transportResult.sent ? null : 'Email transport failed';
+
+    return this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(bookingRequestEmailDeliveries)
+        .set({
+          status,
+          claimedAt: null,
+          nextAttemptAt,
+          errorMessage,
+          providerMessageId: transportResult.messageId ?? null,
+          sentAt: transportResult.sent ? finishedAt : null,
+          updatedAt: finishedAt,
+        })
+        .where(and(
+          eq(bookingRequestEmailDeliveries.id, claimed.id),
+          eq(bookingRequestEmailDeliveries.propertyId, claimed.propertyId),
+          eq(bookingRequestEmailDeliveries.bookingRequestId, claimed.bookingRequestId),
+          eq(bookingRequestEmailDeliveries.status, 'processing'),
+          eq(bookingRequestEmailDeliveries.claimedAt, claimed.claimedAt!),
+        ))
+        .returning();
+      if (!updated) {
+        return this.findDelivery(
+          tx,
+          claimed.id,
+          claimed.bookingRequestId,
+          claimed.propertyId,
+          false,
+        );
+      }
+      await tx.insert(auditLogs).values({
+        propertyId: updated.propertyId,
+        action: 'update',
+        entityType: 'booking_request_email_delivery',
+        entityId: updated.id,
+        ...actorFields(actor),
+        previousValue: { status: 'processing' },
+        newValue: {
+          kind: updated.kind,
+          status: updated.status,
+          attempts: updated.attempts,
+          automaticAttempts: updated.automaticAttempts,
+          ...(updated.errorMessage ? { error: updated.errorMessage } : {}),
+        },
+        description: updated.status === 'sent'
+          ? 'Booking request email delivered'
+          : updated.status === 'pending'
+            ? 'Booking request email delivery scheduled for retry'
+            : 'Booking request email delivery failed terminally',
+      });
+      return updated;
+    });
+  }
+
+  private async sendWithTimeout(
+    message: Parameters<EmailService['send']>[0],
+  ): Promise<EmailResult> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        this.emailService.send(message).catch(() => ({ sent: false } as EmailResult)),
+        new Promise<EmailResult>((resolve) => {
+          timeout = setTimeout(
+            () => resolve({ sent: false, error: 'Email transport timed out' }),
+            SEND_TIMEOUT_MS,
+          );
+          timeout.unref?.();
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+
+  private isAutomaticallyEligible(
+    delivery: Delivery,
+    now: Date,
+    staleBefore = new Date(now.getTime() - CLAIM_LEASE_MS),
+  ): boolean {
+    if (delivery.automaticAttempts >= MAX_AUTOMATIC_ATTEMPTS) return false;
+    return this.isRecoveryCandidate(delivery, now, staleBefore);
+  }
+
+  private isRecoveryCandidate(
+    delivery: Delivery,
+    now: Date,
+    staleBefore = new Date(now.getTime() - CLAIM_LEASE_MS),
+  ): boolean {
+    if (delivery.status === 'pending') {
+      return !delivery.claimedAt
+        && Boolean(delivery.nextAttemptAt)
+        && delivery.nextAttemptAt!.getTime() <= now.getTime();
+    }
+    return delivery.status === 'processing'
+      && Boolean(delivery.claimedAt)
+      && delivery.claimedAt!.getTime() <= staleBefore.getTime()
+      && Boolean(delivery.nextAttemptAt)
+      && delivery.nextAttemptAt!.getTime() <= now.getTime();
+  }
+
+  private async terminalizeExhaustedClaim(
+    candidate: Delivery,
+    now: Date,
+    staleBefore: Date,
+  ): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const current = await this.findDelivery(
+        tx,
+        candidate.id,
+        candidate.bookingRequestId,
+        candidate.propertyId,
+        true,
+      );
+      if (
+        current.automaticAttempts < MAX_AUTOMATIC_ATTEMPTS
+        || !this.isRecoveryCandidate(current, now, staleBefore)
+      ) {
+        return false;
+      }
+      const [updated] = await tx
+        .update(bookingRequestEmailDeliveries)
+        .set({
+          status: 'failed',
+          claimedAt: null,
+          nextAttemptAt: null,
+          errorMessage: 'Email transport failed',
+          updatedAt: now,
+        })
+        .where(and(
+          eq(bookingRequestEmailDeliveries.id, current.id),
+          eq(bookingRequestEmailDeliveries.propertyId, current.propertyId),
+          eq(bookingRequestEmailDeliveries.bookingRequestId, current.bookingRequestId),
+          eq(bookingRequestEmailDeliveries.status, current.status),
+          eq(bookingRequestEmailDeliveries.automaticAttempts, current.automaticAttempts),
+          current.claimedAt
+            ? eq(bookingRequestEmailDeliveries.claimedAt, current.claimedAt)
+            : isNull(bookingRequestEmailDeliveries.claimedAt),
+        ))
+        .returning();
+      if (!updated) return false;
+      await tx.insert(auditLogs).values({
+        propertyId: updated.propertyId,
+        action: 'update',
+        entityType: 'booking_request_email_delivery',
+        entityId: updated.id,
+        previousValue: { status: current.status },
+        newValue: {
+          kind: updated.kind,
+          status: updated.status,
+          attempts: updated.attempts,
+          automaticAttempts: updated.automaticAttempts,
+          error: updated.errorMessage,
+        },
+        description: 'Booking request email delivery failed terminally',
+      });
+      return true;
+    });
+  }
+
+  private backoffMs(automaticAttempts: number): number {
+    return Math.min(RETRY_BASE_MS * (2 ** Math.max(0, automaticAttempts - 1)), RETRY_MAX_MS);
+  }
+
+  /**
+   * SMTP and providers without server-side idempotency remain at-least-once
+   * across a crash after transport acceptance. Reusing this identity on every
+   * replay gives supporting gateways a dedupe key and all transports the same
+   * RFC Message-ID (or, for SES, its permitted stable custom-header equivalent).
+   */
+  private transportIdentity(deliveryId: string): {
+    idempotencyKey: string;
+    messageId: string;
+  } {
+    return {
+      idempotencyKey: `booking-request-email:${deliveryId}`,
+      messageId: `<booking-request-email-${deliveryId}@haip.local>`,
+    };
+  }
+
+  private async scopedDeliveries(
+    bookingRequestId: string,
+    propertyId: string,
+  ): Promise<Delivery[]> {
+    await this.assertRequestScope(bookingRequestId, propertyId);
+    const rows = await this.db
+      .select()
+      .from(bookingRequestEmailDeliveries)
+      .where(and(
+        eq(bookingRequestEmailDeliveries.propertyId, propertyId),
+        eq(bookingRequestEmailDeliveries.bookingRequestId, bookingRequestId),
+      ));
+    return rows.filter((row: Delivery) =>
+      row.propertyId === propertyId && row.bookingRequestId === bookingRequestId);
   }
 
   private async assertRequestScope(bookingRequestId: string, propertyId: string): Promise<void> {
@@ -264,11 +558,13 @@ export class BookingRequestMailerService {
   }
 
   private async findDelivery(
+    executor: Pick<MailerDatabase, 'select'>,
     deliveryId: string,
     bookingRequestId: string,
     propertyId: string,
+    lock: boolean,
   ): Promise<Delivery> {
-    const rows = await this.db
+    const query = executor
       .select()
       .from(bookingRequestEmailDeliveries)
       .where(and(
@@ -276,6 +572,7 @@ export class BookingRequestMailerService {
         eq(bookingRequestEmailDeliveries.bookingRequestId, bookingRequestId),
         eq(bookingRequestEmailDeliveries.propertyId, propertyId),
       ));
+    const rows = lock ? await query.for('update') : await query;
     const row = rows.find((candidate: Delivery) =>
       candidate.id === deliveryId
       && candidate.bookingRequestId === bookingRequestId
@@ -284,30 +581,21 @@ export class BookingRequestMailerService {
     return row;
   }
 
-  private async auditAttemptBestEffort(delivery: Delivery): Promise<void> {
-    try {
-      await this.db.insert(auditLogs).values({
-        propertyId: delivery.propertyId,
-        action: 'update',
-        entityType: 'booking_request_email_delivery',
-        entityId: delivery.id,
-        description: delivery.status === 'sent'
-          ? 'Booking request email delivered'
-          : 'Booking request email delivery failed',
-        newValue: {
-          bookingRequestId: delivery.bookingRequestId,
-          kind: delivery.kind,
-          status: delivery.status,
-          attempts: delivery.attempts,
-          ...(delivery.errorMessage ? { error: delivery.errorMessage } : {}),
-        },
-      });
-    } catch (error: unknown) {
-      this.logger.error(
-        `Email delivery ${delivery.id} state changed but its audit write failed`,
-        error instanceof Error ? error.stack : undefined,
-      );
-    }
+  private toView(delivery: Delivery): BookingRequestEmailDeliveryView {
+    return {
+      id: delivery.id,
+      kind: delivery.kind,
+      status: delivery.status,
+      subject: delivery.subject,
+      bodyText: delivery.bodyText,
+      errorMessage: delivery.errorMessage,
+      attempts: delivery.attempts,
+      nextAttemptAt: delivery.nextAttemptAt,
+      lastAttemptAt: delivery.lastAttemptAt,
+      sentAt: delivery.sentAt,
+      createdAt: delivery.createdAt,
+      updatedAt: delivery.updatedAt,
+    };
   }
 
   private textAsHtml(text: string): string {
