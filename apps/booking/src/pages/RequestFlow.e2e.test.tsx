@@ -74,8 +74,8 @@ const quote: QuoteResponse = {
   servicesTotal: '0.00',
   servicesTaxTotal: '0.00',
   grandTotal: '200.00',
-  depositPolicy: { type: 'none', refundable: true },
-  depositDue: '0.00',
+  depositPolicy: { type: 'percentage', percentage: 30, refundable: true },
+  depositDue: '60.00',
   cancellationPolicy: {
     type: 'tiered',
     description: 'Free cancellation before arrival.',
@@ -87,8 +87,8 @@ function config(bookingMode: BookingConfig['bookingMode']): BookingConfig {
   return {
     isEnabled: true,
     displayName: 'Hotel Vertical',
-    depositPolicy: { type: 'none', refundable: true },
-    stripePublishableKey: null,
+    depositPolicy: { type: 'percentage', percentage: 30, refundable: true },
+    stripePublishableKey: 'pk_test_present_but_collection_disabled',
     sellableRoomTypeIds: [ROOM_TYPE_ID],
     sellableRatePlanIds: [RATE_PLAN_ID],
     bookingMode,
@@ -185,8 +185,16 @@ describe('Booking widget request/instant rollout', () => {
     expect(await screen.findByText('Request received · Pending review')).toBeVisible();
     expect(screen.getByText(/This is not a confirmed reservation/i)).toBeVisible();
     expect(screen.getByText(/You have not been charged/i)).toBeVisible();
-    expect(screen.queryByRole('link', { name: /manage/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('link', {
+      name: /manage|cancel/i,
+      hidden: true,
+    })).toHaveLength(0);
+    expect(screen.queryAllByRole('button', {
+      name: /manage|cancel/i,
+      hidden: true,
+    })).toHaveLength(0);
+    expect(screen.queryByText(/manage (this|your) booking/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/cancel (this|your) booking/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/confirmation number/i)).not.toBeInTheDocument();
 
     expect(api.submitRequest).toHaveBeenCalledOnce();

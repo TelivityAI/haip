@@ -1,5 +1,7 @@
 {
-  "tests": 2116,
-  "files": 251,
-  "updatedAt": "2026-08-25T12:03:05.574Z"
+  "tests": 2154,
+  "files": 257,
+  "scope": "all workspace packages with a test script",
+  "semantics": "passed assertions and files containing at least one passed assertion; skipped assertions and skipped-only files are excluded",
+  "updatedAt": "2026-08-25T12:26:14.155Z"
 }

@@ -60,7 +60,7 @@ const imports: any[] = [
     isGlobal: true,
     envFilePath: ['.env.local', '.env'],
   }),
-  EventEmitterModule.forRoot(),
+  EventEmitterModule.forRoot({ wildcard: true }),
   DatabaseModule,
   HealthModule,
   PropertyModule,

@@ -48,15 +48,15 @@ export function Payment() {
   });
 
   const publishableKey = config?.stripePublishableKey?.trim();
+  const depositDue = Number(quote?.depositDue ?? 0);
+  const needsPayment =
+    depositDue > 0 && config?.paymentMethodCollection !== 'disabled';
   const stripePromise = useMemo(
-    () => (publishableKey ? loadStripe(publishableKey) : null),
-    [publishableKey],
+    () => (needsPayment && publishableKey ? loadStripe(publishableKey) : null),
+    [needsPayment, publishableKey],
   );
 
   if (!quote || !guest) return null;
-
-  const depositDue = Number(quote.depositDue);
-  const needsPayment = depositDue > 0;
 
   // Mock / demo mode (no Stripe key): submit the well-known MockGateway token.
   const payDemo = () => bookMutation.mutate({ paymentToken: 'tok_demo' });

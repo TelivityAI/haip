@@ -3,27 +3,35 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
+  agentWebhookSubscriptions,
   auditLogs,
   bookingEngineCredentials,
+  bookingRequestConsequences,
   bookingRequestEmailDeliveries,
   bookingRequestInstallments,
   bookingRequests,
   charges,
+  folios,
   payments,
   properties,
   ratePlans,
   reservations,
   rooms,
   roomTypes,
+  webhookDeliveries,
 } from '@telivityhaip/database';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AllExceptionsFilter } from '../../common/filters/all-exceptions.filter';
+import { DRIZZLE } from '../../database/database.module';
 import { EmailService } from '../agent/guest-comms/email.service';
+import { WebhookDeliveryService } from '../webhook/webhook-delivery.service';
+import { WebhookService, type WebhookPayload } from '../webhook/webhook.service';
 
 const databaseUrl = process.env['DATABASE_URL'];
 const describeDatabase = databaseUrl ? describe : describe.skip;
@@ -46,17 +54,20 @@ describeDatabase('Booking Request complete vertical slice', () => {
   const instantArrivalDate = dateFromNow(75);
   const instantDepartureDate = dateFromNow(77);
   const applicationKey = `booking-request-e2e-${randomUUID()}`;
+  const webhookSubscriptionIds = [randomUUID(), randomUUID()];
   const sentEmails: Array<{ to: string; subject: string; text: string }> = [];
   let app: INestApplication;
   let client: ReturnType<typeof postgres>;
   let db: ReturnType<typeof drizzle>;
 
   beforeAll(async () => {
-    process.env['AUTH_ENABLED'] = 'false';
-    process.env['NODE_ENV'] = 'test';
-    process.env['PAYMENT_GATEWAY'] = 'mock';
-    process.env['STRIPE_MODE'] = 'mock';
-    process.env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+    vi.stubEnv('AUTH_ENABLED', 'false');
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('PAYMENT_GATEWAY', 'mock');
+    vi.stubEnv('STRIPE_MODE', 'mock');
+    if (!process.env['REDIS_URL']) {
+      vi.stubEnv('REDIS_URL', 'redis://localhost:6379');
+    }
 
     const root = join(__dirname, '../../../../..');
     execFileSync('node', ['packages/database/dist/push-schema.js'], {
@@ -114,6 +125,22 @@ describeDatabase('Booking Request complete vertical slice', () => {
       keyHash: createHash('sha256').update(bookingKey).digest('hex'),
       keyPrefix: bookingKey.slice(0, 12),
     });
+    await db.insert(agentWebhookSubscriptions).values(
+      webhookSubscriptionIds.map((id, index) => ({
+        id,
+        propertyId,
+        subscriberId: `booking-request-e2e-${propertyId}-${index + 1}`,
+        subscriberName: `Booking Request E2E subscriber ${index + 1}`,
+        callbackUrl: 'https://8.8.8.8/haip-e2e',
+        events: [
+          'booking_request.created',
+          'booking_request.accepted',
+          'payment.received',
+          'reservation.modified',
+        ],
+        secret: `booking-request-e2e-secret-${index + 1}`,
+      })),
+    );
 
     const { AppModule } = await import('../../app.module');
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -128,6 +155,16 @@ describeDatabase('Booking Request complete vertical slice', () => {
           };
         }),
       })
+      .overrideProvider(WebhookDeliveryService)
+      .useFactory({
+        factory: (database: unknown, eventEmitter: EventEmitter2) =>
+          new WebhookDeliveryService(
+            database,
+            eventEmitter,
+            { add: async () => undefined },
+          ),
+        inject: [DRIZZLE, EventEmitter2],
+      })
       .compile();
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api/v1');
@@ -141,8 +178,19 @@ describeDatabase('Booking Request complete vertical slice', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await app?.close();
-    await client?.end();
+    try {
+      await app?.close();
+    } finally {
+      try {
+        if (client) await cleanupPropertyFixture(client, propertyId);
+      } finally {
+        try {
+          await client?.end();
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      }
+    }
   });
 
   it('runs request, manual money, acceptance, folio, amendment, and rollout flows together', async () => {
@@ -313,13 +361,21 @@ describeDatabase('Booking Request complete vertical slice', () => {
       status: 'partial',
     });
 
+    await db
+      .update(ratePlans)
+      .set({ baseAmount: '110.00', updatedAt: new Date() })
+      .where(and(
+        eq(ratePlans.id, ratePlanId),
+        eq(ratePlans.propertyId, propertyId),
+      ));
+
     const acceptancePreview = await http
       .get(`/api/v1/booking-requests/${bookingRequestId}/acceptance-preview`)
       .query({ propertyId })
       .expect(200);
     expect(acceptancePreview.body).toMatchObject({
       submittedTotal: '200.00',
-      currentTotal: '200.00',
+      currentTotal: '220.00',
       currencyCode: 'EUR',
     });
 
@@ -331,11 +387,46 @@ describeDatabase('Booking Request complete vertical slice', () => {
     expect(accepted.body).toMatchObject({
       requestId: bookingRequestId,
       status: 'accepted',
-      totalAmount: '200.00',
+      totalAmount: '220.00',
       priceSource: 'current',
     });
     const reservationId = accepted.body.reservationId as string;
     const folioId = accepted.body.folioId as string;
+
+    const [acceptedRequestRows, acceptedReservationRows, acceptedFolioRows] = await Promise.all([
+      db.select().from(bookingRequests).where(and(
+        eq(bookingRequests.id, bookingRequestId),
+        eq(bookingRequests.propertyId, propertyId),
+      )),
+      db.select().from(reservations).where(and(
+        eq(reservations.id, reservationId),
+        eq(reservations.propertyId, propertyId),
+      )),
+      db.select().from(folios).where(and(
+        eq(folios.id, folioId),
+        eq(folios.propertyId, propertyId),
+      )),
+    ]);
+    expect(acceptedRequestRows[0]).toMatchObject({
+      acceptedTotal: '220.00',
+      acceptedReservationId: reservationId,
+      acceptedFolioId: folioId,
+      submittedQuoteSnapshot: expect.objectContaining({ grandTotal: '200.00' }),
+      currentQuoteSnapshot: expect.objectContaining({ grandTotal: '220.00' }),
+    });
+    expect(acceptedReservationRows[0]).toMatchObject({
+      id: reservationId,
+      totalAmount: '220.00',
+      acceptedPricingSnapshot: expect.objectContaining({
+        grandTotal: '220.00',
+        source: 'current',
+      }),
+    });
+    expect(acceptedFolioRows[0]).toMatchObject({
+      id: folioId,
+      reservationId,
+      propertyId,
+    });
 
     const externalPayment = await http
       .post(`/api/v1/booking-requests/${bookingRequestId}/payments/external`)
@@ -381,8 +472,8 @@ describeDatabase('Booking Request complete vertical slice', () => {
       })
       .expect(200);
     expect(amendmentPreview.body).toMatchObject({
-      previousTotal: '200.00',
-      currentTotal: '300.00',
+      previousTotal: '220.00',
+      currentTotal: '330.00',
       currencyCode: 'EUR',
     });
 
@@ -400,8 +491,8 @@ describeDatabase('Booking Request complete vertical slice', () => {
     expect(amendment.body).toMatchObject({
       reservationId,
       folioId,
-      previousTotalAmount: '200.00',
-      newTotalAmount: '300.00',
+      previousTotalAmount: '220.00',
+      newTotalAmount: '330.00',
       priceSource: 'current',
     });
 
@@ -413,14 +504,15 @@ describeDatabase('Booking Request complete vertical slice', () => {
       status: 'accepted',
       arrivalDate,
       departureDate,
-      acceptedTotal: '200.00',
+      submittedTotal: '200.00',
+      acceptedTotal: '220.00',
       acceptedReservationId: reservationId,
       acceptedFolioId: folioId,
       operationalReservation: {
         id: reservationId,
         arrivalDate,
         departureDate: extendedDepartureDate,
-        totalAmount: '300.00',
+        totalAmount: '330.00',
       },
     });
 
@@ -505,6 +597,144 @@ describeDatabase('Booking Request complete vertical slice', () => {
     ]);
     expect(databaseState.map((rows) => rows.length)).toEqual([1, 1, 2, 2, 1, 4, expect.any(Number)]);
     expect(databaseState[6]!.length).toBeGreaterThanOrEqual(12);
+    const persistedRequest = databaseState[0]![0] as typeof bookingRequests.$inferSelect;
+    const persistedReservation = databaseState[1]![0] as typeof reservations.$inferSelect;
+    expect(persistedRequest).toMatchObject({
+      acceptedTotal: '220.00',
+    });
+    expect(persistedRequest.submittedQuoteSnapshot).toMatchObject({ grandTotal: '200.00' });
+    expect(persistedRequest.currentQuoteSnapshot).toMatchObject({ grandTotal: '220.00' });
+    expect(persistedReservation).toMatchObject({
+      id: reservationId,
+      totalAmount: '330.00',
+    });
+    expect(persistedReservation.acceptedPricingSnapshot).toMatchObject({
+      grandTotal: '330.00',
+      source: 'current',
+    });
+
+    const consequenceRows = await db
+      .select()
+      .from(bookingRequestConsequences)
+      .where(and(
+        eq(bookingRequestConsequences.propertyId, propertyId),
+        eq(bookingRequestConsequences.bookingRequestId, bookingRequestId),
+      ));
+    const targetConsequences = consequenceRows.filter((row) => [
+      'booking_request.created',
+      'booking_request.accepted',
+      'payment.received',
+      'reservation.modified',
+    ].includes((row.payload as { event?: string }).event ?? ''));
+    expect(targetConsequences.map((row) => (row.payload as { event: string }).event).sort())
+      .toEqual([
+        'booking_request.accepted',
+        'booking_request.created',
+        'payment.received',
+        'payment.received',
+        'reservation.modified',
+      ]);
+    expect(new Set(targetConsequences.map((row) => row.id)).size)
+      .toBe(targetConsequences.length);
+    expect(targetConsequences.every((row) =>
+      row.status === 'completed'
+      && row.attempts === 1
+      && row.completedAt instanceof Date)).toBe(true);
+
+    const queuedDeliveries = await db
+      .select()
+      .from(webhookDeliveries)
+      .where(and(
+        eq(webhookDeliveries.propertyId, propertyId),
+        inArray(webhookDeliveries.subscriptionId, webhookSubscriptionIds),
+      ));
+    expect(queuedDeliveries).toHaveLength(
+      targetConsequences.length * webhookSubscriptionIds.length,
+    );
+    expect(queuedDeliveries.every((delivery) =>
+      delivery.status === 'pending'
+      && delivery.attempts === 0
+      && delivery.deliveredAt === null)).toBe(true);
+    for (const consequence of targetConsequences) {
+      const matchingDeliveries = queuedDeliveries.filter((delivery) =>
+        delivery.logicalEventId === consequence.id);
+      expect(matchingDeliveries.map((delivery) => delivery.subscriptionId).sort())
+        .toEqual([...webhookSubscriptionIds].sort());
+      expect(matchingDeliveries.every((delivery) =>
+        delivery.eventType === (consequence.payload as { event: string }).event)).toBe(true);
+    }
+
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        status: 204,
+      } as unknown as Awaited<ReturnType<typeof fetch>>));
+    try {
+      const deliveryService = app.get(WebhookDeliveryService);
+      for (const delivery of queuedDeliveries) {
+        await expect(deliveryService.attemptDelivery(delivery.id, propertyId))
+          .resolves.toBe('delivered');
+      }
+      const outboundEventIds = fetchMock.mock.calls.map(([, init]) =>
+        new Headers(init?.headers).get('X-HAIP-Event-Id'));
+      expect(outboundEventIds.sort()).toEqual(
+        queuedDeliveries.map((delivery) => delivery.logicalEventId).sort(),
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+    const deliveredDeliveries = await db
+      .select()
+      .from(webhookDeliveries)
+      .where(and(
+        eq(webhookDeliveries.propertyId, propertyId),
+        inArray(webhookDeliveries.subscriptionId, webhookSubscriptionIds),
+      ));
+    expect(deliveredDeliveries.every((delivery) =>
+      delivery.status === 'delivered'
+      && delivery.attempts === 1
+      && delivery.deliveredAt instanceof Date)).toBe(true);
+
+    const payloads = targetConsequences.map((row) => row.payload).concat(
+      deliveredDeliveries.map((row) => row.payload as Record<string, unknown>),
+    );
+    const serializedPayloads = JSON.stringify(payloads);
+    for (const privateValue of [
+      'Leisure',
+      '4242',
+      setupResponse.body.setupIntentId as string,
+      'I authorize staff-initiated charges for this stay.',
+    ]) {
+      expect(serializedPayloads).not.toContain(privateValue);
+    }
+    expect(collectObjectKeys(payloads).some((key) =>
+      /answer|card|consent|paymentMethod|setupIntent|token/i.test(key))).toBe(false);
+
+    const createdConsequence = targetConsequences.find((row) =>
+      (row.payload as { event?: string }).event === 'booking_request.created')!;
+    const createdDelivery = deliveredDeliveries.find((row) =>
+      row.logicalEventId === createdConsequence.id
+      && row.subscriptionId === webhookSubscriptionIds[0])!;
+    await app.get(WebhookService).dispatchPersisted(
+      createdConsequence.payload as unknown as WebhookPayload,
+      createdConsequence.id,
+    );
+    const deduplicatedDeliveries = await db
+      .select()
+      .from(webhookDeliveries)
+      .where(and(
+        eq(webhookDeliveries.propertyId, propertyId),
+        eq(webhookDeliveries.subscriptionId, webhookSubscriptionIds[0]!),
+        eq(webhookDeliveries.logicalEventId, createdConsequence.id),
+      ));
+    expect(deduplicatedDeliveries).toEqual([
+      expect.objectContaining({
+        id: createdDelivery.id,
+        logicalEventId: createdConsequence.id,
+        status: 'delivered',
+      }),
+    ]);
+
     await expect(db.insert(payments).values({
       propertyId,
       method: 'cash',
@@ -559,5 +789,84 @@ describeDatabase('Booking Request complete vertical slice', () => {
       .expect(({ body }) => {
         expect(body).toMatchObject({ id: bookingRequestId, status: 'accepted' });
       });
+
+    vi.stubEnv('AUTH_ENABLED', 'true');
+    try {
+      await http
+        .get('/api/v1/booking-engine/config')
+        .expect(401);
+      await http
+        .get('/api/v1/booking-engine/config')
+        .set('x-booking-key', `pk_invalid_${randomUUID()}`)
+        .expect(401);
+      await http
+        .post('/api/v1/booking-engine/requests')
+        .set('x-booking-key', bookingKey)
+        .send({ propertyId: randomUUID() })
+        .expect(403);
+      await http
+        .get('/api/v1/booking-engine/config')
+        .set('x-booking-key', bookingKey)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toMatchObject({
+            propertyId,
+            bookingMode: 'instant',
+          });
+        });
+      await http
+        .get('/api/v1/booking-engine/requests')
+        .set('x-booking-key', bookingKey)
+        .expect(404);
+      await http
+        .get(`/api/v1/booking-engine/requests/${bookingRequestId}`)
+        .set('x-booking-key', bookingKey)
+        .expect(404);
+    } finally {
+      vi.stubEnv('AUTH_ENABLED', 'false');
+    }
   }, 120_000);
 });
+
+function collectObjectKeys(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(collectObjectKeys);
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, nested]) => [key, ...collectObjectKeys(nested)]);
+}
+
+async function cleanupPropertyFixture(
+  sqlClient: ReturnType<typeof postgres>,
+  propertyId: string,
+): Promise<void> {
+  const guestRows = await sqlClient<{ id: string }[]>`
+    SELECT DISTINCT guest_id AS id
+    FROM reservations
+    WHERE property_id = ${propertyId}
+  `;
+  const propertyTables = await sqlClient<{ tableName: string }[]>`
+    SELECT table_name AS "tableName"
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND column_name = 'property_id'
+    ORDER BY table_name
+  `;
+  await sqlClient.begin(async (transaction) => {
+    await transaction.unsafe("SET LOCAL session_replication_role = 'replica'");
+    for (const { tableName } of propertyTables) {
+      const quotedTable = `"${tableName.replaceAll('"', '""')}"`;
+      await transaction.unsafe(
+        `DELETE FROM ${quotedTable} WHERE property_id = $1`,
+        [propertyId],
+      );
+    }
+    for (const guest of guestRows) {
+      await transaction`DELETE FROM guests WHERE id = ${guest.id}`;
+    }
+    await transaction`DELETE FROM properties WHERE id = ${propertyId}`;
+  });
+  const leftovers = await sqlClient<{ count: number }[]>`
+    SELECT count(*)::int AS count FROM properties WHERE id = ${propertyId}
+  `;
+  if (leftovers[0]?.count !== 0) {
+    throw new Error(`Booking Request E2E fixture ${propertyId} was not removed`);
+  }
+}
