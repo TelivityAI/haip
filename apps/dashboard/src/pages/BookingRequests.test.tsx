@@ -1,0 +1,597 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ToastProvider } from '../components/ui/Toast';
+import BookingRequests from './BookingRequests';
+import de from '../locales/de.json';
+import en from '../locales/en.json';
+import es from '../locales/es.json';
+import fr from '../locales/fr.json';
+import hr from '../locales/hr.json';
+import itMessages from '../locales/it.json';
+import ptBR from '../locales/pt-BR.json';
+import srLatn from '../locales/sr-Latn.json';
+
+const context = vi.hoisted(() => ({
+  propertyId: 'property-1' as string | null,
+  read: true,
+  write: true,
+}));
+
+vi.mock('../context/PropertyContext', () => ({
+  useProperty: () => ({
+    propertyId: context.propertyId,
+    currencyCode: 'EUR',
+    isPortfolioMode: false,
+  }),
+}));
+
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({
+    hasPermission: (permission: string) =>
+      permission === 'reservations.read' ? context.read : context.write,
+  }),
+}));
+
+vi.mock('../lib/api', () => ({
+  api: {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}));
+
+import { api } from '../lib/api';
+
+const REQUEST_ID = 'request-1';
+const PAYMENT_ID = 'payment-1';
+const EXTERNAL_PAYMENT_ID = 'payment-2';
+
+const requestListItem = {
+  id: REQUEST_ID,
+  propertyId: 'property-1',
+  status: 'pending',
+  arrivalDate: '2026-09-10',
+  departureDate: '2026-09-12',
+  roomTypeId: 'room-type-1',
+  ratePlanId: 'rate-plan-1',
+  adults: 2,
+  children: 0,
+  guestFirstName: 'Ada',
+  guestLastName: 'Lovelace',
+  guestEmail: 'ada@example.com',
+  hasCard: true,
+  acceptedPriceSource: null,
+  acceptedTotal: null,
+  acceptedReservationId: null,
+  createdAt: '2026-08-24T10:00:00.000Z',
+  updatedAt: '2026-08-24T10:00:00.000Z',
+};
+
+const requestDetail = {
+  ...requestListItem,
+  guestPhone: '+34 600 000 000',
+  specialRequests: 'A quiet room, please.',
+  serviceIds: [],
+  formSnapshot: [
+    {
+      id: 'question-1',
+      label: 'Expected arrival time',
+      type: 'short_text',
+      order: 0,
+      isActive: true,
+      isRequired: true,
+    },
+  ],
+  applicationAnswers: { 'question-1': 'After 18:00' },
+  submittedQuoteSnapshot: {
+    currencyCode: 'EUR',
+    grandTotal: '640.00',
+    roomTotal: '580.00',
+    taxTotal: '60.00',
+    lineItems: [],
+  },
+  currentQuoteSnapshot: {
+    currencyCode: 'EUR',
+    grandTotal: '670.00',
+    roomTotal: '610.00',
+    taxTotal: '60.00',
+    lineItems: [],
+  },
+  currencyCode: 'EUR',
+  card: { brand: 'visa', lastFour: '4242' },
+  customPriceReason: null,
+  acceptedFolioId: null,
+  decidedBy: null,
+  decidedAt: null,
+  denialReason: null,
+};
+
+const stripePayment = {
+  id: PAYMENT_ID,
+  propertyId: 'property-1',
+  bookingRequestId: REQUEST_ID,
+  folioId: null,
+  method: 'credit_card',
+  status: 'captured',
+  amount: '192.00',
+  currencyCode: 'EUR',
+  gatewayProvider: 'stripe',
+  reference: null,
+  cardLastFour: '4242',
+  cardBrand: 'visa',
+  originalPaymentId: null,
+  notes: 'Staff-initiated Booking Request saved-card charge captured',
+  processedAt: '2026-08-25T09:00:00.000Z',
+  createdAt: '2026-08-25T09:00:00.000Z',
+  updatedAt: '2026-08-25T09:00:00.000Z',
+};
+
+const externalPayment = {
+  ...stripePayment,
+  id: EXTERNAL_PAYMENT_ID,
+  method: 'bank_transfer',
+  amount: '100.00',
+  gatewayProvider: 'bank',
+  reference: 'BANK-42',
+  cardLastFour: null,
+  cardBrand: null,
+  notes: 'Deposit received',
+};
+
+const paymentsEmpty = { movements: [], allocations: [], resolutions: [] };
+
+function mockApi(overrides?: {
+  list?: unknown;
+  detail?: unknown;
+  payments?: unknown;
+  installments?: unknown;
+  emails?: unknown;
+  folio?: unknown;
+}) {
+  vi.mocked(api.get).mockImplementation((url: string) => {
+    if (url === '/v1/booking-requests') {
+      return Promise.resolve({
+        data: overrides?.list ?? {
+          data: [requestListItem],
+          total: 1,
+          page: 1,
+          limit: 20,
+          hasMore: false,
+        },
+      } as never);
+    }
+    if (url === `/v1/booking-requests/${REQUEST_ID}`) {
+      return Promise.resolve({ data: overrides?.detail ?? requestDetail } as never);
+    }
+    if (url === `/v1/booking-requests/${REQUEST_ID}/payments`) {
+      return Promise.resolve({ data: overrides?.payments ?? paymentsEmpty } as never);
+    }
+    if (url === `/v1/booking-requests/${REQUEST_ID}/installments`) {
+      return Promise.resolve({ data: overrides?.installments ?? [] } as never);
+    }
+    if (url === `/v1/booking-requests/${REQUEST_ID}/emails`) {
+      return Promise.resolve({ data: overrides?.emails ?? [] } as never);
+    }
+    if (url === '/v1/folios/folio-1') {
+      return Promise.resolve({ data: overrides?.folio ?? {} } as never);
+    }
+    return Promise.resolve({ data: [] } as never);
+  });
+}
+
+function renderAt(path = '/booking-requests') {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      mutations: { retry: false },
+    },
+  });
+  const view = render(
+    <MemoryRouter initialEntries={[path]}>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Routes>
+            <Route path="/booking-requests/*" element={<BookingRequests />} />
+          </Routes>
+        </ToastProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+  return { ...view, queryClient };
+}
+
+describe('Booking request queue', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    context.propertyId = 'property-1';
+    context.read = true;
+    context.write = true;
+    mockApi();
+    vi.mocked(api.post).mockResolvedValue({ data: {} } as never);
+    vi.mocked(api.patch).mockResolvedValue({ data: {} } as never);
+    vi.mocked(api.delete).mockResolvedValue({ data: {} } as never);
+  });
+
+  it('scopes list and amount-enrichment reads and sends queue filters', async () => {
+    renderAt();
+
+    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
+    expect(within(screen.getByRole('table', { name: 'Booking requests' })).getByText('Pending')).toBeInTheDocument();
+    expect(within(screen.getByRole('table', { name: 'Booking requests' })).getByText('Card saved')).toBeInTheDocument();
+    expect(screen.getByText('€640.00')).toBeInTheDocument();
+
+    const listCall = vi.mocked(api.get).mock.calls.find(([url]) => url === '/v1/booking-requests');
+    expect(listCall?.[1]).toEqual({
+      params: expect.objectContaining({ propertyId: 'property-1', page: 1, limit: 20 }),
+    });
+    expect(vi.mocked(api.get)).toHaveBeenCalledWith(
+      `/v1/booking-requests/${REQUEST_ID}`,
+      { params: { propertyId: 'property-1' } },
+    );
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'accepted');
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Guest' }), 'Ada');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Card' }), 'true');
+
+    await waitFor(() => {
+      const latest = vi.mocked(api.get).mock.calls
+        .filter(([url]) => url === '/v1/booking-requests')
+        .at(-1)?.[1];
+      expect(latest).toEqual({
+        params: expect.objectContaining({
+          propertyId: 'property-1',
+          status: 'accepted',
+          guest: 'Ada',
+          hasCard: true,
+        }),
+      });
+    });
+  });
+
+  it('sorts the compact queue and opens the dedicated detail route', async () => {
+    renderAt();
+    await screen.findByText('Ada Lovelace');
+    expect(screen.getByRole('table', { name: 'Booking requests' })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'amount_desc');
+    await userEvent.click(screen.getByRole('link', { name: /Ada Lovelace/i }));
+    expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('filters cross-property rows and treats a mismatched detail as not found', async () => {
+    mockApi({ list: { data: [{ ...requestListItem, propertyId: 'property-2' }], total: 1 } });
+    const queue = renderAt();
+    expect(await screen.findByText('No booking requests match these filters.')).toBeInTheDocument();
+    queue.unmount();
+
+    vi.clearAllMocks();
+    mockApi({ detail: { ...requestDetail, propertyId: 'property-2' } });
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    expect(await screen.findByRole('heading', { name: 'Request not found' })).toBeInTheDocument();
+    expect(screen.queryByText('ada@example.com')).not.toBeInTheDocument();
+  });
+
+  it('does not query or render request data without reservations.read', () => {
+    context.read = false;
+    renderAt();
+    expect(screen.getByRole('heading', { name: 'Access restricted' })).toBeInTheDocument();
+    expect(api.get).not.toHaveBeenCalled();
+  });
+});
+
+describe('Booking request decisions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    context.propertyId = 'property-1';
+    context.read = true;
+    context.write = true;
+    mockApi();
+    vi.mocked(api.post).mockResolvedValue({ data: {} } as never);
+  });
+
+  it('supports arrow-key navigation across the horizontally scrollable tabs', async () => {
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    const overview = await screen.findByRole('tab', { name: 'Overview' });
+    overview.focus();
+    await userEvent.keyboard('{ArrowRight}');
+
+    const payments = screen.getByRole('tab', { name: 'Payments & plan' });
+    expect(payments).toHaveFocus();
+    expect(payments).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('keeps decision and money actions independent and gates all writes', async () => {
+    context.write = false;
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Accept request' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Deny request' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Payments & plan' }));
+    expect(screen.queryByRole('button', { name: 'Charge saved card' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Record external payment' })).not.toBeInTheDocument();
+    expect(screen.getByText('Booking decisions do not depend on payment state.')).toBeInTheDocument();
+  });
+
+  it('compares submitted/current amounts and requires a positive custom total and reason', async () => {
+    const { queryClient } = renderAt(`/booking-requests/${REQUEST_ID}`);
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    await userEvent.click(await screen.findByRole('button', { name: 'Accept request' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Accept booking request' });
+    expect(within(dialog).getByText('€640.00')).toBeInTheDocument();
+    expect(within(dialog).getByText('€670.00')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('radio', { name: /Custom total/i }));
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Custom total' }), '0');
+    expect(within(dialog).getByText('Enter an amount greater than zero.')).toBeInTheDocument();
+
+    await userEvent.clear(within(dialog).getByRole('textbox', { name: 'Custom total' }));
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Custom total' }), '625');
+    expect(within(dialog).getByRole('button', { name: 'Accept request' })).toBeDisabled();
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Reason for custom total' }), 'Written offer');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Accept request' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      `/v1/booking-requests/${REQUEST_ID}/accept`,
+      { priceSource: 'custom', customTotal: '625.00', customReason: 'Written offer' },
+      { params: { propertyId: 'property-1' } },
+    ));
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ['booking-request-messages', 'property-1', REQUEST_ID],
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ['booking-request-audit', 'property-1', REQUEST_ID],
+    });
+  });
+
+  it('disables duplicate acceptance and preserves the modal draft on a server conflict', async () => {
+    let rejectRequest!: (error: unknown) => void;
+    vi.mocked(api.post).mockImplementation(() => new Promise((_resolve, reject) => {
+      rejectRequest = reject;
+    }) as never);
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('button', { name: 'Accept request' }));
+    const dialog = screen.getByRole('dialog', { name: 'Accept booking request' });
+    await userEvent.click(within(dialog).getByRole('radio', { name: /Custom total/i }));
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Custom total' }), '625');
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Reason for custom total' }), 'Keep this draft');
+    const submit = within(dialog).getByRole('button', { name: 'Accept request' });
+    await userEvent.click(submit);
+    expect(submit).toBeDisabled();
+    expect(api.post).toHaveBeenCalledTimes(1);
+
+    rejectRequest({ response: { status: 409, data: { message: 'Stay is no longer available' } } });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Stay is no longer available');
+    expect(within(dialog).getByRole('textbox', { name: 'Custom total' })).toHaveValue('625');
+    expect(within(dialog).getByRole('textbox', { name: 'Reason for custom total' })).toHaveValue('Keep this draft');
+  });
+
+  it('blocks denial while money is unresolved and directs staff to resolution actions', async () => {
+    mockApi({ payments: { movements: [stripePayment], allocations: [], resolutions: [] } });
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('button', { name: 'Deny request' }));
+    const dialog = screen.getByRole('dialog', { name: 'Deny booking request' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('€192.00 remains unresolved');
+    expect(within(dialog).getByRole('button', { name: 'Confirm denial' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Resolve money first' }));
+    expect(screen.getByRole('tab', { name: 'Payments & plan' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: 'Refund' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retain with reason' })).toBeInTheDocument();
+  });
+});
+
+describe('Booking request payments, messages, and audit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    context.propertyId = 'property-1';
+    context.read = true;
+    context.write = true;
+    mockApi({
+      payments: {
+        movements: [stripePayment, externalPayment],
+        allocations: [],
+        resolutions: [],
+      },
+      installments: [
+        {
+          id: 'installment-1',
+          propertyId: 'property-1',
+          bookingRequestId: REQUEST_ID,
+          label: '30% deposit',
+          sortOrder: 0,
+          fixedAmount: null,
+          percentage: '30.00',
+          resolvedAmount: '192.00',
+          dueMilestone: 'arrival',
+          dueDate: null,
+          allocatedAmount: '50.00',
+          status: 'partial',
+        },
+        {
+          id: 'installment-2',
+          propertyId: 'property-1',
+          bookingRequestId: REQUEST_ID,
+          label: 'Final balance',
+          sortOrder: 1,
+          fixedAmount: '448.00',
+          percentage: null,
+          resolvedAmount: '448.00',
+          dueMilestone: 'checkout',
+          dueDate: null,
+          allocatedAmount: '0.00',
+          status: 'unpaid',
+        },
+      ],
+      emails: [
+        {
+          id: 'delivery-1',
+          kind: 'receipt',
+          status: 'failed',
+          subject: 'We received your request',
+          bodyText: 'Your request is awaiting review.',
+          errorMessage: 'Delivery failed',
+          attempts: 5,
+          nextAttemptAt: null,
+          lastAttemptAt: '2026-08-25T10:00:00.000Z',
+          sentAt: null,
+          createdAt: '2026-08-24T10:00:00.000Z',
+          updatedAt: '2026-08-25T10:00:00.000Z',
+        },
+      ],
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: {} } as never);
+    vi.mocked(api.patch).mockResolvedValue({ data: {} } as never);
+    vi.mocked(api.delete).mockResolvedValue({ data: {} } as never);
+  });
+
+  it('shows manual milestones and allocation status and edits an installment', async () => {
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+    expect(await screen.findByText('30% deposit')).toBeInTheDocument();
+    expect(screen.getByText('Partial')).toBeInTheDocument();
+    expect(screen.getByText('Due at arrival')).toBeInTheDocument();
+    expect(screen.getByText('Nothing is charged automatically.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Final balance' }));
+    const label = screen.getByRole('textbox', { name: 'Installment label' });
+    await userEvent.clear(label);
+    await userEvent.type(label, 'Arrival deposit');
+    await userEvent.click(screen.getByRole('button', { name: 'Save installment' }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith(
+      `/v1/booking-requests/${REQUEST_ID}/installments/installment-2`,
+      expect.objectContaining({ label: 'Arrival deposit', fixedAmount: '448.00', dueMilestone: 'checkout' }),
+      { params: { propertyId: 'property-1' } },
+    ));
+  });
+
+  it('keeps saved-card and external collection separate and rejects zero amounts', async () => {
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+    await screen.findByRole('button', { name: 'Charge saved card' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Charge saved card' }));
+    let dialog = screen.getByRole('dialog', { name: 'Charge saved card' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Amount' }), '0');
+    expect(within(dialog).getByText('Enter an amount greater than zero.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Charge saved card' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Record external payment' }));
+    dialog = screen.getByRole('dialog', { name: 'Record external payment' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Amount' }), '75');
+    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Payment method' }), 'cash');
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Reference' }), 'CASH-75');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record external payment' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      `/v1/booking-requests/${REQUEST_ID}/payments/external`,
+      expect.objectContaining({
+        amount: '75.00',
+        currencyCode: 'EUR',
+        method: 'cash',
+        reference: 'CASH-75',
+      }),
+      { params: { propertyId: 'property-1' } },
+    ));
+  });
+
+  it('offers provenance-correct refund/return/retain actions with required reasons', async () => {
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+    await screen.findByText('Saved card · visa •••• 4242');
+    expect(screen.getByText('External · bank transfer · BANK-42')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Refund' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Record return' })).toHaveLength(1);
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Retain with reason' })[0]!);
+    const dialog = screen.getByRole('dialog', { name: 'Retain money' });
+    await userEvent.clear(within(dialog).getByRole('textbox', { name: 'Amount' }));
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Amount' }), '50');
+    expect(within(dialog).getByRole('button', { name: 'Retain money' })).toBeDisabled();
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Reason for retaining money' }), 'Non-refundable fee');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Retain money' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      `/v1/booking-requests/${REQUEST_ID}/payments/${PAYMENT_ID}/retentions`,
+      { amount: '50.00', reason: 'Non-refundable fee' },
+      { params: { propertyId: 'property-1' } },
+    ));
+  });
+
+  it('retries failed messages through the scoped staff endpoint', async () => {
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Messages' }));
+    expect(await screen.findByText('We received your request')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry delivery' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      `/v1/booking-requests/${REQUEST_ID}/emails/delivery-1/retry`,
+      undefined,
+      { params: { propertyId: 'property-1' } },
+    ));
+  });
+
+  it('renders a safe audit timeline without internal or payment tokens', async () => {
+    const accepted = {
+      ...requestDetail,
+      status: 'accepted',
+      acceptedPriceSource: 'current',
+      acceptedTotal: '670.00',
+      acceptedReservationId: 'reservation-1',
+      acceptedFolioId: 'folio-1',
+      decidedBy: 'staff-user-1',
+      decidedAt: '2026-08-25T11:00:00.000Z',
+      stripePaymentMethodId: 'pm_secret_should_not_render',
+    };
+    mockApi({
+      detail: accepted,
+      payments: { movements: [stripePayment], allocations: [], resolutions: [] },
+      emails: [],
+      folio: {
+        id: 'folio-1',
+        folioNumber: 'F-1042',
+        status: 'open',
+        totalCharges: '700.00',
+        totalPayments: '192.00',
+        balance: '508.00',
+        currencyCode: 'EUR',
+      },
+    });
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Audit' }));
+    expect(await screen.findByText('Request submitted')).toBeInTheDocument();
+    expect(screen.getByText('Request accepted')).toBeInTheDocument();
+    expect(screen.getByText('Payment captured')).toBeInTheDocument();
+    expect(screen.getByText(/staff-user-1/)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('pm_secret_should_not_render');
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Payments & plan' }));
+    expect(await screen.findByText('Operational folio summary')).toBeInTheDocument();
+    expect(screen.getByText('€508.00')).toBeInTheDocument();
+  });
+});
+
+describe('Booking request locales', () => {
+  it('defines every visible booking-request leaf in all eight locales', () => {
+    const locales = { en, de, es, fr, hr, it: itMessages, 'pt-BR': ptBR, 'sr-Latn': srLatn };
+    const leafPaths = (value: unknown, prefix = ''): string[] => {
+      if (value == null || typeof value !== 'object' || Array.isArray(value)) return [prefix];
+      return Object.entries(value as Record<string, unknown>)
+        .flatMap(([key, child]) => leafPaths(child, prefix ? `${prefix}.${key}` : key));
+    };
+    const read = (value: unknown, path: string) => path.split('.').reduce<unknown>(
+      (current, key) => current && typeof current === 'object'
+        ? (current as Record<string, unknown>)[key]
+        : undefined,
+      value,
+    );
+    const paths = leafPaths(en.bookingRequests, 'bookingRequests');
+    for (const [locale, messages] of Object.entries(locales)) {
+      for (const path of paths) {
+        expect(read(messages, path), `${locale} is missing ${path}`).not.toBeUndefined();
+      }
+    }
+  });
+});

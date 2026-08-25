@@ -375,6 +375,7 @@
     "dashboard": "Dashboard",
     "foliosBilling": "Gästekonten & Abrechnung",
     "frontDesk": "Rezeption",
+    "bookingRequests": "Buchungsanfragen",
     "groups": "Gruppen",
     "guests": "Gäste",
     "houseAccounts": "Hauskonten",
@@ -551,5 +552,306 @@
     "Bad Request": "Ungültige Anfrage",
     "Resource not found": "Ressource nicht gefunden",
     "Action not permitted": "Aktion nicht zulässig"
+  },
+  "bookingRequests": {
+    "access": {
+      "title": "Zugang eingeschränkt",
+      "description": "Sie benötigen die Erlaubnis, Reservierungen zu lesen, bevor Sie Buchungsanfragen überprüfen können."
+    },
+    "property": {
+      "title": "Wählen Sie eine Immobilie",
+      "description": "Buchungsanfragen werden jeweils für eine Unterkunft überprüft, sodass Gäste-, Geld- und Entscheidungsunterlagen sicher im Blick bleiben."
+    },
+    "notFound": {
+      "title": "Anfrage nicht gefunden",
+      "description": "Diese Anfrage existiert in der ausgewählten Unterkunft nicht oder ist nicht mehr verfügbar."
+    },
+    "common": {
+      "cancel": "Abbrechen",
+      "loading": "Buchungsanfrage wird geladen…",
+      "status": "Status",
+      "yes": "Ja",
+      "no": "Nein",
+      "notProvided": "Nicht bereitgestellt"
+    },
+    "actions": {
+      "accept": "Anfrage annehmen",
+      "deny": "Anfrage ablehnen",
+      "charge": "Ladekarte",
+      "record": "Zahlung aufzeichnen"
+    },
+    "statuses": {
+      "pending": "Ausstehend",
+      "accepted": "Akzeptiert",
+      "denied": "Abgelehnt"
+    },
+    "tabs": {
+      "label": "Arbeitsbereich anfordern",
+      "overview": "Übersicht",
+      "payments": "Zahlungen & Plan",
+      "messages": "Nachrichten",
+      "audit": "Prüfung"
+    },
+    "queue": {
+      "title": "Buchungsanfragen",
+      "description": "Überprüfen Sie die Gastanträge, die Aufenthaltsdetails und den Geldstatus, bevor Sie eine konkrete Maßnahme ergreifen.",
+      "filters": "Filter für Buchungsanfragen",
+      "guest": "Gast",
+      "card": "Karte",
+      "stay": "Bleib",
+      "amount": "Angeforderter Betrag",
+      "allStatuses": "Alle Status",
+      "anyCard": "Beliebiger Kartenstatus",
+      "cardSaved": "Karte gespeichert",
+      "noCard": "Keine Karte",
+      "arrivalFrom": "Anreise von",
+      "arrivalTo": "Anreise nach",
+      "sort": "Sortieren nach",
+      "sortOptions": {
+        "newest": "Das Neueste zuerst",
+        "arrival": "Ankunftsdatum",
+        "guest": "Gastname",
+        "amountDesc": "Höchster Betrag"
+      },
+      "clear": "Klar",
+      "loading": "Buchungsanfragen werden geladen…",
+      "loadError": "Buchungsanfragen konnten nicht geladen werden. Versuchen Sie es erneut.",
+      "empty": "Keine Buchungsanfragen entsprechen diesen Filtern.",
+      "total_one": "{{count}} Anfrage",
+      "total_other": "{{count}} Anfragen",
+      "total": "{{count}} Anfragen",
+      "previous": "Zurück",
+      "next": "Als nächstes"
+    },
+    "detail": {
+      "back": "Alle Buchungsanfragen",
+      "reference": "{{reference}} · Eingereicht {{date}}",
+      "decisionActions": "Entscheidung",
+      "moneyActions": "Geld",
+      "decisionComplete": "Entscheidung abgeschlossen",
+      "independence": "Buchungsentscheidungen und Geldaktionen sind unabhängig voneinander. Mit der Annahme einer Zahlung wird niemals eine Anfrage angenommen, und die Annahme löst niemals eine Zahlung aus."
+    },
+    "amounts": {
+      "quoted": "Zitiert",
+      "submitted": "Eingereicht",
+      "current": "Aktuell",
+      "accepted": "Akzeptiert",
+      "difference": "Unterschied",
+      "captured": "Gefangen",
+      "returned": "Zurückgegeben",
+      "retained": "Behalten"
+    },
+    "overview": {
+      "stay": "Aufenthaltsanfrage",
+      "dates": "Termine",
+      "occupancy": "Belegung",
+      "occupancyValue": "{{adults}} Erwachsene · {{children}} Kinder",
+      "roomType": "Zimmertyp",
+      "ratePlan": "Tarifplan",
+      "guest": "Gast & Kontakt",
+      "email": "E-Mail",
+      "phone": "Telefon",
+      "specialRequests": "Sonderwünsche",
+      "application": "Bewerbung",
+      "noQuestions": "Es wurden keine weiteren Bewerbungsfragen eingereicht.",
+      "priceComparison": "Preisvergleich",
+      "card": "Karte im Archiv",
+      "cardGeneric": "Karte",
+      "noCard": "Keine gespeicherte Karte",
+      "cardSafety": "Es werden nur die Marke der Safekarte und die letzten vier Ziffern angezeigt. Das Personal muss jede Ladung einleiten.",
+      "decision": "Entscheidungsprotokoll",
+      "priceSource": "Preisquelle"
+    },
+    "priceSources": {
+      "submitted": "Angebot abgegeben",
+      "current": "Aktuelles Angebot",
+      "custom": "Benutzerdefinierte Summe"
+    },
+    "accept": {
+      "title": "Buchungsanfrage annehmen",
+      "priceChoice": "Akzeptierter Preis",
+      "submitted": "Angebot abgegeben",
+      "submittedDescription": "Verwenden Sie den Betrag, den der Gast beim Absenden der Anfrage gesehen hat.",
+      "current": "Aktuelles Angebot",
+      "currentDescription": "Überprüfen Sie die Verfügbarkeit erneut und berechnen Sie bei der Annahme das maßgebliche aktuelle Angebot.",
+      "custom": "Benutzerdefinierte Summe",
+      "customDescription": "Legen Sie eine explizite Summe fest und notieren Sie, warum sie abweicht.",
+      "recheckedOnAccept": "Bei Abnahme noch einmal überprüft",
+      "enterAmount": "Geben Sie einen Betrag ein",
+      "customTotal": "Benutzerdefinierte Summe",
+      "customReason": "Grund für die benutzerdefinierte Summe",
+      "independence": "Durch Akzeptieren wird die Reservierung erstellt. Die gespeicherte Karte wird nicht belastet und es ist nicht vom Zahlungsstatus abhängig.",
+      "accepting": "Akzeptieren…",
+      "error": "Die Anfrage konnte nicht angenommen werden. Überprüfen Sie die aktuelle Verfügbarkeit und versuchen Sie es erneut."
+    },
+    "deny": {
+      "title": "Buchungsanfrage ablehnen",
+      "reason": "Ablehnungsgrund",
+      "unresolved": "{{amount}} bleibt ungelöst",
+      "unresolvedDirection": "Erstatten Sie eine gespeicherte Kartenzahlung, erfassen Sie eine externe Rückgabe oder behalten Sie den Betrag mit Angabe von Gründen ein, bevor Sie ihn ablehnen.",
+      "resolveFirst": "Lösen Sie zuerst das Geld",
+      "confirm": "Ablehnung bestätigen",
+      "denying": "Leugnen…",
+      "error": "Der Antrag konnte nicht abgelehnt werden. Überprüfen Sie den Geldstatus und versuchen Sie es erneut."
+    },
+    "validation": {
+      "positiveAmount": "Geben Sie einen Betrag größer als Null ein."
+    },
+    "payments": {
+      "requestSummary": "Fordern Sie eine Geldübersicht an",
+      "independence": "Buchungsentscheidungen hängen nicht vom Zahlungsstatus ab.",
+      "plan": "Zahlungsplan",
+      "noAutomatic": "Es wird nichts automatisch berechnet. Meilensteine ​​sind Erinnerungen an von Mitarbeitern initiierte Maßnahmen.",
+      "noAutomaticTitle": "Es wird nichts automatisch berechnet.",
+      "noAutomaticDescription": "Meilensteine sind Erinnerungen an von Mitarbeitern initiierte Maßnahmen.",
+      "addInstallment": "Rate hinzufügen",
+      "editInstallment": "Rate bearbeiten",
+      "installmentLabel": "Ratenzahlungsetikett",
+      "amountType": "Betragstyp",
+      "fixedAmount": "Fester Betrag",
+      "percentage": "Prozentsatz",
+      "milestone": "Fälliger Meilenstein",
+      "dueDate": "Fälligkeitsdatum",
+      "saveInstallment": "Rate sparen",
+      "installmentError": "Die Rate konnte nicht gespeichert werden.",
+      "noInstallments": "Noch keine Ratenzahlungspläne.",
+      "allocated": "{{allocated}} von {{total}} zugewiesen",
+      "editLabel": "Bearbeiten {{label}}",
+      "deleteLabel": "{{label}} löschen",
+      "allocateLabel": "Ordnen Sie die Zahlung der Nummer {{label}} zu",
+      "allocateTo": "Ordnen Sie die Zahlung der Nummer {{label}} zu",
+      "movement": "Erfasste Bewegung",
+      "allocate": "Zuordnen",
+      "allocationError": "Die Zahlung konnte nicht zugeordnet werden.",
+      "movements": "Geldbewegungen",
+      "noMovements": "Noch keine Geldbewegungen.",
+      "savedCardProvenance": "Gespeicherte Karte · {{brand}} •••• {{lastFour}}",
+      "externalProvenance": "Extern · {{method}} · {{reference}}",
+      "loadError": "Zahlungsplan und Bewegungshistorie konnten nicht geladen werden.",
+      "folioSummary": "Zusammenfassung des operativen Folios",
+      "acceptedDeal": "Akzeptierter Deal",
+      "folioCharges": "Foliogebühren",
+      "folioPayments": "Folio-Zahlungen",
+      "balanceDue": "Restbetrag fällig",
+      "folioError": "Die verknüpfte Foliozusammenfassung konnte nicht geladen werden."
+    },
+    "installmentStatuses": {
+      "unpaid": "Unbezahlt",
+      "partial": "Teilweise",
+      "paid": "Bezahlt"
+    },
+    "milestones": {
+      "manual": "Manuelle Nachverfolgung",
+      "arrival": "Fällig bei der Ankunft",
+      "checkout": "Fällig an der Kasse",
+      "date": "Spezifisches Datum",
+      "dateValue": "Fällig {{date}}"
+    },
+    "methods": {
+      "credit_card": "Kreditkarte",
+      "debit_card": "Debitkarte",
+      "cash": "Bargeld",
+      "bank_transfer": "Banküberweisung",
+      "pix": "PIX",
+      "other": "andere"
+    },
+    "paymentStatuses": {
+      "pending": "Ausstehend",
+      "authorized": "Autorisiert",
+      "captured": "Gefangen",
+      "settled": "Erledigt",
+      "refunded": "Erstattet",
+      "partially_refunded": "Teilweise erstattet",
+      "failed": "Fehlgeschlagen",
+      "voided": "Entwertet"
+    },
+    "paymentActions": {
+      "amount": "Betrag",
+      "method": "Zahlungsart",
+      "processedAt": "Verarbeitet bei",
+      "provider": "Anbieter (optional)",
+      "reference": "Referenz",
+      "notes": "Notizen (optional)",
+      "saving": "Sparen…",
+      "error": "Die Geldaktion konnte nicht abgeschlossen werden. Ihre eingegebenen Daten sind noch hier.",
+      "paymentRequired": "Wählen Sie zunächst eine Zahlungsbewegung aus.",
+      "charge": {
+        "title": "Gespeicherte Karte aufladen",
+        "action": "Gespeicherte Karte aufladen",
+        "description": "Hierbei handelt es sich um eine ausdrücklich vom Personal initiierte Anklage. Die Anfrage wird nicht angenommen."
+      },
+      "external": {
+        "title": "Externe Zahlung erfassen",
+        "action": "Externe Zahlung erfassen",
+        "description": "Erfassen Sie Geld, das bereits außerhalb des Gateways für gespeicherte Karten gesammelt wurde."
+      },
+      "refund": {
+        "title": "Rückerstattung der gespeicherten Kartenzahlung",
+        "action": "Rückerstattung",
+        "description": "Geben Sie einen Teil oder die gesamte Gateway-Zahlung zurück."
+      },
+      "external_return": {
+        "title": "Erfassen Sie die externe Rendite",
+        "action": "Rekordrückkehr",
+        "description": "Vermerken Sie, dass extern eingenommenes Geld zurückgegeben wurde."
+      },
+      "retain": {
+        "title": "Geld behalten",
+        "action": "Geld behalten",
+        "open": "Behalten Sie mit Vernunft bei",
+        "description": "Lösen Sie diesen Betrag vor der Ablehnung als einbehalten auf. Ein geschäftlicher Grund ist zwingend erforderlich.",
+        "reason": "Grund für die Geldeinbehaltung"
+      }
+    },
+    "messages": {
+      "title": "Nachrichtenübermittlungen",
+      "description": "Transaktions-E-Mails sind eine Folge von Mitarbeiteraktionen. Eine fehlgeschlagene Lieferung macht niemals eine Entscheidung oder Geldbewegung rückgängig.",
+      "loading": "Nachrichtenverlauf wird geladen…",
+      "loadError": "Der Nachrichtenverlauf konnte nicht geladen werden.",
+      "empty": "Es wurden noch keine Transaktionsnachrichten aufgezeichnet.",
+      "retry": "Zustellung erneut versuchen",
+      "retryError": "Die fehlgeschlagene Zustellung konnte nicht wiederholt werden.",
+      "attempts_one": "{{count}} Versuch",
+      "attempts_other": "{{count}} Versuche",
+      "attempts": "{{count}} Versuche",
+      "actorNote": "Ein manueller Wiederholungsversuch wird mit Ihrer Mitarbeiteridentität aufgezeichnet."
+    },
+    "messageKinds": {
+      "receipt": "Quittung anfordern",
+      "accepted": "Akzeptanz",
+      "denied": "Ablehnung",
+      "payment": "Zahlung",
+      "refund": "Rückerstattung",
+      "failure": "Zahlungsfehler"
+    },
+    "messageStatuses": {
+      "pending": "Ausstehend",
+      "processing": "Verarbeitung",
+      "sent": "Gesendet",
+      "failed": "Fehlgeschlagen"
+    },
+    "audit": {
+      "title": "Geschäftszeitleiste",
+      "description": "Eine sichere Betriebsansicht, abgeleitet aus den den Mitarbeitern zur Verfügung stehenden Anforderungs-, Bewegungs-, Lösungs- und Lieferaufzeichnungen.",
+      "submitted": "Antrag eingereicht",
+      "submittedDescription": "Die Gastbewerbung und der eingereichte Angebots-Snapshot wurden aufgezeichnet.",
+      "accepted": "Anfrage angenommen",
+      "acceptedDescription": "Akzeptiert unter {{amount}} unter Verwendung der {{source}}.",
+      "denied": "Anfrage abgelehnt",
+      "deniedDescription": "Der Antrag wurde abgelehnt, nachdem der Geldstatus geklärt war.",
+      "paymentCaptured": "Zahlung erfasst",
+      "paymentFailed": "Die Zahlung ist fehlgeschlagen",
+      "paymentReturned": "Zahlung zurückerstattet",
+      "paymentDescription": "{{amount}} · {{method}}",
+      "resolutionDescription": "{{amount}} gelöst",
+      "resolutions": {
+        "refund": "Gateway-Rückerstattung erfasst",
+        "external_return": "Externe Rendite erfasst",
+        "retained": "Geld einbehalten"
+      },
+      "message": "{{kind}} Nachricht",
+      "messageDescription": "Lieferstatus: {{status}}",
+      "actor": "Schauspieler: {{actor}}"
+    }
   }
 }

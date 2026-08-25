@@ -24,6 +24,7 @@ import {
   Building2,
   Calculator,
   ReceiptText,
+  ClipboardList,
   X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -48,6 +49,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard', permission: 'dashboard.view' },
       { to: '/front-desk', icon: ConciergeBell, labelKey: 'nav.frontDesk', permission: 'frontdesk.access' },
+      { to: '/booking-requests', icon: ClipboardList, labelKey: 'nav.bookingRequests', permission: 'reservations.read' },
       { to: '/reservations', icon: CalendarDays, labelKey: 'nav.reservations', permission: 'reservations.read' },
       { to: '/guests', icon: Users, labelKey: 'nav.guests', permission: 'guests.read' },
       { to: '/rooms', icon: DoorOpen, labelKey: 'nav.rooms', permission: 'rooms.read' },

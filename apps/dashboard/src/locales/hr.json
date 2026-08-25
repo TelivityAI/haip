@@ -1216,6 +1216,7 @@
     "dashboard": "Nadzorna ploča",
     "foliosBilling": "Foliji i naplata",
     "frontDesk": "Recepcija",
+    "bookingRequests": "Zahtjevi za rezervaciju",
     "groups": "Grupe",
     "guests": "Gosti",
     "houseAccounts": "Interni računi",
@@ -1865,5 +1866,306 @@
     "Bad Request": "Neispravan zahtjev",
     "Resource not found": "Resurs nije pronađen",
     "Action not permitted": "Radnja nije dopuštena"
+  },
+  "bookingRequests": {
+    "access": {
+      "title": "Pristup ograničen",
+      "description": "Potrebno vam je dopuštenje za čitanje rezervacija prije nego što možete pregledati zahtjeve za rezervacije."
+    },
+    "property": {
+      "title": "Odaberite jednu nekretninu",
+      "description": "Zahtjevi za rezervaciju pregledavaju se jedan po jedan objekt tako da gosti, novac i zapisi o odlukama ostaju na sigurnom."
+    },
+    "notFound": {
+      "title": "Zahtjev nije pronađen",
+      "description": "Ovaj zahtjev ne postoji na odabranom objektu ili više nije dostupan."
+    },
+    "common": {
+      "cancel": "Odustani",
+      "loading": "Učitavanje zahtjeva za rezervaciju…",
+      "status": "Status",
+      "yes": "da",
+      "no": "br",
+      "notProvided": "Nije osigurano"
+    },
+    "actions": {
+      "accept": "Prihvati zahtjev",
+      "deny": "Odbij zahtjev",
+      "charge": "Kartica za naplatu",
+      "record": "Rekordno plaćanje"
+    },
+    "statuses": {
+      "pending": "Na čekanju",
+      "accepted": "Prihvaćeno",
+      "denied": "odbijeno"
+    },
+    "tabs": {
+      "label": "Zatražite radni prostor",
+      "overview": "Pregled",
+      "payments": "Plaćanja i plan",
+      "messages": "Poruke",
+      "audit": "revizija"
+    },
+    "queue": {
+      "title": "Zahtjevi za rezervaciju",
+      "description": "Pregledajte prijave gostiju, podatke o boravku i stanje novca prije poduzimanja izričite radnje.",
+      "filters": "Filtri zahtjeva za rezervaciju",
+      "guest": "Gost",
+      "card": "kartica",
+      "stay": "ostani",
+      "amount": "Traženi iznos",
+      "allStatuses": "Svi statusi",
+      "anyCard": "Bilo koje stanje kartice",
+      "cardSaved": "Kartica je spremljena",
+      "noCard": "Nema kartice",
+      "arrivalFrom": "Dolazak iz",
+      "arrivalTo": "Dolazak u",
+      "sort": "Poredaj po",
+      "sortOptions": {
+        "newest": "Prvo najnoviji",
+        "arrival": "Datum dolaska",
+        "guest": "Ime gosta",
+        "amountDesc": "Najviši iznos"
+      },
+      "clear": "čisto",
+      "loading": "Učitavanje zahtjeva za rezervaciju…",
+      "loadError": "Zahtjevi za rezervaciju nisu se mogli učitati. Pokušajte ponovno.",
+      "empty": "Nijedan zahtjev za rezervaciju ne odgovara ovim filtrima.",
+      "total_one": "{{count}} zahtjev",
+      "total_other": "{{count}} zahtjeva",
+      "total": "{{count}} zahtjeva",
+      "previous": "Prethodno",
+      "next": "Dalje"
+    },
+    "detail": {
+      "back": "Svi zahtjevi za rezervacije",
+      "reference": "{{reference}} · Poslano {{date}}",
+      "decisionActions": "Odluka",
+      "moneyActions": "Novac",
+      "decisionComplete": "Odluka dovršena",
+      "independence": "Odluke o rezervaciji i novčane akcije su neovisne. Prihvaćanje plaćanja nikada ne prihvaća zahtjev, a prihvaćanje nikada ne pokreće plaćanje."
+    },
+    "amounts": {
+      "quoted": "Citirano",
+      "submitted": "Poslano",
+      "current": "Trenutni",
+      "accepted": "Prihvaćeno",
+      "difference": "razlika",
+      "captured": "Zarobljen",
+      "returned": "Vratio se",
+      "retained": "Zadržano"
+    },
+    "overview": {
+      "stay": "Zahtjev za ostanak",
+      "dates": "Datumi",
+      "occupancy": "Popunjenost",
+      "occupancyValue": "{{adults}} odrasli · {{children}} djeca",
+      "roomType": "Tip sobe",
+      "ratePlan": "Tarifni plan",
+      "guest": "Gost & kontakt",
+      "email": "E-mail",
+      "phone": "Telefon",
+      "specialRequests": "Posebni zahtjevi",
+      "application": "Primjena",
+      "noQuestions": "Nisu poslana dodatna pitanja za prijavu.",
+      "priceComparison": "Usporedba cijena",
+      "card": "Kartica u dosjeu",
+      "cardGeneric": "kartica",
+      "noCard": "Nema spremljene kartice",
+      "cardSafety": "Prikazuje se samo marka sigurne kartice i posljednje četiri znamenke. Osoblje mora pokrenuti svako punjenje.",
+      "decision": "Zapisnik odluke",
+      "priceSource": "Izvor cijene"
+    },
+    "priceSources": {
+      "submitted": "Poslana ponuda",
+      "current": "Trenutni citat",
+      "custom": "Prilagođeni ukupni iznos"
+    },
+    "accept": {
+      "title": "Prihvatite zahtjev za rezervaciju",
+      "priceChoice": "Prihvaćena cijena",
+      "submitted": "Poslana ponuda",
+      "submittedDescription": "Koristite iznos koji je gost vidio kada je zahtjev poslan.",
+      "current": "Trenutni citat",
+      "currentDescription": "Ponovno provjerite dostupnost i izračunajte mjerodavnu trenutnu ponudu tijekom prihvaćanja.",
+      "custom": "Prilagođeni ukupni iznos",
+      "customDescription": "Postavite eksplicitni ukupni iznos i zabilježite zašto se razlikuje.",
+      "recheckedOnAccept": "Ponovno provjereno pri prihvaćanju",
+      "enterAmount": "Unesite iznos",
+      "customTotal": "Prilagođeni ukupni iznos",
+      "customReason": "Razlog prilagođenog ukupnog iznosa",
+      "independence": "Prihvaćanje stvara rezervaciju. Ne tereti spremljenu karticu niti ovisi o stanju plaćanja.",
+      "accepting": "Prihvaćanje...",
+      "error": "Zahtjev nije mogao biti prihvaćen. Pregledajte trenutnu dostupnost i pokušajte ponovno."
+    },
+    "deny": {
+      "title": "Odbij zahtjev za rezervaciju",
+      "reason": "Razlog odbijanja",
+      "unresolved": "{{amount}} ostaje neriješeno",
+      "unresolvedDirection": "Vratite novac za plaćanje spremljenom karticom, zabilježite vanjski povrat ili zadržite iznos s razlogom prije odbijanja.",
+      "resolveFirst": "Prvo riješite novac",
+      "confirm": "Potvrdite odbijanje",
+      "denying": "Uskraćivanje...",
+      "error": "Zahtjev nije mogao biti odbijen. Pregledajte stanje novca i pokušajte ponovno."
+    },
+    "validation": {
+      "positiveAmount": "Unesite iznos veći od nule."
+    },
+    "payments": {
+      "requestSummary": "Sažetak zahtjeva za novac",
+      "independence": "Odluke o rezervaciji ne ovise o stanju plaćanja.",
+      "plan": "Plan plaćanja",
+      "noAutomatic": "Ništa se ne naplaćuje automatski. Prekretnice su podsjetnici za radnje koje pokreće osoblje.",
+      "noAutomaticTitle": "Ništa se ne naplaćuje automatski.",
+      "noAutomaticDescription": "Prekretnice su podsjetnici za radnje koje pokreće osoblje.",
+      "addInstallment": "Dodaj ratu",
+      "editInstallment": "Uredi ratu",
+      "installmentLabel": "Oznaka rate",
+      "amountType": "Vrsta iznosa",
+      "fixedAmount": "Fiksni iznos",
+      "percentage": "Postotak",
+      "milestone": "Dospjela prekretnica",
+      "dueDate": "Datum dospijeća",
+      "saveInstallment": "Uštedite ratu",
+      "installmentError": "Rata se nije mogla spremiti.",
+      "noInstallments": "Još nema rata plaćanja.",
+      "allocated": "{{allocated}} od {{total}} dodijeljeno",
+      "editLabel": "Uredi {{label}}",
+      "deleteLabel": "Izbriši {{label}}",
+      "allocateLabel": "Dodijelite uplatu na {{label}}",
+      "allocateTo": "Dodijelite uplatu na {{label}}",
+      "movement": "Uhvaćen pokret",
+      "allocate": "Dodijeliti",
+      "allocationError": "Plaćanje nije bilo moguće dodijeliti.",
+      "movements": "Kretanja novca",
+      "noMovements": "Još nema kretanja novca.",
+      "savedCardProvenance": "Spremljena kartica · {{brand}} •••• {{lastFour}}",
+      "externalProvenance": "Vanjski · {{method}} · {{reference}}",
+      "loadError": "Plan plaćanja i povijest kretanja nisu se mogli učitati.",
+      "folioSummary": "Sažetak operativnog folija",
+      "acceptedDeal": "Prihvaćen dogovor",
+      "folioCharges": "Folio optužbe",
+      "folioPayments": "Folio plaćanja",
+      "balanceDue": "Saldo duga",
+      "folioError": "Povezani sažetak folija nije se mogao učitati."
+    },
+    "installmentStatuses": {
+      "unpaid": "Neplaćeno",
+      "partial": "Djelomično",
+      "paid": "Plaćeno"
+    },
+    "milestones": {
+      "manual": "Ručno praćenje",
+      "arrival": "Plaća se po dolasku",
+      "checkout": "Dospjeva na blagajni",
+      "date": "Određeni datum",
+      "dateValue": "Rok {{date}}"
+    },
+    "methods": {
+      "credit_card": "kreditna kartica",
+      "debit_card": "debitna kartica",
+      "cash": "gotovina",
+      "bank_transfer": "bankovni transfer",
+      "pix": "PIX",
+      "other": "drugo"
+    },
+    "paymentStatuses": {
+      "pending": "Na čekanju",
+      "authorized": "Ovlašten",
+      "captured": "Zarobljen",
+      "settled": "Naselili",
+      "refunded": "Vraćeno",
+      "partially_refunded": "Djelomično vraćeno",
+      "failed": "nije uspjelo",
+      "voided": "Poništen"
+    },
+    "paymentActions": {
+      "amount": "Iznos",
+      "method": "Način plaćanja",
+      "processedAt": "Obrađeno u",
+      "provider": "Davatelj (neobavezno)",
+      "reference": "Referenca",
+      "notes": "Bilješke (nije obavezno)",
+      "saving": "Spremanje...",
+      "error": "Novčana akcija nije mogla biti dovršena. Vaši uneseni podaci su još uvijek ovdje.",
+      "paymentRequired": "Prvo odaberite način plaćanja.",
+      "charge": {
+        "title": "Naplati spremljenu karticu",
+        "action": "Naplati spremljenu karticu",
+        "description": "Ovo je eksplicitna naknada koju pokreće osoblje. Ne prihvaća zahtjev."
+      },
+      "external": {
+        "title": "Zabilježite vanjsko plaćanje",
+        "action": "Zabilježite vanjsko plaćanje",
+        "description": "Zabilježite novac koji je već prikupljen izvan pristupnika spremljene kartice."
+      },
+      "refund": {
+        "title": "Povrat plaćanja spremljenom karticom",
+        "action": "Povrat novca",
+        "description": "Vratite dio ili cijelo ovo gateway plaćanje."
+      },
+      "external_return": {
+        "title": "Zabilježite vanjski povrat",
+        "action": "Rekordni povrat",
+        "description": "Zabilježite da je novac prikupljen izvana vraćen."
+      },
+      "retain": {
+        "title": "Zadrži novac",
+        "action": "Zadrži novac",
+        "open": "Zadržati s razlogom",
+        "description": "Riješite ovaj iznos kao zadržan prije odbijanja. Poslovni razlog je obavezan.",
+        "reason": "Razlog zadržavanja novca"
+      }
+    },
+    "messages": {
+      "title": "Isporuke poruka",
+      "description": "Transakcijski e-mail je posljedica radnji osoblja. Neuspjeh u isporuci nikada ne poništava odluku ili kretanje novca.",
+      "loading": "Učitavanje povijesti poruka…",
+      "loadError": "Povijest poruka nije se mogla učitati.",
+      "empty": "Još nije zabilježena nijedna transakcijska poruka.",
+      "retry": "Ponovi isporuku",
+      "retryError": "Neuspjela isporuka nije mogla biti ponovljena.",
+      "attempts_one": "{{count}} pokušaj",
+      "attempts_other": "{{count}} pokušaja",
+      "attempts": "{{count}} pokušaja",
+      "actorNote": "Ručni ponovni pokušaj bilježi se s vašim identitetom osoblja."
+    },
+    "messageKinds": {
+      "receipt": "Zatražite potvrdu",
+      "accepted": "prihvaćanje",
+      "denied": "Poricanje",
+      "payment": "Plaćanje",
+      "refund": "Povrat novca",
+      "failure": "Neuspjeh plaćanja"
+    },
+    "messageStatuses": {
+      "pending": "Na čekanju",
+      "processing": "Obrada",
+      "sent": "Poslano",
+      "failed": "nije uspjelo"
+    },
+    "audit": {
+      "title": "Poslovna vremenska linija",
+      "description": "Siguran radni pregled izveden iz zapisa o zahtjevima, kretanju, rješavanju i isporuci dostupnih osoblju.",
+      "submitted": "Zahtjev poslan",
+      "submittedDescription": "Snimljena je prijava gosta i dostavljena snimka ponude.",
+      "accepted": "Zahtjev prihvaćen",
+      "acceptedDescription": "Prihvaćeno na {{amount}} koristeći {{source}}.",
+      "denied": "Zahtjev odbijen",
+      "deniedDescription": "Zahtjev je odbijen nakon što je razriješeno stanje novca.",
+      "paymentCaptured": "Uplata snimljena",
+      "paymentFailed": "Plaćanje nije uspjelo",
+      "paymentReturned": "Uplata vraćena",
+      "paymentDescription": "{{amount}} · {{method}}",
+      "resolutionDescription": "{{amount}} riješeno",
+      "resolutions": {
+        "refund": "Povrat novca za pristupnik zabilježen",
+        "external_return": "Zabilježen vanjski povrat",
+        "retained": "Novac zadržan"
+      },
+      "message": "{{kind}} poruka",
+      "messageDescription": "Status isporuke: {{status}}",
+      "actor": "Glumac: {{actor}}"
+    }
   }
 }

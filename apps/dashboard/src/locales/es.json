@@ -1216,6 +1216,7 @@
     "dashboard": "Panel",
     "foliosBilling": "Folios y facturación",
     "frontDesk": "Recepción",
+    "bookingRequests": "Solicitudes de reserva",
     "groups": "Grupos",
     "guests": "Huéspedes",
     "houseAccounts": "Cuentas house",
@@ -1865,5 +1866,306 @@
     "Bad Request": "Solicitud incorrecta",
     "Resource not found": "Recurso no encontrado",
     "Action not permitted": "Acción no permitida"
+  },
+  "bookingRequests": {
+    "access": {
+      "title": "Acceso restringido",
+      "description": "Necesita permiso para leer las reservas antes de poder revisar las solicitudes de reserva."
+    },
+    "property": {
+      "title": "Elija una propiedad",
+      "description": "Las solicitudes de reserva se revisan una propiedad a la vez para que los registros de huéspedes, dinero y decisiones se mantengan a salvo."
+    },
+    "notFound": {
+      "title": "Solicitud no encontrada",
+      "description": "Esta solicitud no existe en la propiedad seleccionada o ya no está disponible."
+    },
+    "common": {
+      "cancel": "Cancelar",
+      "loading": "Cargando solicitud de reserva…",
+      "status": "Estado",
+      "yes": "si",
+      "no": "No",
+      "notProvided": "No proporcionado"
+    },
+    "actions": {
+      "accept": "Aceptar solicitud",
+      "deny": "Denegar solicitud",
+      "charge": "Tarjeta de cargo",
+      "record": "Pago récord"
+    },
+    "statuses": {
+      "pending": "Pendiente",
+      "accepted": "Aceptado",
+      "denied": "denegado"
+    },
+    "tabs": {
+      "label": "Solicitar espacio de trabajo",
+      "overview": "Descripción general",
+      "payments": "Pagos y planes",
+      "messages": "Mensajes",
+      "audit": "Auditoría"
+    },
+    "queue": {
+      "title": "Solicitudes de reserva",
+      "description": "Revise las solicitudes de los huéspedes, los detalles de la estadía y el estado del dinero antes de realizar una acción explícita.",
+      "filters": "Filtros de solicitud de reserva",
+      "guest": "Invitado",
+      "card": "Tarjeta",
+      "stay": "quedarse",
+      "amount": "Monto solicitado",
+      "allStatuses": "Todos los estados",
+      "anyCard": "Cualquier estado de tarjeta",
+      "cardSaved": "Tarjeta guardada",
+      "noCard": "sin tarjeta",
+      "arrivalFrom": "Llegada desde",
+      "arrivalTo": "Llegada a",
+      "sort": "Ordenar por",
+      "sortOptions": {
+        "newest": "Lo nuevo primero",
+        "arrival": "Fecha de llegada",
+        "guest": "Nombre del invitado",
+        "amountDesc": "Cantidad más alta"
+      },
+      "clear": "Borrar",
+      "loading": "Cargando solicitudes de reserva…",
+      "loadError": "No se pudieron cargar las solicitudes de reserva. Intentar otra vez.",
+      "empty": "Ninguna solicitud de reserva coincide con estos filtros.",
+      "total_one": "{{count}} solicitud",
+      "total_other": "{{count}} solicitudes",
+      "total": "{{count}} solicitudes",
+      "previous": "Anterior",
+      "next": "Siguiente"
+    },
+    "detail": {
+      "back": "Todas las solicitudes de reserva",
+      "reference": "{{reference}} · Enviado {{date}}",
+      "decisionActions": "decisión",
+      "moneyActions": "dinero",
+      "decisionComplete": "Decisión completa",
+      "independence": "Las decisiones de reserva y las acciones monetarias son independientes. Al aceptar el pago nunca se acepta una solicitud y la aceptación nunca activa el pago."
+    },
+    "amounts": {
+      "quoted": "citado",
+      "submitted": "Enviado",
+      "current": "Actual",
+      "accepted": "Aceptado",
+      "difference": "diferencia",
+      "captured": "capturado",
+      "returned": "Devuelto",
+      "retained": "Retenido"
+    },
+    "overview": {
+      "stay": "Solicitud de estancia",
+      "dates": "Fechas",
+      "occupancy": "Ocupación",
+      "occupancyValue": "{{adults}} adultos · {{children}} niños",
+      "roomType": "Tipo de habitación",
+      "ratePlan": "plan tarifario",
+      "guest": "Invitado y contacto",
+      "email": "Correo electrónico",
+      "phone": "Teléfono",
+      "specialRequests": "Solicitudes especiales",
+      "application": "Solicitud",
+      "noQuestions": "No se enviaron preguntas de solicitud adicionales.",
+      "priceComparison": "Comparación de precios",
+      "card": "Tarjeta registrada",
+      "cardGeneric": "tarjeta",
+      "noCard": "Ninguna tarjeta guardada",
+      "cardSafety": "Sólo se muestran la marca de la tarjeta segura y los últimos cuatro dígitos. El personal debe iniciar cada cargo.",
+      "decision": "Registro de decisiones",
+      "priceSource": "fuente de precio"
+    },
+    "priceSources": {
+      "submitted": "cotización enviada",
+      "current": "Cotización actual",
+      "custom": "Total personalizado"
+    },
+    "accept": {
+      "title": "Aceptar solicitud de reserva",
+      "priceChoice": "Precio aceptado",
+      "submitted": "cotización enviada",
+      "submittedDescription": "Utilice la cantidad que vio el huésped cuando se envió la solicitud.",
+      "current": "Cotización actual",
+      "currentDescription": "Vuelva a verificar la disponibilidad y calcule la cotización actual autorizada durante la aceptación.",
+      "custom": "Total personalizado",
+      "customDescription": "Establezca un total explícito y registre por qué difiere.",
+      "recheckedOnAccept": "Se vuelve a comprobar al aceptar",
+      "enterAmount": "Introduce una cantidad",
+      "customTotal": "Total personalizado",
+      "customReason": "Motivo del total personalizado",
+      "independence": "Al aceptar se crea la reserva. No carga la tarjeta guardada ni depende del estado de pago.",
+      "accepting": "Aceptando…",
+      "error": "La solicitud no pudo ser aceptada. Revise la disponibilidad actual y vuelva a intentarlo."
+    },
+    "deny": {
+      "title": "Denegar solicitud de reserva",
+      "reason": "Motivo de denegación",
+      "unresolved": "{{amount}} sigue sin resolverse",
+      "unresolvedDirection": "Reembolsar un pago con tarjeta guardada, registrar una devolución externa o retener el monto con un motivo antes de rechazarlo.",
+      "resolveFirst": "Resolver el dinero primero",
+      "confirm": "Confirmar denegación",
+      "denying": "Negando…",
+      "error": "La solicitud no pudo ser denegada. Revise su estado monetario e inténtelo nuevamente."
+    },
+    "validation": {
+      "positiveAmount": "Ingrese una cantidad mayor que cero."
+    },
+    "payments": {
+      "requestSummary": "Solicitar resumen de dinero",
+      "independence": "Las decisiones de reserva no dependen del estado de pago.",
+      "plan": "plan de pago",
+      "noAutomatic": "No se cobra nada automáticamente. Los hitos son recordatorios de las acciones iniciadas por el personal.",
+      "noAutomaticTitle": "No se cobra nada automáticamente.",
+      "noAutomaticDescription": "Los hitos son recordatorios de las acciones iniciadas por el personal.",
+      "addInstallment": "Agregar cuota",
+      "editInstallment": "Editar cuota",
+      "installmentLabel": "etiqueta de pago a plazos",
+      "amountType": "Tipo de importe",
+      "fixedAmount": "Cantidad fija",
+      "percentage": "Porcentaje",
+      "milestone": "hito debido",
+      "dueDate": "fecha de vencimiento",
+      "saveInstallment": "Guardar cuota",
+      "installmentError": "No se pudo guardar la cuota.",
+      "noInstallments": "Aún no hay cuotas del plan de pago.",
+      "allocated": "{{allocated}} de {{total}} asignados",
+      "editLabel": "Editar {{label}}",
+      "deleteLabel": "Eliminar {{label}}",
+      "allocateLabel": "Asignar pago al {{label}}",
+      "allocateTo": "Asignar pago al {{label}}",
+      "movement": "Movimiento capturado",
+      "allocate": "asignar",
+      "allocationError": "No se pudo asignar el pago.",
+      "movements": "Movimientos de dinero",
+      "noMovements": "Aún no hay movimientos de dinero.",
+      "savedCardProvenance": "Tarjeta guardada · {{brand}} •••• {{lastFour}}",
+      "externalProvenance": "Externo · {{method}} · {{reference}}",
+      "loadError": "No se pudo cargar el plan de pagos ni el historial de movimientos.",
+      "folioSummary": "Resumen del folio operativo",
+      "acceptedDeal": "trato aceptado",
+      "folioCharges": "Cargos en folio",
+      "folioPayments": "Pagos en folio",
+      "balanceDue": "Saldo adeudado",
+      "folioError": "No se pudo cargar el resumen de la publicación vinculada."
+    },
+    "installmentStatuses": {
+      "unpaid": "No remunerado",
+      "partial": "Parcial",
+      "paid": "Pagado"
+    },
+    "milestones": {
+      "manual": "Seguimiento manual",
+      "arrival": "A pagar a la llegada",
+      "checkout": "Vencimiento al finalizar la compra",
+      "date": "fecha especifica",
+      "dateValue": "Vencimiento {{date}}"
+    },
+    "methods": {
+      "credit_card": "tarjeta de crédito",
+      "debit_card": "tarjeta de débito",
+      "cash": "efectivo",
+      "bank_transfer": "transferencia bancaria",
+      "pix": "FOTO",
+      "other": "otro"
+    },
+    "paymentStatuses": {
+      "pending": "Pendiente",
+      "authorized": "Autorizado",
+      "captured": "capturado",
+      "settled": "Resuelto",
+      "refunded": "Reembolsado",
+      "partially_refunded": "Reembolsado parcialmente",
+      "failed": "Fallido",
+      "voided": "anulado"
+    },
+    "paymentActions": {
+      "amount": "Cantidad",
+      "method": "Método de pago",
+      "processedAt": "Procesado en",
+      "provider": "Proveedor (opcional)",
+      "reference": "Referencia",
+      "notes": "Notas (opcional)",
+      "saving": "Guardando…",
+      "error": "La acción monetaria no se pudo completar. Los datos ingresados ​​todavía están aquí.",
+      "paymentRequired": "Elija primero un movimiento de pago.",
+      "charge": {
+        "title": "Cargar tarjeta guardada",
+        "action": "Cargar tarjeta guardada",
+        "description": "Este es un cargo explícito iniciado por el personal. No acepta la solicitud."
+      },
+      "external": {
+        "title": "Registrar pago externo",
+        "action": "Registrar pago externo",
+        "description": "Registre el dinero ya recaudado fuera del portal de tarjetas guardadas."
+      },
+      "refund": {
+        "title": "Reembolso de pago con tarjeta guardada",
+        "action": "Reembolso",
+        "description": "Devolver parte o la totalidad de este pago de pasarela."
+      },
+      "external_return": {
+        "title": "Registrar retorno externo",
+        "action": "Regreso récord",
+        "description": "Registre que el dinero recaudado externamente ha sido devuelto."
+      },
+      "retain": {
+        "title": "retener dinero",
+        "action": "retener dinero",
+        "open": "retener con razon",
+        "description": "Resuelva esta cantidad como retenida antes de la denegación. Un motivo comercial es obligatorio.",
+        "reason": "Razón para retener dinero"
+      }
+    },
+    "messages": {
+      "title": "Entregas de mensajes",
+      "description": "El correo electrónico transaccional es consecuencia de las acciones del personal. Una falla en la entrega nunca revierte una decisión o movimiento de dinero.",
+      "loading": "Cargando historial de mensajes…",
+      "loadError": "No se pudo cargar el historial de mensajes.",
+      "empty": "Aún no se han registrado mensajes transaccionales.",
+      "retry": "Reintentar entrega",
+      "retryError": "No se pudo volver a intentar la entrega fallida.",
+      "attempts_one": "{{count}} intento",
+      "attempts_other": "{{count}} intentos",
+      "attempts": "{{count}} intentos",
+      "actorNote": "Un reintento manual se registra con la identidad de su personal."
+    },
+    "messageKinds": {
+      "receipt": "Solicitar recibo",
+      "accepted": "Aceptación",
+      "denied": "Negación",
+      "payment": "Pago",
+      "refund": "Reembolso",
+      "failure": "Fallo de pago"
+    },
+    "messageStatuses": {
+      "pending": "Pendiente",
+      "processing": "Procesamiento",
+      "sent": "Enviado",
+      "failed": "Fallido"
+    },
+    "audit": {
+      "title": "Cronograma empresarial",
+      "description": "Una visión operativa segura derivada de los registros de solicitudes, movimientos, resoluciones y entregas a disposición del personal.",
+      "submitted": "Solicitud enviada",
+      "submittedDescription": "Se registraron la solicitud de invitado y la instantánea de la cotización enviada.",
+      "accepted": "Solicitud aceptada",
+      "acceptedDescription": "Aceptado al {{amount}} utilizando el {{source}}.",
+      "denied": "Solicitud denegada",
+      "deniedDescription": "La solicitud fue denegada después de que se resolvió su estado monetario.",
+      "paymentCaptured": "Pago capturado",
+      "paymentFailed": "Pago fallido",
+      "paymentReturned": "Pago devuelto",
+      "paymentDescription": "{{amount}} · {{method}}",
+      "resolutionDescription": "{{amount}} resuelto",
+      "resolutions": {
+        "refund": "Reembolso de puerta de enlace registrado",
+        "external_return": "Retorno externo registrado",
+        "retained": "Dinero retenido"
+      },
+      "message": "{{kind}} mensaje",
+      "messageDescription": "Estado de entrega: {{status}}",
+      "actor": "Actor: {{actor}}"
+    }
   }
 }

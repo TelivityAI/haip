@@ -1139,6 +1139,7 @@
     "dashboard": "Painel",
     "foliosBilling": "Contas e Faturamento",
     "frontDesk": "Recepção",
+    "bookingRequests": "Solicitações de reserva",
     "groups": "Grupos",
     "guests": "Hóspedes",
     "houseAccounts": "Contas Internas",
@@ -1750,5 +1751,306 @@
     "Bad Request": "Requisição inválida",
     "Resource not found": "Recurso não encontrado",
     "Action not permitted": "Ação não permitida"
+  },
+  "bookingRequests": {
+    "access": {
+      "title": "Acesso restrito",
+      "description": "Você precisa de permissão para ler as reservas antes de poder analisar as solicitações de reserva."
+    },
+    "property": {
+      "title": "Escolha um imóvel",
+      "description": "As solicitações de reserva são analisadas em uma propriedade por vez, para que os registros de hóspedes, dinheiro e decisões permaneçam no escopo com segurança."
+    },
+    "notFound": {
+      "title": "Solicitação não encontrada",
+      "description": "Esta solicitação não existe na propriedade selecionada ou não está mais disponível."
+    },
+    "common": {
+      "cancel": "Cancelar",
+      "loading": "Carregando solicitação de reserva…",
+      "status": "Estado",
+      "yes": "Sim",
+      "no": "Não",
+      "notProvided": "Não fornecido"
+    },
+    "actions": {
+      "accept": "Aceitar solicitação",
+      "deny": "Negar solicitação",
+      "charge": "Cartão de cobrança",
+      "record": "Registrar pagamento"
+    },
+    "statuses": {
+      "pending": "Pendente",
+      "accepted": "Aceito",
+      "denied": "Negado"
+    },
+    "tabs": {
+      "label": "Solicitar espaço de trabalho",
+      "overview": "Visão geral",
+      "payments": "Pagamentos e plano",
+      "messages": "Mensagens",
+      "audit": "Auditoria"
+    },
+    "queue": {
+      "title": "Pedidos de reserva",
+      "description": "Revise as inscrições dos hóspedes, os detalhes da estadia e o estado financeiro antes de tomar uma ação explícita.",
+      "filters": "Filtros de solicitação de reserva",
+      "guest": "Convidado",
+      "card": "Cartão",
+      "stay": "Fique",
+      "amount": "Valor solicitado",
+      "allStatuses": "Todos os status",
+      "anyCard": "Qualquer estado do cartão",
+      "cardSaved": "Cartão salvo",
+      "noCard": "Sem cartão",
+      "arrivalFrom": "Chegada de",
+      "arrivalTo": "Chegada a",
+      "sort": "Classificar por",
+      "sortOptions": {
+        "newest": "O mais novo primeiro",
+        "arrival": "Data de chegada",
+        "guest": "Nome do convidado",
+        "amountDesc": "Valor mais alto"
+      },
+      "clear": "Limpar",
+      "loading": "Carregando solicitações de reserva…",
+      "loadError": "Não foi possível carregar os pedidos de reserva. Tente novamente.",
+      "empty": "Nenhum pedido de reserva corresponde a estes filtros.",
+      "total_one": "{{count}} solicitação",
+      "total_other": "{{count}} solicitações",
+      "total": "{{count}} solicitações",
+      "previous": "Anterior",
+      "next": "Próximo"
+    },
+    "detail": {
+      "back": "Todos os pedidos de reserva",
+      "reference": "{{reference}} · Enviado {{date}}",
+      "decisionActions": "Decisão",
+      "moneyActions": "Dinheiro",
+      "decisionComplete": "Decisão concluída",
+      "independence": "As decisões de reserva e as ações monetárias são independentes. Receber o pagamento nunca aceita uma solicitação e a aceitação nunca aciona o pagamento."
+    },
+    "amounts": {
+      "quoted": "Citado",
+      "submitted": "Enviado",
+      "current": "Atual",
+      "accepted": "Aceito",
+      "difference": "Diferença",
+      "captured": "Capturado",
+      "returned": "Devolvido",
+      "retained": "Retido"
+    },
+    "overview": {
+      "stay": "Solicitação de estadia",
+      "dates": "Datas",
+      "occupancy": "Ocupação",
+      "occupancyValue": "{{adults}} adultos · {{children}} crianças",
+      "roomType": "Tipo de quarto",
+      "ratePlan": "Plano de tarifas",
+      "guest": "Convidado e contato",
+      "email": "E-mail",
+      "phone": "Telefone",
+      "specialRequests": "Pedidos especiais",
+      "application": "Aplicação",
+      "noQuestions": "Nenhuma pergunta adicional de inscrição foi enviada.",
+      "priceComparison": "Comparação de preços",
+      "card": "Cartão em arquivo",
+      "cardGeneric": "cartão",
+      "noCard": "Nenhum cartão salvo",
+      "cardSafety": "Apenas a marca do cartão seguro e os últimos quatro dígitos são mostrados. A equipe deve iniciar todas as cobranças.",
+      "decision": "Registro de decisão",
+      "priceSource": "Fonte de preço"
+    },
+    "priceSources": {
+      "submitted": "Cotação enviada",
+      "current": "Cotação atual",
+      "custom": "Total personalizado"
+    },
+    "accept": {
+      "title": "Aceitar pedido de reserva",
+      "priceChoice": "Preço aceito",
+      "submitted": "Cotação enviada",
+      "submittedDescription": "Use o valor que o hóspede viu quando a solicitação foi enviada.",
+      "current": "Cotação atual",
+      "currentDescription": "Verifique novamente a disponibilidade e calcule a cotação atual oficial durante a aceitação.",
+      "custom": "Total personalizado",
+      "customDescription": "Defina um total explícito e registre por que ele difere.",
+      "recheckedOnAccept": "Verificado novamente na aceitação",
+      "enterAmount": "Insira um valor",
+      "customTotal": "Total personalizado",
+      "customReason": "Motivo do total personalizado",
+      "independence": "Aceitar cria a reserva. Não cobra o cartão salvo nem depende do estado do pagamento.",
+      "accepting": "Aceitando…",
+      "error": "A solicitação não pôde ser aceita. Revise a disponibilidade atual e tente novamente."
+    },
+    "deny": {
+      "title": "Negar solicitação de reserva",
+      "reason": "Motivo da negação",
+      "unresolved": "{{amount}} permanece sem solução",
+      "unresolvedDirection": "Reembolse um pagamento com cartão salvo, registre uma devolução externa ou retenha o valor com um motivo antes de negar.",
+      "resolveFirst": "Resolva o dinheiro primeiro",
+      "confirm": "Confirmar negação",
+      "denying": "Negando…",
+      "error": "O pedido não poderia ser negado. Revise o estado do dinheiro e tente novamente."
+    },
+    "validation": {
+      "positiveAmount": "Insira um valor maior que zero."
+    },
+    "payments": {
+      "requestSummary": "Solicitar resumo de dinheiro",
+      "independence": "As decisões de reserva não dependem do estado do pagamento.",
+      "plan": "Plano de pagamento",
+      "noAutomatic": "Nada é cobrado automaticamente. Marcos são lembretes para ações iniciadas pela equipe.",
+      "noAutomaticTitle": "Nada é cobrado automaticamente.",
+      "noAutomaticDescription": "Marcos são lembretes para ações iniciadas pela equipe.",
+      "addInstallment": "Adicionar parcela",
+      "editInstallment": "Editar parcela",
+      "installmentLabel": "Etiqueta de parcelamento",
+      "amountType": "Tipo de valor",
+      "fixedAmount": "Valor fixo",
+      "percentage": "Porcentagem",
+      "milestone": "Marco devido",
+      "dueDate": "Data de vencimento",
+      "saveInstallment": "Salvar parcela",
+      "installmentError": "A parcela não pôde ser salva.",
+      "noInstallments": "Ainda não há parcelamento do plano de pagamento.",
+      "allocated": "{{allocated}} de {{total}} alocados",
+      "editLabel": "Editar {{label}}",
+      "deleteLabel": "Excluir {{label}}",
+      "allocateLabel": "Alocar pagamento para {{label}}",
+      "allocateTo": "Alocar pagamento para {{label}}",
+      "movement": "Movimento capturado",
+      "allocate": "Alocar",
+      "allocationError": "O pagamento não pôde ser alocado.",
+      "movements": "Movimentos de dinheiro",
+      "noMovements": "Ainda não há movimentos de dinheiro.",
+      "savedCardProvenance": "Cartão salvo · {{brand}} •••• {{lastFour}}",
+      "externalProvenance": "Externo · {{method}} · {{reference}}",
+      "loadError": "Não foi possível carregar o plano de pagamento e o histórico de movimentos.",
+      "folioSummary": "Resumo do fólio operacional",
+      "acceptedDeal": "Oferta aceita",
+      "folioCharges": "Cobranças de fólio",
+      "folioPayments": "Pagamentos em fólio",
+      "balanceDue": "Saldo devido",
+      "folioError": "O resumo do fólio vinculado não pôde ser carregado."
+    },
+    "installmentStatuses": {
+      "unpaid": "Não pago",
+      "partial": "Parcial",
+      "paid": "Pago"
+    },
+    "milestones": {
+      "manual": "Acompanhamento manual",
+      "arrival": "Vencimento na chegada",
+      "checkout": "Vencimento na finalização da compra",
+      "date": "Data específica",
+      "dateValue": "Vencimento {{date}}"
+    },
+    "methods": {
+      "credit_card": "cartão de crédito",
+      "debit_card": "cartão de débito",
+      "cash": "dinheiro",
+      "bank_transfer": "transferência bancária",
+      "pix": "PIX",
+      "other": "outro"
+    },
+    "paymentStatuses": {
+      "pending": "Pendente",
+      "authorized": "Autorizado",
+      "captured": "Capturado",
+      "settled": "Resolvido",
+      "refunded": "Reembolsado",
+      "partially_refunded": "Parcialmente reembolsado",
+      "failed": "Falha",
+      "voided": "Anulado"
+    },
+    "paymentActions": {
+      "amount": "Quantidade",
+      "method": "Método de pagamento",
+      "processedAt": "Processado em",
+      "provider": "Provedor (opcional)",
+      "reference": "Referência",
+      "notes": "Notas (opcional)",
+      "saving": "Salvando…",
+      "error": "A ação monetária não pôde ser concluída. Os detalhes inseridos ainda estão aqui.",
+      "paymentRequired": "Escolha primeiro um movimento de pagamento.",
+      "charge": {
+        "title": "Carregar cartão salvo",
+        "action": "Carregar cartão salvo",
+        "description": "Esta é uma cobrança explícita iniciada pela equipe. Não aceita o pedido."
+      },
+      "external": {
+        "title": "Registrar pagamento externo",
+        "action": "Registrar pagamento externo",
+        "description": "Registre o dinheiro já coletado fora do gateway do cartão salvo."
+      },
+      "refund": {
+        "title": "Reembolsar pagamento com cartão salvo",
+        "action": "Reembolso",
+        "description": "Devolva parte ou todo esse pagamento de gateway."
+      },
+      "external_return": {
+        "title": "Registrar retorno externo",
+        "action": "Registro de retorno",
+        "description": "Registre que o dinheiro arrecadado externamente foi devolvido."
+      },
+      "retain": {
+        "title": "Reter dinheiro",
+        "action": "Reter dinheiro",
+        "open": "Retenha com razão",
+        "description": "Resolva esse valor como retido antes da negação. Um motivo comercial é obrigatório.",
+        "reason": "Razão para reter dinheiro"
+      }
+    },
+    "messages": {
+      "title": "Entregas de mensagens",
+      "description": "O email transacional é uma consequência das ações da equipe. Uma falha na entrega nunca reverte uma decisão ou movimento de dinheiro.",
+      "loading": "Carregando histórico de mensagens…",
+      "loadError": "Não foi possível carregar o histórico de mensagens.",
+      "empty": "Nenhuma mensagem transacional foi registrada ainda.",
+      "retry": "Tentar entrega novamente",
+      "retryError": "A falha na entrega não pôde ser tentada novamente.",
+      "attempts_one": "{{count}} tentativa",
+      "attempts_other": "{{count}} tentativas",
+      "attempts": "{{count}} tentativas",
+      "actorNote": "Uma nova tentativa manual é registrada com a identidade de sua equipe."
+    },
+    "messageKinds": {
+      "receipt": "Solicitar recibo",
+      "accepted": "Aceitação",
+      "denied": "Negação",
+      "payment": "Pagamento",
+      "refund": "Reembolso",
+      "failure": "Falha no pagamento"
+    },
+    "messageStatuses": {
+      "pending": "Pendente",
+      "processing": "Processamento",
+      "sent": "Enviado",
+      "failed": "Falha"
+    },
+    "audit": {
+      "title": "Cronograma de negócios",
+      "description": "Uma visão operacional segura derivada dos registros de solicitação, movimentação, resolução e entrega disponíveis para a equipe.",
+      "submitted": "Solicitação enviada",
+      "submittedDescription": "A inscrição do convidado e o instantâneo da cotação enviada foram registrados.",
+      "accepted": "Solicitação aceita",
+      "acceptedDescription": "Aceito em {{amount}} usando o {{source}}.",
+      "denied": "Solicitação negada",
+      "deniedDescription": "O pedido foi negado depois que seu estado monetário foi resolvido.",
+      "paymentCaptured": "Pagamento capturado",
+      "paymentFailed": "Falha no pagamento",
+      "paymentReturned": "Pagamento devolvido",
+      "paymentDescription": "{{amount}} · {{method}}",
+      "resolutionDescription": "{{amount}} resolvido",
+      "resolutions": {
+        "refund": "Reembolso de gateway registrado",
+        "external_return": "Retorno externo registrado",
+        "retained": "Dinheiro retido"
+      },
+      "message": "mensagem {{kind}}",
+      "messageDescription": "Status de entrega: {{status}}",
+      "actor": "Ator: {{actor}}"
+    }
   }
 }

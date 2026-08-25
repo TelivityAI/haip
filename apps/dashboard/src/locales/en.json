@@ -1216,6 +1216,7 @@
     "dashboard": "Dashboard",
     "foliosBilling": "Folios & Billing",
     "frontDesk": "Front Desk",
+    "bookingRequests": "Booking Requests",
     "groups": "Groups",
     "guests": "Guests",
     "houseAccounts": "House Accounts",
@@ -1843,6 +1844,307 @@
     "types": {
       "flat": "Flat",
       "percentage": "Percentage"
+    }
+  },
+  "bookingRequests": {
+    "access": {
+      "title": "Access restricted",
+      "description": "You need permission to read reservations before you can review booking requests."
+    },
+    "property": {
+      "title": "Choose one property",
+      "description": "Booking requests are reviewed one property at a time so guest, money, and decision records stay safely scoped."
+    },
+    "notFound": {
+      "title": "Request not found",
+      "description": "This request does not exist at the selected property or is no longer available."
+    },
+    "common": {
+      "cancel": "Cancel",
+      "loading": "Loading booking request…",
+      "status": "Status",
+      "yes": "Yes",
+      "no": "No",
+      "notProvided": "Not provided"
+    },
+    "actions": {
+      "accept": "Accept request",
+      "deny": "Deny request",
+      "charge": "Charge card",
+      "record": "Record payment"
+    },
+    "statuses": {
+      "pending": "Pending",
+      "accepted": "Accepted",
+      "denied": "Denied"
+    },
+    "tabs": {
+      "label": "Request workspace",
+      "overview": "Overview",
+      "payments": "Payments & plan",
+      "messages": "Messages",
+      "audit": "Audit"
+    },
+    "queue": {
+      "title": "Booking requests",
+      "description": "Review guest applications, stay details, and money state before taking an explicit action.",
+      "filters": "Booking request filters",
+      "guest": "Guest",
+      "card": "Card",
+      "stay": "Stay",
+      "amount": "Requested amount",
+      "allStatuses": "All statuses",
+      "anyCard": "Any card state",
+      "cardSaved": "Card saved",
+      "noCard": "No card",
+      "arrivalFrom": "Arrival from",
+      "arrivalTo": "Arrival to",
+      "sort": "Sort by",
+      "sortOptions": {
+        "newest": "Newest first",
+        "arrival": "Arrival date",
+        "guest": "Guest name",
+        "amountDesc": "Highest amount"
+      },
+      "clear": "Clear",
+      "loading": "Loading booking requests…",
+      "loadError": "Booking requests could not be loaded. Try again.",
+      "empty": "No booking requests match these filters.",
+      "total_one": "{{count}} request",
+      "total_other": "{{count}} requests",
+      "total": "{{count}} requests",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "detail": {
+      "back": "All booking requests",
+      "reference": "{{reference}} · Submitted {{date}}",
+      "decisionActions": "Decision",
+      "moneyActions": "Money",
+      "decisionComplete": "Decision complete",
+      "independence": "Booking decisions and money actions are independent. Taking payment never accepts a request, and acceptance never triggers payment."
+    },
+    "amounts": {
+      "quoted": "Quoted",
+      "submitted": "Submitted",
+      "current": "Current",
+      "accepted": "Accepted",
+      "difference": "Difference",
+      "captured": "Captured",
+      "returned": "Returned",
+      "retained": "Retained"
+    },
+    "overview": {
+      "stay": "Stay request",
+      "dates": "Dates",
+      "occupancy": "Occupancy",
+      "occupancyValue": "{{adults}} adults · {{children}} children",
+      "roomType": "Room type",
+      "ratePlan": "Rate plan",
+      "guest": "Guest & contact",
+      "email": "Email",
+      "phone": "Phone",
+      "specialRequests": "Special requests",
+      "application": "Application",
+      "noQuestions": "No additional application questions were submitted.",
+      "priceComparison": "Price comparison",
+      "card": "Card on file",
+      "cardGeneric": "card",
+      "noCard": "No saved card",
+      "cardSafety": "Only the safe card brand and last four digits are shown. Staff must initiate every charge.",
+      "decision": "Decision record",
+      "priceSource": "Price source"
+    },
+    "priceSources": {
+      "submitted": "Submitted quote",
+      "current": "Current quote",
+      "custom": "Custom total"
+    },
+    "accept": {
+      "title": "Accept booking request",
+      "priceChoice": "Accepted price",
+      "submitted": "Submitted quote",
+      "submittedDescription": "Use the amount the guest saw when the request was sent.",
+      "current": "Current quote",
+      "currentDescription": "Recheck availability and calculate the authoritative current quote during acceptance.",
+      "custom": "Custom total",
+      "customDescription": "Set an explicit total and record why it differs.",
+      "recheckedOnAccept": "Rechecked on acceptance",
+      "enterAmount": "Enter an amount",
+      "customTotal": "Custom total",
+      "customReason": "Reason for custom total",
+      "independence": "Accepting creates the reservation. It does not charge the saved card or depend on payment state.",
+      "accepting": "Accepting…",
+      "error": "The request could not be accepted. Review the current availability and try again."
+    },
+    "deny": {
+      "title": "Deny booking request",
+      "reason": "Denial reason",
+      "unresolved": "{{amount}} remains unresolved",
+      "unresolvedDirection": "Refund a saved-card payment, record an external return, or retain the amount with a reason before denying.",
+      "resolveFirst": "Resolve money first",
+      "confirm": "Confirm denial",
+      "denying": "Denying…",
+      "error": "The request could not be denied. Review its money state and try again."
+    },
+    "validation": {
+      "positiveAmount": "Enter an amount greater than zero."
+    },
+    "payments": {
+      "requestSummary": "Request money summary",
+      "independence": "Booking decisions do not depend on payment state.",
+      "plan": "Payment plan",
+      "noAutomatic": "Nothing is charged automatically. Milestones are reminders for staff-initiated actions.",
+      "noAutomaticTitle": "Nothing is charged automatically.",
+      "noAutomaticDescription": "Milestones are reminders for staff-initiated actions.",
+      "addInstallment": "Add installment",
+      "editInstallment": "Edit installment",
+      "installmentLabel": "Installment label",
+      "amountType": "Amount type",
+      "fixedAmount": "Fixed amount",
+      "percentage": "Percentage",
+      "milestone": "Due milestone",
+      "dueDate": "Due date",
+      "saveInstallment": "Save installment",
+      "installmentError": "The installment could not be saved.",
+      "noInstallments": "No payment-plan installments yet.",
+      "allocated": "{{allocated}} of {{total}} allocated",
+      "editLabel": "Edit {{label}}",
+      "deleteLabel": "Delete {{label}}",
+      "allocateLabel": "Allocate payment to {{label}}",
+      "allocateTo": "Allocate payment to {{label}}",
+      "movement": "Captured movement",
+      "allocate": "Allocate",
+      "allocationError": "The payment could not be allocated.",
+      "movements": "Money movements",
+      "noMovements": "No money movements yet.",
+      "savedCardProvenance": "Saved card · {{brand}} •••• {{lastFour}}",
+      "externalProvenance": "External · {{method}} · {{reference}}",
+      "loadError": "Payment-plan and movement history could not be loaded.",
+      "folioSummary": "Operational folio summary",
+      "acceptedDeal": "Accepted deal",
+      "folioCharges": "Folio charges",
+      "folioPayments": "Folio payments",
+      "balanceDue": "Balance due",
+      "folioError": "The linked folio summary could not be loaded."
+    },
+    "installmentStatuses": {
+      "unpaid": "Unpaid",
+      "partial": "Partial",
+      "paid": "Paid"
+    },
+    "milestones": {
+      "manual": "Manual follow-up",
+      "arrival": "Due at arrival",
+      "checkout": "Due at checkout",
+      "date": "Specific date",
+      "dateValue": "Due {{date}}"
+    },
+    "methods": {
+      "credit_card": "credit card",
+      "debit_card": "debit card",
+      "cash": "cash",
+      "bank_transfer": "bank transfer",
+      "pix": "PIX",
+      "other": "other"
+    },
+    "paymentStatuses": {
+      "pending": "Pending",
+      "authorized": "Authorized",
+      "captured": "Captured",
+      "settled": "Settled",
+      "refunded": "Refunded",
+      "partially_refunded": "Partially refunded",
+      "failed": "Failed",
+      "voided": "Voided"
+    },
+    "paymentActions": {
+      "amount": "Amount",
+      "method": "Payment method",
+      "processedAt": "Processed at",
+      "provider": "Provider (optional)",
+      "reference": "Reference",
+      "notes": "Notes (optional)",
+      "saving": "Saving…",
+      "error": "The money action could not be completed. Your entered details are still here.",
+      "paymentRequired": "Choose a payment movement first.",
+      "charge": {
+        "title": "Charge saved card",
+        "action": "Charge saved card",
+        "description": "This is an explicit staff-initiated charge. It does not accept the request."
+      },
+      "external": {
+        "title": "Record external payment",
+        "action": "Record external payment",
+        "description": "Record money already collected outside the saved-card gateway."
+      },
+      "refund": {
+        "title": "Refund saved-card payment",
+        "action": "Refund",
+        "description": "Return part or all of this gateway payment."
+      },
+      "external_return": {
+        "title": "Record external return",
+        "action": "Record return",
+        "description": "Record that externally collected money has been returned."
+      },
+      "retain": {
+        "title": "Retain money",
+        "action": "Retain money",
+        "open": "Retain with reason",
+        "description": "Resolve this amount as retained before denial. A business reason is mandatory.",
+        "reason": "Reason for retaining money"
+      }
+    },
+    "messages": {
+      "title": "Message deliveries",
+      "description": "Transactional email is a consequence of staff actions. A delivery failure never reverses a decision or money movement.",
+      "loading": "Loading message history…",
+      "loadError": "Message history could not be loaded.",
+      "empty": "No transactional messages have been recorded yet.",
+      "retry": "Retry delivery",
+      "retryError": "The failed delivery could not be retried.",
+      "attempts_one": "{{count}} attempt",
+      "attempts_other": "{{count}} attempts",
+      "attempts": "{{count}} attempts",
+      "actorNote": "A manual retry is recorded with your staff identity."
+    },
+    "messageKinds": {
+      "receipt": "Request receipt",
+      "accepted": "Acceptance",
+      "denied": "Denial",
+      "payment": "Payment",
+      "refund": "Refund",
+      "failure": "Payment failure"
+    },
+    "messageStatuses": {
+      "pending": "Pending",
+      "processing": "Processing",
+      "sent": "Sent",
+      "failed": "Failed"
+    },
+    "audit": {
+      "title": "Business timeline",
+      "description": "A safe operational view derived from the request, movement, resolution, and delivery records available to staff.",
+      "submitted": "Request submitted",
+      "submittedDescription": "The guest application and submitted quote snapshot were recorded.",
+      "accepted": "Request accepted",
+      "acceptedDescription": "Accepted at {{amount}} using the {{source}}.",
+      "denied": "Request denied",
+      "deniedDescription": "The request was denied after its money state was resolved.",
+      "paymentCaptured": "Payment captured",
+      "paymentFailed": "Payment failed",
+      "paymentReturned": "Payment returned",
+      "paymentDescription": "{{amount}} · {{method}}",
+      "resolutionDescription": "{{amount}} resolved",
+      "resolutions": {
+        "refund": "Gateway refund recorded",
+        "external_return": "External return recorded",
+        "retained": "Money retained"
+      },
+      "message": "{{kind}} message",
+      "messageDescription": "Delivery status: {{status}}",
+      "actor": "Actor: {{actor}}"
     }
   },
   "errors": {
