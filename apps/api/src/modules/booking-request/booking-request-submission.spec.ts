@@ -270,6 +270,7 @@ function makeHarness() {
       setupIntentId: 'seti_trusted',
       clientSecret: 'seti_trusted_secret_value',
       customerId: 'cus_trusted',
+      clientMode: 'stripe' as const,
     }),
     resolveSetup: vi.fn().mockResolvedValue({
       setupIntentId: 'seti_trusted',
@@ -453,6 +454,7 @@ describe('BookingRequestService public card setup', () => {
     })).resolves.toEqual({
       setupIntentId: 'seti_trusted',
       clientSecret: 'seti_trusted_secret_value',
+      clientMode: 'stripe',
     });
     expect(harness.savedPaymentMethod.createSetup).toHaveBeenCalledWith(
       'ada@example.com',

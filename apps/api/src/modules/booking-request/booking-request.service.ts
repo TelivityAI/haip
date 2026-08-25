@@ -1216,7 +1216,11 @@ export class BookingRequestService {
   async createPaymentMethodSetup(
     propertyId: string,
     dto: CreateRequestCardSetupDto,
-  ): Promise<{ setupIntentId: string; clientSecret: string }> {
+  ): Promise<{
+    setupIntentId: string;
+    clientSecret: string;
+    clientMode: 'mock' | 'stripe';
+  }> {
     const config = await this.configService.getPublicConfig(propertyId);
     this.assertRequestMode(config);
     if (config.paymentMethodCollection === 'disabled') {
@@ -1235,6 +1239,7 @@ export class BookingRequestService {
     return {
       setupIntentId: setup.setupIntentId,
       clientSecret: setup.clientSecret,
+      clientMode: setup.clientMode,
     };
   }
 

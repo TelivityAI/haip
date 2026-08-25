@@ -10,6 +10,7 @@ import type {
 import { Button } from '../components/Button';
 import { RequestFlowFrame } from '../components/RequestStayDocket';
 import { StripeSetupForm } from '../components/StripeSetupForm';
+import { MockSetupForm } from '../components/MockSetupForm';
 import { useBookingFlow } from '../context/BookingFlowContext';
 import { useConfig } from '../context/ConfigContext';
 import { REQUEST_CARD_CONSENT_VERSION } from '../lib/requestCardConsent';
@@ -41,7 +42,13 @@ function effectiveStripeAppearance(config: {
   };
 }
 
-function RequestPaymentHeading({ optional }: { optional: boolean }) {
+function RequestPaymentHeading({
+  optional,
+  simulated,
+}: {
+  optional: boolean;
+  simulated: boolean;
+}) {
   return (
     <div className="mt-2">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#667085]">
@@ -51,9 +58,11 @@ function RequestPaymentHeading({ optional }: { optional: boolean }) {
         Secure your request
       </h1>
       <p className="mt-2 text-sm leading-6 text-[#667085]">
-        {optional
-          ? 'If you add a card, it will be securely saved by Stripe. '
-          : 'Your card will be securely saved by Stripe. '}
+        {simulated
+          ? 'A test payment method will be saved for this local request. '
+          : optional
+            ? 'If you add a card, it will be securely saved by Stripe. '
+            : 'Your card will be securely saved by Stripe. '}
         <strong className="text-[#183153]">You will not be charged now.</strong>{' '}
         The hotel reviews every request before confirming.
       </p>
@@ -196,8 +205,11 @@ export function RequestPayment() {
 
   const publishableKey = config?.stripePublishableKey?.trim();
   const stripePromise = useMemo(
-    () => (collectCard && publishableKey ? loadStripe(publishableKey) : null),
-    [collectCard, publishableKey],
+    () =>
+      collectCard && setupMutation.data?.clientMode === 'stripe' && publishableKey
+        ? loadStripe(publishableKey)
+        : null,
+    [collectCard, publishableKey, setupMutation.data?.clientMode],
   );
 
   if (
@@ -273,6 +285,7 @@ export function RequestPayment() {
       </Button>
       <RequestPaymentHeading
         optional={config.paymentMethodCollection === 'optional'}
+        simulated={setupMutation.data?.clientMode === 'mock'}
       />
 
       <div className="mt-5 rounded-brand border border-[#D0D5DD] bg-white p-5 sm:p-6">
@@ -367,6 +380,17 @@ export function RequestPayment() {
               )}
             </div>
           </div>
+        ) : setup?.clientMode === 'mock' ? (
+          <MockSetupForm
+            propertyName={propertyName}
+            setupIntentId={setup.setupIntentId}
+            submitting={isSubmitting}
+            onConfirmed={(setupIntentId, consentText) => {
+              flow.setSetupIntentId(setupIntentId);
+              flow.setSetupIntentConsentText(consentText);
+              submitRequest({ setupIntentId, consentText });
+            }}
+          />
         ) : setup && stripePromise ? (
           <Elements
             stripe={stripePromise}

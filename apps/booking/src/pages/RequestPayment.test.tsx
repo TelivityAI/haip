@@ -165,6 +165,7 @@ describe('RequestPayment', () => {
     mocks.createSetup.mockResolvedValue({
       setupIntentId: 'seti_server',
       clientSecret: 'seti_server_secret_value',
+      clientMode: 'stripe',
     });
     mocks.confirmSetup.mockResolvedValue({
       setupIntent: { id: 'seti_succeeded', status: 'succeeded' },
@@ -227,6 +228,7 @@ describe('RequestPayment', () => {
       let resolveSetup!: (value: {
         setupIntentId: string;
         clientSecret: string;
+        clientMode: 'stripe';
       }) => void;
       mocks.createSetup.mockReturnValue(
         new Promise((resolve) => {
@@ -249,6 +251,7 @@ describe('RequestPayment', () => {
       resolveSetup({
         setupIntentId: 'seti_deferred',
         clientSecret: 'seti_deferred_secret_value',
+        clientMode: 'stripe',
       });
 
       expect(await screen.findByLabelText('Secure card entry')).toBeVisible();
@@ -311,6 +314,33 @@ describe('RequestPayment', () => {
     expect(payload).not.toHaveProperty('cardLastFour');
   });
 
+  it('uses the local payment simulation instead of loading Stripe for a mock setup', async () => {
+    mocks.createSetup.mockResolvedValue({
+      setupIntentId: 'seti_mock_local',
+      clientSecret: 'seti_mock_local_secret_mock',
+      clientMode: 'mock',
+    });
+    renderPayment('required');
+    await begin();
+
+    expect(await screen.findByText('Local payment simulation')).toBeVisible();
+    expect(mocks.loadStripe).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Secure card entry')).not.toBeInTheDocument();
+    expect(screen.queryByText(/card will be securely saved by Stripe/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /I authorize Hotel Mirador/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Save test card and submit booking request' }),
+    );
+
+    await waitFor(() => expect(mocks.submitRequest).toHaveBeenCalledOnce());
+    expect(mocks.submitRequest.mock.calls[0]![0]).toMatchObject({
+      setupIntentId: 'seti_mock_local',
+      consentAccepted: true,
+      consentVersion: 'request-card-v1',
+    });
+  });
+
   it('blocks required submission when Stripe does not complete setup', async () => {
     mocks.confirmSetup.mockResolvedValue({
       error: { message: 'Your card could not be saved.' },
@@ -370,6 +400,7 @@ describe('RequestPayment', () => {
       .mockResolvedValueOnce({
         setupIntentId: 'seti_retry',
         clientSecret: 'seti_retry_secret_value',
+        clientMode: 'stripe',
       });
     renderPayment('optional');
     await begin();

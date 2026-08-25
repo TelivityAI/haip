@@ -42,6 +42,7 @@ export interface SavedPaymentMethodGateway {
     setupIntentId: string;
     clientSecret: string;
     customerId: string;
+    clientMode: 'mock' | 'stripe';
   }>;
   resolveSetup(
     setupIntentId: string,

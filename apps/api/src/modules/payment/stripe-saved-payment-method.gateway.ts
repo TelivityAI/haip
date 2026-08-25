@@ -43,9 +43,12 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
     setupIntentId: string;
     clientSecret: string;
     customerId: string;
+    clientMode: 'stripe';
   }> {
-    const options: Stripe.RequestOptions = { idempotencyKey };
-    const customer = await this.stripe.customers.create({ email }, options);
+    const customer = await this.stripe.customers.create(
+      { email },
+      { idempotencyKey: `${idempotencyKey}:customer` },
+    );
     const setupIntent = await this.stripe.setupIntents.create(
       {
         customer: customer.id,
@@ -56,7 +59,7 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
           [APPLICATION_METADATA_KEY]: this.applicationHash(provenance.applicationId),
         },
       },
-      options,
+      { idempotencyKey: `${idempotencyKey}:setup-intent` },
     );
 
     if (!setupIntent.client_secret) {
@@ -67,6 +70,7 @@ export class StripeSavedPaymentMethodGateway implements SavedPaymentMethodGatewa
       setupIntentId: setupIntent.id,
       clientSecret: setupIntent.client_secret,
       customerId: customer.id,
+      clientMode: 'stripe',
     };
   }
 

@@ -203,6 +203,7 @@ export interface RequestPaymentMethodSetupRequest {
 export interface RequestPaymentMethodSetupResponse {
   setupIntentId: string;
   clientSecret: string;
+  clientMode: 'mock' | 'stripe';
 }
 
 export interface SubmitBookingRequest {

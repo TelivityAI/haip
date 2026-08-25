@@ -14,7 +14,12 @@ export class UnsupportedSavedPaymentMethodGateway implements SavedPaymentMethodG
     _email: string,
     _idempotencyKey: string,
     _provenance: SavedPaymentMethodProvenance,
-  ): Promise<{ setupIntentId: string; clientSecret: string; customerId: string }> {
+  ): Promise<{
+    setupIntentId: string;
+    clientSecret: string;
+    customerId: string;
+    clientMode: 'mock' | 'stripe';
+  }> {
     throw this.unsupported();
   }
 

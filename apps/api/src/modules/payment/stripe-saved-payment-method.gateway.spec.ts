@@ -71,10 +71,11 @@ describe('StripeSavedPaymentMethodGateway', () => {
       setupIntentId: 'seti_trusted',
       clientSecret: 'seti_secret_safe_for_guest',
       customerId: 'cus_trusted',
+      clientMode: 'stripe',
     });
     expect(stripe.customers.create).toHaveBeenCalledWith(
       { email: 'guest@example.com' },
-      { idempotencyKey: 'request-card:req_123' },
+      { idempotencyKey: 'request-card:req_123:customer' },
     );
     expect(stripe.setupIntents.create).toHaveBeenCalledWith(
       {
@@ -87,7 +88,7 @@ describe('StripeSavedPaymentMethodGateway', () => {
             'cf18a22e39cd5bba19be060f31c6a9e68094cefbaf2c4a23c5738bf78c687a3a',
         },
       },
-      { idempotencyKey: 'request-card:req_123' },
+      { idempotencyKey: 'request-card:req_123:setup-intent' },
     );
   });
 

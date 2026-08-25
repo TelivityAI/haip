@@ -52,6 +52,7 @@ const savedPaymentMethodGateway: SavedPaymentMethodGateway = {
       setupIntentId: PRIVATE_SETUP_INTENT,
       clientSecret: 'seti_E2E_PRIVATE_TOKEN_secret_E2E_PRIVATE_CLIENT_TOKEN',
       customerId: 'cus_E2E_PRIVATE_TOKEN',
+      clientMode: 'stripe' as const,
     };
   },
   async resolveSetup() {

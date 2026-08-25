@@ -9,7 +9,12 @@ import type {
 } from './interfaces/saved-payment-method-gateway.interface';
 
 type MockSetupRecord = {
-  setup: { setupIntentId: string; clientSecret: string; customerId: string };
+  setup: {
+    setupIntentId: string;
+    clientSecret: string;
+    customerId: string;
+    clientMode: 'mock';
+  };
   paymentMethod: SavedPaymentMethod;
   propertyId: string;
   applicationHash: string;
@@ -36,6 +41,7 @@ export class MockSavedPaymentMethodGateway implements SavedPaymentMethodGateway 
     setupIntentId: string;
     clientSecret: string;
     customerId: string;
+    clientMode: 'mock';
   }> {
     const existing = this.setupsByKey.get(idempotencyKey);
     if (existing) {
@@ -48,6 +54,7 @@ export class MockSavedPaymentMethodGateway implements SavedPaymentMethodGateway 
       setupIntentId: `seti_mock_${suffix}`,
       clientSecret: `seti_mock_${suffix}_secret_mock`,
       customerId: `cus_mock_${suffix}`,
+      clientMode: 'mock' as const,
     };
     const paymentMethod: SavedPaymentMethod = {
       setupIntentId: setup.setupIntentId,
