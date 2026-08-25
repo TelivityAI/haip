@@ -72,7 +72,7 @@ function permsOf(target: Function) {
 
 describe('legacy @Roles() controllers migrated to @RequirePermissions()', () => {
   it.each([
-    [ReservationController.prototype.searchAvailability, 'reservations.write'],
+    [ReservationController.prototype.searchAvailability, 'reservations.read'],
     [GuestController.prototype.createGuest, 'guests.write'],
     [GuestController.prototype.updateGuest, 'guests.write'],
     [GuestController.prototype.deleteGuest, 'guests.write'],

@@ -1133,6 +1133,7 @@ async function main() {
       permission_key varchar(100) NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `DROP INDEX IF EXISTS role_permissions_role_perm_unique`,
     `CREATE UNIQUE INDEX IF NOT EXISTS role_permissions_role_perm_unique ON role_permissions (property_id, role_id, permission_key)`,
     `CREATE TABLE IF NOT EXISTS user_roles (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1141,7 +1142,8 @@ async function main() {
       role_id uuid NOT NULL REFERENCES roles(id),
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS user_roles_user_role_unique ON user_roles (user_id, role_id)`,
+    `DROP INDEX IF EXISTS user_roles_user_role_unique`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS user_roles_user_role_unique ON user_roles (user_id, role_id, property_id)`,
     `CREATE INDEX IF NOT EXISTS user_roles_user_idx ON user_roles (user_id)`,
     // Booking Engine — publishable keys + per-property config (guest-facing direct booking)
     `CREATE TABLE IF NOT EXISTS booking_engine_credentials (

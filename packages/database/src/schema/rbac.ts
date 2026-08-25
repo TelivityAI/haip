@@ -118,7 +118,11 @@ export const userRoles = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    userRoleUnique: uniqueIndex('user_roles_user_role_unique').on(t.userId, t.roleId),
+    userRoleUnique: uniqueIndex('user_roles_user_role_unique').on(
+      t.userId,
+      t.roleId,
+      t.propertyId,
+    ),
     userIdx: index('user_roles_user_idx').on(t.userId),
   }),
 );

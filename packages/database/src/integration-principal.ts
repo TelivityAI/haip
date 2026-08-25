@@ -46,6 +46,11 @@ export const INTEGRATION_CUSTOM_PERMISSION_ALLOWLIST: readonly string[] = [
   'rateplans.manage',
   'reports.view',
   'nightaudit.run',
+  // Channel/iCal feed CRUD and property config are settings.manage routes
+  // (ical.controller.ts, property.controller.ts, import.controller.ts). An
+  // integration that syncs OTA calendars needs it, and without it here such
+  // a principal cannot be expressed with --profile custom at all.
+  'settings.manage',
 ];
 
 export interface LinkIntegrationPrincipalInput {
@@ -252,11 +257,9 @@ export async function linkIntegrationPrincipal(
 
   if (bySub) {
     userId = bySub.id;
-    if (bySub.propertyId !== propertyId) {
-      throw new Error(
-        `User linked to keycloakSub ${keycloakSub} belongs to another property (${bySub.propertyId})`,
-      );
-    }
+    // users.propertyId is the principal's home property (set on first link).
+    // Additional properties are linked via user_roles; PermissionsGuard resolves
+    // grants per request propertyId, matching the multivalued JWT property_ids claim.
     await (db as any)
       .update(users)
       .set({ name, updatedAt: new Date() })
@@ -273,10 +276,22 @@ export async function linkIntegrationPrincipal(
 
     if (emailRow) {
       userId = emailRow.id;
-      await (db as any)
-        .update(users)
-        .set({ keycloakSub, name, propertyId, status: 'active', updatedAt: new Date() })
-        .where(eq(users.id, userId));
+      const patch: {
+        keycloakSub: string;
+        name: string;
+        status: 'active';
+        updatedAt: Date;
+        propertyId?: string;
+      } = {
+        keycloakSub,
+        name,
+        status: 'active',
+        updatedAt: new Date(),
+      };
+      if (!emailRow.keycloakSub) {
+        patch.propertyId = propertyId;
+      }
+      await (db as any).update(users).set(patch).where(eq(users.id, userId));
     } else {
       const [user] = await (db as any)
         .insert(users)

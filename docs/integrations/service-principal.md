@@ -81,6 +81,21 @@ Profiles:
 
 Re-running the command is **idempotent** (same `keycloakSub` updates name; ensures role assignment).
 
+### Multi-property principals
+
+One Keycloak service account can operate on several properties: the JWT `property_ids` claim is multivalued, and `PermissionsGuard` resolves grants per request `propertyId` via `user_roles`. Link the same `keycloakSub` on each property — either run `integration:link` once per property, or pass a comma-separated list:
+
+```bash
+pnpm integration:link -- \
+  --property-id a0000001-0000-4000-a000-000000000001,b0000002-0000-4000-b000-000000000002 \
+  --keycloak-sub <sub-from-jwt> \
+  --label booking-pipeline \
+  --profile custom \
+  --permissions reservations.read,reservations.write,folios.read
+```
+
+`users.propertyId` on the local row is the principal's **home** property (set on the first link). It is not a constraint — additional properties are linked only through `user_roles`.
+
 ## 4. Verify
 
 ```bash
