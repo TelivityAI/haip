@@ -148,9 +148,11 @@ function requestConfig(
 function SeedFlow({
   target,
   withStoredApplication = false,
+  withStoredPayment = false,
 }: {
   target: string;
   withStoredApplication?: boolean;
+  withStoredPayment?: boolean;
 }) {
   const navigate = useNavigate();
   const flow = useBookingFlow();
@@ -178,6 +180,10 @@ function SeedFlow({
             [questions[4]!.id]: false,
           });
         }
+        if (withStoredPayment) {
+          flow.setSetupIntentId('seti_previous_request');
+          flow.setSetupIntentConsentText('Previous request consent');
+        }
         navigate(target);
       }}
     >
@@ -189,6 +195,23 @@ function SeedFlow({
 function StoredState() {
   const { guest, applicationAnswers } = useBookingFlow();
   return <output>{JSON.stringify({ guest, applicationAnswers })}</output>;
+}
+
+function FlowStateProbe() {
+  const flow = useBookingFlow();
+  return (
+    <output aria-label="Booking flow state">
+      {JSON.stringify({
+        requestAcknowledgement: flow.requestAcknowledgement ?? null,
+        requestSubmissionStatus: flow.requestSubmissionStatus,
+        guest: flow.guest ?? null,
+        applicationAnswers: flow.applicationAnswers,
+        setupIntentId: flow.setupIntentId ?? null,
+        setupIntentConsentText: flow.setupIntentConsentText ?? null,
+        requestIdempotencyKey: flow.requestIdempotencyKey ?? null,
+      })}
+    </output>
+  );
 }
 
 function ApplicationWithNavigationAttempt() {
@@ -260,7 +283,12 @@ function renderGuardedRequestApplication(config: BookingConfig) {
 
 function renderRequestApplication(
   config = requestConfig(),
-  options: { withStoredApplication?: boolean; receiptInLayout?: boolean } = {},
+  options: {
+    withStoredApplication?: boolean;
+    withStoredPayment?: boolean;
+    receiptInLayout?: boolean;
+    flowStateProbe?: boolean;
+  } = {},
 ) {
   api.config.mockResolvedValue(config);
   const queryClient = new QueryClient({
@@ -276,10 +304,14 @@ function renderRequestApplication(
               <Route
                 path="/"
                 element={
-                  <SeedFlow
-                    target="/request/application"
-                    withStoredApplication={options.withStoredApplication}
-                  />
+                  <>
+                    <SeedFlow
+                      target="/request/application"
+                      withStoredApplication={options.withStoredApplication}
+                      withStoredPayment={options.withStoredPayment}
+                    />
+                    {options.flowStateProbe && <FlowStateProbe />}
+                  </>
                 }
               />
               <Route path="/extras" element={<StoredState />} />
@@ -517,6 +549,43 @@ describe('RequestApplication', () => {
 
     expect(await screen.findByRole('button', { name: 'Begin test flow' })).toBeVisible();
     expect(screen.queryByText('Request received · Pending review')).not.toBeInTheDocument();
+  });
+
+  it('resets a completed request from the receipt header before a second request', async () => {
+    const onlyQuestion = [{ ...questions[0]!, isRequired: true }];
+    renderRequestApplication(requestConfig('disabled', onlyQuestion), {
+      receiptInLayout: true,
+      flowStateProbe: true,
+      withStoredPayment: true,
+    });
+    await submitDisabledRequest();
+    const firstKey = api.submitRequest.mock.calls[0]![0].idempotencyKey;
+
+    await userEvent.click(screen.getByRole('link', { name: 'Hotel Mirador' }));
+
+    expect(await screen.findByRole('button', { name: 'Begin test flow' })).toBeVisible();
+    expect(screen.queryByText('Request received · Pending review')).not.toBeInTheDocument();
+    const resetState = screen.getByRole('status', { name: 'Booking flow state' });
+    expect(resetState).toHaveTextContent('"requestAcknowledgement":null');
+    expect(resetState).toHaveTextContent('"requestSubmissionStatus":"idle"');
+    expect(resetState).toHaveTextContent('"guest":null');
+    expect(resetState).toHaveTextContent('"applicationAnswers":{}');
+    expect(resetState).toHaveTextContent('"setupIntentId":null');
+    expect(resetState).toHaveTextContent('"setupIntentConsentText":null');
+    expect(resetState).toHaveTextContent('"requestIdempotencyKey":null');
+
+    await begin();
+    expect(screen.getByLabelText(/^First name/)).toHaveValue('');
+    expect(screen.getByLabelText(/^Last name/)).toHaveValue('');
+    expect(screen.getByLabelText(/^Email/)).toHaveValue('');
+    expect(screen.getByLabelText(/Expected arrival time/)).toHaveValue('');
+    await fillCoreGuest();
+    await userEvent.type(screen.getByLabelText(/Expected arrival time/), '20:00');
+    await userEvent.click(screen.getByRole('button', { name: 'Submit booking request' }));
+
+    await waitFor(() => expect(api.submitRequest).toHaveBeenCalledTimes(2));
+    expect(api.submitRequest.mock.calls[1]![0].idempotencyKey).not.toBe(firstKey);
+    expect(await screen.findByText('Request received · Pending review')).toBeVisible();
   });
 
   it('still lets the receipt action reset the flow and start a new search', async () => {

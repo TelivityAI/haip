@@ -4,7 +4,7 @@ import { useBookingFlow } from '../context/BookingFlowContext';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { config } = useConfig();
-  const { branding, requestSubmissionStatus } = useBookingFlow();
+  const { branding, requestSubmissionStatus, reset } = useBookingFlow();
   const { pathname } = useLocation();
   const isRequestFlow = pathname.startsWith('/request/');
   const displayName =
@@ -23,7 +23,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
             aria-disabled={requestSubmissionStatus === 'pending'}
             tabIndex={requestSubmissionStatus === 'pending' ? -1 : undefined}
             onClick={(event) => {
-              if (requestSubmissionStatus === 'pending') event.preventDefault();
+              if (requestSubmissionStatus === 'pending') {
+                event.preventDefault();
+                return;
+              }
+              if (pathname === '/request/received') reset();
             }}
           >
             {displayName}
