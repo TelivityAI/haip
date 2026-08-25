@@ -1,5 +1,6 @@
 import type { AcceptedPricingSnapshot } from '@telivityhaip/database';
 import { ConflictException } from '@nestjs/common';
+import Decimal from 'decimal.js';
 import { describe, expect, it, vi } from 'vitest';
 import { FolioService } from './folio.service';
 
@@ -48,6 +49,7 @@ function roomGroup(
       parentChargeId: null,
       sourceKey: `accepted-pricing:reservation:${RESERVATION}:night:${date}`,
       isLocked: options.locked ?? false,
+      lockedByAuditDate: options.locked ? date : null,
     },
     {
       id: `tax-${suffix}`,
@@ -64,6 +66,7 @@ function roomGroup(
       parentChargeId: baseId,
       sourceKey: null,
       isLocked: options.locked ?? false,
+      lockedByAuditDate: options.locked ? date : null,
     },
   ];
 }
@@ -129,7 +132,7 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
     expect(inserted).toEqual([]);
   });
 
-  it('reverses only removed unlocked accepted groups and preserves overlapping revenue and extras', async () => {
+  it('uses signed amendment rows for removed accepted groups and preserves extras', async () => {
     const ledger = [
       ...roomGroup('2026-10-01', 'one'),
       ...roomGroup('2026-10-02', 'two'),
@@ -174,21 +177,21 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
     });
 
     expect(result).toEqual({
-      reversedChargeIds: ['room-two'],
-      adjustmentAmount: '0.00',
+      reversedChargeIds: [],
+      adjustmentAmount: '-110.00',
     });
     expect(inserted).toEqual(expect.arrayContaining([
       expect.objectContaining({
         type: 'room',
         amount: '-100.00',
-        isReversal: true,
-        originalChargeId: 'room-two',
+        isReversal: false,
+        adjustsChargeId: 'room-two',
       }),
       expect.objectContaining({
         type: 'tax',
         amount: '-10.00',
-        isReversal: true,
-        originalChargeId: 'tax-two',
+        isReversal: false,
+        adjustsChargeId: 'tax-two',
       }),
     ]));
     expect(inserted.some((row) => row.originalChargeId === 'room-one')).toBe(false);
@@ -229,11 +232,15 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
         type: 'room',
         amount: '20.00',
         parentChargeId: 'room-one',
+        adjustsChargeId: 'room-one',
+        isReversal: false,
       }),
       expect.objectContaining({
         type: 'tax',
         amount: '2.00',
         parentChargeId: 'room-one',
+        adjustsChargeId: 'tax-one',
+        isReversal: false,
       }),
     ]);
     expect(inserted.some((row) => row.type === 'adjustment')).toBe(false);
@@ -297,7 +304,7 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
         isReversal: false,
         originalChargeId: null,
         parentChargeId: null,
-        sourceKey: 'accepted-pricing:reservation-service:other-row:once',
+        sourceKey: 'accepted-pricing:reservation-service:other-row:once:2026-10-01',
         isLocked: false,
       },
     ];
@@ -350,11 +357,18 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
       postedBy: 'staff-1',
     });
 
-    expect(result).toEqual({ reversedChargeIds: [], adjustmentAmount: '-110.00' });
-    expect(inserted).toEqual([
-      expect.objectContaining({ type: 'room', amount: '-100.00', isReversal: true }),
-      expect.objectContaining({ type: 'tax', amount: '-10.00', isReversal: true }),
-    ]);
+    expect(result).toEqual({ reversedChargeIds: [], adjustmentAmount: '0.00' });
+    expect(inserted).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'room', amount: '-100.00', isReversal: false,
+        adjustsChargeId: 'room-two', serviceDate: new Date('2026-10-03T00:00:00.000Z'),
+      }),
+      expect.objectContaining({
+        type: 'tax', amount: '-10.00', isReversal: false,
+        adjustsChargeId: 'tax-two', serviceDate: new Date('2026-10-03T00:00:00.000Z'),
+      }),
+    ]));
+    expect(ledger.slice(0, 2).every((row) => row.isLocked)).toBe(true);
   });
 
   it('reconciles a service charge-type and tax change by category', async () => {
@@ -366,7 +380,7 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
       type: 'parking', description: 'Parking [svc:rs-1]', amount: '15.00', taxAmount: '0.00',
       currencyCode: 'EUR', serviceDate: new Date('2026-10-01T00:00:00.000Z'),
       isReversal: false, originalChargeId: null, parentChargeId: null,
-      sourceKey: 'accepted-pricing:reservation-service:rs-1:once', isLocked: false,
+      sourceKey: 'accepted-pricing:reservation-service:rs-1:once:2026-10-01', isLocked: false,
     };
     const ledger = [serviceBase, {
       ...serviceBase,
@@ -400,9 +414,18 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
 
     expect(result.adjustmentAmount).toBe('6.00');
     expect(inserted).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'parking', amount: '-15.00', isReversal: true }),
-      expect.objectContaining({ type: 'spa', amount: '20.00', isReversal: false }),
-      expect.objectContaining({ type: 'tax', amount: '1.00' }),
+      expect.objectContaining({
+        type: 'parking', amount: '-15.00', isReversal: false,
+        adjustsChargeId: 'service-one',
+      }),
+      expect.objectContaining({
+        type: 'spa', amount: '20.00', isReversal: false,
+        adjustsChargeId: 'service-one',
+      }),
+      expect.objectContaining({
+        type: 'tax', amount: '1.00', isReversal: false,
+        adjustsChargeId: 'service-tax',
+      }),
     ]));
   });
 
@@ -430,7 +453,7 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
     expect(inserted).toEqual([]);
   });
 
-  it('reverses a partially posted per-night service and posts the chosen once group immediately', async () => {
+  it('balances a partially posted per-night group and defers a future once group', async () => {
     const serviceRow = {
       id: 'rs-1', propertyId: PROPERTY, reservationId: RESERVATION, serviceId: 'svc-1',
     };
@@ -459,20 +482,118 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
     const folio = service();
     vi.spyOn(folio, 'recalculateBalance').mockResolvedValue(undefined);
 
-    await folio.reconcileAcceptedStayAmendment({
+    const result = await folio.reconcileAcceptedStayAmendment({
       tx, propertyId: PROPERTY, folioId: FOLIO, reservationId: RESERVATION,
       amendmentId: AMENDMENT, previousPricing: oldPricing, newPricing: nextPricing,
     });
 
     expect(inserted).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'parking', amount: '-15.00', isReversal: true }),
-      expect.objectContaining({ type: 'tax', amount: '-2.00', isReversal: true }),
-      expect.objectContaining({
-        type: 'parking', amount: '25.00',
-        sourceKey: 'accepted-pricing:reservation-service:rs-1:once',
-      }),
-      expect.objectContaining({ type: 'tax', amount: '3.00' }),
+      expect.objectContaining({ type: 'parking', amount: '-15.00', isReversal: false }),
+      expect.objectContaining({ type: 'tax', amount: '-2.00', isReversal: false }),
     ]));
+    expect(inserted.some((row) =>
+      row.sourceKey === 'accepted-pricing:reservation-service:rs-1:once:2026-10-01')).toBe(false);
+  });
+
+  it('balances an old once date and recovers a reanchored closed once date exactly once', async () => {
+    const serviceRow = {
+      id: 'rs-1', propertyId: PROPERTY, reservationId: RESERVATION, serviceId: 'svc-1',
+    };
+    const oldBase = {
+      id: 'service-old', propertyId: PROPERTY, folioId: FOLIO,
+      type: 'parking', description: 'Parking [svc:rs-1]', amount: '20.00', taxAmount: '0.00',
+      currencyCode: 'EUR', serviceDate: new Date('2026-10-01T00:00:00.000Z'),
+      isReversal: false, originalChargeId: null, parentChargeId: null,
+      sourceKey: 'accepted-pricing:reservation-service:rs-1:once:2026-10-01',
+      isLocked: true, lockedByAuditDate: '2026-10-02',
+    };
+    const ledger = [oldBase, {
+      ...oldBase, id: 'service-old-tax', type: 'tax', description: 'Parking tax', amount: '2.00',
+      parentChargeId: oldBase.id, sourceKey: null,
+    }];
+    const reanchored: AcceptedPricingSnapshot = {
+      ...structuredClone(oldPricing),
+      nights: [], roomTotal: '0.00', taxTotal: '0.00',
+      services: [{
+        serviceId: 'svc-1', code: 'PARK', name: 'Parking', postingRule: 'once',
+        chargeType: 'parking', currencyCode: 'EUR', unitPrice: '20.00', quantity: 1,
+        lineTotal: '20.00', taxTotal: '2.00',
+        lineItems: [{ date: '2026-10-02', amount: '20.00', taxAmount: '2.00' }],
+      }],
+      servicesTotal: '20.00', servicesTaxTotal: '2.00', grandTotal: '22.00',
+    };
+    const { tx, inserted } = makeTx(
+      ledger, [serviceRow], RESERVATION, [{ businessDate: '2026-10-02' }],
+    );
+    const folio = service();
+    vi.spyOn(folio, 'recalculateBalance').mockResolvedValue(undefined);
+
+    const first = await folio.reconcileAcceptedStayAmendment({
+      tx, propertyId: PROPERTY, folioId: FOLIO, reservationId: RESERVATION,
+      amendmentId: AMENDMENT, previousPricing: oldPricing, newPricing: reanchored,
+    });
+    const count = inserted.length;
+    const replay = await folio.reconcileAcceptedStayAmendment({
+      tx, propertyId: PROPERTY, folioId: FOLIO, reservationId: RESERVATION,
+      amendmentId: AMENDMENT, previousPricing: oldPricing, newPricing: reanchored,
+    });
+
+    expect(first.adjustmentAmount).toBe('0.00');
+    expect(replay.adjustmentAmount).toBe('0.00');
+    expect(inserted).toHaveLength(count);
+    expect(inserted).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        amount: '-20.00', isReversal: false, adjustsChargeId: 'service-old',
+        serviceDate: new Date('2026-10-03T00:00:00.000Z'),
+      }),
+      expect.objectContaining({
+        amount: '-2.00', isReversal: false, adjustsChargeId: 'service-old-tax',
+        serviceDate: new Date('2026-10-03T00:00:00.000Z'),
+      }),
+      expect.objectContaining({
+        amount: '20.00',
+        sourceKey: 'accepted-pricing:reservation-service:rs-1:once:2026-10-02',
+        serviceDate: new Date('2026-10-03T00:00:00.000Z'),
+      }),
+    ]));
+  });
+
+  it('keeps repeated repricing oscillations as additive non-reversal history', async () => {
+    const ledger = [...roomGroup('2026-10-01', 'one')];
+    const { tx, inserted } = makeTx(ledger);
+    const folio = service();
+    vi.spyOn(folio, 'recalculateBalance').mockResolvedValue(undefined);
+    const snapshot = (room: string, tax: string): AcceptedPricingSnapshot => ({
+      ...structuredClone(oldPricing),
+      nights: [{ date: '2026-10-01', roomAmount: room, taxAmount: tax }],
+      roomTotal: room,
+      taxTotal: tax,
+      grandTotal: new Decimal(room).plus(tax).toFixed(2),
+    });
+    let prior = snapshot('100.00', '10.00');
+    for (const [index, [room, tax]] of [
+      ['120.00', '12.00'],
+      ['80.00', '8.00'],
+      ['100.00', '10.00'],
+      ['70.00', '7.00'],
+    ].entries()) {
+      const next = snapshot(room, tax);
+      await folio.reconcileAcceptedStayAmendment({
+        tx, propertyId: PROPERTY, folioId: FOLIO, reservationId: RESERVATION,
+        amendmentId: `amendment-${index + 1}`, previousPricing: prior, newPricing: next,
+      });
+      prior = next;
+    }
+
+    expect(inserted.every((row) => row.isReversal === false)).toBe(true);
+    expect(inserted.every((row) => row.adjustsChargeId === 'room-one'
+      || row.adjustsChargeId === 'tax-one')).toBe(true);
+    const roomNet = ledger.filter((row) => row.type === 'room')
+      .reduce((total, row) => total.plus(row.amount), new Decimal(0));
+    const taxNet = ledger.filter((row) => row.type === 'tax')
+      .reduce((total, row) => total.plus(row.amount), new Decimal(0));
+    expect(roomNet.toFixed(2)).toBe('70.00');
+    expect(taxNet.toFixed(2)).toBe('7.00');
   });
 
   it('posts a newly added closed night immediately with its canonical source and replays cleanly', async () => {
@@ -486,7 +607,7 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
     const folio = service();
     vi.spyOn(folio, 'recalculateBalance').mockResolvedValue(undefined);
 
-    await folio.reconcileAcceptedStayAmendment({
+    const result = await folio.reconcileAcceptedStayAmendment({
       tx, propertyId: PROPERTY, folioId: FOLIO, reservationId: RESERVATION,
       amendmentId: AMENDMENT, previousPricing: oldPricing, newPricing: oldPricing,
     });
@@ -497,12 +618,16 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
     });
 
     expect(inserted).toHaveLength(count);
+    expect(result).toEqual({ reversedChargeIds: [], adjustmentAmount: '110.00' });
     expect(inserted).toEqual(expect.arrayContaining([
       expect.objectContaining({
         type: 'room', amount: '100.00',
         sourceKey: `accepted-pricing:reservation:${RESERVATION}:night:2026-10-02`,
+        serviceDate: new Date('2026-10-03T00:00:00.000Z'),
       }),
-      expect.objectContaining({ type: 'tax', amount: '10.00' }),
+      expect.objectContaining({
+        type: 'tax', amount: '10.00', serviceDate: new Date('2026-10-03T00:00:00.000Z'),
+      }),
     ]));
   });
 });

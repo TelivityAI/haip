@@ -57,6 +57,7 @@ describe('booking request schema', () => {
     expect(payments.bookingRequestId).toBeDefined();
     expect(payments.idempotencyKey).toBeDefined();
     expect(charges.sourceKey).toBeDefined();
+    expect(charges.adjustsChargeId).toBeDefined();
     expect(webhookDeliveries.logicalEventId).toBeDefined();
     expect(reservations.acceptedPricingSnapshot).toBeDefined();
     expect(getTableConfig(auditLogs).indexes.map((index) => index.config.name)).toContain(

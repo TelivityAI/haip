@@ -26,6 +26,10 @@ const auditRelationshipMigration = readFileSync(
   new URL('./migrations/0028_booking_request_audit_relationship.sql', import.meta.url),
   'utf8',
 );
+const amendmentLedgerMigration = readFileSync(
+  new URL('./migrations/0030_booking_request_amendment_ledger.sql', import.meta.url),
+  'utf8',
+);
 
 describe('booking request accepted-pricing migration safety', () => {
   it('fails instead of accepting an already-accepted request without an operational snapshot', () => {
@@ -204,6 +208,30 @@ describe('booking request immutable audit relationship migration safety', () => 
       expect(source).toMatch(/target\.property_id = relationship\.property_id/i);
       expect(source).toMatch(/target\.entity_type = relationship\.entity_type/i);
       expect(source).toMatch(/target\.entity_id = relationship\.entity_id/i);
+    }
+  });
+});
+
+describe('booking request amendment ledger migration safety', () => {
+  it('adds immutable correction provenance in both migration paths', () => {
+    for (const source of [amendmentLedgerMigration, pushSchema]) {
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS adjusts_charge_id');
+      expect(source).toContain('charges_adjusts_charge_fkey');
+      expect(source).toMatch(/FOREIGN KEY \(adjusts_charge_id\) REFERENCES charges\(id\)/i);
+    }
+  });
+
+  it('migrates accepted once identities to include their immutable service date', () => {
+    for (const source of [amendmentLedgerMigration, pushSchema]) {
+      expect(source).toContain('accepted-pricing:reservation-service:');
+      expect(source).toContain("source_key LIKE 'accepted-pricing:reservation-service:%:once'");
+      expect(source).toMatch(/source_key\s*\|\|\s*':'\s*\|\|\s*to_char\([^)]*service_date AT TIME ZONE 'UTC'/i);
+    }
+  });
+
+  it('does not rewrite monetary, reversal, or lock state', () => {
+    for (const source of [amendmentLedgerMigration]) {
+      expect(source).not.toMatch(/SET\s+(amount|is_reversal|is_locked|service_date)\s*=/i);
     }
   });
 });

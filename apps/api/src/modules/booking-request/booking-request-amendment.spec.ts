@@ -12,6 +12,7 @@ import {
   bookingRequests,
   bookingRequestStayAmendments,
   properties,
+  reservationServices,
   reservations,
 } from '@telivityhaip/database';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -154,6 +155,7 @@ type HarnessState = {
   amendments: Array<Record<string, any>>;
   audits: Array<Record<string, any>>;
   consequences: Array<Record<string, any>>;
+  reservationServices: Array<Record<string, any>>;
 };
 
 function makeDatabase(state: HarnessState, lockOrder: string[]) {
@@ -164,6 +166,7 @@ function makeDatabase(state: HarnessState, lockOrder: string[]) {
     if (table === bookingRequestStayAmendments) return state.amendments;
     if (table === auditLogs) return state.audits;
     if (table === bookingRequestConsequences) return state.consequences;
+    if (table === reservationServices) return state.reservationServices;
     return [];
   };
   let transactionActive = false;
@@ -196,6 +199,9 @@ function makeDatabase(state: HarnessState, lockOrder: string[]) {
   };
 
   const db: any = {
+    execute: vi.fn(async () => {
+      lockOrder.push('pricing-lock');
+    }),
     select: vi.fn((selection?: Record<string, unknown>) => selectBuilder(selection)),
     insert: vi.fn((table: unknown) => ({
       values: vi.fn((values: Record<string, any>) => {
@@ -258,6 +264,7 @@ function makeHarness(status: 'pending' | 'accepted' | 'denied' = 'accepted') {
     amendments: [],
     audits: [],
     consequences: [],
+    reservationServices: [],
   };
   const lockOrder: string[] = [];
   const database = makeDatabase(state, lockOrder);
@@ -445,6 +452,38 @@ describe('BookingRequestService stay amendment preview', () => {
     );
   });
 
+  it('excludes a cancelled accepted service from prior/current operational pricing', async () => {
+    const harness = makeHarness();
+    const serviceLine = {
+      serviceId: 'parking', code: 'PARKING', name: 'Parking', postingRule: 'once',
+      chargeType: 'parking', currencyCode: 'EUR', unitPrice: '20.00', quantity: 1,
+      lineTotal: '20.00', taxTotal: '2.00',
+      lineItems: [{ date: '2026-10-01', amount: '20.00', taxAmount: '2.00' }],
+    };
+    Object.assign(harness.state.reservations[0]!, {
+      totalAmount: '242.00',
+      acceptedPricingSnapshot: {
+        ...structuredClone(acceptedPricing), services: [serviceLine],
+        servicesTotal: '20.00', servicesTaxTotal: '2.00', grandTotal: '242.00',
+      },
+    });
+    harness.state.requests[0]!.serviceIds = ['parking'];
+    harness.state.reservationServices.push({
+      id: 'rs-parking', propertyId: PROPERTY, reservationId: RESERVATION,
+      serviceId: 'parking', status: 'cancelled',
+    });
+
+    const preview = await harness.service.stayAmendmentPreview(REQUEST, PROPERTY, dates);
+
+    expect(preview).toMatchObject({ previousTotal: '220.00', priorTotal: '330.00' });
+    expect(harness.bookingEngine.quote).toHaveBeenLastCalledWith(
+      PROPERTY,
+      expect.objectContaining({ serviceIds: [] }),
+      undefined,
+      { excludeReservationId: RESERVATION },
+    );
+  });
+
   it('rejects pending/denied requests, wrong property scope, and unavailable complete windows', async () => {
     await expect(makeHarness('pending').service.stayAmendmentPreview(REQUEST, PROPERTY, dates))
       .rejects.toThrow(ConflictException);
@@ -531,6 +570,49 @@ describe('Booking Request stay amendment HTTP contract', () => {
 describe('BookingRequestService accepted stay amendment commit', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('commits without a cancelled accepted service so total and posting snapshot stay aligned', async () => {
+    const harness = makeHarness();
+    const serviceLine = {
+      serviceId: 'parking', code: 'PARKING', name: 'Parking', postingRule: 'once',
+      chargeType: 'parking', currencyCode: 'EUR', unitPrice: '20.00', quantity: 1,
+      lineTotal: '20.00', taxTotal: '2.00',
+      lineItems: [{ date: '2026-10-01', amount: '20.00', taxAmount: '2.00' }],
+    };
+    Object.assign(harness.state.reservations[0]!, {
+      totalAmount: '242.00',
+      acceptedPricingSnapshot: {
+        ...structuredClone(acceptedPricing), services: [serviceLine],
+        servicesTotal: '20.00', servicesTaxTotal: '2.00', grandTotal: '242.00',
+      },
+    });
+    harness.state.requests[0]!.serviceIds = ['parking'];
+    harness.state.reservationServices.push({
+      id: 'rs-parking', propertyId: PROPERTY, reservationId: RESERVATION,
+      serviceId: 'parking', status: 'cancelled',
+    });
+    const preview = await harness.service.stayAmendmentPreview(REQUEST, PROPERTY, dates);
+
+    await harness.service.amendStay(REQUEST, PROPERTY, {
+      ...dates,
+      priceSource: 'prior',
+      previewToken: preview.previewToken,
+      idempotencyKey: 'cancelled-service-amendment',
+    });
+
+    expect(harness.state.reservations[0]).toMatchObject({
+      totalAmount: '330.00',
+      acceptedPricingSnapshot: expect.objectContaining({
+        grandTotal: '330.00', services: [], servicesTotal: '0.00', servicesTaxTotal: '0.00',
+      }),
+    });
+    expect(harness.folio.reconcileAcceptedStayAmendment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previousPricing: expect.objectContaining({ grandTotal: '242.00', services: [serviceLine] }),
+        newPricing: expect.objectContaining({ grandTotal: '330.00', services: [] }),
+      }),
+    );
+  });
+
   it('locks in order, updates only operational state, audits, and emits one durable event after commit', async () => {
     const harness = makeHarness();
     const requestBefore = structuredClone(harness.state.requests[0]);
@@ -549,7 +631,13 @@ describe('BookingRequestService accepted stay amendment commit', () => {
       { userId: 'staff-1', userEmail: 'staff@example.com' },
     );
 
-    expect(harness.lockOrder).toEqual(['property', 'request', 'reservation', 'inventory']);
+    expect(harness.lockOrder).toEqual([
+      'property',
+      'request',
+      'pricing-lock',
+      'reservation',
+      'inventory',
+    ]);
     expect(harness.quoteTransactionStates.at(-1)).toBe(true);
     expect(harness.bookingEngine.quote).toHaveBeenLastCalledWith(
       PROPERTY,

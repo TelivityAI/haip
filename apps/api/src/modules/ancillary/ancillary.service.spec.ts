@@ -109,7 +109,7 @@ describe('AncillaryService', () => {
 
   describe('findServiceById (multi-tenancy)', () => {
     it('throws NotFound when scoped propertyId does not match', async () => {
-      const db = {
+      const db: any = {
         select: vi.fn().mockImplementation(chainResolving([])),
         insert: vi.fn(),
         update: vi.fn(),
@@ -245,15 +245,30 @@ describe('AncillaryService', () => {
   describe('cancelReservationService', () => {
     it('sets status to cancelled', async () => {
       const cancelled = { ...mockRs, status: 'cancelled' };
-      const db = {
-        select: vi.fn().mockImplementation(chainResolving([mockRs])),
+      const lockOrder: string[] = [];
+      const select = vi.fn(() => {
+        const chain: any = {
+          from: vi.fn(() => chain),
+          where: vi.fn(() => chain),
+          for: vi.fn(async () => {
+            lockOrder.push('service');
+            return [mockRs];
+          }),
+        };
+        return chain;
+      });
+      const db: any = {
+        execute: vi.fn(async () => { lockOrder.push('pricing-lock'); }),
+        transaction: vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db)),
+        select,
         insert: vi.fn(),
         update: vi.fn().mockReturnValue(mutateResolving([cancelled])()),
         delete: vi.fn(),
       };
       const svc = await buildService(db);
-      const result = await svc.cancelReservationService('rs-001', 'prop-001');
+      const result = await svc.cancelReservationService('rs-001', 'prop-001', 'res-001');
       expect(result.status).toBe('cancelled');
+      expect(lockOrder).toEqual(['pricing-lock', 'service']);
       expect(mockWebhookService.emit).toHaveBeenCalledWith(
         'reservation.service_cancelled',
         'reservation_service',

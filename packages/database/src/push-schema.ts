@@ -358,6 +358,7 @@ async function main() {
       is_reversal boolean NOT NULL DEFAULT false,
       original_charge_id uuid,
       parent_charge_id uuid REFERENCES charges(id),
+      adjusts_charge_id uuid,
       source_key varchar(255),
       is_locked boolean NOT NULL DEFAULT false,
       locked_by_audit_date timestamp,
@@ -1672,7 +1673,25 @@ async function main() {
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS house_account_id uuid`,
     // Split-component tax charges link to their parent charge (self-FK).
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS parent_charge_id uuid`,
+    `ALTER TABLE charges ADD COLUMN IF NOT EXISTS adjusts_charge_id uuid`,
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS source_key varchar(255)`,
+    `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'charges_adjusts_charge_fkey') THEN
+        ALTER TABLE charges ADD CONSTRAINT charges_adjusts_charge_fkey
+          FOREIGN KEY (adjusts_charge_id) REFERENCES charges(id);
+      END IF;
+    END $$`,
+    `UPDATE charges current_charge
+      SET source_key = current_charge.source_key || ':'
+        || to_char(current_charge.service_date AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+      WHERE current_charge.source_key LIKE 'accepted-pricing:reservation-service:%:once'
+        AND NOT EXISTS (
+          SELECT 1 FROM charges existing
+          WHERE existing.property_id = current_charge.property_id
+            AND existing.folio_id = current_charge.folio_id
+            AND existing.source_key = current_charge.source_key || ':'
+              || to_char(current_charge.service_date AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+        )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS charges_property_folio_source_key_unique ON charges (property_id, folio_id, source_key)`,
     `ALTER TABLE payments ALTER COLUMN folio_id DROP NOT NULL`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS house_account_id uuid`,

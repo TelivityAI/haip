@@ -13,6 +13,7 @@ import { PolicyService } from '../policy/policy.service';
 import { DepositSettlementService } from '../accounting/deposit-settlement.service';
 
 const mockFolioService = {
+  emitSnapshotChargeWebhooks: vi.fn().mockResolvedValue(undefined),
   postChargeFromSnapshotWithOutcome: vi.fn().mockResolvedValue({
     charge: {
       id: 'charge-room-snapshot',
@@ -140,7 +141,7 @@ function createMockDb(overrides: {
 
   let selectCallCount = 0;
 
-  return {
+  const db: any = {
     select: vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
@@ -214,6 +215,9 @@ function createMockDb(overrides: {
       }),
     }),
   };
+  db.execute = vi.fn(async () => undefined);
+  db.transaction = vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db));
+  return db;
 }
 
 describe('NightAuditService', () => {
@@ -375,8 +379,8 @@ describe('NightAuditService', () => {
     const db = createMockDb({
       selectResults: [
         [acceptedReservation],
+        [acceptedReservation],
         [mockFolio],
-        [],
       ],
     });
     const module = await Test.createTestingModule({
@@ -403,9 +407,63 @@ describe('NightAuditService', () => {
       '12.00',
       undefined,
       'accepted-pricing:reservation:res-001:night:2026-04-06',
+      expect.anything(),
     );
     expect(mockFolioService.postCharge).not.toHaveBeenCalled();
     expect(result).toMatchObject({ totalRoom: '123.00', totalTax: '12.00', count: 1 });
+  });
+
+  it('re-reads the accepted room snapshot under the pricing lock before claiming a night', async () => {
+    const staleReservation = {
+      ...mockReservation,
+      acceptedPricingSnapshot: {
+        version: 1,
+        source: 'current',
+        currencyCode: 'USD',
+        grandTotal: '135.00',
+        roomTotal: '123.00',
+        taxTotal: '12.00',
+        nights: [{ date: '2026-04-06', roomAmount: '123.00', taxAmount: '12.00' }],
+        services: [],
+        servicesTotal: '0.00',
+        servicesTaxTotal: '0.00',
+        adjustment: null,
+      },
+    };
+    const lockedReservation = {
+      ...staleReservation,
+      acceptedPricingSnapshot: {
+        ...staleReservation.acceptedPricingSnapshot,
+        grandTotal: '0.00',
+        roomTotal: '0.00',
+        taxTotal: '0.00',
+        nights: [],
+      },
+    };
+    const db = createMockDb({
+      selectResults: [[staleReservation], [lockedReservation]],
+    });
+    const module = await Test.createTestingModule({
+      providers: [
+        NightAuditService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: FolioService, useValue: mockFolioService },
+        { provide: ReservationService, useValue: mockReservationService },
+        { provide: HousekeepingService, useValue: mockHousekeepingService },
+        { provide: RoomStatusService, useValue: mockRoomStatusService },
+        { provide: WebhookService, useValue: mockWebhookService },
+        { provide: AncillaryService, useValue: mockAncillaryService },
+        { provide: PolicyService, useValue: mockPolicyService },
+        { provide: DepositSettlementService, useValue: mockDepositSettlementService },
+      ],
+    }).compile();
+    service = module.get(NightAuditService);
+
+    const result = await service.postRoomTariffs('prop-001', '2026-04-06');
+
+    expect(result.count).toBe(0);
+    expect(mockFolioService.postChargeFromSnapshotWithOutcome).not.toHaveBeenCalled();
+    expect(db.execute).toHaveBeenCalledOnce();
   });
 
   it('posts a custom accepted-price delta once with the arrival-night snapshot', async () => {
@@ -434,7 +492,7 @@ describe('NightAuditService', () => {
       },
     };
     const db = createMockDb({
-      selectResults: [[acceptedReservation], [mockFolio], []],
+      selectResults: [[acceptedReservation], [acceptedReservation], [mockFolio]],
     });
     const module = await Test.createTestingModule({
       providers: [
@@ -463,6 +521,7 @@ describe('NightAuditService', () => {
         reason: 'Staff loyalty adjustment',
       },
       'accepted-pricing:reservation:res-001:night:2026-04-04',
+      expect.anything(),
     );
   });
 
@@ -486,8 +545,8 @@ describe('NightAuditService', () => {
     const db = createMockDb({
       selectResults: [
         [acceptedReservation],
+        [acceptedReservation],
         [mockFolio],
-        [{ id: 'manual-room-charge', sourceKey: null }],
       ],
     });
     const module = await Test.createTestingModule({
@@ -514,6 +573,7 @@ describe('NightAuditService', () => {
       '12.00',
       undefined,
       'accepted-pricing:reservation:res-001:night:2026-04-06',
+      expect.anything(),
     );
     expect(result.count).toBe(1);
   });
@@ -536,7 +596,8 @@ describe('NightAuditService', () => {
       },
     };
     const db = createMockDb({ selectResults: [
-      [acceptedReservation], [mockFolio], [acceptedReservation], [mockFolio],
+      [acceptedReservation], [acceptedReservation], [mockFolio],
+      [acceptedReservation], [acceptedReservation], [mockFolio],
     ] });
     mockFolioService.postChargeFromSnapshotWithOutcome
       .mockResolvedValueOnce({

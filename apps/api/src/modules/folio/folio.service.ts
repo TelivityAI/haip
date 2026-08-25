@@ -386,6 +386,15 @@ export class FolioService {
       .filter((value): value is string => value != null)
       .sort()
       .at(-1);
+    const addCalendarDay = (date: string) => {
+      const value = new Date(`${date}T00:00:00.000Z`);
+      value.setUTCDate(value.getUTCDate() + 1);
+      return value.toISOString().slice(0, 10);
+    };
+    const today = new Date().toISOString().slice(0, 10);
+    const currentOpenDate = latestClosedDate == null
+      ? today
+      : [today, addCalendarDay(latestClosedDate)].sort().at(-1)!;
 
     type DesiredGroup = {
       sourceKey: string;
@@ -441,7 +450,7 @@ export class FolioService {
         for (const line of lines) {
           const suffix = pricedService.postingRule === 'per_night'
             ? `night:${line.date}`
-            : 'once';
+            : `once:${line.date}`;
           const sourceKey = `accepted-pricing:reservation-service:${row.id}:${suffix}`;
           desiredGroups.set(sourceKey, {
             sourceKey,
@@ -475,6 +484,8 @@ export class FolioService {
         row.isReversal && originals.has(row.originalChargeId));
       return { children, reversals, all: [base, ...children, ...reversals] };
     };
+    // This method never creates canonical reversals: repricing is represented
+    // by signed amendment rows so revenue reports retain every correction.
     const reversedChargeIds: string[] = [];
     const amendmentSourcePrefix = `accepted-pricing:reservation:${reservationId}:amendment:`;
     let adjustment = new Decimal(0);
@@ -538,15 +549,18 @@ export class FolioService {
       key: string,
       delta: Decimal,
       desired?: DesiredGroup,
-      trackAdjustment = true,
+      groupLocked = false,
     ) => {
       if (delta.isZero()) return;
       const type = key.startsWith('base:') ? key.slice(5) : key === 'tax' ? 'tax' : 'adjustment';
-      const original = all.find((row: any) =>
+      const component = all.find((row: any) =>
         !row.isReversal
         && componentKey(row, base) === key
         && new Decimal(row.amount ?? 0).greaterThan(0));
-      const isReversal = delta.isNegative() && key !== 'custom' && original != null;
+      const affectedServiceDate = desired?.serviceDate ?? calendarDate(base.serviceDate) ?? today;
+      const mustPostOnOpenDate = groupLocked
+        || (latestClosedDate != null && affectedServiceDate <= latestClosedDate);
+      const postingDate = mustPostOnOpenDate ? currentOpenDate : affectedServiceDate;
       await insert({
         propertyId,
         folioId,
@@ -554,19 +568,21 @@ export class FolioService {
         description: (
           key === 'custom'
             ? `Accepted price adjustment: ${desired?.customAdjustment?.reason ?? 'stay amendment'}`
-            : `Accepted stay amendment ${key === 'tax' ? 'tax' : type} correction`
+            : `Accepted stay amendment ${key === 'tax' ? 'tax' : type} correction (affected ${affectedServiceDate})`
         ).slice(0, 255),
         amount: delta.toFixed(2),
         currencyCode: newPricing.currencyCode,
         taxAmount: '0.00',
-        serviceDate: base.serviceDate,
-        isReversal,
-        originalChargeId: isReversal ? original.id : undefined,
+        taxRate: component?.taxRate ?? undefined,
+        taxCode: component?.taxCode ?? undefined,
+        serviceDate: new Date(`${postingDate}T00:00:00.000Z`),
+        isReversal: false,
+        adjustsChargeId: component?.id ?? base.id,
         parentChargeId: base.id,
         sourceKey: `${amendmentSourcePrefix}${amendmentId}:component:${base.id}:${key}`,
         postedBy: postedBy ?? undefined,
       }, true);
-      if (trackAdjustment) adjustment = adjustment.plus(delta);
+      adjustment = adjustment.plus(delta);
     };
 
     for (const base of acceptedBases) {
@@ -582,11 +598,8 @@ export class FolioService {
           key,
           (wanted.get(key) ?? new Decimal(0)).minus(actual.get(key) ?? 0),
           desired,
-          desired != null || groupLocked,
+          groupLocked,
         );
-      }
-      if (!desired && !groupLocked && [...actual.values()].some((amount) => !amount.isZero())) {
-        reversedChargeIds.push(base.id);
       }
     }
 
@@ -598,24 +611,32 @@ export class FolioService {
     for (const desired of desiredGroups.values()) {
       if (acceptedBases.some((base: any) => base.sourceKey === desired.sourceKey)) continue;
       const isClosed = latestClosedDate != null && desired.serviceDate <= latestClosedDate;
-      const isDueOnce = desired.sourceKey.endsWith(':once')
+      const isOnce = /:once:\d{4}-\d{2}-\d{2}$/.test(desired.sourceKey);
+      const isDueOnce = isOnce
         && desired.reservationServiceId != null
-        && postedServiceRows.has(desired.reservationServiceId);
+        && postedServiceRows.has(desired.reservationServiceId)
+        && desired.serviceDate <= currentOpenDate;
       if (!isClosed && !isDueOnce) continue;
+      const postingDate = isClosed ? currentOpenDate : desired.serviceDate;
+      const affectedDateSuffix = postingDate === desired.serviceDate
+        ? ''
+        : ` (affected ${desired.serviceDate})`;
       const baseOutcome = await insert({
         propertyId,
         folioId,
         type: desired.baseType,
-        description: desired.description,
+        description: `${desired.description}${affectedDateSuffix}`.slice(0, 255),
         amount: new Decimal(desired.baseAmount).toFixed(2),
         currencyCode: newPricing.currencyCode,
         taxAmount: '0.00',
-        serviceDate: new Date(`${desired.serviceDate}T00:00:00.000Z`),
+        serviceDate: new Date(`${postingDate}T00:00:00.000Z`),
+        isReversal: false,
         sourceKey: desired.sourceKey,
         postedBy: postedBy ?? undefined,
       }, true);
       const base = baseOutcome.row;
       if (!base || !baseOutcome.created) continue;
+      adjustment = adjustment.plus(desired.baseAmount);
       if (new Decimal(desired.taxAmount).greaterThan(0)) {
         await insert({
           propertyId,
@@ -625,10 +646,12 @@ export class FolioService {
           amount: new Decimal(desired.taxAmount).toFixed(2),
           currencyCode: newPricing.currencyCode,
           taxAmount: '0.00',
-          serviceDate: new Date(`${desired.serviceDate}T00:00:00.000Z`),
+          serviceDate: new Date(`${postingDate}T00:00:00.000Z`),
+          isReversal: false,
           parentChargeId: base.id,
           postedBy: postedBy ?? undefined,
         });
+        adjustment = adjustment.plus(desired.taxAmount);
       }
       if (desired.customAdjustment && !new Decimal(desired.customAdjustment.amount).isZero()) {
         await insert({
@@ -639,10 +662,12 @@ export class FolioService {
           amount: new Decimal(desired.customAdjustment.amount).toFixed(2),
           currencyCode: newPricing.currencyCode,
           taxAmount: '0.00',
-          serviceDate: new Date(`${desired.serviceDate}T00:00:00.000Z`),
+          serviceDate: new Date(`${postingDate}T00:00:00.000Z`),
+          isReversal: false,
           parentChargeId: base.id,
           postedBy: postedBy ?? undefined,
         });
+        adjustment = adjustment.plus(desired.customAdjustment.amount);
       }
     }
     await this.recalculateBalance(folioId, propertyId, tx);
@@ -821,8 +846,9 @@ export class FolioService {
     taxAmount: string,
     adjustment?: { amount: string; reason: string },
     sourceKey?: string,
+    existingTx?: any,
   ) {
-    const result = await this.db.transaction(async (tx: any) => {
+    const postInTransaction = async (tx: any) => {
       const base = await this.postCharge(folioId, {
         ...dto,
         skipTaxCalculation: true,
@@ -877,7 +903,10 @@ export class FolioService {
         adjustmentCharges.push(adjustmentCharge);
       }
       return { ...base, taxCharges, adjustmentCharges, wasCreated: true };
-    });
+    };
+    const result = existingTx
+      ? await postInTransaction(existingTx)
+      : await this.db.transaction(postInTransaction);
 
     if (!result.wasCreated) {
       const { wasCreated: _wasCreated, ...existing } = result;
@@ -885,49 +914,41 @@ export class FolioService {
       return { charge: existing, wasCreated: false as const };
     }
 
-    await this.webhookService.emit(
-      'folio.charge_posted',
-      'charge',
-      result.id,
-      {
-        folioId,
-        type: result.type,
-        amount: result.amount,
-        description: result.description,
-      },
-      dto.propertyId,
-    );
-    for (const tax of result.taxCharges) {
-      await this.webhookService.emit(
-        'folio.charge_posted',
-        'charge',
-        tax.id,
-        {
-          folioId,
-          type: tax.type,
-          amount: tax.amount,
-          description: tax.description,
-        },
-        dto.propertyId,
-      );
-    }
-    for (const adjustmentCharge of result.adjustmentCharges) {
-      await this.webhookService.emit(
-        'folio.charge_posted',
-        'charge',
-        adjustmentCharge.id,
-        {
-          folioId,
-          type: adjustmentCharge.type,
-          amount: adjustmentCharge.amount,
-          description: adjustmentCharge.description,
-        },
-        dto.propertyId,
-      );
-    }
     const { wasCreated: _wasCreated, ...posted } = result;
     void _wasCreated;
-    return { charge: posted, wasCreated: true as const };
+    const outcome = { charge: posted, wasCreated: true as const };
+    if (!existingTx) {
+      await this.emitSnapshotChargeWebhooks(folioId, dto.propertyId, outcome);
+    }
+    return outcome;
+  }
+
+  /** Dispatch immutable charge-group events after the caller's transaction commits. */
+  async emitSnapshotChargeWebhooks(
+    folioId: string,
+    propertyId: string,
+    outcome: { charge: any; wasCreated: boolean },
+  ): Promise<void> {
+    if (!outcome.wasCreated) return;
+    const posted = outcome.charge;
+    for (const charge of [
+      posted,
+      ...(posted.taxCharges ?? []),
+      ...(posted.adjustmentCharges ?? []),
+    ]) {
+      await this.webhookService.emit(
+        'folio.charge_posted',
+        'charge',
+        charge.id,
+        {
+          folioId,
+          type: charge.type,
+          amount: charge.amount,
+          description: charge.description,
+        },
+        propertyId,
+      );
+    }
   }
 
   async reverseCharge(folioId: string, chargeId: string, propertyId: string) {

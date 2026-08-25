@@ -19,6 +19,7 @@ import {
   bookingRequests,
   payments,
   properties,
+  reservationServices,
   reservations,
 } from '@telivityhaip/database';
 import type {
@@ -52,6 +53,7 @@ import {
   actorFields,
   type AuditActor,
 } from '../../common/audit/audit-actor';
+import { withAcceptedPricingLock } from '../../common/database/accepted-pricing-lock';
 import { DRIZZLE } from '../../database/database.module';
 import { AncillaryService } from '../ancillary/ancillary.service';
 import { reservationServiceAttachedPayload } from '../ancillary/reservation-service-event';
@@ -86,6 +88,7 @@ import { buildAcceptedPricingSnapshot } from './booking-request-pricing';
 import {
   buildAmendedPricingSnapshot,
   buildPriorAmendedPricingSnapshot,
+  withoutCancelledAcceptedServices,
   type StayAmendmentPriceSource,
 } from './booking-request-amendment-pricing';
 import {
@@ -581,13 +584,15 @@ export class BookingRequestService {
     const request = await this.findRequest(this.db, id, propertyId);
     this.assertAcceptedStayAmendmentRequest(request);
     const reservation = await this.findLinkedReservation(this.db, request, propertyId);
-    return this.buildStayAmendmentPreview(
+    const preview = await this.buildStayAmendmentPreview(
       request,
       reservation,
       dates,
       this.db,
       false,
     ).catch((error: unknown) => this.throwStayAmendmentError(error));
+    const { operationalPreviousPricing: _operationalPreviousPricing, ...response } = preview;
+    return response;
   }
 
   async amendStay(
@@ -612,6 +617,11 @@ export class BookingRequestService {
       await this.lockProperty(tx, propertyId);
       const request = await this.lockRequest(tx, id, propertyId);
       this.assertAcceptedStayAmendmentRequest(request);
+      return withAcceptedPricingLock(
+        this.db,
+        propertyId,
+        request.acceptedReservationId!,
+        async () => {
       const reservation = await this.lockLinkedReservation(tx, request, propertyId);
 
       const replay = await this.findExistingStayAmendment(
@@ -639,7 +649,7 @@ export class BookingRequestService {
       const previousPricing = reservation.acceptedPricingSnapshot as AcceptedPricingSnapshot;
       const newPricing = buildAmendedPricingSnapshot({
         source: input.priceSource,
-        previous: previousPricing,
+        previous: preview.operationalPreviousPricing,
         currentQuote: preview.currentQuote,
         currencyCode: reservation.currencyCode,
         arrivalDate: input.arrivalDate,
@@ -751,6 +761,9 @@ export class BookingRequestService {
         result: this.toStayAmendmentResult(amendmentValues),
         replay: false,
       };
+        },
+        tx,
+      );
     }).catch((error: unknown) => this.throwStayAmendmentError(error));
 
     await this.deliverConsequencesBestEffort(id, propertyId);
@@ -1575,6 +1588,44 @@ export class BookingRequestService {
     ) {
       throw new ConflictException('Booking Request and reservation currencies do not match');
     }
+    const serviceQuery = db
+      .select({
+        id: reservationServices.id,
+        serviceId: reservationServices.serviceId,
+        status: reservationServices.status,
+      })
+      .from(reservationServices)
+      .where(and(
+        eq(reservationServices.propertyId, request.propertyId),
+        eq(reservationServices.reservationId, reservation.id),
+      ));
+    const serviceRows = lockForUpdate && typeof serviceQuery.for === 'function'
+      ? await serviceQuery.for('update')
+      : await serviceQuery;
+    const linkedServiceIds = new Set(serviceRows.map((row: any) => row.serviceId as string));
+    const missingOperationalService = previousPricing.services.find(
+      (service) => service.postingRule !== 'on_consumption'
+        && !linkedServiceIds.has(service.serviceId),
+    );
+    if (missingOperationalService) {
+      throw new ConflictException(
+        `Accepted service ${missingOperationalService.code} has no linked reservation service`,
+      );
+    }
+    const activeServiceIds = new Set(
+      serviceRows
+        .filter((row: any) => row.status !== 'cancelled')
+        .map((row: any) => row.serviceId as string),
+    );
+    const cancelledServiceIds = new Set(
+      previousPricing.services
+        .map((service) => service.serviceId)
+        .filter((serviceId) => !activeServiceIds.has(serviceId)),
+    );
+    const operationalPreviousPricing = withoutCancelledAcceptedServices(
+      previousPricing,
+      cancelledServiceIds,
+    );
     const currentQuote = await this.bookingEngineService.quote(request.propertyId, {
       roomTypeId: reservation.roomTypeId,
       ratePlanId: reservation.ratePlanId,
@@ -1582,18 +1633,18 @@ export class BookingRequestService {
       checkOut: dates.departureDate,
       adults: reservation.adults,
       children: reservation.children,
-      serviceIds: request.serviceIds,
+      serviceIds: operationalPreviousPricing.services.map((service) => service.serviceId),
     }, lockForUpdate ? db : undefined, lockForUpdate
       ? { lockForUpdate: true, excludeReservationId: reservation.id }
       : { excludeReservationId: reservation.id });
     const priorPricing = buildPriorAmendedPricingSnapshot(
-      previousPricing,
+      operationalPreviousPricing,
       dates.arrivalDate,
       dates.departureDate,
     );
     const currentPricing = buildAmendedPricingSnapshot({
       source: 'current',
-      previous: previousPricing,
+      previous: operationalPreviousPricing,
       currentQuote,
       currencyCode: reservation.currencyCode,
       arrivalDate: dates.arrivalDate,
@@ -1607,7 +1658,7 @@ export class BookingRequestService {
       previousArrivalDate: reservation.arrivalDate,
       previousDepartureDate: reservation.departureDate,
       previousTotal: reservation.totalAmount,
-      previousPricing,
+      previousPricing: operationalPreviousPricing,
       arrivalDate: dates.arrivalDate,
       departureDate: dates.departureDate,
       currentQuote,
@@ -1617,7 +1668,7 @@ export class BookingRequestService {
       reservationId: reservation.id,
       previousArrivalDate: reservation.arrivalDate,
       previousDepartureDate: reservation.departureDate,
-      previousTotal: reservation.totalAmount,
+      previousTotal: operationalPreviousPricing.grandTotal,
       arrivalDate: dates.arrivalDate,
       departureDate: dates.departureDate,
       priorTotal: priorPricing.grandTotal,
@@ -1626,6 +1677,7 @@ export class BookingRequestService {
       priorPricing,
       currentPricing,
       currentQuote,
+      operationalPreviousPricing,
       previewVersion: 1 as const,
       previewToken,
     };

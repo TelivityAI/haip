@@ -36,6 +36,35 @@ function sum(
   return values.reduce((total, value) => total.plus(value), new Decimal(0)).toFixed(2);
 }
 
+/**
+ * Convert the immutable accepted snapshot into the current operational basis.
+ * Cancellation is authoritative for scheduling, so its money must leave every
+ * aggregate before prior/current/custom amendment choices are calculated.
+ */
+export function withoutCancelledAcceptedServices(
+  previous: AcceptedPricingSnapshot,
+  cancelledServiceIds: ReadonlySet<string>,
+): AcceptedPricingSnapshot {
+  const services = previous.services
+    .filter((service) => !cancelledServiceIds.has(service.serviceId))
+    .map((service) => structuredClone(service));
+  const servicesTotal = sum(services.map((service) => service.lineTotal));
+  const servicesTaxTotal = sum(services.map((service) => service.taxTotal));
+  const grandTotal = new Decimal(previous.roomTotal)
+    .plus(previous.taxTotal)
+    .plus(servicesTotal)
+    .plus(servicesTaxTotal)
+    .plus(previous.adjustment?.amount ?? 0)
+    .toFixed(2);
+  return {
+    ...structuredClone(previous),
+    services,
+    servicesTotal,
+    servicesTaxTotal,
+    grandTotal,
+  };
+}
+
 function priorService(
   service: AcceptedPricingService,
   dates: string[],

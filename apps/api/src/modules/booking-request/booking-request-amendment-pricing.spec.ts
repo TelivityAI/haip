@@ -4,6 +4,7 @@ import type { AcceptedPricingSnapshot } from '@telivityhaip/database';
 import {
   buildAmendedPricingSnapshot,
   buildPriorAmendedPricingSnapshot,
+  withoutCancelledAcceptedServices,
 } from './booking-request-amendment-pricing';
 
 const previous: AcceptedPricingSnapshot = {
@@ -92,6 +93,18 @@ const currentQuote = {
 };
 
 describe('Booking Request prior amendment pricing', () => {
+  it('removes cancelled operational services and recomputes every aggregate exactly', () => {
+    const operational = withoutCancelledAcceptedServices(previous, new Set(['parking']));
+
+    expect(operational.services.map((service) => service.serviceId)).toEqual(['breakfast']);
+    expect(operational).toMatchObject({
+      servicesTotal: '30.00',
+      servicesTaxTotal: '3.00',
+      grandTotal: '231.00',
+    });
+    expect(previous.services).toHaveLength(2);
+  });
+
   it('preserves overlap and clones the nearest immutable boundary basis for extension nights', () => {
     const amended = buildPriorAmendedPricingSnapshot(
       previous,

@@ -17,6 +17,7 @@ import {
   rooms,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { withAcceptedPricingLock } from '../../common/database/accepted-pricing-lock';
 import { FolioService } from '../folio/folio.service';
 import { ReservationService } from '../reservation/reservation.service';
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
@@ -164,6 +165,94 @@ export class NightAuditService {
 
     for (const reservation of inHouseReservations) {
       try {
+        if (reservation.acceptedPricingSnapshot) {
+          const lockedPost = await withAcceptedPricingLock(
+            this.db,
+            propertyId,
+            reservation.id,
+            async (tx) => {
+              const [currentReservation] = await tx
+                .select()
+                .from(reservations)
+                .where(and(
+                  eq(reservations.id, reservation.id),
+                  eq(reservations.propertyId, propertyId),
+                  sql`${reservations.status} in ('checked_in', 'stayover', 'due_out')`,
+                ));
+              const acceptedPricing = currentReservation?.acceptedPricingSnapshot;
+              const acceptedNight = acceptedPricing?.nights?.find(
+                (night: { date: string }) => night.date === businessDate,
+              );
+              if (!currentReservation || !acceptedPricing || !acceptedNight) return null;
+
+              const [folio] = await tx
+                .select()
+                .from(folios)
+                .where(and(
+                  eq(folios.reservationId, currentReservation.id),
+                  eq(folios.propertyId, propertyId),
+                  eq(folios.type, 'guest' as any),
+                  eq(folios.status, 'open' as any),
+                ));
+              if (!folio) {
+                return { missingFolio: true as const, reservation: currentReservation };
+              }
+
+              const acceptedAdjustment = acceptedPricing.adjustment?.serviceDate === businessDate
+                ? {
+                    amount: acceptedPricing.adjustment.amount,
+                    reason: acceptedPricing.adjustment.reason,
+                  }
+                : undefined;
+              const outcome = await this.folioService.postChargeFromSnapshotWithOutcome(
+                folio.id,
+                {
+                  propertyId,
+                  type: 'room',
+                  description: `Room tariff - ${businessDate}`,
+                  amount: acceptedNight.roomAmount,
+                  currencyCode: acceptedPricing.currencyCode,
+                  serviceDate: new Date(`${businessDate}T00:00:00Z`).toISOString(),
+                  guestId: currentReservation.guestId,
+                },
+                acceptedNight.taxAmount,
+                acceptedAdjustment,
+                `accepted-pricing:reservation:${currentReservation.id}:night:${businessDate}`,
+                tx,
+              );
+              return {
+                missingFolio: false as const,
+                folio,
+                rate: acceptedNight.roomAmount,
+                outcome,
+              };
+            },
+          );
+          if (!lockedPost) continue;
+          if (lockedPost.missingFolio) {
+            errors.push({
+              message: `No open folio for reservation ${reservation.id}`,
+              entity: reservation.id,
+            });
+            continue;
+          }
+          await this.folioService.emitSnapshotChargeWebhooks(
+            lockedPost.folio.id,
+            propertyId,
+            lockedPost.outcome,
+          );
+          if (!lockedPost.outcome.wasCreated) continue;
+          const acceptedTax = (lockedPost.outcome.charge.taxCharges ?? [])
+            .reduce(
+              (sum: Decimal, tax: any) => sum.plus(new Decimal(tax.amount)),
+              new Decimal(0),
+            );
+          totalRoom = totalRoom.plus(new Decimal(lockedPost.rate));
+          totalTax = totalTax.plus(acceptedTax);
+          count++;
+          continue;
+        }
+
         // Find open guest folio
         const [folio] = await this.db
           .select()
@@ -186,75 +275,38 @@ export class NightAuditService {
         }
 
         const serviceDateStart = new Date(businessDate + 'T00:00:00Z');
-        const acceptedPricing = reservation.acceptedPricingSnapshot;
-        const acceptedNight = acceptedPricing?.nights?.find(
-          (night: { date: string }) => night.date === businessDate,
-        );
-        let rate: string;
-        let result: any;
-        if (acceptedPricing) {
-          if (!acceptedNight) continue;
-          rate = acceptedNight.roomAmount;
-          const acceptedAdjustment = acceptedPricing.adjustment?.serviceDate === businessDate
-            ? {
-                amount: acceptedPricing.adjustment.amount,
-                reason: acceptedPricing.adjustment.reason,
-              }
-            : undefined;
-          const outcome = await this.folioService.postChargeFromSnapshotWithOutcome(
-            folio.id,
-            {
-              propertyId,
-              type: 'room',
-              description: `Room tariff - ${businessDate}`,
-              amount: rate,
-              currencyCode: acceptedPricing.currencyCode,
-              serviceDate: serviceDateStart.toISOString(),
-              guestId: reservation.guestId,
-            },
-            acceptedNight.taxAmount,
-            acceptedAdjustment,
-            `accepted-pricing:reservation:${reservation.id}:night:${businessDate}`,
+        // Legacy live-rate postings have no stable source key, so retain the
+        // historical date/type preflight only for that path.
+        const [existingCharge] = await this.db
+          .select({ id: charges.id })
+          .from(charges)
+          .where(
+            and(
+              eq(charges.folioId, folio.id),
+              eq(charges.propertyId, propertyId),
+              eq(charges.type, 'room' as any),
+              eq(charges.isReversal, false),
+              sql`${charges.serviceDate}::date = ${businessDate}`,
+            ),
           );
-          if (!outcome.wasCreated) continue;
-          result = outcome.charge;
-        } else {
-          // Existing reservations retain canonical live rate/tax behavior.
-          // Legacy live-rate postings have no stable source key, so retain the
-          // historical date/type preflight only for that path. Accepted-price
-          // groups claim their exact source key atomically in FolioService;
-          // unrelated manual room charges must never suppress that claim.
-          const [existingCharge] = await this.db
-            .select({ id: charges.id })
-            .from(charges)
-            .where(
-              and(
-                eq(charges.folioId, folio.id),
-                eq(charges.propertyId, propertyId),
-                eq(charges.type, 'room' as any),
-                eq(charges.isReversal, false),
-                sql`${charges.serviceDate}::date = ${businessDate}`,
-              ),
-            );
-          if (existingCharge) continue;
+        if (existingCharge) continue;
 
-          const [ratePlan] = await this.db
-            .select({ baseAmount: ratePlans.baseAmount })
-            .from(ratePlans)
-            .where(eq(ratePlans.id, reservation.ratePlanId));
-          rate = ratePlan
-            ? ratePlan.baseAmount
-            : new Decimal(reservation.totalAmount).div(reservation.nights).toFixed(2);
-          result = await this.folioService.postCharge(folio.id, {
-            propertyId,
-            type: 'room',
-            description: `Room tariff - ${businessDate}`,
-            amount: rate,
-            currencyCode: reservation.currencyCode,
-            serviceDate: serviceDateStart.toISOString(),
-            guestId: reservation.guestId,
-          });
-        }
+        const [ratePlan] = await this.db
+          .select({ baseAmount: ratePlans.baseAmount })
+          .from(ratePlans)
+          .where(eq(ratePlans.id, reservation.ratePlanId));
+        const rate = ratePlan
+          ? ratePlan.baseAmount
+          : new Decimal(reservation.totalAmount).div(reservation.nights).toFixed(2);
+        const result = await this.folioService.postCharge(folio.id, {
+          propertyId,
+          type: 'room',
+          description: `Room tariff - ${businessDate}`,
+          amount: rate,
+          currencyCode: reservation.currencyCode,
+          serviceDate: serviceDateStart.toISOString(),
+          guestId: reservation.guestId,
+        });
 
         // Sum auto-posted tax charges via Decimal
         const taxAmountDec = (result.taxCharges ?? [])

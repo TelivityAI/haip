@@ -109,6 +109,9 @@ export const charges = pgTable('charges', {
   isReversal: boolean('is_reversal').notNull().default(false),
   originalChargeId: uuid('original_charge_id').references((): any => charges.id), // FK to self for reversals
   parentChargeId: uuid('parent_charge_id').references((): any => charges.id), // FK to self — tax charges linked to their parent charge
+  // Immutable provenance for signed amendment corrections. Unlike
+  // originalChargeId, this does not make the row a canonical reversal.
+  adjustsChargeId: uuid('adjusts_charge_id').references((): any => charges.id),
   // Stable, namespaced identity for conflict-safe system posting. Legacy and
   // manually entered rows remain NULL and cannot collide with these keys.
   sourceKey: varchar('source_key', { length: 255 }),

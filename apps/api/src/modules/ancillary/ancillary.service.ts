@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { eq, and, sql, inArray, like } from 'drizzle-orm';
 import Decimal from 'decimal.js';
@@ -16,6 +17,7 @@ import {
   ratePlans,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { withAcceptedPricingLock } from '../../common/database/accepted-pricing-lock';
 import { FolioService } from '../folio/folio.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -219,8 +221,9 @@ export class AncillaryService {
     return reservation;
   }
 
-  private async findOpenGuestFolio(reservationId: string, propertyId: string) {
-    const [folio] = await this.db
+  private async findOpenGuestFolio(reservationId: string, propertyId: string, tx?: any) {
+    const db = tx ?? this.db;
+    const [folio] = await db
       .select()
       .from(folios)
       .where(
@@ -243,7 +246,9 @@ export class AncillaryService {
     propertyId: string,
     reservationServiceId: string,
     businessDate?: string,
+    tx?: any,
   ): Promise<boolean> {
+    const db = tx ?? this.db;
     const conditions: any[] = [
       eq(charges.folioId, folioId),
       eq(charges.propertyId, propertyId),
@@ -253,7 +258,7 @@ export class AncillaryService {
     if (businessDate) {
       conditions.push(sql`${charges.serviceDate}::date = ${businessDate}`);
     }
-    const [existing] = await this.db
+    const [existing] = await db
       .select({ id: charges.id })
       .from(charges)
       .where(and(...conditions))
@@ -324,30 +329,51 @@ export class AncillaryService {
       .orderBy(reservationServices.createdAt);
   }
 
-  async cancelReservationService(id: string, propertyId: string) {
-    const [row] = await this.db
-      .select()
-      .from(reservationServices)
-      .where(
-        and(eq(reservationServices.id, id), eq(reservationServices.propertyId, propertyId)),
-      );
-    if (!row) {
-      throw new NotFoundException(`Reservation service ${id} not found`);
-    }
-    if (row.status === 'cancelled') {
-      throw new BadRequestException('Reservation service is already cancelled');
-    }
-    if (row.status === 'posted') {
-      throw new BadRequestException('Cannot cancel a posted reservation service');
-    }
+  async cancelReservationService(id: string, propertyId: string, reservationId: string) {
+    const updated = await withAcceptedPricingLock(
+      this.db,
+      propertyId,
+      reservationId,
+      async (tx) => {
+        const query = tx
+          .select()
+          .from(reservationServices)
+          .where(and(
+            eq(reservationServices.id, id),
+            eq(reservationServices.propertyId, propertyId),
+            eq(reservationServices.reservationId, reservationId),
+          ));
+        const [row] = typeof query.for === 'function'
+          ? await query.for('update')
+          : await query;
+        if (!row) {
+          throw new NotFoundException(`Reservation service ${id} not found`);
+        }
+        if (row.status === 'cancelled') {
+          throw new BadRequestException('Reservation service is already cancelled');
+        }
+        if (row.status === 'posted') {
+          throw new BadRequestException('Cannot cancel a posted reservation service');
+        }
 
-    const [updated] = await this.db
-      .update(reservationServices)
-      .set({ status: 'cancelled', updatedAt: new Date() })
-      .where(
-        and(eq(reservationServices.id, id), eq(reservationServices.propertyId, propertyId)),
-      )
-      .returning();
+        const [cancelled] = await tx
+          .update(reservationServices)
+          .set({ status: 'cancelled', updatedAt: new Date() })
+          .where(and(
+            eq(reservationServices.id, id),
+            eq(reservationServices.propertyId, propertyId),
+            eq(reservationServices.reservationId, reservationId),
+            inArray(reservationServices.status, ['quoted', 'confirmed'] as any),
+          ))
+          .returning();
+        if (!cancelled) {
+          throw new ConflictException(
+            `Reservation service ${id} changed while it was being cancelled`,
+          );
+        }
+        return cancelled;
+      },
+    );
 
     await this.webhookService.emit(
       'reservation.service_cancelled',
@@ -456,141 +482,173 @@ export class AncillaryService {
   }
 
   async postOnceForReservation(reservationId: string, propertyId: string) {
-    const reservation = await this.findReservation(reservationId, propertyId);
-    const folio = await this.findOpenGuestFolio(reservationId, propertyId);
-    if (!folio) {
-      throw new BadRequestException(
-        `No open guest folio for reservation ${reservationId}`,
-      );
-    }
+    const result = await withAcceptedPricingLock(
+      this.db,
+      propertyId,
+      reservationId,
+      async (tx) => {
+        const reservation = await this.findReservation(reservationId, propertyId, tx);
+        const folio = await this.findOpenGuestFolio(reservationId, propertyId, tx);
+        if (!folio) {
+          throw new BadRequestException(
+            `No open guest folio for reservation ${reservationId}`,
+          );
+        }
+        const rows = await tx
+          .select({
+            rs: reservationServices,
+            serviceName: services.name,
+          })
+          .from(reservationServices)
+          .innerJoin(
+            services,
+            and(
+              eq(services.id, reservationServices.serviceId),
+              eq(services.propertyId, reservationServices.propertyId),
+            ),
+          )
+          .where(and(
+            eq(reservationServices.propertyId, propertyId),
+            eq(reservationServices.reservationId, reservationId),
+          ));
+        const posted: any[] = [];
+        const events: Array<{
+          reservationServiceId: string;
+          amount: string;
+          postingRule: string;
+          chargeType: string;
+        }> = [];
+        const folioOutcomes: Array<{ charge: any; wasCreated: boolean }> = [];
+        const serviceDate = reservation.arrivalDate ?? new Date().toISOString().slice(0, 10);
 
-    const rows = await this.db
-      .select({
-        rs: reservationServices,
-        serviceName: services.name,
-      })
-      .from(reservationServices)
-      .innerJoin(
-        services,
-        and(
-          eq(services.id, reservationServices.serviceId),
-          eq(services.propertyId, reservationServices.propertyId),
-        ),
-      )
-      .where(
-        and(
-          eq(reservationServices.propertyId, propertyId),
-          eq(reservationServices.reservationId, reservationId),
-        ),
-      );
-
-    const posted: any[] = [];
-    const serviceDate =
-      reservation.arrivalDate ?? new Date().toISOString().slice(0, 10);
-
-    for (const { rs, serviceName } of rows) {
-      const acceptedLine = this.acceptedServiceLine(
-        reservation,
-        rs.serviceId,
-        serviceDate,
-        true,
-      );
-      const hasAcceptedPricing = reservation.acceptedPricingSnapshot != null;
-      const effectivePostingRule = acceptedLine?.postingRule ?? rs.postingRule;
-      const effectiveChargeType = acceptedLine?.chargeType ?? rs.chargeType;
-      if (hasAcceptedPricing) {
-        if (!acceptedLine) continue;
-        if (!['once', 'included_in_rate'].includes(effectivePostingRule)) continue;
-      } else if (
-        rs.status !== 'confirmed'
-        || !['once', 'included_in_rate'].includes(effectivePostingRule)
-      ) {
-        continue;
-      }
-      // Accepted pricing uses the database source-key claim as its authority.
-      // A preflight read can race with the winner and must not grant the loser
-      // permission to transition the service row.
-      if (!hasAcceptedPricing && await this.hasPostedCharge(folio.id, propertyId, rs.id)) {
-        if (rs.status === 'confirmed') {
-          await this.db
-            .update(reservationServices)
-            .set({ status: 'posted', updatedAt: new Date() })
-            .where(
-              and(
+        for (const { rs, serviceName } of rows) {
+          if (rs.status === 'cancelled') continue;
+          const acceptedLine = this.acceptedServiceLine(
+            reservation,
+            rs.serviceId,
+            serviceDate,
+            true,
+          );
+          const hasAcceptedPricing = reservation.acceptedPricingSnapshot != null;
+          const effectivePostingRule = acceptedLine?.postingRule ?? rs.postingRule;
+          const effectiveChargeType = acceptedLine?.chargeType ?? rs.chargeType;
+          if (hasAcceptedPricing) {
+            if (!acceptedLine) continue;
+            if (!['once', 'included_in_rate'].includes(effectivePostingRule)) continue;
+          } else if (
+            rs.status !== 'confirmed'
+            || !['once', 'included_in_rate'].includes(effectivePostingRule)
+          ) {
+            continue;
+          }
+          if (!hasAcceptedPricing && await this.hasPostedCharge(
+            folio.id,
+            propertyId,
+            rs.id,
+            undefined,
+            tx,
+          )) {
+            await tx
+              .update(reservationServices)
+              .set({ status: 'posted', updatedAt: new Date() })
+              .where(and(
                 eq(reservationServices.id, rs.id),
                 eq(reservationServices.propertyId, propertyId),
-              ),
-            );
+                eq(reservationServices.status, 'confirmed' as any),
+              ));
+            continue;
+          }
+
+          const amount = acceptedLine?.amount
+            ?? new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
+          let ledgerGroupWasCreated = false;
+          if (new Decimal(amount).greaterThan(0)) {
+            const chargeInput = {
+              propertyId,
+              type: effectiveChargeType,
+              description: `${serviceName} ${this.svcTag(rs.id)}`,
+              amount,
+              currencyCode: acceptedLine?.currencyCode ?? rs.currencyCode,
+              serviceDate: new Date(
+                `${acceptedLine?.date ?? serviceDate}T00:00:00Z`,
+              ).toISOString(),
+              guestId: reservation.guestId,
+            };
+            const outcome = acceptedLine
+              ? await this.folioService.postChargeFromSnapshotWithOutcome(
+                  folio.id,
+                  chargeInput,
+                  acceptedLine.taxAmount,
+                  undefined,
+                  `accepted-pricing:reservation-service:${rs.id}:once:${acceptedLine.date}`,
+                  tx,
+                )
+              : {
+                  charge: await this.folioService.postCharge(folio.id, chargeInput, tx),
+                  wasCreated: true,
+                };
+            folioOutcomes.push(outcome);
+            ledgerGroupWasCreated = outcome.wasCreated;
+          }
+
+          let updated: any;
+          if (hasAcceptedPricing && rs.status === 'posted') {
+            // A once service can acquire a new immutable operational date after
+            // a stay amendment. Its row remains posted, while the date-bearing
+            // source key decides whether this revision still needs a group.
+            if (!ledgerGroupWasCreated) continue;
+            updated = rs;
+          } else {
+            [updated] = await tx
+              .update(reservationServices)
+              .set({ status: 'posted', updatedAt: new Date() })
+              .where(and(
+                eq(reservationServices.id, rs.id),
+                eq(reservationServices.propertyId, propertyId),
+                eq(reservationServices.status, 'confirmed' as any),
+              ))
+              .returning();
+            if (!updated) {
+              throw new ConflictException(
+                `Reservation service ${rs.id} changed while posting its accepted price`,
+              );
+            }
+          }
+          posted.push(updated);
+          events.push({
+            reservationServiceId: rs.id,
+            amount,
+            postingRule: effectivePostingRule,
+            chargeType: effectiveChargeType,
+          });
         }
-        continue;
-      }
+        return { folio, posted, events, folioOutcomes };
+      },
+    );
 
-      const amount = acceptedLine?.amount
-        ?? new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
-      const description = `${serviceName} ${this.svcTag(rs.id)}`;
-
-      // FolioService rejects non-positive amounts except adjustments/reversals.
-      // Zero-priced included lines are marked posted without a ledger row.
-      if (new Decimal(amount).greaterThan(0)) {
-        const chargeInput = {
-          propertyId,
-          type: effectiveChargeType,
-          description,
-          amount,
-          currencyCode: acceptedLine?.currencyCode ?? rs.currencyCode,
-          serviceDate: new Date(
-            `${acceptedLine?.date ?? serviceDate}T00:00:00Z`,
-          ).toISOString(),
-          guestId: reservation.guestId,
-        };
-        if (acceptedLine) {
-          await this.folioService.postChargeFromSnapshotWithOutcome(
-            folio.id,
-            chargeInput,
-            acceptedLine.taxAmount,
-            undefined,
-            `accepted-pricing:reservation-service:${rs.id}:once`,
-          );
-        } else {
-          await this.folioService.postCharge(folio.id, chargeInput);
-        }
-      }
-
-      // Ledger creation and service-state recovery are separate idempotency
-      // boundaries. Creators and replays both attempt this CAS so a replay can
-      // recover a crash after the ledger commit; only the CAS winner emits.
-      const [updated] = await this.db
-        .update(reservationServices)
-        .set({ status: 'posted', updatedAt: new Date() })
-        .where(
-          and(
-            eq(reservationServices.id, rs.id),
-            eq(reservationServices.propertyId, propertyId),
-            eq(reservationServices.status, 'confirmed' as any),
-          ),
-        )
-        .returning();
-
-      if (!updated) continue;
-
+    for (const outcome of result.folioOutcomes) {
+      await this.folioService.emitSnapshotChargeWebhooks(
+        result.folio.id,
+        propertyId,
+        outcome,
+      );
+    }
+    for (const event of result.events) {
       await this.webhookService.emit(
         'reservation.service_posted',
         'reservation_service',
-        rs.id,
+        event.reservationServiceId,
         {
           reservationId,
-          folioId: folio.id,
-          amount,
-          postingRule: effectivePostingRule,
-          chargeType: effectiveChargeType,
+          folioId: result.folio.id,
+          amount: event.amount,
+          postingRule: event.postingRule,
+          chargeType: event.chargeType,
         },
         propertyId,
       );
-
-      posted.push(updated);
     }
-
-    return { posted, count: posted.length };
+    return { posted: result.posted, count: result.posted.length };
   }
 
   async postPerNightForProperty(propertyId: string, businessDate?: string) {
@@ -631,6 +689,110 @@ export class AncillaryService {
 
     for (const { rs, serviceName, reservation } of rows) {
       try {
+        if (reservation.acceptedPricingSnapshot) {
+          const lockedPost = await withAcceptedPricingLock(
+            this.db,
+            propertyId,
+            reservation.id,
+            async (tx) => {
+              const [current] = await tx
+                .select({
+                  rs: reservationServices,
+                  serviceName: services.name,
+                  reservation: reservations,
+                })
+                .from(reservationServices)
+                .innerJoin(
+                  reservations,
+                  and(
+                    eq(reservations.id, reservationServices.reservationId),
+                    eq(reservations.propertyId, reservationServices.propertyId),
+                  ),
+                )
+                .innerJoin(
+                  services,
+                  and(
+                    eq(services.id, reservationServices.serviceId),
+                    eq(services.propertyId, reservationServices.propertyId),
+                  ),
+                )
+                .where(and(
+                  eq(reservationServices.id, rs.id),
+                  eq(reservationServices.propertyId, propertyId),
+                  eq(reservationServices.reservationId, reservation.id),
+                ));
+              if (!current || current.rs.status === 'cancelled') return null;
+              const acceptedLine = this.acceptedServiceLine(
+                current.reservation,
+                current.rs.serviceId,
+                date,
+                false,
+              );
+              if (!acceptedLine || acceptedLine.postingRule !== 'per_night') return null;
+              const folio = await this.findOpenGuestFolio(reservation.id, propertyId, tx);
+              if (!folio) {
+                throw new BadRequestException(
+                  `No open guest folio for reservation ${reservation.id}`,
+                );
+              }
+              if (new Decimal(acceptedLine.amount).lessThanOrEqualTo(0)) return null;
+              const outcome = await this.folioService.postChargeFromSnapshotWithOutcome(
+                folio.id,
+                {
+                  propertyId,
+                  type: acceptedLine.chargeType,
+                  description: `${current.serviceName} ${this.svcTag(current.rs.id)}`,
+                  amount: acceptedLine.amount,
+                  currencyCode: acceptedLine.currencyCode,
+                  serviceDate: new Date(`${date}T00:00:00Z`).toISOString(),
+                  guestId: current.reservation.guestId,
+                },
+                acceptedLine.taxAmount,
+                undefined,
+                `accepted-pricing:reservation-service:${current.rs.id}:night:${date}`,
+                tx,
+              );
+              return {
+                folio,
+                reservation: current.reservation,
+                rs: current.rs,
+                acceptedLine,
+                outcome,
+              };
+            },
+          );
+          if (!lockedPost || !lockedPost.outcome.wasCreated) {
+            skipped.push(rs.id);
+            continue;
+          }
+          await this.folioService.emitSnapshotChargeWebhooks(
+            lockedPost.folio.id,
+            propertyId,
+            lockedPost.outcome,
+          );
+          await this.webhookService.emit(
+            'reservation.service_posted',
+            'reservation_service',
+            lockedPost.rs.id,
+            {
+              reservationId: lockedPost.reservation.id,
+              folioId: lockedPost.folio.id,
+              amount: lockedPost.acceptedLine.amount,
+              businessDate: date,
+              postingRule: lockedPost.acceptedLine.postingRule,
+              chargeType: lockedPost.acceptedLine.chargeType,
+              chargeId: lockedPost.outcome.charge.id,
+            },
+            propertyId,
+          );
+          posted.push({
+            reservationServiceId: lockedPost.rs.id,
+            chargeId: lockedPost.outcome.charge.id,
+            amount: lockedPost.acceptedLine.amount,
+          });
+          continue;
+        }
+
         const acceptedLine = this.acceptedServiceLine(
           reservation,
           rs.serviceId,
