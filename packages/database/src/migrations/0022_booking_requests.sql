@@ -1,4 +1,4 @@
--- Booking Requests — separate request-first aggregate and neutral configuration.
+-- Migration 0022: Booking Requests — separate request-first aggregate and neutral configuration.
 -- This is a forward-only migration. It preserves existing instant booking and
 -- payment behavior while adding optional request provenance.
 
@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS booking_request_installments (
 CREATE INDEX IF NOT EXISTS booking_request_installments_property_request_idx
   ON booking_request_installments (property_id, booking_request_id);
 
+ALTER TABLE payments ALTER COLUMN folio_id DROP NOT NULL;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS booking_request_id uuid;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS idempotency_key varchar(255);
 

@@ -176,6 +176,7 @@
         "request": "Zahtjev za rezervaciju"
       },
       "requiredCardWarning": "Dodajte Stripeov javni ključ prije obaveznog prikupljanja kartice.",
+      "unsupportedCardWarning": "Konfigurirani pružatelj plaćanja ne podržava spremljene kartice. Isključite prikupljanje kartica ili odaberite Stripe.",
       "reloadLatest": "Ponovno učitaj najnovije postavke",
       "reset": "Poništi promjene",
       "retry": "Pokušaj ponovno",

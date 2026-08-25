@@ -19,6 +19,7 @@ export interface Branding {
 
 export type BookingMode = 'instant' | 'request';
 export type PaymentMethodCollection = 'required' | 'optional' | 'disabled';
+export type PaymentMethodClientMode = 'mock' | 'stripe' | 'unsupported';
 export type BookingFormQuestionType =
   | 'short_text'
   | 'long_text'
@@ -52,6 +53,7 @@ export interface BookingConfig {
   sellableRatePlanIds: string[];
   bookingMode: BookingMode;
   paymentMethodCollection: PaymentMethodCollection;
+  paymentMethodClientMode?: PaymentMethodClientMode;
   formQuestions: BookingFormQuestion[];
 }
 

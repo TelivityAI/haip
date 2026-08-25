@@ -111,6 +111,7 @@
         "request": "Buchungsanfrage"
       },
       "requiredCardWarning": "Fügen Sie einen veröffentlichbaren Stripe-Schlüssel hinzu, bevor Sie eine Karte verlangen.",
+      "unsupportedCardWarning": "Der konfigurierte Zahlungsanbieter unterstützt keine gespeicherten Karten. Deaktivieren Sie die Kartenerfassung oder wählen Sie Stripe.",
       "reloadLatest": "Neueste Einstellungen laden",
       "reset": "Änderungen zurücksetzen",
       "retry": "Erneut versuchen",

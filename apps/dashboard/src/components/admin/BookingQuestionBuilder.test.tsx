@@ -378,6 +378,7 @@ const baseConfig = {
   stripePublishableKey: 'pk_test_property',
   bookingMode: 'request' as const,
   paymentMethodCollection: 'optional' as const,
+  paymentMethodClientMode: 'stripe' as const,
   formQuestions: [arrivalQuestion, breakfastQuestion],
   updatedAt: '2026-08-25T00:00:00.000Z',
 };
@@ -444,8 +445,76 @@ describe('BookingEngineSettings request configuration', () => {
     await userEvent.clear(name);
     await userEvent.type(name, 'Hotel without Stripe');
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Add a Stripe publishable key before requiring card collection.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Add a Stripe publishable key before enabling card collection.');
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  });
+
+  it('prevents saving optional Stripe card collection without a publishable key', async () => {
+    mockQueries({
+      ...baseConfig,
+      stripePublishableKey: null,
+      paymentMethodCollection: 'optional',
+    });
+    renderSettings();
+
+    const name = await screen.findByRole('textbox', { name: 'Display Name' });
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Hotel without Stripe');
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/Stripe publishable key/i);
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  });
+
+  it('allows mock card collection without Stripe keys', async () => {
+    mockQueries({
+      ...baseConfig,
+      stripePublishableKey: null,
+      paymentMethodCollection: 'required',
+      paymentMethodClientMode: 'mock',
+    });
+    renderSettings();
+
+    const name = await screen.findByRole('textbox', { name: 'Display Name' });
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Local mock hotel');
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+  });
+
+  it.each(['optional', 'required'] as const)(
+    'blocks %s card collection when the configured provider does not support saved cards',
+    async (paymentMethodCollection) => {
+      mockQueries({
+        ...baseConfig,
+        paymentMethodCollection,
+        paymentMethodClientMode: 'unsupported',
+      });
+      renderSettings();
+
+      const name = await screen.findByRole('textbox', { name: 'Display Name' });
+      await userEvent.clear(name);
+      await userEvent.type(name, 'Unsupported card provider');
+
+      expect(screen.getByRole('alert')).toHaveTextContent(/does not support saved cards/i);
+      expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    },
+  );
+
+  it('allows disabled card collection with an unsupported provider', async () => {
+    mockQueries({
+      ...baseConfig,
+      paymentMethodCollection: 'disabled',
+      paymentMethodClientMode: 'unsupported',
+    });
+    renderSettings();
+
+    const name = await screen.findByRole('textbox', { name: 'Display Name' });
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Unsupported provider with cards off');
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
   });
 
   it('resets dirty request changes and sends only changed fields with the version header', async () => {

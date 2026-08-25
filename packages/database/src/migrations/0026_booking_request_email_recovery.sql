@@ -1,3 +1,4 @@
+-- Migration 0026: booking-request email delivery recovery.
 ALTER TABLE booking_request_email_deliveries
   ADD COLUMN IF NOT EXISTS logical_key varchar(200),
   ADD COLUMN IF NOT EXISTS claimed_at timestamptz;

@@ -1,3 +1,4 @@
+-- Migration 0029: direct booking-request audit relationships.
 ALTER TABLE audit_logs
   ADD COLUMN IF NOT EXISTS booking_request_id uuid;
 

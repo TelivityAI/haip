@@ -1,35 +1,61 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
+const bookingRequestMigration = readFileSync(
+  new URL('./migrations/0022_booking_requests.sql', import.meta.url),
+  'utf8',
+);
 const migration = readFileSync(
-  new URL('./migrations/0022_booking_request_accepted_pricing.sql', import.meta.url),
+  new URL('./migrations/0023_booking_request_accepted_pricing.sql', import.meta.url),
   'utf8',
 );
 const pushSchema = readFileSync(new URL('./push-schema.ts', import.meta.url), 'utf8');
 const paymentIntegrityMigration = readFileSync(
-  new URL('./migrations/0023_booking_request_payment_integrity.sql', import.meta.url),
+  new URL('./migrations/0024_booking_request_payment_integrity.sql', import.meta.url),
   'utf8',
 );
 const financialRecoveryMigration = readFileSync(
-  new URL('./migrations/0024_booking_request_financial_recovery.sql', import.meta.url),
+  new URL('./migrations/0025_booking_request_financial_recovery.sql', import.meta.url),
   'utf8',
 );
 const emailRecoveryMigration = readFileSync(
-  new URL('./migrations/0025_booking_request_email_recovery.sql', import.meta.url),
+  new URL('./migrations/0026_booking_request_email_recovery.sql', import.meta.url),
   'utf8',
 );
 const emailRetryMigration = readFileSync(
-  new URL('./migrations/0026_booking_request_email_retry_policy.sql', import.meta.url),
+  new URL('./migrations/0027_booking_request_email_retry_policy.sql', import.meta.url),
   'utf8',
 );
 const auditRelationshipMigration = readFileSync(
-  new URL('./migrations/0028_booking_request_audit_relationship.sql', import.meta.url),
+  new URL('./migrations/0029_booking_request_audit_relationship.sql', import.meta.url),
   'utf8',
 );
 const amendmentLedgerMigration = readFileSync(
-  new URL('./migrations/0030_booking_request_amendment_ledger.sql', import.meta.url),
+  new URL('./migrations/0031_booking_request_amendment_ledger.sql', import.meta.url),
   'utf8',
 );
+
+describe('booking request migration sequence', () => {
+  it('keeps one migration per numeric sequence', () => {
+    const migrationNames = readdirSync(new URL('./migrations', import.meta.url))
+      .filter((name) => /^\d{4}_.+\.sql$/.test(name));
+    const sequences = migrationNames.map((name) => name.slice(0, 4));
+
+    expect(new Set(sequences).size).toBe(sequences.length);
+  });
+
+  it('allows request-owned payments before a folio exists', () => {
+    const nullableFolio = bookingRequestMigration.indexOf(
+      'ALTER TABLE payments ALTER COLUMN folio_id DROP NOT NULL',
+    );
+    const requestTarget = bookingRequestMigration.indexOf(
+      'ALTER TABLE payments ADD COLUMN IF NOT EXISTS booking_request_id uuid',
+    );
+
+    expect(nullableFolio).toBeGreaterThanOrEqual(0);
+    expect(nullableFolio).toBeLessThan(requestTarget);
+  });
+});
 
 describe('booking request accepted-pricing migration safety', () => {
   it('fails instead of accepting an already-accepted request without an operational snapshot', () => {

@@ -1,4 +1,4 @@
--- Keep stay-amendment corrections in the revenue ledger as signed, non-reversal
+-- Migration 0031: keep stay-amendment corrections in the revenue ledger as signed, non-reversal
 -- rows while retaining an immutable link to the component they adjust.
 ALTER TABLE charges
   ADD COLUMN IF NOT EXISTS adjusts_charge_id uuid;

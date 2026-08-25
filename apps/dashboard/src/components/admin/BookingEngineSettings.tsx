@@ -15,6 +15,7 @@ import {
 type DepositType = 'none' | 'first_night' | 'percentage' | 'full';
 type BookingMode = 'instant' | 'request';
 type PaymentMethodCollection = 'required' | 'optional' | 'disabled';
+type PaymentMethodClientMode = 'mock' | 'stripe' | 'unsupported';
 
 interface DepositPolicy {
   type: DepositType;
@@ -37,6 +38,7 @@ interface BookingEngineConfig {
   stripePublishableKey: string | null;
   bookingMode?: BookingMode;
   paymentMethodCollection?: PaymentMethodCollection;
+  paymentMethodClientMode?: PaymentMethodClientMode;
   formQuestions?: BookingFormQuestionDefinition[];
   updatedAt: string;
 }
@@ -328,16 +330,23 @@ function BookingEngineSettingsForProperty({ propertyId }: { propertyId: string }
   };
   const formDirty = baseline !== null && !formsEqual(form, baseline);
   const dirty = formDirty || isQuestionEditorOpen;
-  const missingRequiredCardKey = form.bookingMode === 'request'
-    && form.paymentMethodCollection === 'required'
+  const cardCollectionEnabled = form.bookingMode === 'request'
+    && form.paymentMethodCollection !== 'disabled';
+  const paymentMethodClientMode = config?.paymentMethodClientMode ?? 'stripe';
+  const missingStripeCardKey = form.bookingMode === 'request'
+    && cardCollectionEnabled
+    && paymentMethodClientMode === 'stripe'
     && form.stripePublishableKey.trim().length === 0;
+  const unsupportedCardCollection = cardCollectionEnabled
+    && paymentMethodClientMode === 'unsupported';
+  const cardCollectionBlocked = missingStripeCardKey || unsupportedCardCollection;
   const questionsValid = bookingQuestionsAreValid(form.formQuestions);
   const questionsChanged = baseline !== null
     && JSON.stringify(form.formQuestions) !== JSON.stringify(baseline.formQuestions);
   const unsupportedActive = hasActiveUnsupportedQuestions(form.formQuestions);
   const questionsPublishBlocked = questionsChanged && unsupportedActive;
   const save = () => {
-    if (!formDirty || isQuestionEditorOpen || !baselineRef.current || !configVersionRef.current || hasConflict || missingRequiredCardKey || !questionsValid || questionsPublishBlocked || saveConfig.isPending) return;
+    if (!formDirty || isQuestionEditorOpen || !baselineRef.current || !configVersionRef.current || hasConflict || cardCollectionBlocked || !questionsValid || questionsPublishBlocked || saveConfig.isPending) return;
     const savedForm = cloneForm(formRef.current);
     saveConfig.mutate({
       payload: payloadFromChanges(savedForm, baselineRef.current),
@@ -449,10 +458,14 @@ function BookingEngineSettingsForProperty({ propertyId }: { propertyId: string }
                 <p className="text-[11px] text-telivity-slate mt-1">{t('bookingEngine.requestSettings.stripeKeyDescription')}</p>
               </div>
             </div>
-            {missingRequiredCardKey && (
+            {cardCollectionBlocked && (
               <div role="alert" className="flex items-start gap-2 mt-4 border-l-4 border-telivity-orange bg-telivity-orange/5 rounded-lg px-3 py-2.5 max-w-3xl">
                 <AlertTriangle size={16} className="text-telivity-navy shrink-0 mt-0.5" aria-hidden="true" />
-                <p className="text-xs font-medium text-telivity-navy">{t('bookingEngine.requestSettings.requiredCardWarning')}</p>
+                <p className="text-xs font-medium text-telivity-navy">
+                  {t(unsupportedCardCollection
+                    ? 'bookingEngine.requestSettings.unsupportedCardWarning'
+                    : 'bookingEngine.requestSettings.requiredCardWarning')}
+                </p>
               </div>
             )}
           </div>
@@ -472,7 +485,7 @@ function BookingEngineSettingsForProperty({ propertyId }: { propertyId: string }
         <DepositSettings form={form} updateForm={updateForm} />
 
         <div className="bg-white rounded-xl shadow-sm px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
-          <button type="button" onClick={save} disabled={!formDirty || isQuestionEditorOpen || !configVersion || hasConflict || missingRequiredCardKey || !questionsValid || questionsPublishBlocked || saveConfig.isPending} className="bg-telivity-deep-blue text-white rounded-lg px-6 py-2 text-sm font-semibold disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2">{saveConfig.isPending ? t('bookingEngine.requestSettings.saving') : t('bookingEngine.requestSettings.save')}</button>
+          <button type="button" onClick={save} disabled={!formDirty || isQuestionEditorOpen || !configVersion || hasConflict || cardCollectionBlocked || !questionsValid || questionsPublishBlocked || saveConfig.isPending} className="bg-telivity-deep-blue text-white rounded-lg px-6 py-2 text-sm font-semibold disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2">{saveConfig.isPending ? t('bookingEngine.requestSettings.saving') : t('bookingEngine.requestSettings.save')}</button>
           <button type="button" onClick={reset} disabled={!dirty || saveConfig.isPending} className="text-sm font-medium text-telivity-slate hover:text-telivity-navy disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue rounded">{t('bookingEngine.requestSettings.reset')}</button>
           {dirty && <span className="text-xs font-medium text-telivity-navy">{t('bookingEngine.requestSettings.unsaved')}</span>}
           {saveConfig.isError && !hasConflict && <p role="alert" className="text-xs text-red-600 sm:ml-auto">{t('bookingEngine.requestSettings.saveError')}</p>}

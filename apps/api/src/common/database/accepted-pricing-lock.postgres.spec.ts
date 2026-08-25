@@ -272,7 +272,9 @@ suite('accepted-pricing mutex against PostgreSQL', () => {
       {} as any,
       ratePlan,
     );
-    const config = new BookingEngineConfigService(db as any);
+    const config = new BookingEngineConfigService(db as any, {
+      get: (key: string, fallback?: string) => key === 'PAYMENT_GATEWAY' ? 'mock' : fallback,
+    } as any);
     const bookingEngine = new BookingEngineService(
       db as any,
       {} as any,

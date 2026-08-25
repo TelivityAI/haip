@@ -1,4 +1,4 @@
--- Booking Request payment recovery and aggregate integrity.
+-- Migration 0024: Booking Request payment recovery and aggregate integrity.
 -- Pending gateway operations are durable claims: provider I/O is always outside
 -- the transaction and replay uses the same property-scoped idempotency key.
 

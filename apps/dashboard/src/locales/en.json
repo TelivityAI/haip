@@ -175,7 +175,8 @@
         "instant": "Instant booking",
         "request": "Booking request"
       },
-      "requiredCardWarning": "Add a Stripe publishable key before requiring card collection.",
+      "requiredCardWarning": "Add a Stripe publishable key before enabling card collection.",
+      "unsupportedCardWarning": "The configured payment provider does not support saved cards. Disable card collection or choose Stripe.",
       "reloadLatest": "Reload latest settings",
       "reset": "Reset changes",
       "retry": "Try again",

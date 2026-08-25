@@ -1,4 +1,4 @@
--- Exact provider recovery, financial lifecycle checks, and aggregate ownership.
+-- Migration 0025: exact provider recovery, financial lifecycle checks, and aggregate ownership.
 
 ALTER TABLE booking_request_payment_resolutions
   ADD COLUMN IF NOT EXISTS provider_transaction_id varchar(255),

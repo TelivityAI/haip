@@ -42,6 +42,7 @@ const publicConfig = {
   isEnabled: true,
   bookingMode: 'request' as const,
   paymentMethodCollection: 'disabled' as const,
+  paymentMethodClientMode: 'stripe' as const,
   stripePublishableKey: 'pk_test_public',
   depositPolicy: { type: 'none' as const, refundable: true },
   sellableRoomTypeIds: [ROOM_TYPE_ID],
@@ -461,6 +462,31 @@ describe('BookingRequestService public card setup', () => {
       `booking-request:${PROPERTY_ID}:widget-attempt-1`,
       { propertyId: PROPERTY_ID, applicationId: 'widget-attempt-1' },
     );
+  });
+
+  it('creates a mock setup without requiring Stripe keys', async () => {
+    const harness = makeHarness();
+    harness.config.getPublicConfig.mockResolvedValue({
+      ...structuredClone(publicConfig),
+      paymentMethodCollection: 'required',
+      paymentMethodClientMode: 'mock',
+      stripePublishableKey: null,
+    });
+    harness.savedPaymentMethod.createSetup.mockResolvedValueOnce({
+      setupIntentId: 'seti_mock_local',
+      clientSecret: 'seti_mock_local_secret_mock',
+      customerId: 'cus_mock_local',
+      clientMode: 'mock',
+    });
+
+    await expect(harness.service.createPaymentMethodSetup(PROPERTY_ID, {
+      guestEmail: 'ada@example.com',
+      idempotencyKey: 'widget-attempt-1',
+    })).resolves.toEqual({
+      setupIntentId: 'seti_mock_local',
+      clientSecret: 'seti_mock_local_secret_mock',
+      clientMode: 'mock',
+    });
   });
 });
 

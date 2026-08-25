@@ -1,4 +1,4 @@
--- Freeze the operational tariff chosen during Booking Request acceptance.
+-- Migration 0023: freeze the operational tariff chosen during Booking Request acceptance.
 -- Existing reservations remain NULL and continue using their canonical live
 -- rate-plan/night-audit behavior.
 ALTER TABLE reservations

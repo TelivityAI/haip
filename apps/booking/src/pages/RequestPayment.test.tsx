@@ -76,16 +76,25 @@ const rate: SearchRate = {
   currencyCode: 'EUR',
 };
 
-function config(policy: BookingConfig['paymentMethodCollection']): BookingConfig {
+function config(
+  policy: BookingConfig['paymentMethodCollection'],
+  options: {
+    stripePublishableKey?: string | null;
+    paymentMethodClientMode?: BookingConfig['paymentMethodClientMode'];
+  } = {},
+): BookingConfig {
   return {
     isEnabled: true,
     displayName: 'Hotel Mirador',
     depositPolicy: { type: 'none', refundable: true },
-    stripePublishableKey: 'pk_test_public',
+    stripePublishableKey: options.stripePublishableKey === undefined
+      ? 'pk_test_public'
+      : options.stripePublishableKey,
     sellableRoomTypeIds: [ROOM_TYPE_ID],
     sellableRatePlanIds: [RATE_PLAN_ID],
     bookingMode: 'request',
     paymentMethodCollection: policy,
+    paymentMethodClientMode: options.paymentMethodClientMode ?? 'stripe',
     formQuestions: [],
   };
 }
@@ -123,9 +132,14 @@ function SeedPayment({ prepareRequestKey = false }: { prepareRequestKey?: boolea
 function renderPayment(
   policy: BookingConfig['paymentMethodCollection'],
   widgetStyle?: CSSProperties,
-  options: { strict?: boolean; prepareRequestKey?: boolean } = {},
+  options: {
+    strict?: boolean;
+    prepareRequestKey?: boolean;
+    stripePublishableKey?: string | null;
+    paymentMethodClientMode?: BookingConfig['paymentMethodClientMode'];
+  } = {},
 ) {
-  mocks.config.mockResolvedValue(config(policy));
+  mocks.config.mockResolvedValue(config(policy, options));
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -196,6 +210,19 @@ describe('RequestPayment', () => {
     expect(payload).not.toHaveProperty('setupIntentId');
     expect(payload).not.toHaveProperty('consentAccepted');
     expect(await screen.findByText('Request received · Pending review')).toBeVisible();
+  });
+
+  it('does not offer an optional Stripe card when the publishable key is unavailable', async () => {
+    renderPayment('optional', undefined, {
+      stripePublishableKey: null,
+      paymentMethodClientMode: 'stripe',
+    });
+    await begin();
+
+    expect(screen.queryByRole('button', { name: 'Add a card' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue without a card' })).toBeVisible();
+    expect(screen.queryByText(/securely saved by Stripe/i)).not.toBeInTheDocument();
+    expect(mocks.createSetup).not.toHaveBeenCalled();
   });
 
   it('redirects disabled collection without loading Stripe or requesting a setup', async () => {
@@ -320,7 +347,10 @@ describe('RequestPayment', () => {
       clientSecret: 'seti_mock_local_secret_mock',
       clientMode: 'mock',
     });
-    renderPayment('required');
+    renderPayment('required', undefined, {
+      stripePublishableKey: null,
+      paymentMethodClientMode: 'mock',
+    });
     await begin();
 
     expect(await screen.findByText('Local payment simulation')).toBeVisible();

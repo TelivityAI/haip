@@ -165,6 +165,7 @@
         "request": "Solicitação de reserva"
       },
       "requiredCardWarning": "Adicione uma chave publicável da Stripe antes de exigir o cartão.",
+      "unsupportedCardWarning": "O provedor de pagamento configurado não aceita cartões salvos. Desative a coleta de cartões ou escolha a Stripe.",
       "reloadLatest": "Recarregar configurações mais recentes",
       "reset": "Redefinir alterações",
       "retry": "Tentar novamente",

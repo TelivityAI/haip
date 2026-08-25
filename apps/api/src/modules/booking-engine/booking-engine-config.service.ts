@@ -5,6 +5,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { eq, and, desc } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { bookingEngineConfig, bookingEngineCredentials } from '@telivityhaip/database';
@@ -16,6 +17,7 @@ import type {
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { hashBookingKey } from '../auth/booking-key.guard';
+import { resolvePaymentGatewayProvider } from '../payment/payment-gateway.factory';
 import { isSupportedQuestion, validateQuestionDefinitions } from './booking-form-questions';
 
 // Crockford base32 (no I/L/O/U) — unambiguous when copied by a human.
@@ -49,7 +51,16 @@ export interface UpdateConfigInput {
 
 @Injectable()
 export class BookingEngineConfigService {
-  constructor(@Inject(DRIZZLE) private readonly db: any) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: any,
+    private readonly runtimeConfig: ConfigService,
+  ) {}
+
+  private paymentMethodClientMode(): 'mock' | 'stripe' | 'unsupported' {
+    const provider = resolvePaymentGatewayProvider(this.runtimeConfig);
+    if (provider === 'mock' || provider === 'stripe') return provider;
+    return 'unsupported';
+  }
 
   /** Full config row (admin view). Creates a default row on first access. */
   async getConfig(propertyId: string, db?: any, lockForUpdate = false) {
@@ -74,6 +85,15 @@ export class BookingEngineConfigService {
    */
   async getPublicConfig(propertyId: string, db?: any, lockForUpdate = false) {
     const cfg = await this.getConfig(propertyId, db, lockForUpdate);
+    const bookingMode = cfg.bookingMode as BookingMode;
+    const configuredPaymentMethodCollection =
+      cfg.paymentMethodCollection as PaymentMethodCollection;
+    const paymentMethodClientMode = this.paymentMethodClientMode();
+    const paymentMethodCollection = bookingMode === 'request'
+      && paymentMethodClientMode === 'unsupported'
+      && configuredPaymentMethodCollection !== 'disabled'
+      ? 'disabled'
+      : configuredPaymentMethodCollection;
     const formQuestions = validateQuestionDefinitions(
       cfg.formQuestions ?? [],
       { allowActiveUnsupported: true },
@@ -92,9 +112,18 @@ export class BookingEngineConfigService {
       stripePublishableKey: cfg.stripePublishableKey,
       sellableRoomTypeIds: cfg.sellableRoomTypeIds as string[],
       sellableRatePlanIds: cfg.sellableRatePlanIds as string[],
-      bookingMode: cfg.bookingMode as BookingMode,
-      paymentMethodCollection: cfg.paymentMethodCollection as PaymentMethodCollection,
+      bookingMode,
+      paymentMethodCollection,
+      paymentMethodClientMode,
       formQuestions,
+    };
+  }
+
+  async getAdminConfig(propertyId: string) {
+    const cfg = await this.getConfig(propertyId);
+    return {
+      ...cfg,
+      paymentMethodClientMode: this.paymentMethodClientMode(),
     };
   }
 
@@ -135,12 +164,22 @@ export class BookingEngineConfigService {
       const formQuestions = patch.formQuestions === undefined
         ? undefined
         : validateQuestionDefinitions(patch.formQuestions);
+      const paymentMethodClientMode = this.paymentMethodClientMode();
 
       if (bookingMode === 'request'
-        && paymentMethodCollection === 'required'
+        && paymentMethodCollection !== 'disabled'
+        && paymentMethodClientMode === 'unsupported') {
+        throw new BadRequestException(
+          'Saved card collection is not supported by the configured payment provider',
+        );
+      }
+
+      if (bookingMode === 'request'
+        && paymentMethodCollection !== 'disabled'
+        && paymentMethodClientMode === 'stripe'
         && (!stripePublishableKey || stripePublishableKey.trim().length === 0)) {
         throw new BadRequestException(
-          'A Stripe publishable key is required when request-mode card collection is required',
+          'A Stripe publishable key is required when request-mode card collection is enabled',
         );
       }
 

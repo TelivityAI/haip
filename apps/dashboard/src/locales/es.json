@@ -176,6 +176,7 @@
         "request": "Petición de reserva"
       },
       "requiredCardWarning": "Añada una clave publicable de Stripe antes de exigir una tarjeta.",
+      "unsupportedCardWarning": "El proveedor de pagos configurado no admite tarjetas guardadas. Desactive la recopilación de tarjetas o elija Stripe.",
       "reloadLatest": "Recargar la configuración más reciente",
       "reset": "Restablecer cambios",
       "retry": "Intentar de nuevo",

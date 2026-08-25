@@ -75,7 +75,10 @@ describe('StripeSavedPaymentMethodGateway', () => {
     });
     expect(stripe.customers.create).toHaveBeenCalledWith(
       { email: 'guest@example.com' },
-      { idempotencyKey: 'request-card:req_123:customer' },
+      {
+        idempotencyKey:
+          'saved-method:554b9d6897beb16e36c4e97dae44a87a176537902c77313b11d229abc0ebeda1:customer',
+      },
     );
     expect(stripe.setupIntents.create).toHaveBeenCalledWith(
       {
@@ -88,8 +91,37 @@ describe('StripeSavedPaymentMethodGateway', () => {
             'cf18a22e39cd5bba19be060f31c6a9e68094cefbaf2c4a23c5738bf78c687a3a',
         },
       },
-      { idempotencyKey: 'request-card:req_123:setup-intent' },
+      {
+        idempotencyKey:
+          'saved-method:554b9d6897beb16e36c4e97dae44a87a176537902c77313b11d229abc0ebeda1:setup-intent',
+      },
     );
+  });
+
+  it('derives stable bounded Stripe idempotency keys from the full application identity', async () => {
+    stripe.customers.create.mockResolvedValue({ id: 'cus_trusted' });
+    stripe.setupIntents.create.mockResolvedValue({
+      id: 'seti_trusted',
+      client_secret: 'seti_secret_safe_for_guest',
+    });
+    const fullIdentity = `booking-request:${provenance.propertyId}:${'a'.repeat(200)}`;
+
+    await gateway.createSetup('guest@example.com', fullIdentity, provenance);
+    await gateway.createSetup('guest@example.com', fullIdentity, provenance);
+
+    const customerKeys = stripe.customers.create.mock.calls.map(
+      (call) => (call[1] as { idempotencyKey: string }).idempotencyKey,
+    );
+    const setupKeys = stripe.setupIntents.create.mock.calls.map(
+      (call) => (call[1] as { idempotencyKey: string }).idempotencyKey,
+    );
+    expect(customerKeys[0]).toBe(customerKeys[1]);
+    expect(setupKeys[0]).toBe(setupKeys[1]);
+    expect(customerKeys[0]).not.toBe(setupKeys[0]);
+    expect(customerKeys[0]!.length).toBeLessThanOrEqual(255);
+    expect(setupKeys[0]!.length).toBeLessThanOrEqual(255);
+    expect(customerKeys[0]).not.toContain('a'.repeat(200));
+    expect(setupKeys[0]).not.toContain('a'.repeat(200));
   });
 
   it('rejects setup resolution unless Stripe reports success', async () => {

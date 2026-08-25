@@ -36,7 +36,7 @@ export class BookingEngineAdminController {
   @RequirePermissions('bookingengine.manage')
   @ApiOperation({ summary: 'Get the booking-engine config for a property' })
   getConfig(@Query('propertyId', new ParseUUIDPipe()) propertyId: string) {
-    return this.configService.getConfig(propertyId);
+    return this.configService.getAdminConfig(propertyId);
   }
 
   @Patch('config')

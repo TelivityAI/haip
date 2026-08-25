@@ -54,9 +54,10 @@ describe('Booking Request staff authorization contract', () => {
     })),
   };
   const bookingEngineConfig = {
-    getConfig: vi.fn(async () => ({
+    getAdminConfig: vi.fn(async () => ({
       propertyId: PROPERTY_ID,
       bookingMode: 'request',
+      paymentMethodClientMode: 'mock',
     })),
   };
 
@@ -146,6 +147,6 @@ describe('Booking Request staff authorization contract', () => {
       .query({ propertyId: PROPERTY_ID })
       .set('x-test-user', 'config')
       .expect(200);
-    expect(bookingEngineConfig.getConfig).toHaveBeenCalledOnce();
+    expect(bookingEngineConfig.getAdminConfig).toHaveBeenCalledOnce();
   });
 });

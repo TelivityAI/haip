@@ -176,6 +176,7 @@
         "request": "Zahtev za rezervaciju"
       },
       "requiredCardWarning": "Dodajte Stripe javni ključ pre obaveznog prikupljanja kartice.",
+      "unsupportedCardWarning": "Konfigurisani provajder plaćanja ne podržava sačuvane kartice. Isključite prikupljanje kartica ili izaberite Stripe.",
       "reloadLatest": "Ponovo učitaj najnovija podešavanja",
       "reset": "Poništi promene",
       "retry": "Pokušaj ponovo",

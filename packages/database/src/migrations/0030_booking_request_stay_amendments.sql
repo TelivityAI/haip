@@ -1,4 +1,4 @@
--- Durable, property-scoped idempotency and immutable operational snapshots for
+-- Migration 0030: durable, property-scoped idempotency and immutable operational snapshots for
 -- staff stay amendments. The original Booking Request deal is never updated.
 CREATE UNIQUE INDEX IF NOT EXISTS reservations_property_id_unique
   ON reservations(property_id, id);

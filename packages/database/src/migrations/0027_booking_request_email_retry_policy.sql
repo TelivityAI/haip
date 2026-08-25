@@ -1,3 +1,4 @@
+-- Migration 0027: booking-request email retry policy.
 ALTER TYPE booking_request_email_delivery_status
   ADD VALUE IF NOT EXISTS 'processing';
 

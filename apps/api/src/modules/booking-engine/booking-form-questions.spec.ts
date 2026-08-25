@@ -196,7 +196,10 @@ describe('booking form DTO validation', () => {
   });
 });
 
-function makeConfigService(row: Record<string, unknown>) {
+function makeConfigService(
+  row: Record<string, unknown>,
+  paymentGateway: 'mock' | 'stripe' | 'adyen' = 'stripe',
+) {
   const returning = vi.fn().mockResolvedValue([row]);
   const where = vi.fn().mockReturnValue({ returning });
   const set = vi.fn().mockReturnValue({ where });
@@ -211,9 +214,16 @@ function makeConfigService(row: Record<string, unknown>) {
   const tx = { select: lockedSelect, update };
   const transaction = vi.fn(async (callback: (transaction: typeof tx) => unknown) => callback(tx));
   const db = { select, update, transaction };
+  const runtimeConfig = {
+    get: (key: string, fallback?: string) => {
+      if (key === 'PAYMENT_GATEWAY') return paymentGateway;
+      if (key === 'STRIPE_MODE') return paymentGateway === 'mock' ? 'mock' : 'test';
+      return fallback;
+    },
+  };
 
   return {
-    service: new BookingEngineConfigService(db as any),
+    service: new BookingEngineConfigService(db as any, runtimeConfig as any),
     update,
     set,
     transaction,
@@ -252,12 +262,26 @@ describe('BookingEngineConfigService request settings', () => {
     expect(publicConfig).toMatchObject({
       bookingMode: 'request',
       paymentMethodCollection: 'optional',
+      paymentMethodClientMode: 'stripe',
       formQuestions: [
         { id: 'arrival', order: 2 },
         { id: 'notes', order: 3 },
       ],
     });
     expect(publicConfig).not.toHaveProperty('updatedAt');
+  });
+
+  it('degrades an unsupported legacy card policy to a completable public flow', async () => {
+    const { service } = makeConfigService(
+      { ...configRow, paymentMethodCollection: 'required' },
+      'adyen',
+    );
+
+    await expect(service.getPublicConfig(configRow.propertyId)).resolves.toMatchObject({
+      bookingMode: 'request',
+      paymentMethodCollection: 'disabled',
+      paymentMethodClientMode: 'unsupported',
+    });
   });
 
   it('accepts a legacy admin save without a version during the compatibility window', async () => {
@@ -293,13 +317,51 @@ describe('BookingEngineConfigService request settings', () => {
     expect(written).not.toHaveProperty('formQuestions');
   });
 
-  it('rejects required request card collection without a publishable card key', async () => {
+  it.each(['required', 'optional'] as const)(
+    'rejects %s Stripe card collection without a publishable card key',
+    async (paymentMethodCollection) => {
     const { service, update } = makeConfigService({ ...configRow, stripePublishableKey: null });
 
     await expect(service.updateConfig(configRow.propertyId, {
-      paymentMethodCollection: 'required',
+      paymentMethodCollection,
     }, configRow.updatedAt.toISOString())).rejects.toThrow(/publishable/i);
     expect(update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows mock card collection without Stripe keys', async () => {
+    const { service, set } = makeConfigService(
+      { ...configRow, stripePublishableKey: null },
+      'mock',
+    );
+
+    await service.updateConfig(configRow.propertyId, {
+      paymentMethodCollection: 'required',
+    }, configRow.updatedAt.toISOString());
+
+    expect(set.mock.calls[0][0]).toMatchObject({ paymentMethodCollection: 'required' });
+  });
+
+  it.each(['required', 'optional'] as const)(
+    'rejects %s card collection when the configured provider does not support saved cards',
+    async (paymentMethodCollection) => {
+      const { service, update } = makeConfigService(configRow, 'adyen');
+
+      await expect(service.updateConfig(configRow.propertyId, {
+        paymentMethodCollection,
+      }, configRow.updatedAt.toISOString())).rejects.toThrow(/not supported/i);
+      expect(update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows disabled card collection with an unsupported payment provider', async () => {
+    const { service, set } = makeConfigService(configRow, 'adyen');
+
+    await service.updateConfig(configRow.propertyId, {
+      paymentMethodCollection: 'disabled',
+    }, configRow.updatedAt.toISOString());
+
+    expect(set.mock.calls[0][0]).toMatchObject({ paymentMethodCollection: 'disabled' });
   });
 
   it('does not write absent request settings during a branding-only update', async () => {

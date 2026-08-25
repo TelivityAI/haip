@@ -1226,7 +1226,8 @@ export class BookingRequestService {
     if (config.paymentMethodCollection === 'disabled') {
       throw new BadRequestException('Payment method collection is disabled for booking requests');
     }
-    if (!config.stripePublishableKey?.trim()) {
+    if ((config.paymentMethodClientMode ?? 'stripe') === 'stripe'
+      && !config.stripePublishableKey?.trim()) {
       throw new BadRequestException('Payment method collection is unavailable for this property');
     }
 

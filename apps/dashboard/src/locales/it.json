@@ -176,6 +176,7 @@
         "request": "Richiesta di prenotazione"
       },
       "requiredCardWarning": "Aggiungi una chiave pubblicabile Stripe prima di rendere obbligatoria la carta.",
+      "unsupportedCardWarning": "Il provider di pagamento configurato non supporta le carte salvate. Disattiva la raccolta delle carte o scegli Stripe.",
       "reloadLatest": "Ricarica impostazioni recenti",
       "reset": "Ripristina modifiche",
       "retry": "Riprova",

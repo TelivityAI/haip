@@ -176,6 +176,7 @@
         "request": "Demande de réservation"
       },
       "requiredCardWarning": "Ajoutez une clé publique Stripe avant d’exiger une carte.",
+      "unsupportedCardWarning": "Le prestataire de paiement configuré ne prend pas en charge les cartes enregistrées. Désactivez la collecte des cartes ou choisissez Stripe.",
       "reloadLatest": "Recharger les réglages récents",
       "reset": "Réinitialiser les modifications",
       "retry": "Réessayer",

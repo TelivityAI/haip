@@ -45,9 +45,11 @@ function effectiveStripeAppearance(config: {
 function RequestPaymentHeading({
   optional,
   simulated,
+  cardCollectionAvailable,
 }: {
   optional: boolean;
   simulated: boolean;
+  cardCollectionAvailable: boolean;
 }) {
   return (
     <div className="mt-2">
@@ -60,6 +62,8 @@ function RequestPaymentHeading({
       <p className="mt-2 text-sm leading-6 text-[#667085]">
         {simulated
           ? 'A test payment method will be saved for this local request. '
+          : optional && !cardCollectionAvailable
+            ? 'No payment method is required for this request. '
           : optional
             ? 'If you add a card, it will be securely saved by Stripe. '
             : 'Your card will be securely saved by Stripe. '}
@@ -139,8 +143,13 @@ export function RequestPayment() {
   const { config, isLoading } = useConfig();
   const flow = useBookingFlow();
   const [optionalCardSelected, setOptionalCardSelected] = useState(false);
+  const publishableKey = config?.stripePublishableKey?.trim();
+  const paymentMethodClientMode = config?.paymentMethodClientMode ?? 'stripe';
+  const cardCollectionAvailable = paymentMethodClientMode === 'mock'
+    || (paymentMethodClientMode === 'stripe' && Boolean(publishableKey));
   const collectCard =
-    config?.paymentMethodCollection === 'required' || optionalCardSelected;
+    config?.paymentMethodCollection === 'required'
+    || (optionalCardSelected && cardCollectionAvailable);
 
   useEffect(() => {
     if (
@@ -184,6 +193,7 @@ export function RequestPayment() {
   useEffect(() => {
     if (
       !collectCard ||
+      !cardCollectionAvailable ||
       !idempotencyKey ||
       !flow.guest?.email ||
       setupMutation.isPending ||
@@ -197,13 +207,13 @@ export function RequestPayment() {
       idempotencyKey,
     });
   }, [
+    cardCollectionAvailable,
     collectCard,
     flow.guest?.email,
     idempotencyKey,
     setupMutation,
   ]);
 
-  const publishableKey = config?.stripePublishableKey?.trim();
   const stripePromise = useMemo(
     () =>
       collectCard && setupMutation.data?.clientMode === 'stripe' && publishableKey
@@ -286,6 +296,7 @@ export function RequestPayment() {
       <RequestPaymentHeading
         optional={config.paymentMethodCollection === 'optional'}
         simulated={setupMutation.data?.clientMode === 'mock'}
+        cardCollectionAvailable={cardCollectionAvailable}
       />
 
       <div className="mt-5 rounded-brand border border-[#D0D5DD] bg-white p-5 sm:p-6">
@@ -304,14 +315,16 @@ export function RequestPayment() {
               </p>
             )}
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={() => setOptionalCardSelected(true)}
-                disabled={isSubmitting}
-              >
-                Add a card
-              </Button>
+              {cardCollectionAvailable && (
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => setOptionalCardSelected(true)}
+                  disabled={isSubmitting}
+                >
+                  Add a card
+                </Button>
+              )}
               <Button
                 className="flex-1"
                 onClick={skipCard}
