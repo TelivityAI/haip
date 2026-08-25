@@ -117,8 +117,15 @@ function bookingFlowReducer(
   action: BookingFlowAction,
 ): BookingFlowData {
   switch (action.type) {
-    case 'patch':
+    case 'patch': {
+      const entries = Object.entries(action.value) as Array<
+        [keyof BookingFlowData, BookingFlowData[keyof BookingFlowData]]
+      >;
+      if (entries.every(([key, value]) => Object.is(state[key], value))) {
+        return state;
+      }
       return { ...state, ...action.value };
+    }
     case 'selection':
       return {
         ...state,

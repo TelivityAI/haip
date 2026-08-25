@@ -205,6 +205,10 @@ export const payments = pgTable('payments', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
+  // `payments_financial_target_check` intentionally lives in migration 0021
+  // and push-schema SQL. Drizzle cannot express the folio/house-account/request
+  // target invariant here without reintroducing the payments ↔ request module
+  // cycle; the PostgreSQL vertical contract verifies the live constraint.
   propertyIdempotencyKeyUnique: uniqueIndex('payments_property_idempotency_key_unique')
     .on(table.propertyId, table.idempotencyKey),
   propertyRequestIdUnique: uniqueIndex('payments_property_request_id_unique')

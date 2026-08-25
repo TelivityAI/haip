@@ -52,7 +52,7 @@ Each matching event is POSTed to your `callbackUrl`:
 POST <callbackUrl>
 Content-Type: application/json
 X-HAIP-Signature: sha256=<hex HMAC-SHA256 of the raw body, keyed by your secret>
-X-HAIP-Event-Id: <delivery uuid>
+X-HAIP-Event-Id: <logical event uuid>
 X-HAIP-Event-Type: reservation.checked_in
 ```
 
@@ -83,6 +83,11 @@ function verify(rawBody: string, header: string, secret: string): boolean {
 
 Respond with any 2xx status within 5 seconds. Anything else (including a
 timeout) counts as a failed attempt.
+
+`X-HAIP-Event-Id` identifies the logical event, so retries and deliveries of
+the same persisted event to different subscriptions keep the same value. This
+is the subscriber's idempotency key. Legacy events that have no persisted
+logical identity fall back to the individual delivery UUID.
 
 ### Payloads are intentionally lean — fetch the entity by id
 
