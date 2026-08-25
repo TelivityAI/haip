@@ -1,8 +1,16 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Outlet,
+  Route,
+  RouterProvider,
+  Routes,
+  useNavigate,
+} from 'react-router-dom';
 import type {
   BookingConfig,
   BookingFormQuestion,
@@ -183,6 +191,73 @@ function StoredState() {
   return <output>{JSON.stringify({ guest, applicationAnswers })}</output>;
 }
 
+function ApplicationWithNavigationAttempt() {
+  const navigate = useNavigate();
+
+  return (
+    <Layout>
+      <button onClick={() => navigate('/extras')}>Attempt to leave</button>
+      <RequestApplication />
+    </Layout>
+  );
+}
+
+function renderGuardedRequestApplication(config: BookingConfig) {
+  // React Router creates browser-like requests in its in-memory data router.
+  // A small browser Request stand-in avoids undici/jsdom AbortSignal branding.
+  class MemoryRouterRequest {
+    readonly url: string;
+    readonly method: string;
+    readonly signal?: AbortSignal | null;
+
+    constructor(input: RequestInfo | URL, init: RequestInit = {}) {
+      this.url = String(input);
+      this.method = init.method ?? 'GET';
+      this.signal = init.signal;
+    }
+  }
+  vi.stubGlobal('Request', MemoryRouterRequest);
+  api.config.mockResolvedValue(config);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const router = createMemoryRouter([
+    {
+      element: (
+        <BookingFlowProvider>
+          <Outlet />
+        </BookingFlowProvider>
+      ),
+      children: [
+        {
+          path: '/',
+          element: <SeedFlow target="/request/application" />,
+        },
+        {
+          path: '/request/application',
+          element: <ApplicationWithNavigationAttempt />,
+        },
+        {
+          path: '/request/received',
+          element: <RequestReceived />,
+        },
+        {
+          path: '/extras',
+          element: <p>Navigation escaped the request</p>,
+        },
+      ],
+    },
+  ]);
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ConfigProvider>
+        <RouterProvider router={router} />
+      </ConfigProvider>
+    </QueryClientProvider>,
+  );
+}
+
 function renderRequestApplication(
   config = requestConfig(),
   options: { withStoredApplication?: boolean; receiptInLayout?: boolean } = {},
@@ -242,6 +317,10 @@ async function fillCoreGuest() {
 }
 
 describe('RequestApplication', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     api.submitRequest.mockResolvedValue({
@@ -274,6 +353,84 @@ describe('RequestApplication', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Expected arrival time is required');
     expect(screen.getByRole('heading', { name: 'Tell us about your stay' })).toBeVisible();
+  });
+
+  it('marks core fields required, links their errors, and focuses the first invalid field', async () => {
+    renderRequestApplication(requestConfig('required', []));
+    await begin();
+
+    const firstName = screen.getByRole('textbox', { name: 'First name required' });
+    const lastName = screen.getByRole('textbox', { name: 'Last name required' });
+    const email = screen.getByRole('textbox', { name: 'Email required' });
+    expect(firstName).toBeRequired();
+    expect(lastName).toBeRequired();
+    expect(email).toBeRequired();
+    expect(firstName).toHaveAttribute('aria-required', 'true');
+
+    fireEvent.submit(screen.getByRole('form', { name: 'Booking request application' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveAttribute('id', 'request-application-error');
+    expect(firstName).toHaveFocus();
+    for (const field of [firstName, lastName, email]) {
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+      expect(field).toHaveAttribute('aria-describedby', 'request-application-error');
+    }
+  });
+
+  it('exposes required question semantics and focuses text, select, radio, then multi groups', async () => {
+    const requiredQuestions = [
+      questions[0]!,
+      questions[2]!,
+      questions[4]!,
+      { ...questions[3]!, isRequired: true },
+    ];
+    renderRequestApplication(requestConfig('required', requiredQuestions));
+    await begin();
+    await fillCoreGuest();
+
+    const text = screen.getByRole('textbox', {
+      name: 'Expected arrival time required',
+    });
+    const select = screen.getByRole('combobox', {
+      name: 'Purpose of stay required',
+    });
+    const radioGroup = screen.getByRole('group', {
+      name: 'Travelling with a pet required',
+    });
+    const yes = screen.getByRole('radio', { name: 'Yes' });
+    const multiGroup = screen.getByRole('group', {
+      name: 'Interested experiences required',
+    });
+    const spa = screen.getByRole('checkbox', { name: 'Spa' });
+    expect(text).toBeRequired();
+    expect(select).toBeRequired();
+    expect(yes).toBeRequired();
+    expect(radioGroup).toHaveAttribute('aria-required', 'true');
+    expect(multiGroup).toHaveAttribute('aria-required', 'true');
+
+    const form = screen.getByRole('form', { name: 'Booking request application' });
+    fireEvent.submit(form);
+    expect(text).toHaveFocus();
+    expect(text).toHaveAttribute('aria-invalid', 'true');
+    expect(text).toHaveAttribute('aria-describedby', 'request-application-error');
+
+    await userEvent.type(text, '18:00');
+    fireEvent.submit(form);
+    expect(select).toHaveFocus();
+    expect(select).toHaveAttribute('aria-invalid', 'true');
+
+    await userEvent.selectOptions(select, 'Leisure');
+    fireEvent.submit(form);
+    expect(yes).toHaveFocus();
+    expect(radioGroup).toHaveAttribute('aria-invalid', 'true');
+    expect(radioGroup).toHaveAttribute('aria-describedby', 'request-application-error');
+
+    await userEvent.click(yes);
+    fireEvent.submit(form);
+    expect(spa).toHaveFocus();
+    expect(multiGroup).toHaveAttribute('aria-invalid', 'true');
+    expect(multiGroup).toHaveAttribute('aria-describedby', 'request-application-error');
   });
 
   it('does not commit local edits when the guest navigates back', async () => {
@@ -347,6 +504,68 @@ describe('RequestApplication', () => {
     expect(api.submitRequest.mock.calls[0]![0].idempotencyKey).toBe(
       api.submitRequest.mock.calls[1]![0].idempotencyKey,
     );
+  });
+
+  it('keeps an in-flight request alive, blocks leaving, and stores the receipt once', async () => {
+    let resolveRequest!: (value: {
+      requestId: string;
+      status: 'pending';
+      message: string;
+    }) => void;
+    api.submitRequest.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+    const onlyQuestion = [{ ...questions[0]!, isRequired: true }];
+    renderGuardedRequestApplication(requestConfig('disabled', onlyQuestion));
+    await begin();
+    await fillCoreGuest();
+    await userEvent.type(screen.getByLabelText(/Expected arrival time/), '18:00');
+
+    const submit = screen.getByRole('button', { name: 'Submit booking request' });
+    await userEvent.dblClick(submit);
+    await waitFor(() => expect(api.submitRequest).toHaveBeenCalledOnce());
+    expect(submit).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Back to extras/ })).toBeDisabled();
+
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Attempt to leave' }));
+    expect(screen.getByRole('heading', { name: 'Tell us about your stay' })).toBeVisible();
+    expect(screen.queryByText('Navigation escaped the request')).not.toBeInTheDocument();
+
+    resolveRequest({
+      requestId: 'request-replayed',
+      status: 'pending',
+      message: 'The idempotent request is pending review.',
+    });
+
+    expect(await screen.findByText('Request received · Pending review')).toBeVisible();
+    expect(screen.getByText(/idempotent request is pending review/i)).toBeVisible();
+    expect(api.submitRequest).toHaveBeenCalledOnce();
+  });
+
+  it('re-enables navigation after an in-flight request fails', async () => {
+    api.submitRequest.mockRejectedValueOnce(new Error('Request submission failed.'));
+    const onlyQuestion = [{ ...questions[0]!, isRequired: true }];
+    renderGuardedRequestApplication(requestConfig('disabled', onlyQuestion));
+    await begin();
+    await fillCoreGuest();
+    await userEvent.type(screen.getByLabelText(/Expected arrival time/), '18:00');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit booking request' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Request submission failed.');
+    expect(screen.getByRole('button', { name: /Back to extras/ })).toBeEnabled();
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Attempt to leave' }));
+    expect(await screen.findByText('Navigation escaped the request')).toBeVisible();
   });
 });
 

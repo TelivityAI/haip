@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import type {
   BookingApplicationAnswer,
   BookingApplicationAnswers,
   BookingFormQuestion,
 } from '../api/types';
-import { bookingApi, errorMessage } from '../api/client';
+import { errorMessage } from '../api/client';
 import { Button } from '../components/Button';
 import { ConfiguredQuestion } from '../components/ConfiguredQuestion';
 import { Field, inputClass } from '../components/Field';
@@ -18,18 +17,36 @@ import { requestPayload } from '../lib/requestPayload';
 function missingRequiredAnswer(
   questions: BookingFormQuestion[],
   answers: BookingApplicationAnswers,
-): string | undefined {
-  for (const question of questions) {
-    if (!question.isRequired) continue;
+): { message: string; invalidIds: string[]; focusId: string } | undefined {
+  const missing = questions.filter((question) => {
+    if (!question.isRequired) return false;
     const answer = answers[question.id];
-    const missing =
+    return (
       answer === undefined ||
       (typeof answer === 'string' && answer.trim().length === 0) ||
-      (Array.isArray(answer) && answer.length === 0);
-    if (missing) return `${question.label} is required.`;
-  }
-  return undefined;
+      (Array.isArray(answer) && answer.length === 0)
+    );
+  });
+  const first = missing[0];
+  if (!first) return undefined;
+  const baseId = `request-question-${first.id}`;
+  return {
+    message: `${first.label} is required.`,
+    invalidIds: missing.map((question) => question.id),
+    focusId:
+      first.type === 'yes_no' || first.type === 'multi_select'
+        ? `${baseId}-option-0`
+        : baseId,
+  };
 }
+
+interface ValidationIssue {
+  message: string;
+  invalidIds: string[];
+  focusId: string;
+}
+
+const APPLICATION_ERROR_ID = 'request-application-error';
 
 export function RequestApplication() {
   const navigate = useNavigate();
@@ -45,7 +62,7 @@ export function RequestApplication() {
   const [answers, setAnswers] = useState<BookingApplicationAnswers>(() => ({
     ...flow.applicationAnswers,
   }));
-  const [validationError, setValidationError] = useState<string>();
+  const [validationError, setValidationError] = useState<ValidationIssue>();
 
   useEffect(() => {
     if (
@@ -63,10 +80,6 @@ export function RequestApplication() {
       navigate('/guest', { replace: true });
     }
   }, [config?.bookingMode, isLoading, navigate]);
-
-  const submitMutation = useMutation({
-    mutationFn: bookingApi.submitRequest,
-  });
 
   if (
     isLoading ||
@@ -100,17 +113,35 @@ export function RequestApplication() {
       specialRequests: specialRequests.trim() || undefined,
     };
 
-    if (!cleanGuest.firstName || !cleanGuest.lastName || !cleanGuest.email) {
-      setValidationError('First name, last name and email are required.');
+    const missingCoreFields = [
+      !cleanGuest.firstName ? 'request-first-name' : undefined,
+      !cleanGuest.lastName ? 'request-last-name' : undefined,
+      !cleanGuest.email ? 'request-email' : undefined,
+    ].filter((id): id is string => Boolean(id));
+    if (missingCoreFields.length > 0) {
+      const issue = {
+        message: 'First name, last name and email are required.',
+        invalidIds: missingCoreFields,
+        focusId: missingCoreFields[0]!,
+      };
+      setValidationError(issue);
+      document.getElementById(issue.focusId)?.focus();
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanGuest.email)) {
-      setValidationError('Please enter a valid email address.');
+      const issue = {
+        message: 'Please enter a valid email address.',
+        invalidIds: ['request-email'],
+        focusId: 'request-email',
+      };
+      setValidationError(issue);
+      document.getElementById(issue.focusId)?.focus();
       return;
     }
     const questionError = missingRequiredAnswer(config.formQuestions, answers);
     if (questionError) {
       setValidationError(questionError);
+      document.getElementById(questionError.focusId)?.focus();
       return;
     }
 
@@ -126,8 +157,9 @@ export function RequestApplication() {
       return;
     }
 
-    submitMutation.mutate(
-      requestPayload({
+    void flow
+      .submitRequest(
+        requestPayload({
         idempotencyKey,
         criteria: flow.criteria!,
         roomType: flow.roomType!,
@@ -135,19 +167,27 @@ export function RequestApplication() {
         guest: cleanGuest,
         serviceIds: flow.serviceIds,
         applicationAnswers: answers,
-      }),
-      {
-        onSuccess: (acknowledgement) => {
-          flow.setRequestAcknowledgement(acknowledgement);
-          navigate('/request/received');
-        },
-      },
-    );
+        }),
+      )
+      .catch(() => undefined);
   };
+
+  const isSubmitting = flow.requestSubmissionStatus === 'pending';
+  const invalidIds = new Set(validationError?.invalidIds);
+  const fieldErrorProps = (id: string) => ({
+    'aria-invalid': invalidIds.has(id) || undefined,
+    'aria-describedby': invalidIds.has(id)
+      ? APPLICATION_ERROR_ID
+      : undefined,
+  });
 
   return (
     <RequestFlowFrame active={2}>
-      <Button variant="ghost" onClick={() => navigate('/extras')}>
+      <Button
+        variant="ghost"
+        onClick={() => navigate('/extras')}
+        disabled={isSubmitting}
+      >
         ← Back to extras
       </Button>
       <div className="mt-2">
@@ -176,6 +216,10 @@ export function RequestApplication() {
               autoComplete="given-name"
               className={inputClass}
               value={firstName}
+              disabled={isSubmitting}
+              required
+              aria-required="true"
+              {...fieldErrorProps('request-first-name')}
               onChange={(event) => setFirstName(event.target.value)}
             />
           </Field>
@@ -185,6 +229,10 @@ export function RequestApplication() {
               autoComplete="family-name"
               className={inputClass}
               value={lastName}
+              disabled={isSubmitting}
+              required
+              aria-required="true"
+              {...fieldErrorProps('request-last-name')}
               onChange={(event) => setLastName(event.target.value)}
             />
           </Field>
@@ -196,6 +244,10 @@ export function RequestApplication() {
             autoComplete="email"
             className={inputClass}
             value={email}
+            disabled={isSubmitting}
+            required
+            aria-required="true"
+            {...fieldErrorProps('request-email')}
             onChange={(event) => setEmail(event.target.value)}
           />
         </Field>
@@ -206,6 +258,7 @@ export function RequestApplication() {
             autoComplete="tel"
             className={inputClass}
             value={phone}
+            disabled={isSubmitting}
             onChange={(event) => setPhone(event.target.value)}
           />
         </Field>
@@ -218,6 +271,9 @@ export function RequestApplication() {
                 key={question.id}
                 question={question}
                 value={answers[question.id]}
+                disabled={isSubmitting}
+                invalid={invalidIds.has(question.id)}
+                errorId={APPLICATION_ERROR_ID}
                 onChange={(value) => setAnswer(question.id, value)}
               />
             ))}
@@ -230,21 +286,23 @@ export function RequestApplication() {
             rows={3}
             className={inputClass}
             value={specialRequests}
+            disabled={isSubmitting}
             onChange={(event) => setSpecialRequests(event.target.value)}
           />
         </Field>
 
-        {(validationError || submitMutation.isError) && (
+        {(validationError || flow.requestSubmissionStatus === 'error') && (
           <p
+            id={APPLICATION_ERROR_ID}
             role="alert"
             className="rounded-brand border border-red-200 bg-red-50 p-3 text-sm text-red-700"
           >
-            {validationError ?? errorMessage(submitMutation.error)}
+            {validationError?.message ?? errorMessage(flow.requestSubmissionError)}
           </p>
         )}
 
-        <Button type="submit" className="w-full" disabled={submitMutation.isPending}>
-          {submitMutation.isPending
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting
             ? 'Submitting request…'
             : config.paymentMethodCollection === 'disabled'
               ? 'Submit booking request'

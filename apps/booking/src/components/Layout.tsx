@@ -4,7 +4,7 @@ import { useBookingFlow } from '../context/BookingFlowContext';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { config } = useConfig();
-  const { branding } = useBookingFlow();
+  const { branding, requestSubmissionStatus } = useBookingFlow();
   const { pathname } = useLocation();
   const isRequestFlow = pathname.startsWith('/request/');
   const displayName =
@@ -17,7 +17,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
         style={{ borderTopWidth: 4, borderTopColor: 'var(--haip-primary, #06bdb4)' }}
       >
         <div className={`mx-auto flex items-center justify-between px-4 py-4 ${isRequestFlow ? 'max-w-5xl' : 'max-w-3xl'}`}>
-          <Link to="/" className="text-lg font-semibold text-gray-900">
+          <Link
+            to="/"
+            className="text-lg font-semibold text-gray-900"
+            aria-disabled={requestSubmissionStatus === 'pending'}
+            tabIndex={requestSubmissionStatus === 'pending' ? -1 : undefined}
+            onClick={(event) => {
+              if (requestSubmissionStatus === 'pending') event.preventDefault();
+            }}
+          >
             {displayName}
           </Link>
           {!isRequestFlow && (

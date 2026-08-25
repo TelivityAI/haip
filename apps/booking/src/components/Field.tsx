@@ -10,10 +10,19 @@ export function Field({ label, htmlFor, children, required }: FieldProps) {
     <label htmlFor={htmlFor} className="block">
       <span className="mb-1 block text-sm font-medium text-gray-700">
         {label}
-        {required && <span className="text-red-500"> *</span>}
+        {required && <RequiredIndicator />}
       </span>
       {children}
     </label>
+  );
+}
+
+export function RequiredIndicator() {
+  return (
+    <>
+      <span aria-hidden="true" className="text-red-500"> *</span>
+      <span className="sr-only"> required</span>
+    </>
   );
 }
 

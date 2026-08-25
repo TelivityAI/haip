@@ -5,21 +5,18 @@ import {
   useStripe,
 } from '@stripe/react-stripe-js';
 import { Button } from './Button';
-
-export const REQUEST_CARD_CONSENT_VERSION = 'request-card-v1';
-
-export function requestCardConsent(propertyName: string): string {
-  return `I authorize ${propertyName} to securely save this payment method and charge amounts explicitly recorded against this stay. I understand no charge is made when submitting.`;
-}
+import { requestCardConsent } from '../lib/requestCardConsent';
 
 export function StripeSetupForm({
   propertyName,
   submitting,
   onConfirmed,
+  onSkip,
 }: {
   propertyName: string;
   submitting: boolean;
   onConfirmed: (setupIntentId: string, consentText: string) => void;
+  onSkip?: () => void;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -29,12 +26,12 @@ export function StripeSetupForm({
   const mounted = useRef(true);
   const consentText = requestCardConsent(propertyName);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
       mounted.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -61,9 +58,9 @@ export function StripeSetupForm({
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="space-y-4" aria-busy={confirming || submitting}>
       <div className="rounded-brand border border-[#D0D5DD] p-3">
-        <PaymentElement />
+        <PaymentElement options={{ readOnly: confirming || submitting }} />
       </div>
       <div className="rounded-brand border border-[#B7E3DD] bg-[#F0F9F7] p-3 text-xs leading-5 text-[#29655E]">
         Card details are handled directly by Stripe and never pass through the hotel.
@@ -73,6 +70,7 @@ export function StripeSetupForm({
           type="checkbox"
           className="mt-1"
           checked={consentAccepted}
+          disabled={confirming || submitting}
           onChange={(event) => setConsentAccepted(event.target.checked)}
         />
         <span>{consentText}</span>
@@ -82,15 +80,30 @@ export function StripeSetupForm({
           {error}
         </p>
       )}
-      <Button
-        type="submit"
-        className="w-full"
-        disabled={!stripe || !elements || !consentAccepted || confirming || submitting}
-      >
-        {confirming || submitting
-          ? 'Submitting request…'
-          : 'Save card and submit booking request'}
-      </Button>
+      <div className="flex flex-col gap-3">
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={!stripe || !elements || !consentAccepted || confirming || submitting}
+        >
+          {confirming || submitting
+            ? 'Submitting request…'
+            : error
+              ? 'Retry saving card and submit request'
+              : 'Save card and submit booking request'}
+        </Button>
+        {error && onSkip && (
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            onClick={onSkip}
+            disabled={confirming || submitting}
+          >
+            Continue without a card
+          </Button>
+        )}
+      </div>
     </form>
   );
 }

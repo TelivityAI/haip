@@ -1,3 +1,4 @@
+import { StrictMode, type CSSProperties } from 'react';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -8,6 +9,7 @@ import { BookingFlowProvider, useBookingFlow } from '../context/BookingFlowConte
 import { ConfigProvider } from '../context/ConfigContext';
 import { RequestPayment } from './RequestPayment';
 import { RequestReceived } from './RequestReceived';
+import { StripeSetupForm } from '../components/StripeSetupForm';
 
 const mocks = vi.hoisted(() => ({
   config: vi.fn(),
@@ -15,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   submitRequest: vi.fn(),
   loadStripe: vi.fn(),
   confirmSetup: vi.fn(),
+  elementsOptions: vi.fn(),
 }));
 
 vi.mock('../api/client', () => ({
@@ -32,7 +35,16 @@ vi.mock('@stripe/stripe-js', () => ({
 }));
 
 vi.mock('@stripe/react-stripe-js', () => ({
-  Elements: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Elements: ({
+    children,
+    options,
+  }: {
+    children: React.ReactNode;
+    options: unknown;
+  }) => {
+    mocks.elementsOptions(options);
+    return <div>{children}</div>;
+  },
   PaymentElement: () => <div aria-label="Secure card entry" />,
   useElements: () => ({ id: 'elements' }),
   useStripe: () => ({ confirmSetup: mocks.confirmSetup }),
@@ -107,26 +119,31 @@ function SeedPayment() {
   );
 }
 
-function renderPayment(policy: BookingConfig['paymentMethodCollection']) {
+function renderPayment(
+  policy: BookingConfig['paymentMethodCollection'],
+  widgetStyle?: CSSProperties,
+) {
   mocks.config.mockResolvedValue(config(policy));
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
-    <MemoryRouter initialEntries={['/']}>
-      <QueryClientProvider client={queryClient}>
-        <ConfigProvider>
-          <BookingFlowProvider>
-            <Routes>
-              <Route path="/" element={<SeedPayment />} />
-              <Route path="/request/payment" element={<RequestPayment />} />
-              <Route path="/request/application" element={<p>Application page</p>} />
-              <Route path="/request/received" element={<RequestReceived />} />
-            </Routes>
-          </BookingFlowProvider>
-        </ConfigProvider>
-      </QueryClientProvider>
-    </MemoryRouter>,
+    <div className="haip-booking" style={widgetStyle}>
+      <MemoryRouter initialEntries={['/']}>
+        <QueryClientProvider client={queryClient}>
+          <ConfigProvider>
+            <BookingFlowProvider>
+              <Routes>
+                <Route path="/" element={<SeedPayment />} />
+                <Route path="/request/payment" element={<RequestPayment />} />
+                <Route path="/request/application" element={<p>Application page</p>} />
+                <Route path="/request/received" element={<RequestReceived />} />
+              </Routes>
+            </BookingFlowProvider>
+          </ConfigProvider>
+        </QueryClientProvider>
+      </MemoryRouter>
+    </div>,
   );
 }
 
@@ -162,6 +179,8 @@ describe('RequestPayment', () => {
     expect(mocks.createSetup).not.toHaveBeenCalled();
     expect(mocks.loadStripe).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Secure card entry')).not.toBeInTheDocument();
+    expect(screen.getByText(/If you add a card, it will be securely saved/i)).toBeVisible();
+    expect(screen.queryByText(/^Your card will be securely saved/i)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Continue without a card' }));
 
@@ -274,5 +293,128 @@ describe('RequestPayment', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Card setup is unavailable.');
     expect(mocks.submitRequest).not.toHaveBeenCalled();
+  });
+
+  it('offers setup retry and optional skip after adding a card fails', async () => {
+    mocks.createSetup
+      .mockRejectedValueOnce(new Error('Card setup is unavailable.'))
+      .mockResolvedValueOnce({
+        setupIntentId: 'seti_retry',
+        clientSecret: 'seti_retry_secret_value',
+      });
+    renderPayment('optional');
+    await begin();
+    await userEvent.click(screen.getByRole('button', { name: 'Add a card' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Card setup is unavailable.');
+    expect(screen.getByRole('button', { name: 'Retry secure card entry' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Continue without a card' })).toBeVisible();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry secure card entry' }));
+
+    await waitFor(() => expect(mocks.createSetup).toHaveBeenCalledTimes(2));
+    expect(await screen.findByLabelText('Secure card entry')).toBeVisible();
+  });
+
+  it('keeps retry and optional skip available after Stripe rejects the card setup', async () => {
+    mocks.confirmSetup.mockResolvedValueOnce({
+      error: { message: 'Stripe could not save this card.' },
+    });
+    renderPayment('optional');
+    await begin();
+    await userEvent.click(screen.getByRole('button', { name: 'Add a card' }));
+    await screen.findByLabelText('Secure card entry');
+    await userEvent.click(screen.getByRole('checkbox', { name: /I authorize Hotel Mirador/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Save card and submit booking request' }),
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Stripe could not save this card.',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Retry saving card and submit request' }),
+    ).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Continue without a card' })).toBeEnabled();
+  });
+
+  it('prevents a double submission and re-enables controls after a real POST failure', async () => {
+    let rejectRequest!: (error: Error) => void;
+    mocks.submitRequest.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectRequest = reject;
+      }),
+    );
+    renderPayment('optional');
+    await begin();
+
+    const skip = screen.getByRole('button', { name: 'Continue without a card' });
+    await userEvent.dblClick(skip);
+    await waitFor(() => expect(mocks.submitRequest).toHaveBeenCalledOnce());
+    expect(skip).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Back to your details/ })).toBeDisabled();
+
+    rejectRequest(new Error('The request could not be submitted.'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The request could not be submitted.',
+    );
+    expect(screen.getByRole('button', { name: /Back to your details/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Continue without a card' })).toBeEnabled();
+  });
+
+  it('derives Stripe appearance from effective widget theme variables', async () => {
+    renderPayment('required', {
+      '--haip-primary': '#126E75',
+      '--haip-text': '#102A43',
+      '--haip-surface': '#FAFCFE',
+      '--haip-radius': '14px',
+    } as CSSProperties);
+    await begin();
+    await screen.findByLabelText('Secure card entry');
+
+    expect(mocks.elementsOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        appearance: {
+          variables: expect.objectContaining({
+            colorPrimary: '#126E75',
+            colorText: '#102A43',
+            colorBackground: '#FAFCFE',
+            borderRadius: '14px',
+          }),
+        },
+      }),
+    );
+  });
+
+  it('completes Stripe setup exactly once when effects replay in StrictMode', async () => {
+    const onConfirmed = vi.fn();
+    render(
+      <StrictMode>
+        <StripeSetupForm
+          propertyName="Hotel Mirador"
+          submitting={false}
+          onConfirmed={onConfirmed}
+        />
+      </StrictMode>,
+    );
+
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: /I authorize Hotel Mirador/i }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Save card and submit booking request' }),
+    );
+
+    await waitFor(() =>
+      expect(onConfirmed).toHaveBeenCalledOnce(),
+    );
+    expect(onConfirmed).toHaveBeenCalledWith(
+      'seti_succeeded',
+      expect.stringContaining('I authorize Hotel Mirador'),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Save card and submit booking request' }),
+    ).toBeEnabled();
   });
 });

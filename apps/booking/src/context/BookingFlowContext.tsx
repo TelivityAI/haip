@@ -1,4 +1,17 @@
-import { createContext, useContext, useMemo, useReducer, useRef } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+} from 'react';
+import {
+  UNSAFE_DataRouterContext,
+  useBlocker,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
 import type {
   BookingApplicationAnswers,
   BookingRequestAcknowledgement,
@@ -6,7 +19,9 @@ import type {
   QuoteResponse,
   SearchRate,
   SearchRoomType,
+  SubmitBookingRequest,
 } from '../api/types';
+import { bookingApi } from '../api/client';
 
 /** Guest-entered search criteria + the selections built up across the flow. */
 export interface SearchCriteria {
@@ -60,6 +75,12 @@ interface BookingFlowState {
   requestIdempotencyKey?: string;
   ensureRequestIdempotencyKey: () => string;
 
+  requestSubmissionStatus: 'idle' | 'pending' | 'success' | 'error';
+  requestSubmissionError?: unknown;
+  submitRequest: (
+    request: SubmitBookingRequest,
+  ) => Promise<BookingRequestAcknowledgement>;
+
   reset: () => void;
 }
 
@@ -76,6 +97,8 @@ interface BookingFlowData {
   setupIntentConsentText?: string;
   requestAcknowledgement?: BookingRequestAcknowledgement;
   requestIdempotencyKey?: string;
+  requestSubmissionStatus: 'idle' | 'pending' | 'success' | 'error';
+  requestSubmissionError?: unknown;
 }
 
 type BookingFlowAction =
@@ -86,6 +109,7 @@ type BookingFlowAction =
 const initialFlow: BookingFlowData = {
   serviceIds: [],
   applicationAnswers: {},
+  requestSubmissionStatus: 'idle',
 };
 
 function bookingFlowReducer(
@@ -108,6 +132,7 @@ function bookingFlowReducer(
         branding: state.branding,
         serviceIds: [],
         applicationAnswers: {},
+        requestSubmissionStatus: 'idle',
       };
   }
 }
@@ -117,6 +142,7 @@ const BookingFlowContext = createContext<BookingFlowState | null>(null);
 export function BookingFlowProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(bookingFlowReducer, initialFlow);
   const requestKey = useRef<string>();
+  const requestSubmission = useRef<Promise<BookingRequestAcknowledgement>>();
 
   const value = useMemo<BookingFlowState>(
     () => ({
@@ -148,8 +174,50 @@ export function BookingFlowProvider({ children }: { children: React.ReactNode })
         });
         return id;
       },
+      submitRequest: (request) => {
+        if (requestSubmission.current) return requestSubmission.current;
+
+        dispatch({
+          type: 'patch',
+          value: {
+            requestAcknowledgement: undefined,
+            requestSubmissionStatus: 'pending',
+            requestSubmissionError: undefined,
+          },
+        });
+        const pendingRequest = bookingApi
+          .submitRequest(request)
+          .then((requestAcknowledgement) => {
+            dispatch({
+              type: 'patch',
+              value: {
+                requestAcknowledgement,
+                requestSubmissionStatus: 'success',
+              },
+            });
+            return requestAcknowledgement;
+          })
+          .catch((requestSubmissionError: unknown) => {
+            dispatch({
+              type: 'patch',
+              value: {
+                requestSubmissionStatus: 'error',
+                requestSubmissionError,
+              },
+            });
+            throw requestSubmissionError;
+          })
+          .finally(() => {
+            if (requestSubmission.current === pendingRequest) {
+              requestSubmission.current = undefined;
+            }
+          });
+        requestSubmission.current = pendingRequest;
+        return pendingRequest;
+      },
       reset: () => {
         requestKey.current = undefined;
+        requestSubmission.current = undefined;
         dispatch({ type: 'reset' });
       },
     }),
@@ -159,6 +227,7 @@ export function BookingFlowProvider({ children }: { children: React.ReactNode })
   return (
     <BookingFlowContext.Provider value={value}>
       {children}
+      <RequestSubmissionEffects />
     </BookingFlowContext.Provider>
   );
 }
@@ -167,4 +236,54 @@ export function useBookingFlow(): BookingFlowState {
   const ctx = useContext(BookingFlowContext);
   if (!ctx) throw new Error('useBookingFlow must be used within BookingFlowProvider');
   return ctx;
+}
+
+function RequestDataRouterBlocker({ isPending }: { isPending: boolean }) {
+  const blocker = useBlocker(isPending);
+
+  useEffect(() => {
+    if (!isPending && blocker.state === 'blocked') blocker.reset();
+  }, [blocker, isPending]);
+
+  return null;
+}
+
+function RequestSubmissionEffects() {
+  const {
+    requestAcknowledgement,
+    requestSubmissionStatus,
+  } = useBookingFlow();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const dataRouterContext = useContext(UNSAFE_DataRouterContext);
+  const isPending = requestSubmissionStatus === 'pending';
+
+  useEffect(() => {
+    if (!isPending) return;
+    const preventUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', preventUnload);
+    return () => window.removeEventListener('beforeunload', preventUnload);
+  }, [isPending]);
+
+  useEffect(() => {
+    if (
+      requestSubmissionStatus === 'success' &&
+      requestAcknowledgement &&
+      pathname !== '/request/received'
+    ) {
+      navigate('/request/received', { replace: true });
+    }
+  }, [
+    navigate,
+    pathname,
+    requestAcknowledgement,
+    requestSubmissionStatus,
+  ]);
+
+  return dataRouterContext ? (
+    <RequestDataRouterBlocker isPending={isPending} />
+  ) : null;
 }

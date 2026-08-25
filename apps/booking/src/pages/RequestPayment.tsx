@@ -1,18 +1,115 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
-import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { bookingApi, errorMessage } from '../api/client';
+import type {
+  RequestPaymentMethodSetupRequest,
+  RequestPaymentMethodSetupResponse,
+} from '../api/types';
 import { Button } from '../components/Button';
 import { RequestFlowFrame } from '../components/RequestStayDocket';
-import {
-  REQUEST_CARD_CONSENT_VERSION,
-  StripeSetupForm,
-} from '../components/StripeSetupForm';
+import { StripeSetupForm } from '../components/StripeSetupForm';
 import { useBookingFlow } from '../context/BookingFlowContext';
 import { useConfig } from '../context/ConfigContext';
+import { REQUEST_CARD_CONSENT_VERSION } from '../lib/requestCardConsent';
 import { requestPayload } from '../lib/requestPayload';
+
+function effectiveStripeAppearance(config: {
+  primaryColor?: string | null;
+}) {
+  const widget = document.querySelector<HTMLElement>('.haip-booking');
+  const source = widget ?? document.documentElement;
+  const computed = getComputedStyle(source);
+  const token = (name: string, fallback: string) =>
+    source.style.getPropertyValue(name).trim() ||
+    computed.getPropertyValue(name).trim() ||
+    fallback;
+
+  return {
+    variables: {
+      colorPrimary:
+        source.style.getPropertyValue('--haip-primary').trim() ||
+        config.primaryColor?.trim() ||
+        computed.getPropertyValue('--haip-primary').trim() ||
+        '#0D9488',
+      colorText: token('--haip-text', '#183153'),
+      colorBackground: token('--haip-surface', '#FFFFFF'),
+      colorDanger: '#B42318',
+      borderRadius: token('--haip-radius', '0.375rem'),
+    },
+  };
+}
+
+function RequestPaymentHeading({ optional }: { optional: boolean }) {
+  return (
+    <div className="mt-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#667085]">
+        Step 3 of 3 · Payment details
+      </p>
+      <h1 className="mt-1 text-2xl font-semibold text-[#183153]">
+        Secure your request
+      </h1>
+      <p className="mt-2 text-sm leading-6 text-[#667085]">
+        {optional
+          ? 'If you add a card, it will be securely saved by Stripe. '
+          : 'Your card will be securely saved by Stripe. '}
+        <strong className="text-[#183153]">You will not be charged now.</strong>{' '}
+        The hotel reviews every request before confirming.
+      </p>
+    </div>
+  );
+}
+
+interface SetupRequestState {
+  status: 'idle' | 'pending' | 'success' | 'error';
+  data?: RequestPaymentMethodSetupResponse;
+  error?: unknown;
+}
+
+function useRequestPaymentSetup() {
+  const [state, setState] = useState<SetupRequestState>({ status: 'idle' });
+  const generation = useRef(0);
+
+  useEffect(
+    () => () => {
+      generation.current += 1;
+    },
+    [],
+  );
+
+  const mutate = useCallback((request: RequestPaymentMethodSetupRequest) => {
+    const requestGeneration = ++generation.current;
+    setState({ status: 'pending' });
+    void bookingApi.createRequestPaymentMethodSetup(request).then(
+      (data) => {
+        if (generation.current === requestGeneration) {
+          setState({ status: 'success', data });
+        }
+      },
+      (error: unknown) => {
+        if (generation.current === requestGeneration) {
+          setState({ status: 'error', error });
+        }
+      },
+    );
+  }, []);
+
+  const reset = useCallback(() => {
+    generation.current += 1;
+    setState({ status: 'idle' });
+  }, []);
+
+  return {
+    data: state.data,
+    error: state.error,
+    isError: state.status === 'error',
+    isPending: state.status === 'pending',
+    isSuccess: state.status === 'success',
+    mutate,
+    reset,
+  };
+}
 
 export function RequestPayment() {
   const navigate = useNavigate();
@@ -59,12 +156,7 @@ export function RequestPayment() {
     if (config?.paymentMethodCollection === 'required') setCollectCard(true);
   }, [config?.paymentMethodCollection]);
 
-  const setupMutation = useMutation({
-    mutationFn: bookingApi.createRequestPaymentMethodSetup,
-  });
-  const submitMutation = useMutation({
-    mutationFn: bookingApi.submitRequest,
-  });
+  const setupMutation = useRequestPaymentSetup();
 
   const idempotencyKey = flow.requestIdempotencyKey;
   useEffect(() => {
@@ -117,8 +209,9 @@ export function RequestPayment() {
     card?: { setupIntentId: string; consentText: string },
   ) => {
     const stableKey = flow.requestIdempotencyKey ?? flow.ensureRequestIdempotencyKey();
-    submitMutation.mutate(
-      requestPayload(
+    void flow
+      .submitRequest(
+        requestPayload(
         {
           idempotencyKey: stableKey,
           criteria: flow.criteria!,
@@ -134,42 +227,46 @@ export function RequestPayment() {
               consentVersion: REQUEST_CARD_CONSENT_VERSION,
             }
           : undefined,
-      ),
-      {
-        onSuccess: (acknowledgement) => {
-          flow.setRequestAcknowledgement(acknowledgement);
-          navigate('/request/received');
-        },
-      },
-    );
+        ),
+      )
+      .catch(() => undefined);
   };
 
   const propertyName = config.displayName?.trim() || 'the hotel';
   const setup = setupMutation.data;
   const pageError = setupMutation.isError
     ? errorMessage(setupMutation.error)
-    : submitMutation.isError
-      ? errorMessage(submitMutation.error)
+    : flow.requestSubmissionStatus === 'error'
+      ? errorMessage(flow.requestSubmissionError)
       : undefined;
+  const isSubmitting = flow.requestSubmissionStatus === 'pending';
+  const skipCard = () => {
+    setupMutation.reset();
+    setCollectCard(false);
+    submitRequest();
+  };
+  const retrySetup = () => {
+    if (!idempotencyKey || !flow.guest?.email) return;
+    setupMutation.reset();
+    requestedSetupKey.current = idempotencyKey;
+    setupMutation.mutate({
+      guestEmail: flow.guest.email,
+      idempotencyKey,
+    });
+  };
 
   return (
     <RequestFlowFrame active={3}>
-      <Button variant="ghost" onClick={() => navigate('/request/application')}>
+      <Button
+        variant="ghost"
+        onClick={() => navigate('/request/application')}
+        disabled={isSubmitting}
+      >
         ← Back to your details
       </Button>
-      <div className="mt-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#667085]">
-          Step 3 of 3 · Payment details
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold text-[#183153]">
-          Secure your request
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-[#667085]">
-          Your card will be securely saved by Stripe.{' '}
-          <strong className="text-[#183153]">You will not be charged now.</strong>{' '}
-          The hotel reviews every request before confirming.
-        </p>
-      </div>
+      <RequestPaymentHeading
+        optional={config.paymentMethodCollection === 'optional'}
+      />
 
       <div className="mt-5 rounded-brand border border-[#D0D5DD] bg-white p-5 sm:p-6">
         {config.paymentMethodCollection === 'optional' && !collectCard ? (
@@ -191,16 +288,16 @@ export function RequestPayment() {
                 variant="secondary"
                 className="flex-1"
                 onClick={() => setCollectCard(true)}
-                disabled={submitMutation.isPending}
+                disabled={isSubmitting}
               >
                 Add a card
               </Button>
               <Button
                 className="flex-1"
-                onClick={() => submitRequest()}
-                disabled={submitMutation.isPending}
+                onClick={skipCard}
+                disabled={isSubmitting}
               >
-                {submitMutation.isPending
+                {isSubmitting
                   ? 'Submitting request…'
                   : 'Continue without a card'}
               </Button>
@@ -227,9 +324,9 @@ export function RequestPayment() {
                   consentText: flow.setupIntentConsentText!,
                 })
               }
-              disabled={submitMutation.isPending}
+              disabled={isSubmitting}
             >
-              {submitMutation.isPending
+              {isSubmitting
                 ? 'Submitting request…'
                 : 'Submit booking request'}
             </Button>
@@ -237,27 +334,48 @@ export function RequestPayment() {
         ) : setupMutation.isPending || !idempotencyKey ? (
           <p className="text-sm text-[#667085]">Preparing secure card entry…</p>
         ) : setupMutation.isError ? (
-          <p role="alert" className="rounded-brand border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {errorMessage(setupMutation.error)}
-          </p>
+          <div>
+            <p role="alert" className="rounded-brand border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {errorMessage(setupMutation.error)}
+            </p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={retrySetup}
+                disabled={isSubmitting}
+              >
+                Retry secure card entry
+              </Button>
+              {config.paymentMethodCollection === 'optional' && (
+                <Button
+                  className="flex-1"
+                  onClick={skipCard}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting
+                    ? 'Submitting request…'
+                    : 'Continue without a card'}
+                </Button>
+              )}
+            </div>
+          </div>
         ) : setup && stripePromise ? (
           <Elements
             stripe={stripePromise}
             options={{
               clientSecret: setup.clientSecret,
-              appearance: {
-                variables: {
-                  colorPrimary: config.primaryColor?.trim() || '#0D9488',
-                  colorText: '#183153',
-                  colorDanger: '#B42318',
-                  borderRadius: '6px',
-                },
-              },
+              appearance: effectiveStripeAppearance(config),
             }}
           >
             <StripeSetupForm
               propertyName={propertyName}
-              submitting={submitMutation.isPending}
+              submitting={isSubmitting}
+              onSkip={
+                config.paymentMethodCollection === 'optional'
+                  ? skipCard
+                  : undefined
+              }
               onConfirmed={(setupIntentId, consentText) => {
                 flow.setSetupIntentId(setupIntentId);
                 flow.setSetupIntentConsentText(consentText);

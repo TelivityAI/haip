@@ -1,12 +1,13 @@
 import { useBookingFlow } from '../context/BookingFlowContext';
 import { money } from '../lib/format';
 
+const REQUEST_STEPS = ['Stay', 'Your details', 'Payment details'];
+
 export function RequestSteps({ active }: { active: 2 | 3 }) {
-  const steps = ['Stay', 'Your details', 'Payment details'];
   return (
     <nav aria-label="Booking request progress" className="mb-6">
       <ol className="grid grid-cols-3 overflow-hidden rounded-brand border border-[#D0D5DD] bg-white text-center text-xs sm:text-sm">
-        {steps.map((step, index) => {
+        {REQUEST_STEPS.map((step, index) => {
           const number = index + 1;
           const current = number === active;
           const complete = number < active;
