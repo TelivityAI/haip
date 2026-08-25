@@ -88,7 +88,7 @@ describe('booking request schema', () => {
 
 - [ ] **Step 2: Run the schema test and verify it fails**
 
-Run: `pnpm --filter @telivityhaip/database test -- src/booking-request-schema.spec.ts`  
+Run: `pnpm --filter @telivityhaip/database test -- src/booking-request-schema.spec.ts`
 Expected: FAIL because the request tables and columns are not exported.
 
 - [ ] **Step 3: Define shared configuration and form types**
@@ -184,8 +184,8 @@ The migration must create the enums/tables/indexes/FKs, add the three booking-en
 
 - [ ] **Step 6: Apply the migration to the test database and run the schema test**
 
-Run: `DATABASE_URL=postgresql://haip:haip@localhost:5432/haip_test pnpm db:migrate`  
-Run: `pnpm --filter @telivityhaip/database test -- src/booking-request-schema.spec.ts`  
+Run: `DATABASE_URL=postgresql://haip:haip@localhost:5432/haip_test pnpm db:migrate`
+Run: `pnpm --filter @telivityhaip/database test -- src/booking-request-schema.spec.ts`
 Expected: migration succeeds and the test passes.
 
 - [ ] **Step 7: Commit**
@@ -232,7 +232,7 @@ it('requires a reason for a custom accepted price', () => {
 
 - [ ] **Step 2: Run tests and verify they fail**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-state.spec.ts src/modules/booking-request/booking-request-money.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-state.spec.ts src/modules/booking-request/booking-request-money.spec.ts`
 Expected: FAIL because the pure functions do not exist.
 
 - [ ] **Step 3: Implement explicit state and money functions**
@@ -258,7 +258,7 @@ Cover percentage rounding to currency precision, allocations that exceed movemen
 
 - [ ] **Step 5: Run focused tests**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-state.spec.ts src/modules/booking-request/booking-request-money.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-state.spec.ts src/modules/booking-request/booking-request-money.spec.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -303,7 +303,7 @@ it('rejects a missing required answer', () => {
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-engine/booking-form-questions.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-engine/booking-form-questions.spec.ts`
 Expected: FAIL because validation is missing.
 
 - [ ] **Step 3: Add nested DTO validation and pure value validation**
@@ -316,7 +316,7 @@ Admin config returns all definitions. Public config returns only active question
 
 - [ ] **Step 5: Run tests**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-engine/booking-form-questions.spec.ts src/modules/booking-engine/booking-engine.service.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-engine/booking-form-questions.spec.ts src/modules/booking-engine/booking-engine.service.spec.ts`
 Expected: PASS, including unchanged instant-mode expectations.
 
 - [ ] **Step 6: Commit**
@@ -373,7 +373,7 @@ Test SetupIntent creation with `usage: 'off_session'`, resolution only when stat
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/payment/stripe-saved-payment-method.gateway.spec.ts src/modules/payment/mock-saved-payment-method.gateway.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/payment/stripe-saved-payment-method.gateway.spec.ts src/modules/payment/mock-saved-payment-method.gateway.spec.ts`
 Expected: FAIL because adapters are missing.
 
 - [ ] **Step 3: Implement Stripe and mock adapters**
@@ -386,8 +386,8 @@ In mock mode inject `MockSavedPaymentMethodGateway`; in Stripe mode inject `Stri
 
 - [ ] **Step 5: Run focused tests and typecheck**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/payment/stripe-saved-payment-method.gateway.spec.ts src/modules/payment/mock-saved-payment-method.gateway.spec.ts`  
-Run: `pnpm --filter @telivityhaip/api typecheck`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/payment/stripe-saved-payment-method.gateway.spec.ts src/modules/payment/mock-saved-payment-method.gateway.spec.ts`
+Run: `pnpm --filter @telivityhaip/api typecheck`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -431,7 +431,7 @@ Cover request submission rejection in instant mode, card setup rejection when re
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-submission.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-submission.spec.ts`
 Expected: FAIL because the module and service do not exist.
 
 - [ ] **Step 3: Implement public DTOs and controller**
@@ -461,7 +461,7 @@ Load public config, require request mode, validate answers, call `RatePlanServic
 
 - [ ] **Step 5: Run tests and confirm no instant regression**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-submission.spec.ts src/modules/booking-engine/booking-engine.service.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-submission.spec.ts src/modules/booking-engine/booking-engine.service.spec.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -512,7 +512,7 @@ Test `reservations.read` on list/detail; `reservations.write` on accept/deny; re
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-decision.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-decision.spec.ts`
 Expected: FAIL because staff behavior is missing.
 
 - [ ] **Step 3: Add transaction-aware canonical creation**
@@ -529,7 +529,7 @@ Lock the request, call `assertDenialMoneyResolved`, record reason/actor, and tra
 
 - [ ] **Step 6: Run focused and reservation regression tests**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-decision.spec.ts src/modules/reservation/reservation-race.spec.ts src/modules/reservation/reservation-assert-sellable.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-decision.spec.ts src/modules/reservation/reservation-race.spec.ts src/modules/reservation/reservation-assert-sellable.spec.ts`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -563,7 +563,7 @@ Cover fixed/percentage installments, several partial movements, manual/date/arri
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-payment.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-payment.spec.ts`
 Expected: FAIL because the payment service is missing.
 
 - [ ] **Step 3: Implement installment persistence and allocation**
@@ -580,7 +580,7 @@ Record external payments as captured ledger rows with processed date/reference. 
 
 - [ ] **Step 6: Run payment regression tests**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-payment.spec.ts src/modules/payment/payment.service.spec.ts src/modules/payment/payment-ledger.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-payment.spec.ts src/modules/payment/payment.service.spec.ts src/modules/payment/payment-ledger.spec.ts`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -615,7 +615,7 @@ Test receipt, accepted, denied, payment, refund, and failure templates; persiste
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-mailer.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-mailer.spec.ts`
 Expected: FAIL because persistent delivery is missing.
 
 - [ ] **Step 3: Implement persistent delivery**
@@ -643,7 +643,7 @@ Submission, accept, deny, charge, external payment, refund, and failure queue/de
 
 - [ ] **Step 5: Run tests**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-mailer.spec.ts src/modules/booking-request/booking-request-decision.spec.ts src/modules/booking-request/booking-request-payment.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-mailer.spec.ts src/modules/booking-request/booking-request-decision.spec.ts src/modules/booking-request/booking-request-payment.spec.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -684,7 +684,7 @@ Test instant mode unchanged; request application rendering all six question type
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `pnpm --filter @telivityhaip/booking test -- src/pages/RequestApplication.test.tsx src/pages/RequestPayment.test.tsx`  
+Run: `pnpm --filter @telivityhaip/booking test -- src/pages/RequestApplication.test.tsx src/pages/RequestPayment.test.tsx`
 Expected: FAIL because request pages are missing.
 
 - [ ] **Step 3: Extend typed client and flow state**
@@ -701,8 +701,8 @@ Render Payment Element with the server client secret and call `stripe.confirmSet
 
 - [ ] **Step 6: Run widget suite**
 
-Run: `pnpm --filter @telivityhaip/booking test`  
-Run: `pnpm --filter @telivityhaip/booking typecheck`  
+Run: `pnpm --filter @telivityhaip/booking test`
+Run: `pnpm --filter @telivityhaip/booking typecheck`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -739,7 +739,7 @@ Test defaults, mode/card-policy selectors, required-card warning without a key, 
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `pnpm --filter @telivityhaip/dashboard test -- src/components/admin/BookingQuestionBuilder.test.tsx`  
+Run: `pnpm --filter @telivityhaip/dashboard test -- src/components/admin/BookingQuestionBuilder.test.tsx`
 Expected: FAIL because the builder is missing.
 
 - [ ] **Step 3: Implement the question builder**
@@ -752,8 +752,8 @@ Add request configuration near the existing enabled/auto-confirm controls and tr
 
 - [ ] **Step 5: Run dashboard tests and typecheck**
 
-Run: `pnpm --filter @telivityhaip/dashboard test -- src/components/admin/BookingQuestionBuilder.test.tsx`  
-Run: `pnpm --filter @telivityhaip/dashboard typecheck`  
+Run: `pnpm --filter @telivityhaip/dashboard test -- src/components/admin/BookingQuestionBuilder.test.tsx`
+Run: `pnpm --filter @telivityhaip/dashboard typecheck`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -793,7 +793,7 @@ Test permission-gated navigation, property-scoped queries, queue filters, card/s
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `pnpm --filter @telivityhaip/dashboard test -- src/pages/BookingRequests.test.tsx src/components/layout/Sidebar.test.tsx`  
+Run: `pnpm --filter @telivityhaip/dashboard test -- src/pages/BookingRequests.test.tsx src/components/layout/Sidebar.test.tsx`
 Expected: FAIL because routes and pages are missing.
 
 - [ ] **Step 3: Implement queue and routing**
@@ -810,8 +810,8 @@ Map `booking_request.*`, `payment.*`, and linked `reservation.*` events to reque
 
 - [ ] **Step 6: Run dashboard suite and typecheck**
 
-Run: `pnpm --filter @telivityhaip/dashboard test`  
-Run: `pnpm --filter @telivityhaip/dashboard typecheck`  
+Run: `pnpm --filter @telivityhaip/dashboard test`
+Run: `pnpm --filter @telivityhaip/dashboard typecheck`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -847,7 +847,7 @@ Cover accepted-only behavior, property scope, complete-window availability, exte
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-amendment.spec.ts`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-amendment.spec.ts`
 Expected: FAIL because amendment orchestration is missing.
 
 - [ ] **Step 3: Extract a reusable reservation amendment result**
@@ -874,8 +874,8 @@ Show old/new dates, submitted accepted price, current quote, custom price and re
 
 - [ ] **Step 6: Run API and dashboard tests**
 
-Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-amendment.spec.ts src/modules/reservation/reservation-ops.spec.ts`  
-Run: `pnpm --filter @telivityhaip/dashboard test -- src/components/booking-requests/ModifyStayModal.test.tsx`  
+Run: `pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request-amendment.spec.ts src/modules/reservation/reservation-ops.spec.ts`
+Run: `pnpm --filter @telivityhaip/dashboard test -- src/components/booking-requests/ModifyStayModal.test.tsx`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -906,7 +906,7 @@ The test configures request mode/questions, submits with a saved card, verifies 
 
 - [ ] **Step 2: Run the end-to-end test and fix only integration defects**
 
-Run: `DATABASE_URL=postgresql://haip:haip@localhost:5432/haip_test REDIS_URL=redis://localhost:6379 CI=true pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request.e2e-spec.ts`  
+Run: `DATABASE_URL=postgresql://haip:haip@localhost:5432/haip_test REDIS_URL=redis://localhost:6379 CI=true pnpm --filter @telivityhaip/api test -- src/modules/booking-request/booking-request.e2e-spec.ts`
 Expected: PASS.
 
 - [ ] **Step 3: Add widget flow integration coverage**
@@ -915,10 +915,10 @@ Exercise request and instant configurations with mocked API/Stripe boundaries. A
 
 - [ ] **Step 4: Run all quality gates**
 
-Run: `pnpm build`  
-Run: `pnpm lint`  
-Run: `pnpm typecheck`  
-Run: `DATABASE_URL=postgresql://haip:haip@localhost:5432/haip_test REDIS_URL=redis://localhost:6379 CI=true pnpm test`  
+Run: `pnpm build`
+Run: `pnpm lint`
+Run: `pnpm typecheck`
+Run: `DATABASE_URL=postgresql://haip:haip@localhost:5432/haip_test REDIS_URL=redis://localhost:6379 CI=true pnpm test`
 Expected: build/typecheck/tests succeed; lint has zero errors.
 
 - [ ] **Step 5: Run React diagnostics**
@@ -927,7 +927,7 @@ Invoke the `react-doctor` skill against both `apps/dashboard` and `apps/booking`
 
 - [ ] **Step 6: Sync published test counts**
 
-Run: `pnpm readme:sync-tests`  
+Run: `pnpm readme:sync-tests`
 Review only the generated README badge/count and `docs/test-stats.json` changes.
 
 - [ ] **Step 7: Verify rollout guard manually**

@@ -1,7 +1,7 @@
 # Request-first direct bookings — design
 
-**Status:** Approved in design review  
-**Issue:** https://github.com/TelivityAI/haip/issues/332  
+**Status:** Approved in design review
+**Issue:** https://github.com/TelivityAI/haip/issues/332
 **Date:** 2026-08-24
 
 ## Summary
