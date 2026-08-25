@@ -25,7 +25,15 @@ const api = vi.hoisted(() => ({
   cancelBooking: vi.fn(),
 }));
 
-const stripe = vi.hoisted(() => ({ loadStripe: vi.fn() }));
+const stripe = vi.hoisted(() => ({
+  loadStripe: vi.fn(() => Promise.resolve({})),
+  createPaymentMethod: vi.fn(async () => ({
+    paymentMethod: {
+      id: 'pm_instant_paid',
+      card: { last4: '6789', brand: 'visa' },
+    },
+  })),
+}));
 
 vi.mock('../api/client', () => ({
   bookingApi: api,
@@ -35,6 +43,13 @@ vi.mock('../api/client', () => ({
 
 vi.mock('@stripe/stripe-js', () => ({
   loadStripe: stripe.loadStripe,
+}));
+
+vi.mock('@stripe/react-stripe-js', () => ({
+  Elements: ({ children }: { children: React.ReactNode }) => children,
+  CardElement: () => <div data-testid="stripe-card-element" />,
+  useStripe: () => ({ createPaymentMethod: stripe.createPaymentMethod }),
+  useElements: () => ({ getElement: () => ({}) }),
 }));
 
 const ROOM_TYPE_ID = '11111111-1111-4111-8111-111111111111';
@@ -213,7 +228,7 @@ describe('Booking widget request/instant rollout', () => {
     expect(consoleError.mock.calls.flat().join(' ')).not.toContain('Maximum update depth');
   });
 
-  it('preserves the instant booking path when the property remains in instant mode', async () => {
+  it('keeps an instant deposit payable when request-card collection is disabled by backfill', async () => {
     renderWidget('instant');
     await selectQuotedStay();
 
@@ -224,7 +239,16 @@ describe('Booking widget request/instant rollout', () => {
     await userEvent.type(screen.getByLabelText(/^Email/), 'grace@example.com');
     await userEvent.click(screen.getByRole('button', { name: 'Continue to payment' }));
     await screen.findByRole('heading', { name: 'Payment' });
-    await userEvent.click(screen.getByRole('button', { name: 'Confirm booking' }));
+    expect(screen.getByText(/Deposit due now:/i)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Confirm booking' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pay & confirm booking' })).toBeVisible();
+    expect(stripe.loadStripe).toHaveBeenCalledWith(
+      'pk_test_present_but_collection_disabled',
+    );
+    expect(api.book).not.toHaveBeenCalled();
+    expect(screen.queryByText('Booking confirmed')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pay & confirm booking' }));
 
     expect(await screen.findByText('Booking confirmed')).toBeVisible();
     expect(screen.getByText('HAIP-INSTANT-1')).toBeVisible();
@@ -236,10 +260,13 @@ describe('Booking widget request/instant rollout', () => {
       guestFirstName: 'Grace',
       guestLastName: 'Hopper',
       guestEmail: 'grace@example.com',
+      paymentToken: 'pm_instant_paid',
+      cardLastFour: '6789',
+      cardBrand: 'visa',
     });
     expect(api.submitRequest).not.toHaveBeenCalled();
     expect(api.createRequestPaymentMethodSetup).not.toHaveBeenCalled();
-    expect(stripe.loadStripe).not.toHaveBeenCalled();
+    expect(stripe.createPaymentMethod).toHaveBeenCalledOnce();
     expect(consoleError.mock.calls.flat().join(' ')).not.toContain('Maximum update depth');
   });
 });

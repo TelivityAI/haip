@@ -30,11 +30,47 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AllExceptionsFilter } from '../../common/filters/all-exceptions.filter';
 import { DRIZZLE } from '../../database/database.module';
 import { EmailService } from '../agent/guest-comms/email.service';
+import {
+  SAVED_PAYMENT_METHOD_GATEWAY,
+  type SavedPaymentMethodGateway,
+} from '../payment/interfaces/saved-payment-method-gateway.interface';
 import { WebhookDeliveryService } from '../webhook/webhook-delivery.service';
 import { WebhookService, type WebhookPayload } from '../webhook/webhook.service';
 
 const databaseUrl = process.env['DATABASE_URL'];
 const describeDatabase = databaseUrl ? describe : describe.skip;
+const PRIVATE_ANSWER = 'E2E_PRIVATE_ANSWER_SENTINEL';
+const PRIVATE_CONSENT = 'E2E_PRIVATE_CONSENT_SENTINEL';
+const PRIVATE_SETUP_INTENT = 'seti_E2E_PRIVATE_TOKEN';
+const PRIVATE_PAYMENT_METHOD = 'pm_E2E_PRIVATE_TOKEN';
+const PRIVATE_CARD_BRAND = 'e2e_card_sentinel';
+const PRIVATE_CARD_LAST_FOUR = '6789';
+
+const savedPaymentMethodGateway: SavedPaymentMethodGateway = {
+  async createSetup() {
+    return {
+      setupIntentId: PRIVATE_SETUP_INTENT,
+      clientSecret: 'seti_E2E_PRIVATE_TOKEN_secret_E2E_PRIVATE_CLIENT_TOKEN',
+      customerId: 'cus_E2E_PRIVATE_TOKEN',
+    };
+  },
+  async resolveSetup() {
+    return {
+      setupIntentId: PRIVATE_SETUP_INTENT,
+      customerId: 'cus_E2E_PRIVATE_TOKEN',
+      paymentMethodId: PRIVATE_PAYMENT_METHOD,
+      cardLastFour: PRIVATE_CARD_LAST_FOUR,
+      cardBrand: PRIVATE_CARD_BRAND,
+    };
+  },
+  async charge(input) {
+    return {
+      success: true,
+      transactionId: `pi_E2E_${input.paymentId}`,
+      requiresAction: false,
+    };
+  },
+};
 
 function dateFromNow(days: number): string {
   const date = new Date();
@@ -155,6 +191,8 @@ describeDatabase('Booking Request complete vertical slice', () => {
           };
         }),
       })
+      .overrideProvider(SAVED_PAYMENT_METHOD_GATEWAY)
+      .useValue(savedPaymentMethodGateway)
       .overrideProvider(WebhookDeliveryService)
       .useFactory({
         factory: (database: unknown, eventEmitter: EventEmitter2) =>
@@ -226,7 +264,7 @@ describeDatabase('Booking Request complete vertical slice', () => {
           id: questionId,
           label: 'Purpose of stay',
           type: 'single_select',
-          options: ['Leisure', 'Business'],
+          options: [PRIVATE_ANSWER, 'Business'],
           order: 0,
           isActive: true,
           isRequired: true,
@@ -244,8 +282,8 @@ describeDatabase('Booking Request complete vertical slice', () => {
       .set('x-booking-key', bookingKey)
       .send({ guestEmail: 'vertical@example.com', idempotencyKey: applicationKey })
       .expect(201);
-    expect(setupResponse.body.setupIntentId).toMatch(/^seti_mock_/);
-    expect(setupResponse.body.clientSecret).toContain('_secret_mock');
+    expect(setupResponse.body.setupIntentId).toBe(PRIVATE_SETUP_INTENT);
+    expect(setupResponse.body.clientSecret).toContain('E2E_PRIVATE_CLIENT_TOKEN');
 
     await http
       .post('/api/v1/booking-engine/book')
@@ -278,10 +316,10 @@ describeDatabase('Booking Request complete vertical slice', () => {
         children: 0,
         specialRequests: 'Quiet room',
         serviceIds: [],
-        applicationAnswers: { [questionId]: 'Leisure' },
+        applicationAnswers: { [questionId]: PRIVATE_ANSWER },
         setupIntentId: setupResponse.body.setupIntentId,
         consentAccepted: true,
-        consentText: 'I authorize staff-initiated charges for this stay.',
+        consentText: PRIVATE_CONSENT,
         consentVersion: 'v1',
       })
       .expect(201);
@@ -298,8 +336,8 @@ describeDatabase('Booking Request complete vertical slice', () => {
       submittedTotal: '200.00',
       acceptedReservationId: null,
       operationalReservation: null,
-      card: { brand: 'visa', lastFour: '4242' },
-      applicationAnswers: { [questionId]: 'Leisure' },
+      card: { brand: PRIVATE_CARD_BRAND, lastFour: PRIVATE_CARD_LAST_FOUR },
+      applicationAnswers: { [questionId]: PRIVATE_ANSWER },
     });
     expect(pendingRequest.body).not.toHaveProperty('stripePaymentMethodId');
     expect(await db.select().from(reservations).where(eq(reservations.propertyId, propertyId)))
@@ -345,7 +383,7 @@ describeDatabase('Booking Request complete vertical slice', () => {
       amount: '30.00',
       status: 'captured',
       source: 'saved_card',
-      cardLastFour: '4242',
+      cardLastFour: PRIVATE_CARD_LAST_FOUR,
     });
 
     const allocation = await http
@@ -698,17 +736,23 @@ describeDatabase('Booking Request complete vertical slice', () => {
     const payloads = targetConsequences.map((row) => row.payload).concat(
       deliveredDeliveries.map((row) => row.payload as Record<string, unknown>),
     );
-    const serializedPayloads = JSON.stringify(payloads);
+    const payloadLeaves = collectPayloadLeaves(payloads);
+    expect(payloadLeaves.filter(({ path }) => path.some((segment) =>
+      /answer|card|lastFour|consent|paymentMethod|setupIntent|token/i.test(segment))))
+      .toEqual([]);
+    const payloadStringValues = payloadLeaves
+      .map(({ value }) => value)
+      .filter((value): value is string => typeof value === 'string');
     for (const privateValue of [
-      'Leisure',
-      '4242',
-      setupResponse.body.setupIntentId as string,
-      'I authorize staff-initiated charges for this stay.',
+      PRIVATE_ANSWER,
+      PRIVATE_CONSENT,
+      PRIVATE_SETUP_INTENT,
+      PRIVATE_PAYMENT_METHOD,
+      PRIVATE_CARD_BRAND,
     ]) {
-      expect(serializedPayloads).not.toContain(privateValue);
+      expect(payloadStringValues).not.toContain(privateValue);
     }
-    expect(collectObjectKeys(payloads).some((key) =>
-      /answer|card|consent|paymentMethod|setupIntent|token/i.test(key))).toBe(false);
+    expect(JSON.stringify(payloads)).not.toContain('E2E_PRIVATE_');
 
     const createdConsequence = targetConsequences.find((row) =>
       (row.payload as { event?: string }).event === 'booking_request.created')!;
@@ -828,10 +872,17 @@ describeDatabase('Booking Request complete vertical slice', () => {
   }, 120_000);
 });
 
-function collectObjectKeys(value: unknown): string[] {
-  if (Array.isArray(value)) return value.flatMap(collectObjectKeys);
-  if (!value || typeof value !== 'object') return [];
-  return Object.entries(value).flatMap(([key, nested]) => [key, ...collectObjectKeys(nested)]);
+function collectPayloadLeaves(
+  value: unknown,
+  path: string[] = [],
+): Array<{ path: string[]; value: unknown }> {
+  if (Array.isArray(value)) {
+    return value.flatMap((nested, index) =>
+      collectPayloadLeaves(nested, [...path, String(index)]));
+  }
+  if (!value || typeof value !== 'object') return [{ path, value }];
+  return Object.entries(value).flatMap(([key, nested]) =>
+    collectPayloadLeaves(nested, [...path, key]));
 }
 
 async function cleanupPropertyFixture(
@@ -849,19 +900,38 @@ async function cleanupPropertyFixture(
     WHERE table_schema = 'public' AND column_name = 'property_id'
     ORDER BY table_name
   `;
+  const foreignKeys = await sqlClient<Array<{
+    childTable: string;
+    parentTable: string;
+  }>>`
+    SELECT
+      child.relname AS "childTable",
+      parent.relname AS "parentTable"
+    FROM pg_constraint constraint_row
+    JOIN pg_class child ON child.oid = constraint_row.conrelid
+    JOIN pg_class parent ON parent.oid = constraint_row.confrelid
+    JOIN pg_namespace child_namespace ON child_namespace.oid = child.relnamespace
+    JOIN pg_namespace parent_namespace ON parent_namespace.oid = parent.relnamespace
+    WHERE constraint_row.contype = 'f'
+      AND child_namespace.nspname = 'public'
+      AND parent_namespace.nspname = 'public'
+  `;
+  const deletionOrder = childFirstTableOrder(
+    [...propertyTables.map(({ tableName }) => tableName), 'properties'],
+    foreignKeys,
+  );
   await sqlClient.begin(async (transaction) => {
-    await transaction.unsafe("SET LOCAL session_replication_role = 'replica'");
-    for (const { tableName } of propertyTables) {
+    for (const tableName of deletionOrder) {
       const quotedTable = `"${tableName.replaceAll('"', '""')}"`;
+      const propertyColumn = tableName === 'properties' ? 'id' : 'property_id';
       await transaction.unsafe(
-        `DELETE FROM ${quotedTable} WHERE property_id = $1`,
+        `DELETE FROM ${quotedTable} WHERE ${propertyColumn} = $1`,
         [propertyId],
       );
     }
     for (const guest of guestRows) {
       await transaction`DELETE FROM guests WHERE id = ${guest.id}`;
     }
-    await transaction`DELETE FROM properties WHERE id = ${propertyId}`;
   });
   const leftovers = await sqlClient<{ count: number }[]>`
     SELECT count(*)::int AS count FROM properties WHERE id = ${propertyId}
@@ -869,4 +939,36 @@ async function cleanupPropertyFixture(
   if (leftovers[0]?.count !== 0) {
     throw new Error(`Booking Request E2E fixture ${propertyId} was not removed`);
   }
+}
+
+function childFirstTableOrder(
+  tableNames: string[],
+  foreignKeys: Array<{ childTable: string; parentTable: string }>,
+): string[] {
+  const remaining = new Set(tableNames);
+  const scopedForeignKeys = foreignKeys.filter(({ childTable, parentTable }) =>
+    childTable !== parentTable
+    && remaining.has(childTable)
+    && remaining.has(parentTable));
+  const ordered: string[] = [];
+  while (remaining.size > 0) {
+    const children = [...remaining]
+      .filter((candidate) => !scopedForeignKeys.some(({ childTable, parentTable }) =>
+        parentTable === candidate
+        && remaining.has(childTable)
+        && remaining.has(parentTable)))
+      .sort();
+    if (children.length === 0) {
+      throw new Error(
+        `Cannot clean Booking Request E2E fixture: property table FK cycle (${[
+          ...remaining,
+        ].sort().join(', ')})`,
+      );
+    }
+    for (const child of children) {
+      ordered.push(child);
+      remaining.delete(child);
+    }
+  }
+  return ordered;
 }

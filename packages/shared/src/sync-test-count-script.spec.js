@@ -31,7 +31,7 @@ describe('sync-test-count workspace coverage', () => {
     ]);
   });
 
-  it('counts passed tests and only files with at least one passed assertion', () => {
+  it('counts passed test cases and only files with at least one passed test', () => {
     expect(countPassedReport({
       numPassedTests: 2,
       testResults: [
@@ -43,7 +43,7 @@ describe('sync-test-count workspace coverage', () => {
     })).toEqual({ tests: 2, files: 2 });
   });
 
-  it('publishes the count scope and skipped-test semantics explicitly', () => {
+  it('publishes the test-case count scope and skipped-test semantics explicitly', () => {
     expect(buildStatsDocument(
       { tests: 12, files: 3 },
       '2026-08-25T12:00:00.000Z',
@@ -51,7 +51,7 @@ describe('sync-test-count workspace coverage', () => {
       tests: 12,
       files: 3,
       scope: 'all workspace packages with a test script',
-      semantics: 'passed assertions and files containing at least one passed assertion; skipped assertions and skipped-only files are excluded',
+      semantics: 'passed test cases and files containing at least one passed test; skipped test cases and skipped-only files are excluded',
       updatedAt: '2026-08-25T12:00:00.000Z',
     });
   });

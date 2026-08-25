@@ -642,7 +642,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# Passing-test count: 2154 assertions across 257 files (skipped excluded)
+# Passing-test count: 2154 test cases across 257 files (skipped excluded)
 
 # API tests only
 pnpm --filter @telivityhaip/api test

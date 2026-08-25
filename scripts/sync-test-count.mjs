@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Run the complete workspace test suite and sync passed counts into README.md
- * and docs/test-stats.json. Skipped assertions and skipped-only files do not
+ * and docs/test-stats.json. Skipped test cases and skipped-only files do not
  * inflate the published totals.
  *
  * Usage:
@@ -53,7 +53,7 @@ export function buildStatsDocument(counts, updatedAt = new Date().toISOString())
     ...counts,
     scope: 'all workspace packages with a test script',
     semantics:
-      'passed assertions and files containing at least one passed assertion; skipped assertions and skipped-only files are excluded',
+      'passed test cases and files containing at least one passed test; skipped test cases and skipped-only files are excluded',
     updatedAt,
   };
 }
@@ -145,7 +145,7 @@ function applyCounts(readme, { tests, files }) {
 
   next = next.replace(
     /(?:# All tests|# Passing-test count:)[^\n]*/,
-    `# Passing-test count: ${tests} assertions across ${files} files (skipped excluded)`,
+    `# Passing-test count: ${tests} test cases across ${files} files (skipped excluded)`,
   );
 
   next = next.replace(
