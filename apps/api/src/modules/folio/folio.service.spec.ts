@@ -967,9 +967,56 @@ describe('FolioService', () => {
         page: 1,
         limit: 10,
       });
-      expect(result.data).toEqual([mockCharge]);
+      expect(result.data).toEqual([{
+        ...mockCharge,
+        canMove: true,
+        canReverse: true,
+      }]);
       expect(result.total).toBe(1);
       expect(result.page).toBe(1);
+    });
+
+    it('marks a paginated group child non-operable without needing its base row', async () => {
+      const taxChild = {
+        ...mockCharge,
+        id: 'tax-child-on-page-two',
+        type: 'tax',
+        parentChargeId: 'accepted-base-on-page-one',
+      };
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                offset: vi.fn().mockReturnValue({
+                  orderBy: vi.fn().mockResolvedValue([taxChild]),
+                }),
+              }),
+              then: (resolve: any) => resolve([{ count: 21 }]),
+            }),
+          }),
+        })),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+
+      const result = await module.get(FolioService).getCharges('folio-001', {
+        propertyId: 'prop-001',
+        page: 2,
+        limit: 20,
+      });
+
+      expect(result.data).toEqual([{
+        ...taxChild,
+        canMove: false,
+        canReverse: false,
+      }]);
     });
   });
 

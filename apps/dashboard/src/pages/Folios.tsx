@@ -70,6 +70,8 @@ interface Charge {
   parentChargeId?: string;
   adjustsChargeId?: string;
   sourceKey?: string;
+  canMove?: boolean;
+  canReverse?: boolean;
   createdAt: string;
 }
 
@@ -223,7 +225,7 @@ function SplitFolioPanel({
     || (charge.parentChargeId && acceptedBaseIds.has(charge.parentChargeId)),
   );
   const movableCharges = charges.filter((c) =>
-    !c.isLocked && !c.isReversal && !isAcceptedInternal(c));
+    c.canMove !== false && !c.isLocked && !c.isReversal && !isAcceptedInternal(c));
 
   const createRule = useMutation({
     mutationFn: () =>
@@ -708,6 +710,7 @@ function FolioDetail() {
                   <td className="py-2 text-sm text-right font-medium">{formatMoney(c.amount, folio.currencyCode)}</td>
                   <td className="py-2 text-right">
                     {!c.isReversal
+                      && c.canReverse !== false
                       && !reversedIds.has(c.id)
                       && !c.isLocked
                       && !c.adjustsChargeId

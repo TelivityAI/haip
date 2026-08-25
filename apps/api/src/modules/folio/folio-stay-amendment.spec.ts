@@ -726,7 +726,14 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
       serviceId: 'svc-1', status: 'confirmed', sourceChannel: 'front_desk',
       createdAt: new Date('2026-08-25T10:05:00.000Z'),
     }];
-    const ledger: Array<Record<string, any>> = [];
+    const manualExtra = {
+      id: 'manual-extra', propertyId: PROPERTY, folioId: FOLIO,
+      type: 'parking', description: 'Front desk parking [svc:rs-frontdesk-active]',
+      amount: '27.00', taxAmount: '0.00', currencyCode: 'EUR',
+      serviceDate: new Date('2026-10-02T00:00:00.000Z'), isReversal: false,
+      originalChargeId: null, parentChargeId: null, sourceKey: null, isLocked: true,
+    };
+    const ledger: Array<Record<string, any>> = [manualExtra];
     const { tx, inserted } = makeTx(
       ledger,
       serviceRows,
@@ -742,6 +749,8 @@ describe('FolioService accepted-pricing stay amendment reconciliation', () => {
     });
 
     expect(inserted.filter((row) => row.sourceKey?.includes('reservation-service'))).toEqual([]);
+    expect(ledger).toContain(manualExtra);
+    expect(inserted.some((row) => row.adjustsChargeId === manualExtra.id)).toBe(false);
   });
 
   it('posts a correction on the property-local open date across a UTC boundary without a completed audit', async () => {

@@ -135,7 +135,7 @@ function acceptedOnceScenario() {
 }
 
 describe('AncillaryService accepted operational pricing', () => {
-  it('does not let an active duplicate resurrect a cancelled accepted once row', async () => {
+  it('skips frozen once posting while allowing an active manual duplicate', async () => {
     const reservation = {
       id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', arrivalDate: '2026-10-01',
       acceptedPricingSnapshot: {
@@ -158,59 +158,202 @@ describe('AncillaryService accepted operational pricing', () => {
     const db = transactionalDb({
       select: stagedSelect([
         [reservation], [{ id: 'folio-1' }],
-        [{ rs: cancelled, serviceName: 'Parking' }, { rs: active, serviceName: 'Parking' }],
+        [{ rs: cancelled, serviceName: 'Parking' }, { rs: active, serviceName: 'Parking' }], [],
       ]),
-      update: vi.fn(),
+      update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({
+        returning: vi.fn(async () => [{ ...active, status: 'posted' }]),
+      })) })) })),
     });
     const folio = {
-      postCharge: vi.fn(), postChargeFromSnapshotWithOutcome: vi.fn(),
+      postCharge: vi.fn().mockResolvedValue({ id: 'manual-charge', taxCharges: [] }),
+      postChargeFromSnapshotWithOutcome: vi.fn(),
       emitSnapshotChargeWebhooks: vi.fn(),
     };
     const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
 
     await expect(service.postOnceForReservation('res-1', 'prop-1'))
-      .resolves.toEqual({ posted: [], count: 0 });
+      .resolves.toMatchObject({ count: 1 });
     expect(folio.postChargeFromSnapshotWithOutcome).not.toHaveBeenCalled();
   });
 
-  it('does not let an active duplicate resurrect a cancelled accepted per-night row', async () => {
+  it('posts a manual once extra independently when the accepted duplicate is cancelled', async () => {
     const reservation = {
-      id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', status: 'checked_in',
+      id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', arrivalDate: '2026-10-01',
       acceptedPricingSnapshot: {
-        currencyCode: 'EUR',
-        services: [{
-          serviceId: 'svc-1', postingRule: 'per_night', chargeType: 'parking',
-          lineItems: [{ date: '2026-10-02', amount: '15.00', taxAmount: '2.00' }],
+        currencyCode: 'EUR', services: [{
+          serviceId: 'svc-1', postingRule: 'once', chargeType: 'parking',
+          lineItems: [{ date: '2026-10-01', amount: '15.00', taxAmount: '2.00' }],
         }],
       },
     };
-    const cancelled = {
+    const accepted = {
+      id: 'rs-accepted', serviceId: 'svc-1', status: 'cancelled', postingRule: 'once',
+      chargeType: 'parking', unitPrice: '15.00', quantity: 1, currencyCode: 'EUR',
+      sourceChannel: 'booking_engine', createdAt: new Date('2026-08-24T10:00:00Z'),
+    };
+    const manual = {
+      ...accepted, id: 'rs-manual', status: 'confirmed', sourceChannel: 'front_desk',
+      unitPrice: '27.00', createdAt: new Date('2026-08-25T10:00:00Z'),
+    };
+    const db = transactionalDb({
+      select: stagedSelect([
+        [reservation], [{ id: 'folio-1' }],
+        [{ rs: accepted, serviceName: 'Parking' }, { rs: manual, serviceName: 'Parking' }],
+        [],
+      ]),
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({ returning: vi.fn(async () => [{ ...manual, status: 'posted' }]) })),
+        })),
+      })),
+    });
+    const folio = {
+      postCharge: vi.fn().mockResolvedValue({ id: 'manual-charge', taxCharges: [] }),
+      postChargeFromSnapshotWithOutcome: vi.fn(), emitSnapshotChargeWebhooks: vi.fn(),
+    };
+    const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
+
+    await expect(service.postOnceForReservation('res-1', 'prop-1'))
+      .resolves.toMatchObject({ count: 1 });
+    expect(folio.postCharge).toHaveBeenCalledWith(
+      'folio-1', expect.objectContaining({ amount: '27.00' }), expect.anything(),
+    );
+    expect(folio.postChargeFromSnapshotWithOutcome).not.toHaveBeenCalled();
+  });
+
+  it('posts accepted and manual once rows independently at frozen and live amounts', async () => {
+    const reservation = {
+      id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', arrivalDate: '2026-10-01',
+      acceptedPricingSnapshot: {
+        currencyCode: 'EUR', services: [{
+          serviceId: 'svc-1', postingRule: 'once', chargeType: 'parking',
+          lineItems: [{ date: '2026-10-01', amount: '15.00', taxAmount: '2.00' }],
+        }],
+      },
+    };
+    const accepted = {
+      id: 'rs-accepted', serviceId: 'svc-1', status: 'confirmed', postingRule: 'once',
+      chargeType: 'parking', unitPrice: '99.00', quantity: 1, currencyCode: 'EUR',
+      sourceChannel: 'booking_engine', createdAt: new Date('2026-08-24T10:00:00Z'),
+    };
+    const manual = {
+      ...accepted, id: 'rs-manual', sourceChannel: 'front_desk', unitPrice: '27.00',
+      createdAt: new Date('2026-08-25T10:00:00Z'),
+    };
+    const db = transactionalDb({
+      select: stagedSelect([
+        [reservation], [{ id: 'folio-1' }],
+        [{ rs: accepted, serviceName: 'Parking' }, { rs: manual, serviceName: 'Parking' }],
+        [],
+      ]),
+      update: vi.fn(() => ({ set: vi.fn(() => ({
+        where: vi.fn(() => ({ returning: vi.fn(async () => [{ status: 'posted' }]) })),
+      })) })),
+    });
+    const folio = {
+      postCharge: vi.fn().mockResolvedValue({ id: 'manual-charge', taxCharges: [] }),
+      postChargeFromSnapshotWithOutcome: vi.fn().mockResolvedValue({
+        charge: { id: 'accepted-charge' }, wasCreated: true,
+      }),
+      emitSnapshotChargeWebhooks: vi.fn(),
+    };
+    const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
+
+    await expect(service.postOnceForReservation('res-1', 'prop-1'))
+      .resolves.toMatchObject({ count: 2 });
+    expect(folio.postChargeFromSnapshotWithOutcome).toHaveBeenCalledWith(
+      'folio-1', expect.objectContaining({ amount: '15.00' }), '2.00', undefined,
+      'accepted-pricing:reservation-service:rs-accepted:once:2026-10-01', expect.anything(),
+    );
+    expect(folio.postCharge).toHaveBeenCalledWith(
+      'folio-1', expect.objectContaining({ amount: '27.00' }), expect.anything(),
+    );
+  });
+
+  it('posts a manual per-night extra independently of a cancelled accepted duplicate', async () => {
+    const reservation = {
+      id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', status: 'checked_in',
+      acceptedPricingSnapshot: { currencyCode: 'EUR', services: [{
+        serviceId: 'svc-1', postingRule: 'per_night', chargeType: 'parking',
+        lineItems: [{ date: '2026-10-02', amount: '15.00', taxAmount: '2.00' }],
+      }] },
+    };
+    const accepted = {
       id: 'rs-accepted', propertyId: 'prop-1', reservationId: 'res-1', serviceId: 'svc-1',
       status: 'cancelled', postingRule: 'per_night', chargeType: 'parking',
       unitPrice: '15.00', quantity: 1, currencyCode: 'EUR', sourceChannel: 'booking_engine',
       createdAt: new Date('2026-08-24T10:00:00Z'),
     };
-    const active = {
-      ...cancelled, id: 'rs-frontdesk', status: 'confirmed', sourceChannel: 'front_desk',
-      createdAt: new Date('2026-08-25T10:00:00Z'),
+    const manual = {
+      ...accepted, id: 'rs-manual', status: 'confirmed', sourceChannel: 'front_desk',
+      unitPrice: '27.00', createdAt: new Date('2026-08-25T10:00:00Z'),
     };
     const candidates = [
-      { rs: cancelled, serviceName: 'Parking', reservation },
-      { rs: active, serviceName: 'Parking', reservation },
+      { rs: accepted, serviceName: 'Parking', reservation },
+      { rs: manual, serviceName: 'Parking', reservation },
     ];
     const db = transactionalDb({
-      select: stagedSelect([candidates, candidates]),
+      select: stagedSelect([candidates, candidates, candidates, [{ id: 'folio-1' }], []]),
     });
     const folio = {
-      postCharge: vi.fn(), postChargeFromSnapshotWithOutcome: vi.fn(),
-      emitSnapshotChargeWebhooks: vi.fn(),
+      postCharge: vi.fn().mockResolvedValue({ id: 'manual-charge', taxCharges: [] }),
+      postChargeFromSnapshotWithOutcome: vi.fn(), emitSnapshotChargeWebhooks: vi.fn(),
     };
     const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
 
     const result = await service.postPerNightForProperty('prop-1', '2026-10-02');
 
-    expect(result.count).toBe(0);
+    expect(result.posted).toEqual([
+      { reservationServiceId: 'rs-manual', chargeId: 'manual-charge', amount: '27.00' },
+    ]);
+    expect(folio.postCharge).toHaveBeenCalledOnce();
     expect(folio.postChargeFromSnapshotWithOutcome).not.toHaveBeenCalled();
+  });
+
+  it('posts accepted and manual per-night rows independently', async () => {
+    const reservation = {
+      id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', status: 'checked_in',
+      acceptedPricingSnapshot: { currencyCode: 'EUR', services: [{
+        serviceId: 'svc-1', postingRule: 'per_night', chargeType: 'parking',
+        lineItems: [{ date: '2026-10-02', amount: '15.00', taxAmount: '2.00' }],
+      }] },
+    };
+    const accepted = {
+      id: 'rs-accepted', propertyId: 'prop-1', reservationId: 'res-1', serviceId: 'svc-1',
+      status: 'confirmed', postingRule: 'per_night', chargeType: 'parking',
+      unitPrice: '99.00', quantity: 1, currencyCode: 'EUR', sourceChannel: 'booking_engine',
+      createdAt: new Date('2026-08-24T10:00:00Z'),
+    };
+    const manual = {
+      ...accepted, id: 'rs-manual', sourceChannel: 'front_desk', unitPrice: '27.00',
+      createdAt: new Date('2026-08-25T10:00:00Z'),
+    };
+    const candidates = [
+      { rs: accepted, serviceName: 'Parking', reservation },
+      { rs: manual, serviceName: 'Parking', reservation },
+    ];
+    const db = transactionalDb({
+      select: stagedSelect([
+        candidates, candidates, [{ id: 'folio-1' }],
+        candidates, [{ id: 'folio-1' }], [],
+      ]),
+    });
+    const folio = {
+      postCharge: vi.fn().mockResolvedValue({ id: 'manual-charge', taxCharges: [] }),
+      postChargeFromSnapshotWithOutcome: vi.fn().mockResolvedValue({
+        charge: { id: 'accepted-charge' }, wasCreated: true,
+      }), emitSnapshotChargeWebhooks: vi.fn(),
+    };
+    const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
+
+    const result = await service.postPerNightForProperty('prop-1', '2026-10-02');
+
+    expect(result.posted).toEqual(expect.arrayContaining([
+      { reservationServiceId: 'rs-accepted', chargeId: 'accepted-charge', amount: '15.00' },
+      { reservationServiceId: 'rs-manual', chargeId: 'manual-charge', amount: '27.00' },
+    ]));
+    expect(folio.postChargeFromSnapshotWithOutcome).toHaveBeenCalledOnce();
+    expect(folio.postCharge).toHaveBeenCalledOnce();
   });
 
   it('never resurrects a cancelled accepted once service', async () => {
@@ -513,6 +656,7 @@ describe('AncillaryService accepted operational pricing', () => {
     const rs = {
       id: 'rs-1', serviceId: 'svc-1', unitPrice: '99.00', quantity: 1,
       chargeType: 'parking', currencyCode: 'EUR', postingRule: 'once', status: 'confirmed',
+      sourceChannel: 'booking_engine',
     };
     const db = transactionalDb({
       select: stagedSelect([[reservation], [{ id: 'folio-1' }], [{ rs, serviceName: 'Parking' }]]),

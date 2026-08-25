@@ -219,6 +219,9 @@ describe('booking request amendment ledger migration safety', () => {
       expect(source).toContain('charges_property_id_unique');
       expect(source).toContain('charges_adjusts_charge_property_fkey');
       expect(source).toMatch(
+        /conname\s*=\s*'charges_adjusts_charge_property_fkey'\s+AND\s+conrelid\s*=\s*'charges'::regclass/i,
+      );
+      expect(source).toMatch(
         /FOREIGN KEY \(property_id, adjusts_charge_id\)\s+REFERENCES charges\(property_id, id\)/i,
       );
       expect(source).not.toMatch(

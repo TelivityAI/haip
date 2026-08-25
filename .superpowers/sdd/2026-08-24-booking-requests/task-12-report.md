@@ -81,13 +81,23 @@ The isolated PostgreSQL 16 follow-up database on `127.0.0.1:55432` passed a fres
 
 The final blocking review is resolved with an explicit accepted-pricing group boundary. Canonical bases, their tax/custom children, and signed amendment corrections cannot be moved or transferred individually. Corrections cannot be reversed directly, and an accepted child directs the caller to reverse its canonical base. A base reversal locks the group and creates exact signed reversals for every immutable child, so `100,-20` becomes `-100,+20`; Daily Revenue uses the signed reversal sum and reports zero rather than `-40`. The dashboard applies the same eligibility rules to both reverse and move controls.
 
-Duplicate `reservation_services` are matched deterministically per accepted snapshot component: the Booking Request-created `booking_engine` row wins, followed by creation time and ID for legacy rows. Only that row owns accepted once/per-night/closed-day groups. A cancelled accepted row remains authoritative even when an active front-desk duplicate exists, so the duplicate is neither charged nor allowed to reintroduce the service into an amended total.
+Duplicate `reservation_services` are matched deterministically per accepted snapshot component: the Booking Request-created `booking_engine` row wins, followed by creation time and ID for legacy rows. Only that row owns accepted once/per-night/closed-day groups. A cancelled accepted row remains authoritative for the accepted snapshot and cannot reintroduce the service into an amended total; a separate active front-desk/manual row remains an independent live-priced extra and posts exactly once under its own service-row identity.
 
 The current open business date is now resolved from the property's IANA timezone and the latest completed audit boundary. Tests cover both sides of a UTC date boundary, a delayed audit, and no completed audit. Locked historical rows remain unchanged and corrections retain the affected service date in their descriptions. Removing a negative custom component links the positive correction to that exact immutable custom row.
 
 Correction provenance is tenant-safe at the database layer. Drizzle, migration 0030, and push schema now use `(property_id, adjusts_charge_id) → charges(property_id, id)` backed by `charges_property_id_unique`; a preflight rejects legacy cross-property links before replacing the earlier single-column FK. Fresh/replay migration tests and live PostgreSQL verify both the catalog definition and a real cross-property insertion failure.
 
-The live mutex suite now contains four PostgreSQL tests. In addition to both amendment/posting orders, it exercises the real public `AncillaryService` posting and cancellation seams in both race orders: cancellation-first makes the waiting poster re-read `cancelled` and write nothing, while posting-first commits `posted` and makes cancellation fail without deadlock. The narrow parameterized advisory-lock statement is documented in the hardening plan as the sole approved raw-SQL exception because Drizzle has no transaction-advisory-lock query primitive.
+The live mutex suite now contains five PostgreSQL tests. It exercises the actual `BookingRequestService.amendStay` and `NightAuditService` write seams against real reservation, snapshot, folio, charge, source-key, audit, and outbox rows: a night-audit poster queued behind an amendment re-reads the committed snapshot and writes only the new room amount, and replay writes nothing. It also runs the public `AncillaryService` cancellation/posting race with the real `FolioService`: cancellation-first writes no charge, while posting-first commits the accepted base/tax group and a losing cancellation rolls back without changing `posted`. The narrow parameterized advisory-lock statement remains the documented raw-SQL exception because Drizzle has no transaction-advisory-lock query primitive.
+
+## Final review follow-up
+
+The last review loop closes the remaining public and presentation boundaries:
+
+- generic create-charge HTTP/DTO/service input cannot supply `isReversal`, `originalChargeId`, `parentChargeId`, `adjustsChargeId`, or `sourceKey`; whitelist validation rejects forged HTTP fields and the service rejects forged runtime objects before any insert;
+- `reverseCharge` is the only generic folio operation that writes `is_reversal=true`; repeated or reversal-of-reversal attempts remain rejected, while accepted group reversal retains signed base/child reporting semantics;
+- accepted and manual duplicate extras are row-aware for once and per-night scheduling: accepted ownership uses the frozen snapshot, while manual/front-desk ownership uses live price/category/tax and its own `[svc:<reservationServiceId>]` idempotency identity;
+- `getCharges` presents row-local `canMove`/`canReverse` authority hints, so a paginated tax/custom child stays non-operable even when its base is absent from the current dashboard page; backend write guards remain authoritative;
+- migration and push-schema constraint catalog checks now scope the name lookup to `conrelid = 'charges'::regclass`, preventing an unrelated table's same-named constraint from suppressing the tenant-safe charge FK.
 
 ## TDD and review findings
 
@@ -114,14 +124,14 @@ The final focused set covers schema/migration safety, pricing, transactional orc
 | Focused database schema/migration tests | Pass: 22/22 |
 | Focused Task 12 API tests | Pass: pricing, amendment, reservation, availability, night-audit, folio, and ancillary suites |
 | Focused dashboard tests | Pass: Modify Stay modal plus Booking Requests page |
-| Full monorepo test suite | Pass; shared 10/10, database 22/22, booking 44/44, dashboard 145/145, API 224 files / 1905 tests (12 intentional skips remain) |
-| Final focused review set | Pass: API 134/134, database 18/18, dashboard 35/35 |
-| Live PostgreSQL contract | Pass: final 4/4 mutex/service/FK contract, fresh push, seed, push replay, migration 0030 replay twice, and catalog checks |
+| Full monorepo test suite | Pass; shared 10/10, database 22/22, booking 44/44, dashboard 146/146, API 225 files / 1919 tests (13 intentional skips remain) |
+| Final focused review set | Pass: API 158/158, database 18/18, dashboard 39/39 |
+| Live PostgreSQL contract | Pass: final 5/5 helper/actual-amendment/night-audit/ancillary/FK contract, fresh push, seed, push replay, migration 0030 replay twice, and scoped catalog checks |
 | Repository typecheck | Pass |
 | Repository lint | Pass: 0 errors; the repository's warning baseline remains (primarily explicit `any` and type-only imports) |
 | Production build | Pass; the existing Vite large-chunk advisory remains |
 | Eight-locale JSON/key parity | Pass |
-| React Doctor changed-scope scan | 33 changed files scanned; the chained-iteration finding was fixed and the final scan reports no issues, score 63/100 |
+| React Doctor changed-scope scan | Pass: 54 Task 12 files against `main` (63/100) and 2 final-loop dashboard files against `b7dc5a5` (71/100), with no issues reported |
 | `git diff --check` | Pass |
 
 ## Design and scope

@@ -182,6 +182,31 @@ describe('Folios — split folios', () => {
       .not.toBeInTheDocument();
     expect(within(chargeSelect).getByRole('option', { name: /Minibar/ })).toBeInTheDocument();
   });
+
+  it('honours server operability when a group child is paginated without its base', async () => {
+    const orphanedPageChild = {
+      ...CHARGE,
+      id: 'accepted-tax-page-two',
+      description: 'Accepted tax from an earlier page',
+      type: 'tax',
+      parentChargeId: 'accepted-base-page-one',
+      canMove: false,
+      canReverse: false,
+    };
+    mockGet({
+      '/v1/folios/folio-1/charges': [orphanedPageChild, CHARGE],
+    });
+    renderDetail();
+
+    const childRow = (await screen.findByText(orphanedPageChild.description)).closest('tr')!;
+    expect(within(childRow).queryByText('Reverse')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Move Transactions'));
+    const chargeSelect = screen.getByLabelText('Charge');
+    expect(within(chargeSelect).queryByRole('option', { name: /Accepted tax from an earlier page/ }))
+      .not.toBeInTheDocument();
+    expect(within(chargeSelect).getByRole('option', { name: /Minibar/ })).toBeInTheDocument();
+  });
 });
 
 describe('Folios — payment corrections', () => {

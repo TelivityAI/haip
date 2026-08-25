@@ -7,7 +7,6 @@ import {
   IsBoolean,
   IsDateString,
   MaxLength,
-  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsMoneyString } from '../../../common/validation/is-money-string.validator';
@@ -32,8 +31,8 @@ export class CreateChargeDto {
 
   @ApiProperty({ example: '150.00', description: 'Charge amount (positive for charges, negative for credits)' })
   // Must be a valid numeric decimal; negatives are allowed here at the DTO layer
-  // because credits/adjustments are legitimate — the service restricts WHEN a
-  // negative is permitted (only type='adjustment' or reversals).
+  // because credits/adjustments are legitimate — the service restricts them to
+  // type='adjustment'. Canonical reversals have a separate service operation.
   @IsMoneyString({ allowNegative: true })
   amount!: string;
 
@@ -62,17 +61,6 @@ export class CreateChargeDto {
   @ApiProperty({ description: 'Date the charge applies to' })
   @IsDateString()
   serviceDate!: string;
-
-  @ApiPropertyOptional({ default: false })
-  @IsOptional()
-  @IsBoolean()
-  isReversal?: boolean;
-
-  @ApiPropertyOptional({ description: 'Original charge ID (required if isReversal=true)' })
-  @IsOptional()
-  @IsUUID()
-  @ValidateIf((o) => o.isReversal === true)
-  originalChargeId?: string;
 
   @ApiPropertyOptional({ description: 'Staff user ID who posted this charge' })
   @IsOptional()

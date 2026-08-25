@@ -715,49 +715,29 @@ export class FolioService {
     tx?: any,
     persistence?: { parentChargeId?: string; sourceKey?: string },
   ) {
+    const publicInput = dto as unknown as Record<string, unknown>;
+    if (['isReversal', 'originalChargeId', 'parentChargeId', 'adjustsChargeId', 'sourceKey']
+      .some((key) => publicInput[key] !== undefined)) {
+      throw new BadRequestException(
+        'Internal charge provenance cannot be supplied to generic charge posting',
+      );
+    }
     const db = tx ?? this.db;
     const folio = await this.findById(folioId, dto.propertyId, tx);
     if (folio.status !== 'open') {
       throw new BadRequestException('Cannot post charge to a folio that is not open');
     }
 
-    // A negative/zero amount inverts or zeroes the folio balance. Only legitimate
-    // credit paths may go non-positive: an explicit `adjustment` charge or a
-    // reversal. Everything else must be strictly positive.
+    // A negative/zero amount inverts or zeroes the folio balance. Generic
+    // posting permits this only for an explicit adjustment; canonical reversal
+    // rows are created solely by reverseCharge().
     if (
       new Decimal(dto.amount).lessThanOrEqualTo(0) &&
-      dto.type !== 'adjustment' &&
-      !dto.isReversal
+      dto.type !== 'adjustment'
     ) {
       throw new BadRequestException(
-        'Charge amount must be positive (negatives are only allowed for adjustments or reversals)',
+        'Charge amount must be positive (negatives are only allowed for adjustments)',
       );
-    }
-
-    // Validate originalChargeId WHENEVER supplied (not only for reversals) so a
-    // caller can't attach a dangling reference to another property's charge.
-    if (dto.originalChargeId) {
-      const [original] = await db
-        .select()
-        .from(charges)
-        .where(
-          and(
-            eq(charges.id, dto.originalChargeId),
-            eq(charges.folioId, folioId),
-            eq(charges.propertyId, dto.propertyId),
-          ),
-        );
-      if (!original) {
-        throw new NotFoundException(`Original charge ${dto.originalChargeId} not found`);
-      }
-      if (dto.isReversal && original.isLocked) {
-        throw new BadRequestException('Cannot reverse a locked charge');
-      }
-      // Operational integrity: a reversal cannot itself be reversed. Undo a
-      // mistaken reversal by re-posting the original charge.
-      if (dto.isReversal && original.isReversal) {
-        throw new BadRequestException('Cannot reverse a reversal transaction');
-      }
     }
 
     const insert = db
@@ -773,8 +753,7 @@ export class FolioService {
         taxRate: dto.taxRate,
         taxCode: dto.taxCode,
         serviceDate: new Date(dto.serviceDate),
-        isReversal: dto.isReversal ?? false,
-        originalChargeId: dto.originalChargeId,
+        isReversal: false,
         parentChargeId: persistence?.parentChargeId,
         sourceKey: persistence?.sourceKey,
         postedBy: dto.postedBy,
@@ -805,7 +784,7 @@ export class FolioService {
 
     // Auto-post tax charges if this is a taxable charge (not a tax or reversal itself)
     const taxCharges: any[] = [];
-    if (charge.type !== 'tax' && charge.type !== 'adjustment' && !charge.isReversal && !dto.skipTaxCalculation) {
+    if (charge.type !== 'tax' && charge.type !== 'adjustment' && !dto.skipTaxCalculation) {
       const taxItems = await this.taxService.calculateTaxes(
         dto.amount,
         dto.type,
@@ -1167,7 +1146,22 @@ export class FolioService {
     ]);
 
     return {
-      data,
+      // Present row-local authority hints so a tax/custom group child remains
+      // non-operable even when its base is on another result page. The write
+      // services still enforce the same rules as the final authority.
+      data: data.map((charge: any) => {
+        const canReverse = !charge.isLocked
+          && !charge.isReversal
+          && !charge.adjustsChargeId
+          && !charge.parentChargeId;
+        return {
+          ...charge,
+          canReverse,
+          canMove: canReverse
+            && !(typeof charge.sourceKey === 'string'
+              && charge.sourceKey.startsWith('accepted-pricing:')),
+        };
+      }),
       total: Number(countResult[0]?.count ?? 0),
       page,
       limit,

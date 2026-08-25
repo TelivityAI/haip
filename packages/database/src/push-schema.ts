@@ -1691,6 +1691,7 @@ async function main() {
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'charges_adjusts_charge_property_fkey'
+          AND conrelid = 'charges'::regclass
       ) THEN
         ALTER TABLE charges ADD CONSTRAINT charges_adjusts_charge_property_fkey
           FOREIGN KEY (property_id, adjusts_charge_id)

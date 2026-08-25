@@ -528,17 +528,18 @@ export class AncillaryService {
 
         for (const { rs, serviceName } of rows) {
           if (rs.status === 'cancelled') continue;
-          const acceptedLine = this.acceptedServiceLine(
-            reservation,
-            rs.serviceId,
-            serviceDate,
-            true,
-          );
           const hasAcceptedPricing = reservation.acceptedPricingSnapshot != null;
-          if (hasAcceptedPricing && acceptedRows.get(rs.serviceId)?.id !== rs.id) continue;
+          const isAcceptedRow = hasAcceptedPricing
+            && acceptedRows.get(rs.serviceId)?.id === rs.id;
+          if (hasAcceptedPricing && rs.sourceChannel === 'booking_engine' && !isAcceptedRow) {
+            continue;
+          }
+          const acceptedLine = isAcceptedRow
+            ? this.acceptedServiceLine(reservation, rs.serviceId, serviceDate, true)
+            : null;
           const effectivePostingRule = acceptedLine?.postingRule ?? rs.postingRule;
           const effectiveChargeType = acceptedLine?.chargeType ?? rs.chargeType;
-          if (hasAcceptedPricing) {
+          if (isAcceptedRow) {
             if (!acceptedLine) continue;
             if (!['once', 'included_in_rate'].includes(effectivePostingRule)) continue;
           } else if (
@@ -547,7 +548,7 @@ export class AncillaryService {
           ) {
             continue;
           }
-          if (!hasAcceptedPricing && await this.hasPostedCharge(
+          if (!isAcceptedRow && await this.hasPostedCharge(
             folio.id,
             propertyId,
             rs.id,
@@ -598,7 +599,7 @@ export class AncillaryService {
           }
 
           let updated: any;
-          if (hasAcceptedPricing && rs.status === 'posted') {
+          if (isAcceptedRow && rs.status === 'posted') {
             // A once service can acquire a new immutable operational date after
             // a stay amendment. Its row remains posted, while the date-bearing
             // source key decides whether this revision still needs a group.
@@ -616,7 +617,7 @@ export class AncillaryService {
               .returning();
             if (!updated) {
               throw new ConflictException(
-                `Reservation service ${rs.id} changed while posting its accepted price`,
+                `Reservation service ${rs.id} changed while posting`,
               );
             }
           }
@@ -732,42 +733,66 @@ export class AncillaryService {
                 current.reservation.acceptedPricingSnapshot,
                 currentRows.map(({ rs: candidate }: any) => candidate),
               );
-              if (acceptedRows.get(current.rs.serviceId)?.id !== current.rs.id) return null;
-              const acceptedLine = this.acceptedServiceLine(
-                current.reservation,
-                current.rs.serviceId,
-                date,
-                false,
-              );
-              if (!acceptedLine || acceptedLine.postingRule !== 'per_night') return null;
+              const isAcceptedRow = acceptedRows.get(current.rs.serviceId)?.id === current.rs.id;
+              if (current.rs.sourceChannel === 'booking_engine' && !isAcceptedRow) return null;
+              const acceptedLine = isAcceptedRow
+                ? this.acceptedServiceLine(
+                    current.reservation,
+                    current.rs.serviceId,
+                    date,
+                    false,
+                  )
+                : null;
+              const postingRule = acceptedLine?.postingRule ?? current.rs.postingRule;
+              const chargeType = acceptedLine?.chargeType ?? current.rs.chargeType;
+              if (isAcceptedRow) {
+                if (!acceptedLine || postingRule !== 'per_night') return null;
+              } else {
+                if (current.rs.status !== 'confirmed' || postingRule !== 'per_night') return null;
+                if (current.rs.startDate && date < current.rs.startDate) return null;
+                if (current.rs.endDate && date > current.rs.endDate) return null;
+              }
               const folio = await this.findOpenGuestFolio(reservation.id, propertyId, tx);
               if (!folio) {
                 throw new BadRequestException(
                   `No open guest folio for reservation ${reservation.id}`,
                 );
               }
-              if (new Decimal(acceptedLine.amount).lessThanOrEqualTo(0)) return null;
-              const outcome = await this.folioService.postChargeFromSnapshotWithOutcome(
-                folio.id,
-                {
-                  propertyId,
-                  type: acceptedLine.chargeType,
-                  description: `${current.serviceName} ${this.svcTag(current.rs.id)}`,
-                  amount: acceptedLine.amount,
-                  currencyCode: acceptedLine.currencyCode,
-                  serviceDate: new Date(`${date}T00:00:00Z`).toISOString(),
-                  guestId: current.reservation.guestId,
-                },
-                acceptedLine.taxAmount,
-                undefined,
-                `accepted-pricing:reservation-service:${current.rs.id}:night:${date}`,
-                tx,
-              );
+              if (!isAcceptedRow && await this.hasPostedCharge(
+                folio.id, propertyId, current.rs.id, date, tx,
+              )) return null;
+              const amount = acceptedLine?.amount
+                ?? new Decimal(current.rs.unitPrice).times(current.rs.quantity).toFixed(2);
+              if (new Decimal(amount).lessThanOrEqualTo(0)) return null;
+              const chargeInput = {
+                propertyId,
+                type: chargeType,
+                description: `${current.serviceName} ${this.svcTag(current.rs.id)}`,
+                amount,
+                currencyCode: acceptedLine?.currencyCode ?? current.rs.currencyCode,
+                serviceDate: new Date(`${date}T00:00:00Z`).toISOString(),
+                guestId: current.reservation.guestId,
+              };
+              const outcome = acceptedLine
+                ? await this.folioService.postChargeFromSnapshotWithOutcome(
+                    folio.id,
+                    chargeInput,
+                    acceptedLine.taxAmount,
+                    undefined,
+                    `accepted-pricing:reservation-service:${current.rs.id}:night:${date}`,
+                    tx,
+                  )
+                : {
+                    charge: await this.folioService.postCharge(folio.id, chargeInput, tx),
+                    wasCreated: true,
+                  };
               return {
                 folio,
                 reservation: current.reservation,
                 rs: current.rs,
-                acceptedLine,
+                amount,
+                postingRule,
+                chargeType,
                 outcome,
               };
             },
@@ -788,10 +813,10 @@ export class AncillaryService {
             {
               reservationId: lockedPost.reservation.id,
               folioId: lockedPost.folio.id,
-              amount: lockedPost.acceptedLine.amount,
+              amount: lockedPost.amount,
               businessDate: date,
-              postingRule: lockedPost.acceptedLine.postingRule,
-              chargeType: lockedPost.acceptedLine.chargeType,
+              postingRule: lockedPost.postingRule,
+              chargeType: lockedPost.chargeType,
               chargeId: lockedPost.outcome.charge.id,
             },
             propertyId,
@@ -799,7 +824,7 @@ export class AncillaryService {
           posted.push({
             reservationServiceId: lockedPost.rs.id,
             chargeId: lockedPost.outcome.charge.id,
-            amount: lockedPost.acceptedLine.amount,
+            amount: lockedPost.amount,
           });
           continue;
         }
