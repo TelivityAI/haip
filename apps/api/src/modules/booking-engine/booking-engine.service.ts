@@ -138,7 +138,7 @@ export class BookingEngineService {
     propertyId: string,
     dto: BeQuoteDto,
     db?: any,
-    options?: { lockForUpdate?: boolean },
+    options?: { lockForUpdate?: boolean; excludeReservationId?: string },
   ) {
     const config = options?.lockForUpdate
       ? await this.configService.getPublicConfig(propertyId, db, true)
@@ -160,13 +160,22 @@ export class BookingEngineService {
     const nights = this.nightsBetween(dto.checkIn, dto.checkOut);
 
     // Re-confirm availability for the requested room type.
-    const availability = await this.availabilityService.searchAvailability(
-      propertyId,
-      dto.checkIn,
-      dto.checkOut,
-      dto.roomTypeId,
-      db,
-    );
+    const availability = options?.excludeReservationId
+      ? await this.availabilityService.searchAvailability(
+        propertyId,
+        dto.checkIn,
+        dto.checkOut,
+        dto.roomTypeId,
+        db,
+        { excludeReservationId: options.excludeReservationId },
+      )
+      : await this.availabilityService.searchAvailability(
+        propertyId,
+        dto.checkIn,
+        dto.checkOut,
+        dto.roomTypeId,
+        db,
+      );
     assertFullStayAvailability(
       availability,
       dto.roomTypeId,

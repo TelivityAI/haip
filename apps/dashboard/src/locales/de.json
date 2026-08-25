@@ -685,6 +685,15 @@
       "accepting": "Akzeptieren…",
       "error": "Die Anfrage konnte nicht angenommen werden. Überprüfen Sie die aktuelle Verfügbarkeit und versuchen Sie es erneut."
     },
+    "modifyStay": {
+      "action": "Aufenthalt ändern", "title": "Angenommenen Aufenthalt ändern", "activeStay": "Aktiver Aufenthalt", "proposedStay": "Geplanter Aufenthalt", "originalRequest": "Ursprüngliche Anfrage",
+      "arrivalDate": "Anreisedatum", "departureDate": "Abreisedatum", "invalidDates": "Die Abreise muss nach der Anreise liegen und beide Daten müssen gültig sein.",
+      "checking": "Gesamten Aufenthalt und aktuelles Angebot prüfen…", "previewError": "Dieser Aufenthalt kann derzeit nicht berechnet werden. Prüfen Sie die Verfügbarkeit und versuchen Sie es erneut.",
+      "priceChoice": "Preisgrundlage für den geänderten Aufenthalt", "prior": "Bisherige angenommene Grundlage", "priorDescription": "Überschneidende Daten behalten ihre angenommenen Preiszeilen; zusätzliche Nächte verwenden den nächstgelegenen angenommenen Randpreis.",
+      "current": "Aktuelles Angebot", "currentDescription": "Verwenden Sie die jetzt verfügbaren maßgeblichen Preise für den gesamten geplanten Aufenthalt.", "custom": "Benutzerdefinierte Summe", "customDescription": "Legen Sie eine positive betriebliche Summe fest und dokumentieren Sie den Grund.",
+      "awaitingQuote": "Angebot ausstehend", "enterAmount": "Betrag eingeben", "customTotal": "Benutzerdefinierte Summe", "customReason": "Grund für die benutzerdefinierte Summe",
+      "apply": "Aufenthaltsänderung anwenden", "applying": "Wird angewendet…", "commitError": "Der Aufenthalt konnte nicht geändert werden. Prüfen Sie die aktuelle Verfügbarkeit und das Angebot."
+    },
     "deny": {
       "title": "Buchungsanfrage ablehnen",
       "reason": "Ablehnungsgrund",
@@ -745,6 +754,7 @@
       "loadError": "Zahlungsplan und Bewegungshistorie konnten nicht geladen werden.",
       "folioSummary": "Zusammenfassung des operativen Folios",
       "acceptedDeal": "Akzeptierter Gesamtbetrag",
+      "activeStayTotal": "Aktueller Aufenthaltspreis",
       "folioCharges": "Folio-Posten",
       "folioPayments": "Folio-Zahlungen",
       "balanceDue": "Restbetrag fällig",
@@ -896,7 +906,8 @@
         "email_sent": "E-Mail zugestellt",
         "email_failed": "E-Mail-Zustellung fehlgeschlagen",
         "email_queued": "E-Mail eingereiht",
-        "email_updated": "E-Mail-Zustellung aktualisiert"
+        "email_updated": "E-Mail-Zustellung aktualisiert",
+        "stay_amended": "Angenommener Aufenthalt geändert"
       }
     }
   }

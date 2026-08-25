@@ -15,15 +15,17 @@ import {
   bookingRequestInstallments,
   bookingRequestPaymentAllocations,
   bookingRequestPaymentResolutions,
+  bookingRequestStayAmendments,
   bookingRequests,
   payments,
+  properties,
   reservations,
 } from '@telivityhaip/database';
 import type {
   AcceptedPricingSnapshot,
   PaymentMethodCollection,
 } from '@telivityhaip/database';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   and,
   asc,
@@ -82,6 +84,11 @@ import { summarizeBookingRequestPaymentLedger } from './booking-request-payment-
 import { assertBookingRequestTransition } from './booking-request-state';
 import { buildAcceptedPricingSnapshot } from './booking-request-pricing';
 import {
+  buildAmendedPricingSnapshot,
+  buildPriorAmendedPricingSnapshot,
+  type StayAmendmentPriceSource,
+} from './booking-request-amendment-pricing';
+import {
   acceptedBookingRequestEmail,
   deniedBookingRequestEmail,
   requestReceivedEmail,
@@ -92,6 +99,10 @@ import type { CreateRequestCardSetupDto } from './dto/create-request-card-setup.
 import type { DenyBookingRequestDto } from './dto/deny-booking-request.dto';
 import type { ListBookingRequestsDto } from './dto/list-booking-requests.dto';
 import type { SubmitBookingRequestDto } from './dto/submit-booking-request.dto';
+import type {
+  AmendBookingRequestStayDto,
+  PreviewBookingRequestStayAmendmentDto,
+} from './dto/amend-booking-request-stay.dto';
 import {
   toAcceptedBookingRequestDecision,
   toBookingRequestDetail,
@@ -195,6 +206,58 @@ export function acceptancePreviewFingerprint(
   });
   return `v1:${createHash('sha256').update(serialized).digest('hex')}`;
 }
+
+type AmendmentPreviewFingerprintInput = {
+  requestId: string;
+  propertyId: string;
+  reservationId: string;
+  reservationUpdatedAt: Date;
+  previousArrivalDate: string;
+  previousDepartureDate: string;
+  previousTotal: string;
+  previousPricing: AcceptedPricingSnapshot;
+  arrivalDate: string;
+  departureDate: string;
+  currentQuote: unknown;
+};
+
+function stableSerialize(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value) ?? 'undefined';
+  }
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`)
+    .join(',')}}`;
+}
+
+export function amendmentPreviewFingerprint(
+  input: AmendmentPreviewFingerprintInput,
+): string {
+  const serialized = stableSerialize({ version: 1, ...input });
+  return `v1:${createHash('sha256').update(serialized).digest('hex')}`;
+}
+
+export type StayAmendmentResult = {
+  amendmentId: string;
+  requestId: string;
+  reservationId: string;
+  folioId: string;
+  previousArrivalDate: string;
+  previousDepartureDate: string;
+  arrivalDate: string;
+  departureDate: string;
+  previousTotalAmount: string;
+  newTotalAmount: string;
+  currencyCode: string;
+  priceSource: StayAmendmentPriceSource;
+  reason: string | null;
+};
 
 export type { AuditActor } from '../../common/audit/audit-actor';
 
@@ -338,7 +401,11 @@ export class BookingRequestService {
   }
 
   async findById(id: string, propertyId: string) {
-    return toBookingRequestDetail(await this.findRequest(this.db, id, propertyId));
+    const request = await this.findRequest(this.db, id, propertyId);
+    const operationalReservation = request.status === 'accepted'
+      ? await this.findLinkedReservation(this.db, request, propertyId)
+      : null;
+    return toBookingRequestDetail(request, operationalReservation);
   }
 
   async auditHistory(
@@ -407,6 +474,7 @@ export class BookingRequestService {
       'payment',
       'booking_request_payment_resolution',
       'booking_request_email_delivery',
+      'reservation',
     ];
     const limit = Math.max(1, Math.min(pagination.limit ?? 50, 100));
     const cursor = decodeBookingRequestAuditCursor(pagination.cursor);
@@ -504,6 +572,187 @@ export class BookingRequestService {
     };
   }
 
+  async stayAmendmentPreview(
+    id: string,
+    propertyId: string,
+    dates: PreviewBookingRequestStayAmendmentDto,
+  ) {
+    assertCanonicalStayDates(dates.arrivalDate, dates.departureDate);
+    const request = await this.findRequest(this.db, id, propertyId);
+    this.assertAcceptedStayAmendmentRequest(request);
+    const reservation = await this.findLinkedReservation(this.db, request, propertyId);
+    return this.buildStayAmendmentPreview(
+      request,
+      reservation,
+      dates,
+      this.db,
+      false,
+    ).catch((error: unknown) => this.throwStayAmendmentError(error));
+  }
+
+  async amendStay(
+    id: string,
+    propertyId: string,
+    input: AmendBookingRequestStayDto,
+    actor?: AuditActor,
+  ): Promise<StayAmendmentResult> {
+    assertCanonicalStayDates(input.arrivalDate, input.departureDate);
+    const idempotencyKey = this.normalizeStayAmendmentIdempotencyKey(input.idempotencyKey);
+    const reason = input.priceSource === 'custom' ? input.customReason?.trim() : null;
+    if (input.priceSource === 'custom' && !reason) {
+      throw new BadRequestException('A reason is required for a custom amended price');
+    }
+    const operationFingerprint = this.stayAmendmentOperationFingerprint(
+      id,
+      propertyId,
+      { ...input, idempotencyKey },
+    );
+
+    const transactionResult = await this.db.transaction(async (tx) => {
+      await this.lockProperty(tx, propertyId);
+      const request = await this.lockRequest(tx, id, propertyId);
+      this.assertAcceptedStayAmendmentRequest(request);
+      const reservation = await this.lockLinkedReservation(tx, request, propertyId);
+
+      const replay = await this.findExistingStayAmendment(
+        tx,
+        propertyId,
+        id,
+        idempotencyKey,
+        operationFingerprint,
+      );
+      if (replay) return { result: this.toStayAmendmentResult(replay), replay: true };
+
+      await this.reservationService.lockInventory(propertyId, reservation.roomTypeId, tx);
+      const preview = await this.buildStayAmendmentPreview(
+        request,
+        reservation,
+        input,
+        tx,
+        true,
+      );
+      if (input.previewToken !== preview.previewToken) {
+        throw new ConflictException(
+          'Stay amendment preview changed; refresh the quote before applying it',
+        );
+      }
+      const previousPricing = reservation.acceptedPricingSnapshot as AcceptedPricingSnapshot;
+      const newPricing = buildAmendedPricingSnapshot({
+        source: input.priceSource,
+        previous: previousPricing,
+        currentQuote: preview.currentQuote,
+        currencyCode: reservation.currencyCode,
+        arrivalDate: input.arrivalDate,
+        departureDate: input.departureDate,
+        customTotal: input.customTotal,
+        customReason: reason ?? undefined,
+      });
+      const amendmentId = randomUUID();
+      const folioReconciliation = await this.folioService.reconcileAcceptedStayAmendment({
+        tx,
+        amendmentId,
+        propertyId,
+        folioId: request.acceptedFolioId!,
+        reservationId: reservation.id,
+        previousPricing,
+        newPricing,
+        postedBy: actor?.userId ?? null,
+      });
+      const amended = await this.reservationService.modifyAcceptedStay(
+        reservation,
+        propertyId,
+        {
+          arrivalDate: input.arrivalDate,
+          departureDate: input.departureDate,
+          totalAmount: newPricing.grandTotal,
+        },
+        newPricing,
+        tx,
+      );
+      const createdAt = new Date();
+      const amendmentValues = {
+        id: amendmentId,
+        propertyId,
+        bookingRequestId: id,
+        reservationId: reservation.id,
+        folioId: request.acceptedFolioId!,
+        idempotencyKey,
+        operationFingerprint,
+        previewToken: input.previewToken,
+        priceSource: input.priceSource,
+        previousArrivalDate: reservation.arrivalDate,
+        previousDepartureDate: reservation.departureDate,
+        newArrivalDate: input.arrivalDate,
+        newDepartureDate: input.departureDate,
+        previousTotalAmount: reservation.totalAmount,
+        newTotalAmount: newPricing.grandTotal,
+        currencyCode: reservation.currencyCode,
+        reason: reason ?? null,
+        previousPricingSnapshot: structuredClone(previousPricing),
+        newPricingSnapshot: structuredClone(newPricing),
+        actorUserId: actor?.userId ?? null,
+        actorEmail: actor?.userEmail ?? null,
+        createdAt,
+      };
+      await tx.insert(bookingRequestStayAmendments).values(amendmentValues);
+      await tx.insert(auditLogs).values({
+        propertyId,
+        bookingRequestId: id,
+        action: 'update',
+        entityType: 'reservation',
+        entityId: reservation.id,
+        ...actorFields(actor),
+        previousValue: {
+          arrivalDate: reservation.arrivalDate,
+          departureDate: reservation.departureDate,
+          totalAmount: reservation.totalAmount,
+          acceptedPricingSnapshot: structuredClone(previousPricing),
+        },
+        newValue: {
+          amendmentId,
+          arrivalDate: amended.reservation.arrivalDate,
+          departureDate: amended.reservation.departureDate,
+          totalAmount: amended.reservation.totalAmount,
+          priceSource: input.priceSource,
+          reason: reason ?? null,
+          acceptedPricingSnapshot: structuredClone(newPricing),
+          folioReconciliation: structuredClone(folioReconciliation),
+        },
+        description: 'Accepted Booking Request stay amended',
+      });
+      await this.insertConsequence(tx, propertyId, id, `amend:${amendmentId}`, {
+        event: 'reservation.modified',
+        entityType: 'reservation',
+        entityId: reservation.id,
+        propertyId,
+        data: {
+          amendmentId,
+          bookingRequestId: id,
+          reservationId: reservation.id,
+          folioId: request.acceptedFolioId!,
+          previousArrivalDate: reservation.arrivalDate,
+          previousDepartureDate: reservation.departureDate,
+          arrivalDate: amended.reservation.arrivalDate,
+          departureDate: amended.reservation.departureDate,
+          roomTypeId: reservation.roomTypeId,
+          previousTotalAmount: reservation.totalAmount,
+          totalAmount: amended.reservation.totalAmount,
+          currencyCode: reservation.currencyCode,
+          priceSource: input.priceSource,
+          reason: reason ?? null,
+        },
+        timestamp: createdAt.toISOString(),
+      });
+      return {
+        result: this.toStayAmendmentResult(amendmentValues),
+        replay: false,
+      };
+    }).catch((error: unknown) => this.throwStayAmendmentError(error));
+
+    await this.deliverConsequencesBestEffort(id, propertyId);
+    return transactionResult.result;
+  }
+
   /**
    * Recover durable consequences after an API process stops between the
    * decision commit and dispatch. Claims remain property-scoped and the
@@ -597,6 +846,9 @@ export class BookingRequestService {
         customTotal: input.customTotal,
         customReason: input.customReason,
       });
+      // Acceptance sources are narrower than the operational snapshot's later
+      // amendment-only `prior` source.
+      const acceptancePriceSource = pricing.source as BookingRequestPriceSource;
       const expectedPreviewToken = acceptancePreviewFingerprint({
         requestId: locked.id,
         propertyId: locked.propertyId,
@@ -692,7 +944,7 @@ export class BookingRequestService {
         .set({
           status: 'accepted',
           currentQuoteSnapshot: structuredClone(currentQuote),
-          acceptedPriceSource: pricing.source,
+          acceptedPriceSource: acceptancePriceSource,
           acceptedTotal: pricing.grandTotal,
           customPriceReason: pricing.customReason,
           acceptedReservationId: reservation.id,
@@ -720,7 +972,7 @@ export class BookingRequestService {
           requestId: id,
           reservationId: reservation.id,
           folioId: folio.id,
-          priceSource: pricing.source,
+          priceSource: acceptancePriceSource,
           acceptedTotal: pricing.grandTotal,
           currencyCode: locked.currencyCode,
         },
@@ -1285,17 +1537,236 @@ export class BookingRequestService {
   }
 
   private stableSerialize(value: unknown): string {
-    if (value === null || typeof value !== 'object') {
-      return JSON.stringify(value) ?? 'undefined';
+    return stableSerialize(value);
+  }
+
+  private assertAcceptedStayAmendmentRequest(
+    request: typeof bookingRequests.$inferSelect,
+  ): void {
+    if (request.status !== 'accepted') {
+      throw new ConflictException('Only accepted booking requests can amend a stay');
     }
-    if (Array.isArray(value)) {
-      return `[${value.map((item) => this.stableSerialize(item)).join(',')}]`;
+    if (!request.acceptedReservationId || !request.acceptedFolioId) {
+      throw new ConflictException(
+        `Accepted booking request ${request.id} has no linked operational stay`,
+      );
     }
-    const record = value as Record<string, unknown>;
-    return `{${Object.keys(record)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${this.stableSerialize(record[key])}`)
-      .join(',')}}`;
+  }
+
+  private async buildStayAmendmentPreview(
+    request: typeof bookingRequests.$inferSelect,
+    reservation: typeof reservations.$inferSelect,
+    dates: Pick<PreviewBookingRequestStayAmendmentDto, 'arrivalDate' | 'departureDate'>,
+    db: any,
+    lockForUpdate: boolean,
+  ) {
+    assertCanonicalStayDates(dates.arrivalDate, dates.departureDate);
+    const previousPricing = reservation.acceptedPricingSnapshot as AcceptedPricingSnapshot | null;
+    if (!previousPricing) {
+      throw new ConflictException('Linked reservation has no accepted operational pricing basis');
+    }
+    if (
+      request.currencyCode !== reservation.currencyCode
+      || previousPricing.currencyCode !== reservation.currencyCode
+    ) {
+      throw new ConflictException('Booking Request and reservation currencies do not match');
+    }
+    const currentQuote = await this.bookingEngineService.quote(request.propertyId, {
+      roomTypeId: reservation.roomTypeId,
+      ratePlanId: reservation.ratePlanId,
+      checkIn: dates.arrivalDate,
+      checkOut: dates.departureDate,
+      adults: reservation.adults,
+      children: reservation.children,
+      serviceIds: request.serviceIds,
+    }, lockForUpdate ? db : undefined, lockForUpdate
+      ? { lockForUpdate: true, excludeReservationId: reservation.id }
+      : { excludeReservationId: reservation.id });
+    const priorPricing = buildPriorAmendedPricingSnapshot(
+      previousPricing,
+      dates.arrivalDate,
+      dates.departureDate,
+    );
+    const currentPricing = buildAmendedPricingSnapshot({
+      source: 'current',
+      previous: previousPricing,
+      currentQuote,
+      currencyCode: reservation.currencyCode,
+      arrivalDate: dates.arrivalDate,
+      departureDate: dates.departureDate,
+    });
+    const previewToken = amendmentPreviewFingerprint({
+      requestId: request.id,
+      propertyId: request.propertyId,
+      reservationId: reservation.id,
+      reservationUpdatedAt: reservation.updatedAt,
+      previousArrivalDate: reservation.arrivalDate,
+      previousDepartureDate: reservation.departureDate,
+      previousTotal: reservation.totalAmount,
+      previousPricing,
+      arrivalDate: dates.arrivalDate,
+      departureDate: dates.departureDate,
+      currentQuote,
+    });
+    return {
+      requestId: request.id,
+      reservationId: reservation.id,
+      previousArrivalDate: reservation.arrivalDate,
+      previousDepartureDate: reservation.departureDate,
+      previousTotal: reservation.totalAmount,
+      arrivalDate: dates.arrivalDate,
+      departureDate: dates.departureDate,
+      priorTotal: priorPricing.grandTotal,
+      currentTotal: currentPricing.grandTotal,
+      currencyCode: reservation.currencyCode,
+      priorPricing,
+      currentPricing,
+      currentQuote,
+      previewVersion: 1 as const,
+      previewToken,
+    };
+  }
+
+  private normalizeStayAmendmentIdempotencyKey(value: string): string {
+    const normalized = value?.trim();
+    if (!normalized || normalized.length > 200) {
+      throw new BadRequestException('A valid stay amendment idempotency key is required');
+    }
+    return normalized;
+  }
+
+  private stayAmendmentOperationFingerprint(
+    requestId: string,
+    propertyId: string,
+    input: AmendBookingRequestStayDto,
+  ): string {
+    if (!['prior', 'current', 'custom'].includes(input.priceSource)) {
+      throw new BadRequestException('A valid stay amendment price source is required');
+    }
+    return createHash('sha256').update(stableSerialize({
+      version: 1,
+      requestId,
+      propertyId,
+      arrivalDate: input.arrivalDate,
+      departureDate: input.departureDate,
+      priceSource: input.priceSource,
+      previewToken: input.previewToken,
+      customTotal: input.customTotal ?? null,
+      customReason: input.customReason?.trim() || null,
+    })).digest('hex');
+  }
+
+  private async lockProperty(tx: any, propertyId: string) {
+    const candidates = await tx
+      .select()
+      .from(properties)
+      .where(eq(properties.id, propertyId))
+      .for('update');
+    const property = candidates.find((candidate: typeof properties.$inferSelect) =>
+      candidate.id === propertyId);
+    if (!property) throw new NotFoundException(`Property ${propertyId} not found`);
+    return property;
+  }
+
+  private async lockLinkedReservation(
+    tx: any,
+    request: typeof bookingRequests.$inferSelect,
+    propertyId: string,
+  ): Promise<typeof reservations.$inferSelect> {
+    const candidates = await tx
+      .select()
+      .from(reservations)
+      .where(and(
+        eq(reservations.id, request.acceptedReservationId!),
+        eq(reservations.propertyId, propertyId),
+      ))
+      .for('update');
+    const reservation = candidates.find((candidate: typeof reservations.$inferSelect) =>
+      candidate.id === request.acceptedReservationId
+      && candidate.propertyId === propertyId);
+    if (!reservation) {
+      throw new ConflictException(
+        `Accepted booking request ${request.id} has no recoverable reservation`,
+      );
+    }
+    return reservation;
+  }
+
+  private async findExistingStayAmendment(
+    db: any,
+    propertyId: string,
+    requestId: string,
+    idempotencyKey: string,
+    operationFingerprint: string,
+  ): Promise<typeof bookingRequestStayAmendments.$inferSelect | undefined> {
+    const candidates = await db
+      .select()
+      .from(bookingRequestStayAmendments)
+      .where(and(
+        eq(bookingRequestStayAmendments.propertyId, propertyId),
+        or(
+          eq(bookingRequestStayAmendments.idempotencyKey, idempotencyKey),
+          and(
+            eq(bookingRequestStayAmendments.bookingRequestId, requestId),
+            eq(bookingRequestStayAmendments.operationFingerprint, operationFingerprint),
+          ),
+        ),
+      ));
+    const scoped = candidates.filter((candidate: typeof bookingRequestStayAmendments.$inferSelect) =>
+      candidate.propertyId === propertyId);
+    const keyMatch = scoped.find((candidate: typeof bookingRequestStayAmendments.$inferSelect) =>
+      candidate.idempotencyKey === idempotencyKey);
+    if (keyMatch && (
+      keyMatch.bookingRequestId !== requestId
+      || keyMatch.operationFingerprint !== operationFingerprint
+    )) {
+      throw new ConflictException('Stay amendment idempotency key was already used');
+    }
+    return keyMatch ?? scoped.find((candidate: typeof bookingRequestStayAmendments.$inferSelect) =>
+      candidate.bookingRequestId === requestId
+      && candidate.operationFingerprint === operationFingerprint);
+  }
+
+  private toStayAmendmentResult(
+    amendment: Pick<
+      typeof bookingRequestStayAmendments.$inferSelect,
+      | 'id'
+      | 'bookingRequestId'
+      | 'reservationId'
+      | 'folioId'
+      | 'previousArrivalDate'
+      | 'previousDepartureDate'
+      | 'newArrivalDate'
+      | 'newDepartureDate'
+      | 'previousTotalAmount'
+      | 'newTotalAmount'
+      | 'currencyCode'
+      | 'priceSource'
+      | 'reason'
+    >,
+  ): StayAmendmentResult {
+    return {
+      amendmentId: amendment.id,
+      requestId: amendment.bookingRequestId,
+      reservationId: amendment.reservationId,
+      folioId: amendment.folioId,
+      previousArrivalDate: amendment.previousArrivalDate,
+      previousDepartureDate: amendment.previousDepartureDate,
+      arrivalDate: amendment.newArrivalDate,
+      departureDate: amendment.newDepartureDate,
+      previousTotalAmount: amendment.previousTotalAmount,
+      newTotalAmount: amendment.newTotalAmount,
+      currencyCode: amendment.currencyCode,
+      priceSource: amendment.priceSource,
+      reason: amendment.reason,
+    };
+  }
+
+  private throwStayAmendmentError(error: unknown): never {
+    if (error instanceof BadRequestException && /availability/i.test(error.message)) {
+      throw new ConflictException(error.message);
+    }
+    throw error;
   }
 
   private async findRequest(

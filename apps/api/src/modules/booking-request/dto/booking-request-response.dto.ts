@@ -42,6 +42,17 @@ export interface BookingRequestDetailDto extends Omit<BookingRequestListItemDto,
   decidedBy: string | null;
   decidedAt: Date | null;
   denialReason: string | null;
+  operationalReservation: {
+    id: string;
+    arrivalDate: string;
+    departureDate: string;
+    totalAmount: string;
+    currencyCode: string;
+    roomTypeId: string;
+    ratePlanId: string;
+    status: ReservationRow['status'];
+    updatedAt: Date;
+  } | null;
 }
 
 export interface AcceptedBookingRequestDecisionDto {
@@ -87,6 +98,10 @@ const AUDIT_DETAIL_KEYS: Record<string, readonly string[]> = {
   payment: ['folioId', 'amount', 'currencyCode', 'method', 'status', 'result'],
   booking_request_payment_resolution: ['paymentId', 'type', 'amount', 'reason', 'status'],
   booking_request_email_delivery: ['kind', 'status', 'attempts', 'automaticAttempts', 'mode'],
+  reservation: [
+    'amendmentId', 'arrivalDate', 'departureDate', 'totalAmount',
+    'priceSource', 'reason',
+  ],
 };
 
 function safeAuditDetails(row: AuditLogRow) {
@@ -146,6 +161,7 @@ function auditSummary(
       row.action === 'create' ? 'queued' : 'updated',
     )}`;
   }
+  if (row.entityType === 'reservation') return 'stay.amended';
   return 'request.updated';
 }
 
@@ -198,6 +214,7 @@ export function toBookingRequestListItem(
 
 export function toBookingRequestDetail(
   row: BookingRequestRow,
+  operationalReservation?: ReservationRow | null,
 ): BookingRequestDetailDto {
   const { hasCard: _hasCard, ...summary } = toBookingRequestListItem(row);
   void _hasCard;
@@ -218,6 +235,19 @@ export function toBookingRequestDetail(
     decidedBy: row.decidedBy,
     decidedAt: row.decidedAt,
     denialReason: row.denialReason,
+    operationalReservation: operationalReservation
+      ? {
+          id: operationalReservation.id,
+          arrivalDate: operationalReservation.arrivalDate,
+          departureDate: operationalReservation.departureDate,
+          totalAmount: operationalReservation.totalAmount,
+          currencyCode: operationalReservation.currencyCode,
+          roomTypeId: operationalReservation.roomTypeId,
+          ratePlanId: operationalReservation.ratePlanId,
+          status: operationalReservation.status,
+          updatedAt: operationalReservation.updatedAt,
+        }
+      : null,
   };
 }
 

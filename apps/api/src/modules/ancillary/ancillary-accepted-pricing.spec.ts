@@ -208,7 +208,7 @@ describe('AncillaryService accepted operational pricing', () => {
       id: 'res-1',
       propertyId: 'prop-1',
       guestId: 'guest-1',
-      arrivalDate: '2026-10-01',
+      arrivalDate: '2026-09-30',
       acceptedPricingSnapshot: {
         currencyCode: 'EUR',
         services: [{
@@ -261,7 +261,11 @@ describe('AncillaryService accepted operational pricing', () => {
 
     expect(folio.postChargeFromSnapshotWithOutcome).toHaveBeenCalledWith(
       'folio-1',
-      expect.objectContaining({ amount: '15.00', currencyCode: 'EUR' }),
+      expect.objectContaining({
+        amount: '15.00',
+        currencyCode: 'EUR',
+        serviceDate: '2026-10-01T00:00:00.000Z',
+      }),
       '2.00',
       undefined,
       'accepted-pricing:reservation-service:rs-1:once',

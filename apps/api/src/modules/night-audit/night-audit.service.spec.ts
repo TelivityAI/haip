@@ -394,6 +394,7 @@ describe('NightAuditService', () => {
       expect.objectContaining({ type: 'room', amount: '123.00' }),
       '12.00',
       undefined,
+      'accepted-pricing:reservation:res-001:night:2026-04-06',
     );
     expect(mockFolioService.postCharge).not.toHaveBeenCalled();
     expect(result).toMatchObject({ totalRoom: '123.00', totalTax: '12.00', count: 1 });
@@ -453,6 +454,7 @@ describe('NightAuditService', () => {
         amount: '-15.00',
         reason: 'Staff loyalty adjustment',
       },
+      'accepted-pricing:reservation:res-001:night:2026-04-04',
     );
   });
 

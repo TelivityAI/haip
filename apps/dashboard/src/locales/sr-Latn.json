@@ -1999,6 +1999,15 @@
       "accepting": "Prihvatam…",
       "error": "Zahtev nije mogao biti prihvaćen. Pregledajte trenutnu dostupnost i pokušajte ponovo."
     },
+    "modifyStay": {
+      "action": "Izmeni boravak", "title": "Izmeni prihvaćeni boravak", "activeStay": "Aktivni boravak", "proposedStay": "Predloženi boravak", "originalRequest": "Prvobitni zahtev",
+      "arrivalDate": "Datum dolaska", "departureDate": "Datum odlaska", "invalidDates": "Odlazak mora biti posle dolaska, a oba datuma moraju biti ispravna.",
+      "checking": "Provera celog boravka i trenutne ponude…", "previewError": "Ovaj boravak trenutno nije moguće obračunati. Proverite dostupnost i pokušajte ponovo.",
+      "priceChoice": "Osnova cene za izmenjeni boravak", "prior": "Prethodna prihvaćena osnova", "priorDescription": "Datumi koji se preklapaju zadržavaju prihvaćene stavke; dodate noći koriste najbližu graničnu prihvaćenu cenu.",
+      "current": "Trenutna ponuda", "currentDescription": "Koristite merodavne cene koje su sada dostupne za ceo predloženi boravak.", "custom": "Prilagođeni total", "customDescription": "Postavite pozitivan operativni zbir i zabeležite razlog.",
+      "awaitingQuote": "Ponuda se čeka", "enterAmount": "Unesite iznos", "customTotal": "Prilagođeni total", "customReason": "Razlog za prilagođeni total",
+      "apply": "Primeni izmenu boravka", "applying": "Izmena je u toku…", "commitError": "Boravak nije mogao biti izmenjen. Pregledajte najnoviju dostupnost i ponudu."
+    },
     "deny": {
       "title": "Odbijte zahtev za rezervaciju",
       "reason": "Razlog za odbijanje",
@@ -2059,6 +2068,7 @@
       "loadError": "Plan plaćanja i istorija kretanja nisu mogli da se učitaju.",
       "folioSummary": "Operativni folio sažetak",
       "acceptedDeal": "Prihvaćen ukupan iznos",
+      "activeStayTotal": "Ukupno za aktivni boravak",
       "folioCharges": "Stavke folija",
       "folioPayments": "Folio plaćanja",
       "balanceDue": "Dospelo stanje",
@@ -2210,7 +2220,8 @@
         "email_sent": "E-pošta dostavljena",
         "email_failed": "Dostava e-pošte nije uspela",
         "email_queued": "E-pošta stavljena na čekanje",
-        "email_updated": "Dostava e-pošte ažurirana"
+        "email_updated": "Dostava e-pošte ažurirana",
+        "stay_amended": "Prihvaćeni boravak izmenjen"
       }
     }
   }

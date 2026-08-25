@@ -377,7 +377,7 @@ function BookingRequestDetailPage({ propertyId, canWrite }: { propertyId: string
       </div>
 
       <div id="booking-request-tabpanel" aria-labelledby={`booking-request-tab-${activeTab}`} className="mt-4" role="tabpanel">
-        {activeTab === 'overview' ? <RequestOverview request={scopedRequest} /> : null}
+        {activeTab === 'overview' ? <RequestOverview request={scopedRequest} propertyId={propertyId} canWrite={canWrite} /> : null}
         {activeTab === 'payments' ? <RequestPayments request={scopedRequest} propertyId={propertyId} canWrite={canWrite} /> : null}
         {activeTab === 'messages' ? <RequestMessages requestId={scopedRequest.id} propertyId={propertyId} canWrite={canWrite} /> : null}
         {activeTab === 'audit' ? <RequestAudit request={scopedRequest} propertyId={propertyId} /> : null}

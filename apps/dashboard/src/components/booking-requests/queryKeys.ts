@@ -6,6 +6,15 @@ export const bookingRequestKeys = {
     ['booking-requests', propertyId, 'detail', requestId] as const,
   acceptancePreview: (propertyId: string, requestId: string) =>
     ['booking-requests', propertyId, 'acceptance-preview', requestId] as const,
+  stayAmendmentPreview: (
+    propertyId: string,
+    requestId: string,
+    arrivalDate: string,
+    departureDate: string,
+  ) => [
+    'booking-requests', propertyId, 'stay-amendment-preview',
+    requestId, arrivalDate, departureDate,
+  ] as const,
   paymentsRoot: (propertyId: string) => ['booking-request-payments', propertyId] as const,
   payments: (propertyId: string, requestId: string) =>
     ['booking-request-payments', propertyId, requestId] as const,

@@ -23,6 +23,11 @@ import { BookingRequestService } from './booking-request.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AcceptBookingRequestDto } from './dto/accept-booking-request.dto';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import {
+  AmendBookingRequestStayDto,
+  PreviewBookingRequestStayAmendmentDto,
+} from './dto/amend-booking-request-stay.dto';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DenyBookingRequestDto } from './dto/deny-booking-request.dto';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { ListBookingRequestsDto } from './dto/list-booking-requests.dto';
@@ -90,6 +95,31 @@ export class BookingRequestController {
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
   ) {
     return this.service.acceptancePreview(id, propertyId);
+  }
+
+  @Get(':id/stay-amendment-preview')
+  @RequirePermissions('reservations.read')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Preview an accepted Booking Request stay amendment' })
+  stayAmendmentPreview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query() dto: PreviewBookingRequestStayAmendmentDto,
+  ) {
+    return this.service.stayAmendmentPreview(id, propertyId, dto);
+  }
+
+  @Post(':id/stay-amendments')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Atomically amend an accepted Booking Request stay' })
+  amendStay(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: AmendBookingRequestStayDto,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.service.amendStay(id, propertyId, dto, actor);
   }
 
   @Get(':id/emails')

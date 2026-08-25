@@ -9,7 +9,9 @@ import {
   bookingRequestInstallments,
   bookingRequestPaymentAllocations,
   bookingRequestPaymentResolutions,
+  bookingRequestStayAmendments,
   charges,
+  folios,
   payments,
   reservations,
   webhookDeliveries,
@@ -40,6 +42,10 @@ describe('booking request schema', () => {
     expect(bookingRequestPaymentResolutions.movementId).toBeDefined();
     expect(bookingRequestPaymentResolutions.attempts).toBeDefined();
     expect(bookingRequestPaymentResolutions.lastError).toBeDefined();
+    expect(bookingRequestStayAmendments.operationFingerprint).toBeDefined();
+    expect(bookingRequestStayAmendments.previewToken).toBeDefined();
+    expect(bookingRequestStayAmendments.previousPricingSnapshot).toBeDefined();
+    expect(bookingRequestStayAmendments.newPricingSnapshot).toBeDefined();
     expect(bookingRequestEmailDeliveries.logicalKey).toBeDefined();
     expect(bookingRequestEmailDeliveries.claimedAt).toBeDefined();
     expect(bookingRequestEmailDeliveries.nextAttemptAt).toBeDefined();
@@ -108,6 +114,28 @@ describe('booking request schema', () => {
     );
     expect(getTableConfig(bookingRequestInstallments).foreignKeys.map((key) => key.getName()))
       .toContain('booking_request_installments_request_fkey');
+    const amendmentConfig = getTableConfig(bookingRequestStayAmendments);
+    expect(amendmentConfig.indexes.map((index) => index.config.name)).toEqual(
+      expect.arrayContaining([
+        'booking_request_stay_amendments_property_idempotency_unique',
+        'br_stay_amendments_property_request_fingerprint_unique',
+      ]),
+    );
+    expect(amendmentConfig.foreignKeys.map((key) => key.getName())).toContain(
+      'booking_request_stay_amendments_request_fkey',
+    );
+    expect(amendmentConfig.foreignKeys.map((key) => key.getName())).toEqual(
+      expect.arrayContaining([
+        'booking_request_stay_amendments_reservation_fkey',
+        'booking_request_stay_amendments_folio_fkey',
+      ]),
+    );
+    expect(getTableConfig(reservations).indexes.map((index) => index.config.name)).toContain(
+      'reservations_property_id_unique',
+    );
+    expect(getTableConfig(folios).indexes.map((index) => index.config.name)).toContain(
+      'folios_property_id_unique',
+    );
     const emailConfig = getTableConfig(bookingRequestEmailDeliveries);
     expect(emailConfig.indexes.map((index) => index.config.name)).toContain(
       'booking_request_email_deliveries_logical_key_unique',

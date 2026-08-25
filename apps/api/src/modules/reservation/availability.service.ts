@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Inject } from '@nestjs/common';
-import { eq, and, notInArray, sql, lt, gt } from 'drizzle-orm';
+import { eq, and, ne, notInArray, sql, lt, gt } from 'drizzle-orm';
 import { reservations, roomTypes, properties, rooms, icalBlocks, icalFeeds } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 
@@ -77,6 +77,7 @@ export class AvailabilityService {
     checkOut: string,
     roomTypeId?: string,
     db?: any,
+    options?: { excludeReservationId?: string },
   ): Promise<AvailabilityResult[]> {
     const conn = db ?? this.db;
     const requestedDates = stayDates(checkIn, checkOut);
@@ -106,6 +107,8 @@ export class AvailabilityService {
     const excludedStatuses = ['cancelled', 'no_show', 'checked_out'] as const;
     const overlapping = await conn
       .select({
+        id: reservations.id,
+        propertyId: reservations.propertyId,
         roomTypeId: reservations.roomTypeId,
         arrivalDate: reservations.arrivalDate,
         departureDate: reservations.departureDate,
@@ -119,8 +122,14 @@ export class AvailabilityService {
           sql`${reservations.arrivalDate} < ${checkOut}`,
           sql`${reservations.departureDate} > ${checkIn}`,
           ...(roomTypeId ? [eq(reservations.roomTypeId, roomTypeId)] : []),
+          ...(options?.excludeReservationId
+            ? [ne(reservations.id, options.excludeReservationId)]
+            : []),
         ),
       );
+    const scopedOverlapping = overlapping.filter((reservation: any) =>
+      (reservation.propertyId == null || reservation.propertyId === propertyId)
+      && (reservation.id == null || reservation.id !== options?.excludeReservationId));
 
     // Single grouped query for room counts per room type (avoids N+1).
     const roomCountRows = await conn
@@ -180,7 +189,7 @@ export class AvailabilityService {
       for (const dateStr of requestedDates) {
 
         // Count reservations occupying this room type on this date
-        const sold = overlapping.filter(
+        const sold = scopedOverlapping.filter(
           (r: any) =>
             r.roomTypeId === type.id &&
             r.arrivalDate <= dateStr &&

@@ -7,7 +7,15 @@ import {
 } from '@nestjs/common';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { folios, charges, payments, reservations, bookings } from '@telivityhaip/database';
+import {
+  folios,
+  charges,
+  payments,
+  reservations,
+  bookings,
+  reservationServices,
+} from '@telivityhaip/database';
+import type { AcceptedPricingSnapshot } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { folioPaymentSumWhere } from '../payment/payment-ledger';
 import { WebhookService } from '../webhook/webhook.service';
@@ -20,6 +28,17 @@ import { CreateChargeDto } from './dto/create-charge.dto';
 import { ListChargesDto } from './dto/list-charges.dto';
 
 const CHARGE_WAS_CREATED = Symbol('chargeWasCreated');
+
+type AcceptedStayAmendmentReconciliationInput = {
+  tx: any;
+  propertyId: string;
+  folioId: string;
+  reservationId: string;
+  amendmentId: string;
+  previousPricing: AcceptedPricingSnapshot;
+  newPricing: AcceptedPricingSnapshot;
+  postedBy?: string | null;
+};
 
 @Injectable()
 export class FolioService {
@@ -287,6 +306,217 @@ export class FolioService {
       .update(folios)
       .set({ totalCharges, totalPayments, balance, updatedAt: new Date() })
       .where(and(eq(folios.id, folioId), eq(folios.propertyId, propertyId)));
+  }
+
+  /**
+   * Reconcile only accepted-pricing groups that have already reached the
+   * ledger. Removed unlocked groups receive canonical parent/child reversals;
+   * locked removals and changed posted overlap collapse into one amendment-
+   * linked adjustment. Missing groups are deliberately left for night audit.
+   */
+  async reconcileAcceptedStayAmendment(
+    input: AcceptedStayAmendmentReconciliationInput,
+  ): Promise<{ reversedChargeIds: string[]; adjustmentAmount: string }> {
+    const {
+      tx,
+      propertyId,
+      folioId,
+      reservationId,
+      amendmentId,
+      previousPricing,
+      newPricing,
+      postedBy,
+    } = input;
+    const folioQuery = tx
+      .select()
+      .from(folios)
+      .where(and(eq(folios.id, folioId), eq(folios.propertyId, propertyId)));
+    const [folio] = typeof folioQuery.for === 'function'
+      ? await folioQuery.for('update')
+      : await folioQuery;
+    if (!folio) throw new NotFoundException(`Folio ${folioId} not found`);
+    if (folio.reservationId !== reservationId) {
+      throw new ConflictException('The linked folio does not belong to the amended reservation');
+    }
+    if (folio.status !== 'open') {
+      throw new ConflictException('The linked folio must be open to amend the stay');
+    }
+    if (
+      folio.currencyCode !== previousPricing.currencyCode
+      || folio.currencyCode !== newPricing.currencyCode
+    ) {
+      throw new ConflictException('Amended pricing currency does not match the linked folio');
+    }
+
+    const serviceRows = await tx
+      .select()
+      .from(reservationServices)
+      .where(and(
+        eq(reservationServices.propertyId, propertyId),
+        eq(reservationServices.reservationId, reservationId),
+      ));
+    const servicesByRowId = new Map(
+      serviceRows
+        .filter((row: any) =>
+          row.propertyId === propertyId && row.reservationId === reservationId)
+        .map((row: any) => [row.id as string, row.serviceId as string]),
+    );
+    const chargeQuery = tx
+      .select()
+      .from(charges)
+      .where(and(eq(charges.propertyId, propertyId), eq(charges.folioId, folioId)));
+    const ledger = (typeof chargeQuery.for === 'function'
+      ? await chargeQuery.for('update')
+      : await chargeQuery)
+      .filter((row: any) => row.propertyId === propertyId && row.folioId === folioId);
+    const acceptedBases = ledger.filter((row: any) =>
+      !row.isReversal
+      && row.parentChargeId == null
+      && typeof row.sourceKey === 'string'
+      && (
+        row.sourceKey.startsWith(`accepted-pricing:reservation:${reservationId}:night:`)
+        || (() => {
+          const match = /^accepted-pricing:reservation-service:([^:]+):/.exec(row.sourceKey);
+          return match != null && servicesByRowId.has(match[1]!);
+        })()
+      ));
+
+    const desiredFor = (sourceKey: string): Decimal | null => {
+      const roomPrefix = `accepted-pricing:reservation:${reservationId}:night:`;
+      if (sourceKey.startsWith(roomPrefix)) {
+        const date = sourceKey.slice(roomPrefix.length);
+        const night = newPricing.nights.find((candidate) => candidate.date === date);
+        if (!night) return null;
+        return new Decimal(night.roomAmount)
+          .plus(night.taxAmount)
+          .plus(newPricing.adjustment?.serviceDate === date
+            ? newPricing.adjustment.amount
+            : 0);
+      }
+      const match = /^accepted-pricing:reservation-service:([^:]+):(once|night:(\d{4}-\d{2}-\d{2}))$/.exec(sourceKey);
+      if (!match) return null;
+      const serviceId = servicesByRowId.get(match[1]!);
+      const service = newPricing.services.find((candidate) => candidate.serviceId === serviceId);
+      if (!service) return null;
+      const line = match[2] === 'once'
+        ? service.lineItems[0]
+        : service.lineItems.find((candidate) => candidate.date === match[3]);
+      return line ? new Decimal(line.amount).plus(line.taxAmount) : null;
+    };
+    const groupRows = (base: any) => {
+      const children = ledger.filter((row: any) =>
+        !row.isReversal && row.parentChargeId === base.id);
+      const originals = new Set([base.id, ...children.map((row: any) => row.id)]);
+      const reversals = ledger.filter((row: any) =>
+        row.isReversal && originals.has(row.originalChargeId));
+      return { children, reversals, all: [base, ...children, ...reversals] };
+    };
+    const rowAmount = (row: any) => new Decimal(row.amount ?? 0).plus(row.taxAmount ?? 0);
+    const reversedChargeIds: string[] = [];
+    const amendmentSourcePrefix = `accepted-pricing:reservation:${reservationId}:amendment:`;
+    const priorAmendmentNet = ledger
+      .filter((row: any) =>
+        !row.isReversal
+        && row.parentChargeId == null
+        && typeof row.sourceKey === 'string'
+        && row.sourceKey.startsWith(amendmentSourcePrefix)
+        && row.sourceKey.endsWith(':pricing-delta'))
+      .reduce(
+        (total: Decimal, base: any) => groupRows(base).all.reduce(
+          (groupTotal: Decimal, row: any) => groupTotal.plus(rowAmount(row)),
+          total,
+        ),
+        new Decimal(0),
+      );
+    // Earlier amendment deltas are already part of the ledger's effective
+    // accepted price. Offset them before deriving this amendment's delta so a
+    // retry or later amendment cannot recognize the same revenue twice.
+    let adjustment = priorAmendmentNet.negated();
+
+    for (const base of acceptedBases) {
+      const group = groupRows(base);
+      const net = group.all.reduce(
+        (total: Decimal, row: any) => total.plus(rowAmount(row)),
+        new Decimal(0),
+      );
+      const desired = desiredFor(base.sourceKey);
+      if (desired == null && !net.isZero()) {
+        const alreadyReversed = group.reversals.some((row: any) =>
+          row.originalChargeId === base.id);
+        const locked = base.isLocked || group.children.some((row: any) => row.isLocked);
+        if (!locked && !alreadyReversed) {
+          const [baseReversal] = await tx
+            .insert(charges)
+            .values({
+              propertyId,
+              folioId,
+              type: base.type,
+              description: `Stay amendment reversal: ${base.description}`.slice(0, 255),
+              amount: new Decimal(base.amount).negated().toFixed(2),
+              currencyCode: base.currencyCode,
+              taxAmount: new Decimal(base.taxAmount ?? 0).negated().toFixed(2),
+              taxRate: base.taxRate,
+              taxCode: base.taxCode,
+              serviceDate: base.serviceDate,
+              isReversal: true,
+              originalChargeId: base.id,
+              sourceKey: `${amendmentSourcePrefix}${amendmentId}:reversal:${base.id}`,
+              postedBy: postedBy ?? undefined,
+            })
+            .returning();
+          for (const child of group.children) {
+            if (group.reversals.some((row: any) => row.originalChargeId === child.id)) continue;
+            await tx
+              .insert(charges)
+              .values({
+                propertyId,
+                folioId,
+                type: child.type,
+                description: `Stay amendment reversal: ${child.description}`.slice(0, 255),
+                amount: new Decimal(child.amount).negated().toFixed(2),
+                currencyCode: child.currencyCode,
+                taxAmount: new Decimal(child.taxAmount ?? 0).negated().toFixed(2),
+                taxRate: child.taxRate,
+                taxCode: child.taxCode,
+                serviceDate: child.serviceDate,
+                isReversal: true,
+                originalChargeId: child.id,
+                parentChargeId: baseReversal.id,
+                sourceKey: `${amendmentSourcePrefix}${amendmentId}:reversal:${child.id}`,
+                postedBy: postedBy ?? undefined,
+              })
+              .returning();
+          }
+          reversedChargeIds.push(base.id);
+        } else {
+          adjustment = adjustment.minus(net);
+        }
+        continue;
+      }
+      if (desired != null && !net.equals(desired)) {
+        adjustment = adjustment.plus(desired.minus(net));
+      }
+    }
+
+    if (!adjustment.isZero()) {
+      await tx
+        .insert(charges)
+        .values({
+          propertyId,
+          folioId,
+          type: 'adjustment',
+          description: 'Accepted stay amendment pricing adjustment',
+          amount: adjustment.toFixed(2),
+          currencyCode: newPricing.currencyCode,
+          taxAmount: '0.00',
+          serviceDate: new Date(`${newPricing.nights[0]!.date}T00:00:00.000Z`),
+          sourceKey: `${amendmentSourcePrefix}${amendmentId}:pricing-delta`,
+          postedBy: postedBy ?? undefined,
+        })
+        .returning();
+    }
+    await this.recalculateBalance(folioId, propertyId, tx);
+    return { reversedChargeIds, adjustmentAmount: adjustment.toFixed(2) };
   }
 
   async postCharge(

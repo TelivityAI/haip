@@ -58,6 +58,8 @@ export const folios = pgTable('folios', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
+  propertyIdUnique: uniqueIndex('folios_property_id_unique')
+    .on(table.propertyId, table.id),
   uniqueFolioNumber: uniqueIndex('folios_property_folio_number_unique')
     .on(table.propertyId, table.folioNumber),
 }));

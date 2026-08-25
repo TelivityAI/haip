@@ -58,11 +58,39 @@ export interface BookingRequestDetail extends Omit<BookingRequestListItem, 'hasC
   decidedBy: string | null;
   decidedAt: string | null;
   denialReason: string | null;
+  operationalReservation: {
+    id: string;
+    arrivalDate: string;
+    departureDate: string;
+    totalAmount: string;
+    currencyCode: string;
+    roomTypeId: string;
+    ratePlanId: string;
+    status: string;
+    updatedAt: string;
+  } | null;
 }
 
 export interface BookingRequestAcceptancePreview {
   requestId: string;
   submittedTotal: string;
+  currentTotal: string;
+  currencyCode: string;
+  previewVersion: 1;
+  previewToken: string;
+}
+
+export type StayAmendmentPriceSource = 'prior' | 'current' | 'custom';
+
+export interface BookingRequestStayAmendmentPreview {
+  requestId: string;
+  reservationId: string;
+  previousArrivalDate: string;
+  previousDepartureDate: string;
+  previousTotal: string;
+  arrivalDate: string;
+  departureDate: string;
+  priorTotal: string;
   currentTotal: string;
   currencyCode: string;
   previewVersion: 1;

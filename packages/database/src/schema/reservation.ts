@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, jsonb, integer, date, pgEnum, numeric, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, jsonb, integer, date, pgEnum, numeric, boolean, uniqueIndex } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 import { rooms } from './room.js';
 import { roomTypes } from './room.js';
@@ -65,7 +65,7 @@ export interface AcceptedPricingService {
 /** Immutable operational tariff chosen when staff accepts a Booking Request. */
 export interface AcceptedPricingSnapshot {
   version: 1;
-  source: 'submitted' | 'current' | 'custom';
+  source: 'submitted' | 'current' | 'custom' | 'prior';
   currencyCode: string;
   grandTotal: string;
   roomTotal: string;
@@ -183,7 +183,10 @@ export const reservations = pgTable('reservations', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  propertyIdUnique: uniqueIndex('reservations_property_id_unique')
+    .on(table.propertyId, table.id),
+}));
 
 /**
  * Named occupants on a reservation (one physical room).

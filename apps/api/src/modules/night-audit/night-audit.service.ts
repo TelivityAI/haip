@@ -232,6 +232,7 @@ export class NightAuditService {
             },
             acceptedNight.taxAmount,
             acceptedAdjustment,
+            `accepted-pricing:reservation:${reservation.id}:night:${businessDate}`,
           );
         } else {
           // Existing reservations retain canonical live rate/tax behavior.

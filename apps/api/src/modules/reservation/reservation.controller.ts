@@ -208,12 +208,13 @@ export class ReservationController {
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation modified' })
   @ApiResponse({ status: 404, description: 'Reservation not found' })
-  modifyReservation(
+  async modifyReservation(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: ModifyReservationDto,
   ) {
-    return this.reservationService.modify(id, propertyId, dto);
+    const result = await this.reservationService.modify(id, propertyId, dto);
+    return result.reservation;
   }
 
   // --- Lifecycle transition routes ---

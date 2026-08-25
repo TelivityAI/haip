@@ -1999,6 +1999,15 @@
       "accepting": "Accettazione...",
       "error": "Non è stato possibile accettare la richiesta. Controlla la disponibilità attuale e riprova."
     },
+    "modifyStay": {
+      "action": "Modifica soggiorno", "title": "Modifica soggiorno accettato", "activeStay": "Soggiorno attivo", "proposedStay": "Soggiorno proposto", "originalRequest": "Richiesta originale",
+      "arrivalDate": "Data di arrivo", "departureDate": "Data di partenza", "invalidDates": "La partenza deve essere successiva all'arrivo ed entrambe le date devono essere valide.",
+      "checking": "Verifica dell'intero soggiorno e del preventivo attuale…", "previewError": "Al momento non è possibile calcolare questo soggiorno. Controlla la disponibilità e riprova.",
+      "priceChoice": "Base tariffaria per il soggiorno modificato", "prior": "Base accettata precedente", "priorDescription": "Le date sovrapposte mantengono le righe accettate; le notti aggiunte usano la tariffa accettata di confine più vicina.",
+      "current": "Preventivo attuale", "currentDescription": "Usa le tariffe autorevoli disponibili ora per l'intero soggiorno proposto.", "custom": "Totale personalizzato", "customDescription": "Imposta un totale operativo positivo e registra il motivo.",
+      "awaitingQuote": "Preventivo in attesa", "enterAmount": "Inserisci un importo", "customTotal": "Totale personalizzato", "customReason": "Motivo del totale personalizzato",
+      "apply": "Applica modifica soggiorno", "applying": "Aggiornamento…", "commitError": "Non è stato possibile modificare il soggiorno. Controlla disponibilità e preventivo aggiornati."
+    },
     "deny": {
       "title": "Rifiuta la richiesta di prenotazione",
       "reason": "Motivo di rifiuto",
@@ -2059,6 +2068,7 @@
       "loadError": "Impossibile caricare il piano di pagamento e la cronologia dei movimenti.",
       "folioSummary": "Riepilogo del conto operativo",
       "acceptedDeal": "Totale accettato",
+      "activeStayTotal": "Totale soggiorno attivo",
       "folioCharges": "Addebiti del conto",
       "folioPayments": "Pagamenti del conto",
       "balanceDue": "Saldo dovuto",
@@ -2210,7 +2220,8 @@
         "email_sent": "E-mail consegnata",
         "email_failed": "Consegna e-mail non riuscita",
         "email_queued": "E-mail in coda",
-        "email_updated": "Consegna e-mail aggiornata"
+        "email_updated": "Consegna e-mail aggiornata",
+        "stay_amended": "Soggiorno accettato modificato"
       }
     }
   }

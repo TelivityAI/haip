@@ -110,6 +110,7 @@ const requestDetail = {
   decidedBy: null,
   decidedAt: null,
   denialReason: null,
+  operationalReservation: null,
 };
 
 const stripePayment = {
@@ -174,6 +175,7 @@ function mockApi(overrides?: {
   emails?: unknown;
   folio?: unknown | (() => unknown);
   preview?: unknown;
+  amendmentPreview?: unknown;
   audit?: unknown | ((cursor: string | null) => unknown);
 }) {
   vi.mocked(api.get).mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
@@ -199,6 +201,22 @@ function mockApi(overrides?: {
         currencyCode: 'EUR',
         previewVersion: 1,
         previewToken: 'v1:preview-token',
+      } } as never);
+    }
+    if (url === `/v1/booking-requests/${REQUEST_ID}/stay-amendment-preview`) {
+      return Promise.resolve({ data: overrides?.amendmentPreview ?? {
+        requestId: REQUEST_ID,
+        reservationId: 'reservation-1',
+        previousArrivalDate: '2026-09-10',
+        previousDepartureDate: '2026-09-12',
+        previousTotal: '640.00',
+        arrivalDate: String(config?.params?.arrivalDate ?? '2026-09-10'),
+        departureDate: String(config?.params?.departureDate ?? '2026-09-13'),
+        priorTotal: '960.00',
+        currentTotal: '990.00',
+        currencyCode: 'EUR',
+        previewVersion: 1,
+        previewToken: `v1:${'a'.repeat(64)}`,
       } } as never);
     }
     if (url === `/v1/booking-requests/${REQUEST_ID}/audit-history`) {
@@ -581,6 +599,99 @@ describe('Booking request decisions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry payment state' }));
     await waitFor(() => expect(vi.mocked(api.get).mock.calls.filter(([url]) =>
       url === `/v1/booking-requests/${REQUEST_ID}/payments`).length).toBeGreaterThan(1));
+  });
+});
+
+describe('Accepted Booking Request stay amendments', () => {
+  const acceptedDetail = {
+    ...requestDetail,
+    status: 'accepted' as const,
+    acceptedPriceSource: 'current' as const,
+    acceptedTotal: '640.00',
+    acceptedReservationId: 'reservation-1',
+    acceptedFolioId: 'folio-1',
+    decidedAt: '2026-08-24T10:10:00.000Z',
+    operationalReservation: {
+      id: 'reservation-1',
+      arrivalDate: '2026-09-10',
+      departureDate: '2026-09-12',
+      totalAmount: '660.00',
+      currencyCode: 'EUR',
+      roomTypeId: 'room-type-1',
+      ratePlanId: 'rate-plan-1',
+      status: 'confirmed',
+      updatedAt: '2026-08-25T10:00:00.000Z',
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    context.propertyId = 'property-1';
+    context.read = true;
+    context.write = true;
+    mockApi({ detail: acceptedDetail });
+    vi.mocked(api.post).mockResolvedValue({ data: {} } as never);
+  });
+
+  it('previews old/new dates and all rate bases, then submits a reasoned custom amendment', async () => {
+    const { queryClient } = renderAt(`/booking-requests/${REQUEST_ID}`);
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    expect(await screen.findByText('Active stay')).toBeInTheDocument();
+    expect(screen.getByText('€660.00')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Modify stay' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Modify accepted stay' });
+    const departure = within(dialog).getByLabelText('Departure date');
+    await userEvent.clear(departure);
+    await userEvent.type(departure, '2026-09-13');
+    expect((await within(dialog).findAllByText('€960.00')).length).toBeGreaterThan(0);
+    expect(within(dialog).getByText('€990.00')).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('radio', { name: /Custom total/i }));
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Custom total' }), '975');
+    expect(within(dialog).getByRole('button', { name: 'Apply stay change' })).toBeDisabled();
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Reason for custom total' }), 'Loyalty adjustment');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Apply stay change' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      `/v1/booking-requests/${REQUEST_ID}/stay-amendments`,
+      expect.objectContaining({
+        arrivalDate: '2026-09-10',
+        departureDate: '2026-09-13',
+        priceSource: 'custom',
+        customTotal: '975.00',
+        customReason: 'Loyalty adjustment',
+        previewToken: `v1:${'a'.repeat(64)}`,
+        idempotencyKey: expect.any(String),
+      }),
+      { params: { propertyId: 'property-1' } },
+    ));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['booking-requests', 'property-1'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['reservations', 'property-1'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['availability', 'property-1'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['folios', 'property-1'] });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ['booking-request-audit', 'property-1', REQUEST_ID],
+    });
+  });
+
+  it('disables duplicate writes and preserves the draft when the server reports a race', async () => {
+    let rejectRequest!: (error: unknown) => void;
+    vi.mocked(api.post).mockImplementation(() => new Promise((_resolve, reject) => {
+      rejectRequest = reject;
+    }) as never);
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('button', { name: 'Modify stay' }));
+    const dialog = screen.getByRole('dialog', { name: 'Modify accepted stay' });
+    await within(dialog).findAllByText('€960.00');
+    const submit = within(dialog).getByRole('button', { name: 'Apply stay change' });
+    await userEvent.click(submit);
+    expect(submit).toBeDisabled();
+    expect(api.post).toHaveBeenCalledTimes(1);
+
+    rejectRequest({ response: { status: 409, data: { message: 'Inventory changed; review the new quote' } } });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Inventory changed; review the new quote');
+    expect(within(dialog).getByLabelText('Departure date')).toHaveValue('2026-09-12');
   });
 });
 

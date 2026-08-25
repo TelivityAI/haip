@@ -14,6 +14,7 @@ import { assertTransition, type ReservationStatus } from './reservation-state-ma
 import {
   assertFullStayAvailability,
   AvailabilityService,
+  stayDates,
 } from './availability.service';
 import { FolioService } from '../folio/folio.service';
 import { RoomStatusService } from '../room/room-status.service';
@@ -38,6 +39,16 @@ import { ListUnassignedDto } from './dto/list-unassigned.dto';
 import { createCipheriv, randomBytes } from 'crypto';
 import { generateConfirmationNumber } from '../../common/crypto/confirmation-number';
 import type { AcceptedPricingSnapshot } from '@telivityhaip/database';
+
+type ReservationRow = typeof reservations.$inferSelect;
+
+export type ReservationAmendmentResult = {
+  reservation: ReservationRow;
+  previousArrivalDate: string;
+  previousDepartureDate: string;
+  previousTotalAmount: string;
+  newTotalAmount: string;
+};
 
 @Injectable()
 export class ReservationService {
@@ -1106,13 +1117,7 @@ export class ReservationService {
     if (dto.arrivalDate || dto.departureDate) {
       const arrival = dto.arrivalDate ?? reservation.arrivalDate;
       const departure = dto.departureDate ?? reservation.departureDate;
-      const nights = Math.ceil(
-        (new Date(departure).getTime() - new Date(arrival).getTime()) /
-          (1000 * 60 * 60 * 24),
-      );
-      if (nights <= 0) {
-        throw new BadRequestException('Departure date must be after arrival date');
-      }
+      const nights = stayDates(arrival, departure).length;
       if (dto.arrivalDate) updates['arrivalDate'] = dto.arrivalDate;
       if (dto.departureDate) updates['departureDate'] = dto.departureDate;
       updates['nights'] = nights;
@@ -1142,7 +1147,7 @@ export class ReservationService {
     //
     // Use the same room-type inventory mutex as canonical creation so a modify
     // cannot race another create/modify for the final unit.
-    const updated = await this.db.transaction(async (tx: any) => {
+    const updated: ReservationRow = await this.db.transaction(async (tx: any) => {
       if (arrivalChanged || departureChanged || roomTypeChanged) {
         const newArrival = (dto.arrivalDate ?? reservation.arrivalDate) as string;
         const newDeparture = (dto.departureDate ?? reservation.departureDate) as string;
@@ -1218,7 +1223,66 @@ export class ReservationService {
       updated.propertyId,
     );
 
-    return updated;
+    return this.amendmentResult(reservation, updated);
+  }
+
+  /**
+   * Explicit seam for a Booking Request stay amendment that already owns the
+   * property/request/reservation/inventory locks and transaction. The generic
+   * modify path intentionally cannot opt into this behavior.
+   */
+  async modifyAcceptedStay(
+    lockedReservation: ReservationRow,
+    propertyId: string,
+    dto: Required<Pick<ModifyReservationDto, 'arrivalDate' | 'departureDate' | 'totalAmount'>>,
+    acceptedPricingSnapshot: AcceptedPricingSnapshot,
+    tx: any,
+  ): Promise<ReservationAmendmentResult> {
+    if (
+      lockedReservation.propertyId !== propertyId
+      || !lockedReservation.acceptedPricingSnapshot
+    ) {
+      throw new ConflictException('Reservation is not eligible for an accepted stay amendment');
+    }
+    const nonModifiable: ReservationStatus[] = ['checked_out', 'no_show', 'cancelled'];
+    if (nonModifiable.includes(lockedReservation.status as ReservationStatus)) {
+      throw new BadRequestException(
+        `Cannot modify reservation in '${lockedReservation.status}' status`,
+      );
+    }
+    const dates = stayDates(dto.arrivalDate, dto.departureDate);
+    if (
+      acceptedPricingSnapshot.currencyCode !== lockedReservation.currencyCode
+      || acceptedPricingSnapshot.grandTotal !== new Decimal(dto.totalAmount).toFixed(2)
+    ) {
+      throw new ConflictException('Amended pricing does not match the reservation currency and total');
+    }
+    if (
+      acceptedPricingSnapshot.nights.length !== dates.length
+      || acceptedPricingSnapshot.nights.some((night, index) => night.date !== dates[index])
+    ) {
+      throw new ConflictException('Amended pricing does not cover the complete stay window');
+    }
+
+    const [updated] = await tx
+      .update(reservations)
+      .set({
+        arrivalDate: dto.arrivalDate,
+        departureDate: dto.departureDate,
+        nights: dates.length,
+        totalAmount: acceptedPricingSnapshot.grandTotal,
+        acceptedPricingSnapshot,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(reservations.id, lockedReservation.id),
+        eq(reservations.propertyId, propertyId),
+      ))
+      .returning();
+    if (!updated) {
+      throw new ConflictException('Reservation changed while applying the stay amendment');
+    }
+    return this.amendmentResult(lockedReservation, updated);
   }
 
   async findById(id: string, propertyId: string) {
@@ -1432,6 +1496,19 @@ export class ReservationService {
       throw new NotFoundException(`Reservation ${id} not found`);
     }
     return reservation;
+  }
+
+  private amendmentResult(
+    previous: ReservationRow,
+    reservation: ReservationRow,
+  ): ReservationAmendmentResult {
+    return {
+      reservation,
+      previousArrivalDate: previous.arrivalDate,
+      previousDepartureDate: previous.departureDate,
+      previousTotalAmount: previous.totalAmount,
+      newTotalAmount: reservation.totalAmount,
+    };
   }
 
   private encryptIdNumber(plainText: string): { encrypted: string; iv: string; authTag: string } {

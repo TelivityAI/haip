@@ -1999,6 +1999,15 @@
       "accepting": "Aceptando…",
       "error": "La solicitud no pudo ser aceptada. Revise la disponibilidad actual y vuelva a intentarlo."
     },
+    "modifyStay": {
+      "action": "Modificar estancia", "title": "Modificar estancia aceptada", "activeStay": "Estancia activa", "proposedStay": "Estancia propuesta", "originalRequest": "Solicitud original",
+      "arrivalDate": "Fecha de llegada", "departureDate": "Fecha de salida", "invalidDates": "La salida debe ser posterior a la llegada y ambas fechas deben ser válidas.",
+      "checking": "Comprobando la estancia completa y el precio actual…", "previewError": "No se puede calcular esta estancia ahora. Revise la disponibilidad e inténtelo de nuevo.",
+      "priceChoice": "Base de tarifa para la estancia modificada", "prior": "Base aceptada anterior", "priorDescription": "Las fechas coincidentes conservan sus líneas aceptadas; las noches añadidas usan la tarifa límite aceptada más cercana.",
+      "current": "Cotización actual", "currentDescription": "Use las tarifas autorizadas disponibles ahora para toda la estancia propuesta.", "custom": "Total personalizado", "customDescription": "Defina un total operativo positivo y registre el motivo.",
+      "awaitingQuote": "Esperando cotización", "enterAmount": "Introduzca un importe", "customTotal": "Total personalizado", "customReason": "Motivo del total personalizado",
+      "apply": "Aplicar cambio de estancia", "applying": "Aplicando…", "commitError": "No se pudo cambiar la estancia. Revise la disponibilidad y la cotización más recientes."
+    },
     "deny": {
       "title": "Denegar solicitud de reserva",
       "reason": "Motivo de denegación",
@@ -2059,6 +2068,7 @@
       "loadError": "No se pudo cargar el plan de pagos ni el historial de movimientos.",
       "folioSummary": "Resumen del folio operativo",
       "acceptedDeal": "Total aceptado",
+      "activeStayTotal": "Total de estancia activa",
       "folioCharges": "Cargos en folio",
       "folioPayments": "Pagos en folio",
       "balanceDue": "Saldo adeudado",
@@ -2210,7 +2220,8 @@
         "email_sent": "Correo entregado",
         "email_failed": "Error en la entrega del correo",
         "email_queued": "Correo en cola",
-        "email_updated": "Entrega de correo actualizada"
+        "email_updated": "Entrega de correo actualizada",
+        "stay_amended": "Estancia aceptada modificada"
       }
     }
   }

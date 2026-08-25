@@ -263,6 +263,7 @@ export {
   bookingRequestEmailDeliveryStatusEnum,
   bookingRequests,
   bookingRequestConsequences,
+  bookingRequestStayAmendments,
   type BookingRequestConsequenceKind,
   type BookingRequestConsequenceStatus,
   bookingRequestInstallments,

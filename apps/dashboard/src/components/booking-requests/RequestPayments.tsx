@@ -358,8 +358,9 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
             <h2 className="font-semibold text-telivity-navy">{t('bookingRequests.payments.folioSummary')}</h2>
           </div>
           {folioQuery.isLoading ? <p className="mt-3 text-sm text-telivity-slate">{t('bookingRequests.common.loading')}</p> : folio ? (
-            <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <div><dt className="text-xs uppercase tracking-wide text-telivity-slate">{t('bookingRequests.payments.acceptedDeal')}</dt><dd className="mt-1 font-semibold text-telivity-navy">{formatMoney(request.acceptedTotal, request.currencyCode)}</dd></div>
+              <div><dt className="text-xs uppercase tracking-wide text-telivity-slate">{t('bookingRequests.payments.activeStayTotal')}</dt><dd className="mt-1 font-semibold text-telivity-navy">{formatMoney(request.operationalReservation?.totalAmount, request.operationalReservation?.currencyCode ?? request.currencyCode)}</dd></div>
               <div><dt className="text-xs uppercase tracking-wide text-telivity-slate">{t('bookingRequests.payments.folioCharges')}</dt><dd className="mt-1 font-semibold text-telivity-navy">{formatMoney(folio.totalCharges, folio.currencyCode)}</dd></div>
               <div><dt className="text-xs uppercase tracking-wide text-telivity-slate">{t('bookingRequests.payments.folioPayments')}</dt><dd className="mt-1 font-semibold text-telivity-navy">{formatMoney(folio.totalPayments, folio.currencyCode)}</dd></div>
               <div><dt className="text-xs uppercase tracking-wide text-telivity-slate">{t('bookingRequests.payments.balanceDue')}</dt><dd className="mt-1 text-lg font-semibold text-telivity-navy">{formatMoney(folio.balance, folio.currencyCode)}</dd></div>

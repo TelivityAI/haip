@@ -20,6 +20,7 @@ import { payments, folios } from './folio.js';
 import { properties } from './property.js';
 import { ratePlans } from './rate-plan.js';
 import { reservations } from './reservation.js';
+import type { AcceptedPricingSnapshot } from './reservation.js';
 import { roomTypes } from './room.js';
 
 export const bookingRequestStatusEnum = pgEnum('booking_request_status', [
@@ -138,6 +139,7 @@ export type BookingRequestConsequenceKind =
   | `payment_refunded:${string}`
   | `external_returned:${string}`
   | `payment_retained:${string}`
+  | `amend:${string}`
   | `service:${string}`;
 export type BookingRequestConsequenceStatus = 'pending' | 'processing' | 'completed';
 
@@ -166,6 +168,60 @@ export const bookingRequestConsequences = pgTable('booking_request_consequences'
     name: 'booking_request_consequences_request_fkey',
     columns: [table.propertyId, table.bookingRequestId],
     foreignColumns: [bookingRequests.propertyId, bookingRequests.id],
+  }),
+}));
+
+/**
+ * Durable idempotency and audit boundary for operational stay amendments.
+ * The Booking Request deal remains immutable; these rows capture successive
+ * reservation/folio states chosen by staff.
+ */
+export const bookingRequestStayAmendments = pgTable('booking_request_stay_amendments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  bookingRequestId: uuid('booking_request_id').notNull().references(() => bookingRequests.id),
+  reservationId: uuid('reservation_id').notNull().references(() => reservations.id),
+  folioId: uuid('folio_id').notNull().references(() => folios.id),
+  idempotencyKey: varchar('idempotency_key', { length: 200 }).notNull(),
+  operationFingerprint: varchar('operation_fingerprint', { length: 64 }).notNull(),
+  previewToken: varchar('preview_token', { length: 67 }).notNull(),
+  priceSource: varchar('price_source', { length: 10 })
+    .$type<'prior' | 'current' | 'custom'>()
+    .notNull(),
+  previousArrivalDate: date('previous_arrival_date').notNull(),
+  previousDepartureDate: date('previous_departure_date').notNull(),
+  newArrivalDate: date('new_arrival_date').notNull(),
+  newDepartureDate: date('new_departure_date').notNull(),
+  previousTotalAmount: numeric('previous_total_amount', { precision: 12, scale: 2 }).notNull(),
+  newTotalAmount: numeric('new_total_amount', { precision: 12, scale: 2 }).notNull(),
+  currencyCode: varchar('currency_code', { length: 3 }).notNull(),
+  reason: text('reason'),
+  previousPricingSnapshot: jsonb('previous_pricing_snapshot').$type<AcceptedPricingSnapshot>().notNull(),
+  newPricingSnapshot: jsonb('new_pricing_snapshot').$type<AcceptedPricingSnapshot>().notNull(),
+  actorUserId: uuid('actor_user_id'),
+  actorEmail: varchar('actor_email', { length: 255 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  propertyIdempotencyUnique:
+    uniqueIndex('booking_request_stay_amendments_property_idempotency_unique')
+      .on(table.propertyId, table.idempotencyKey),
+  propertyRequestFingerprintUnique:
+    uniqueIndex('br_stay_amendments_property_request_fingerprint_unique')
+      .on(table.propertyId, table.bookingRequestId, table.operationFingerprint),
+  requestOwnership: foreignKey({
+    name: 'booking_request_stay_amendments_request_fkey',
+    columns: [table.propertyId, table.bookingRequestId],
+    foreignColumns: [bookingRequests.propertyId, bookingRequests.id],
+  }),
+  reservationOwnership: foreignKey({
+    name: 'booking_request_stay_amendments_reservation_fkey',
+    columns: [table.propertyId, table.reservationId],
+    foreignColumns: [reservations.propertyId, reservations.id],
+  }),
+  folioOwnership: foreignKey({
+    name: 'booking_request_stay_amendments_folio_fkey',
+    columns: [table.propertyId, table.folioId],
+    foreignColumns: [folios.propertyId, folios.id],
   }),
 }));
 

@@ -1978,6 +1978,32 @@
       "accepting": "Accepting…",
       "error": "The request could not be accepted. Review the current availability and try again."
     },
+    "modifyStay": {
+      "action": "Modify stay",
+      "title": "Modify accepted stay",
+      "activeStay": "Active stay",
+      "proposedStay": "Proposed stay",
+      "originalRequest": "Original request",
+      "arrivalDate": "Arrival date",
+      "departureDate": "Departure date",
+      "invalidDates": "Departure must be after arrival and both dates must be valid.",
+      "checking": "Checking the complete stay and current quote…",
+      "previewError": "This stay cannot be quoted right now. Review availability and try again.",
+      "priceChoice": "Rate basis for the amended stay",
+      "prior": "Prior accepted basis",
+      "priorDescription": "Keep exact accepted lines on overlapping dates; extension nights use the nearest accepted boundary rate.",
+      "current": "Current quote",
+      "currentDescription": "Use the authoritative rates available for the complete proposed stay now.",
+      "custom": "Custom total",
+      "customDescription": "Set a positive operational total and record the reason.",
+      "awaitingQuote": "Awaiting quote",
+      "enterAmount": "Enter an amount",
+      "customTotal": "Custom total",
+      "customReason": "Reason for custom total",
+      "apply": "Apply stay change",
+      "applying": "Applying…",
+      "commitError": "The stay could not be changed. Review the latest availability and quote."
+    },
     "deny": {
       "title": "Deny booking request",
       "reason": "Denial reason",
@@ -2038,6 +2064,7 @@
       "loadError": "Payment-plan and movement history could not be loaded.",
       "folioSummary": "Operational folio summary",
       "acceptedDeal": "Accepted deal",
+      "activeStayTotal": "Active stay total",
       "folioCharges": "Folio charges",
       "folioPayments": "Folio payments",
       "balanceDue": "Balance due",
@@ -2189,7 +2216,8 @@
         "email_sent": "Email delivered",
         "email_failed": "Email delivery failed",
         "email_queued": "Email queued",
-        "email_updated": "Email delivery updated"
+        "email_updated": "Email delivery updated",
+        "stay_amended": "Accepted stay amended"
       }
     }
   },

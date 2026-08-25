@@ -528,7 +528,9 @@ export class AncillaryService {
           description,
           amount,
           currencyCode: acceptedLine?.currencyCode ?? rs.currencyCode,
-          serviceDate: new Date(serviceDate + 'T00:00:00Z').toISOString(),
+          serviceDate: new Date(
+            `${acceptedLine?.date ?? serviceDate}T00:00:00Z`,
+          ).toISOString(),
           guestId: reservation.guestId,
         };
         if (acceptedLine) {
@@ -721,7 +723,7 @@ export class AncillaryService {
     serviceId: string,
     date: string,
     useFirstLine: boolean,
-  ): { amount: string; taxAmount: string; currencyCode: string } | null {
+  ): { date: string; amount: string; taxAmount: string; currencyCode: string } | null {
     const pricing = reservation.acceptedPricingSnapshot;
     if (!pricing || !Array.isArray(pricing.services)) return null;
     const service = pricing.services.find(
@@ -733,6 +735,7 @@ export class AncillaryService {
     ) ?? (useFirstLine ? service.lineItems[0] : undefined);
     if (!line) return null;
     return {
+      date: line.date,
       amount: line.amount,
       taxAmount: line.taxAmount,
       currencyCode: pricing.currencyCode,

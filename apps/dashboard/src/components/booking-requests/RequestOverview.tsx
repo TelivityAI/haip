@@ -1,7 +1,9 @@
 import { CalendarDays, Contact, CreditCard, FileText, Scale } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatMoney } from '../../lib/money';
 import { quoteTotal, type BookingRequestDetail } from './types';
+import ModifyStayModal from './ModifyStayModal';
 
 function displayAnswer(value: unknown, yes: string, no: string, unavailable: string): string {
   if (typeof value === 'string' || typeof value === 'number') return String(value);
@@ -33,8 +35,17 @@ function OverviewCard({
   );
 }
 
-export default function RequestOverview({ request }: { request: BookingRequestDetail }) {
+export default function RequestOverview({
+  request,
+  propertyId,
+  canWrite,
+}: {
+  request: BookingRequestDetail;
+  propertyId: string;
+  canWrite: boolean;
+}) {
   const { t } = useTranslation();
+  const [modifyOpen, setModifyOpen] = useState(false);
   const submittedTotal = quoteTotal(request.submittedQuoteSnapshot);
   const currentTotal = quoteTotal(request.currentQuoteSnapshot);
   const difference = submittedTotal && currentTotal
@@ -46,6 +57,29 @@ export default function RequestOverview({ request }: { request: BookingRequestDe
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
       <div className="space-y-4">
         <OverviewCard icon={CalendarDays} title={t('bookingRequests.overview.stay')}>
+          {request.operationalReservation ? (
+            <div className="mb-4 flex flex-col justify-between gap-3 rounded-lg border border-telivity-dark-teal/25 bg-telivity-dark-teal/5 p-4 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-telivity-dark-teal">
+                  {t('bookingRequests.modifyStay.activeStay')}
+                </p>
+                <p className="mt-1 font-semibold text-telivity-navy">
+                  {request.operationalReservation.arrivalDate} → {request.operationalReservation.departureDate}
+                </p>
+                <p className="mt-1 text-sm font-medium text-telivity-navy">
+                  {formatMoney(request.operationalReservation.totalAmount, request.operationalReservation.currencyCode)}
+                </p>
+              </div>
+              {canWrite && request.status === 'accepted' ? (
+                <button type="button" onClick={() => setModifyOpen(true)} className="rounded-lg border border-telivity-deep-blue px-3 py-2 text-sm font-semibold text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
+                  {t('bookingRequests.modifyStay.action')}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-telivity-slate">
+            {t('bookingRequests.modifyStay.originalRequest')}
+          </p>
           <dl className="grid gap-4 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-telivity-slate">{t('bookingRequests.overview.dates')}</dt>
@@ -163,6 +197,13 @@ export default function RequestOverview({ request }: { request: BookingRequestDe
           </OverviewCard>
         ) : null}
       </div>
+      {modifyOpen && request.operationalReservation ? (
+        <ModifyStayModal
+          request={request}
+          propertyId={propertyId}
+          onClose={() => setModifyOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

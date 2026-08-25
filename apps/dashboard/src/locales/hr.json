@@ -1999,6 +1999,15 @@
       "accepting": "Prihvaćanje...",
       "error": "Zahtjev nije mogao biti prihvaćen. Pregledajte trenutnu dostupnost i pokušajte ponovno."
     },
+    "modifyStay": {
+      "action": "Izmijeni boravak", "title": "Izmijeni prihvaćeni boravak", "activeStay": "Aktivni boravak", "proposedStay": "Predloženi boravak", "originalRequest": "Izvorni zahtjev",
+      "arrivalDate": "Datum dolaska", "departureDate": "Datum odlaska", "invalidDates": "Odlazak mora biti nakon dolaska, a oba datuma moraju biti valjana.",
+      "checking": "Provjera cijelog boravka i trenutne ponude…", "previewError": "Ovaj boravak trenutačno nije moguće izračunati. Provjerite dostupnost i pokušajte ponovno.",
+      "priceChoice": "Osnova cijene za izmijenjeni boravak", "prior": "Prethodna prihvaćena osnova", "priorDescription": "Datumi koji se preklapaju zadržavaju prihvaćene stavke; dodane noći koriste najbližu rubnu prihvaćenu cijenu.",
+      "current": "Trenutna ponuda", "currentDescription": "Koristite mjerodavne cijene koje su sada dostupne za cijeli predloženi boravak.", "custom": "Prilagođeni ukupni iznos", "customDescription": "Postavite pozitivan operativni ukupni iznos i zabilježite razlog.",
+      "awaitingQuote": "Ponuda se čeka", "enterAmount": "Unesite iznos", "customTotal": "Prilagođeni ukupni iznos", "customReason": "Razlog prilagođenog ukupnog iznosa",
+      "apply": "Primijeni promjenu boravka", "applying": "Primjenjuje se…", "commitError": "Boravak nije moguće promijeniti. Pregledajte najnoviju dostupnost i ponudu."
+    },
     "deny": {
       "title": "Odbij zahtjev za rezervaciju",
       "reason": "Razlog odbijanja",
@@ -2059,6 +2068,7 @@
       "loadError": "Plan plaćanja i povijest kretanja nisu se mogli učitati.",
       "folioSummary": "Sažetak operativnog folija",
       "acceptedDeal": "Prihvaćen dogovor",
+      "activeStayTotal": "Ukupno za aktivni boravak",
       "folioCharges": "Stavke folija",
       "folioPayments": "Folio plaćanja",
       "balanceDue": "Saldo duga",
@@ -2210,7 +2220,8 @@
         "email_sent": "E-pošta dostavljena",
         "email_failed": "Dostava e-pošte nije uspjela",
         "email_queued": "E-pošta stavljena u red",
-        "email_updated": "Dostava e-pošte ažurirana"
+        "email_updated": "Dostava e-pošte ažurirana",
+        "stay_amended": "Prihvaćeni boravak izmijenjen"
       }
     }
   }

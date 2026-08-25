@@ -1884,6 +1884,15 @@
       "accepting": "Aceitando…",
       "error": "A solicitação não pôde ser aceita. Revise a disponibilidade atual e tente novamente."
     },
+    "modifyStay": {
+      "action": "Alterar estadia", "title": "Alterar estadia aceita", "activeStay": "Estadia ativa", "proposedStay": "Estadia proposta", "originalRequest": "Pedido original",
+      "arrivalDate": "Data de chegada", "departureDate": "Data de saída", "invalidDates": "A saída deve ser posterior à chegada e ambas as datas devem ser válidas.",
+      "checking": "Verificando toda a estadia e a cotação atual…", "previewError": "Não é possível calcular esta estadia agora. Revise a disponibilidade e tente novamente.",
+      "priceChoice": "Base de tarifa para a estadia alterada", "prior": "Base aceita anterior", "priorDescription": "As datas sobrepostas mantêm as linhas aceitas; noites adicionadas usam a tarifa limite aceita mais próxima.",
+      "current": "Cotação atual", "currentDescription": "Use as tarifas oficiais disponíveis agora para toda a estadia proposta.", "custom": "Total personalizado", "customDescription": "Defina um total operacional positivo e registre o motivo.",
+      "awaitingQuote": "Aguardando cotação", "enterAmount": "Informe um valor", "customTotal": "Total personalizado", "customReason": "Motivo do total personalizado",
+      "apply": "Confirmar alteração da estadia", "applying": "Confirmando…", "commitError": "Não foi possível alterar a estadia. Revise a disponibilidade e a cotação mais recentes."
+    },
     "deny": {
       "title": "Negar solicitação de reserva",
       "reason": "Motivo da negação",
@@ -1944,6 +1953,7 @@
       "loadError": "Não foi possível carregar o plano de pagamento e o histórico de movimentos.",
       "folioSummary": "Resumo do fólio operacional",
       "acceptedDeal": "Total aceito",
+      "activeStayTotal": "Total da estadia ativa",
       "folioCharges": "Cobranças de fólio",
       "folioPayments": "Pagamentos em fólio",
       "balanceDue": "Saldo devido",
@@ -2095,7 +2105,8 @@
         "email_sent": "E-mail entregue",
         "email_failed": "Falha na entrega do e-mail",
         "email_queued": "E-mail na fila",
-        "email_updated": "Entrega do e-mail atualizada"
+        "email_updated": "Entrega do e-mail atualizada",
+        "stay_amended": "Estadia aceita alterada"
       }
     }
   }
