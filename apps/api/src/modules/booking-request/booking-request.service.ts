@@ -615,14 +615,24 @@ export class BookingRequestService {
     );
 
     const transactionResult = await this.db.transaction(async (tx) => {
-      await this.lockProperty(tx, propertyId);
-      const request = await this.lockRequest(tx, id, propertyId);
-      this.assertAcceptedStayAmendmentRequest(request);
+      // Resolve the immutable accepted reservation link without taking a row
+      // lock, then acquire the shared pricing/posting mutex first. A poster
+      // holding that mutex may still need FK key-share locks on property and
+      // request rows while inserting its charge. Taking those UPDATE locks
+      // before waiting here would form a real posting-first deadlock.
+      const requestCandidate = await this.findRequest(tx, id, propertyId);
+      this.assertAcceptedStayAmendmentRequest(requestCandidate);
       return withAcceptedPricingLock(
         this.db,
         propertyId,
-        request.acceptedReservationId!,
+        requestCandidate.acceptedReservationId!,
         async () => {
+      await this.lockProperty(tx, propertyId);
+      const request = await this.lockRequest(tx, id, propertyId);
+      this.assertAcceptedStayAmendmentRequest(request);
+      if (request.acceptedReservationId !== requestCandidate.acceptedReservationId) {
+        throw new ConflictException('Accepted reservation link changed; retry the amendment');
+      }
       const reservation = await this.lockLinkedReservation(tx, request, propertyId);
 
       const replay = await this.findExistingStayAmendment(

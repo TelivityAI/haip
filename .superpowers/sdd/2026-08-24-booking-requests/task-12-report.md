@@ -87,7 +87,7 @@ The current open business date is now resolved from the property's IANA timezone
 
 Correction provenance is tenant-safe at the database layer. Drizzle, migration 0030, and push schema now use `(property_id, adjusts_charge_id) → charges(property_id, id)` backed by `charges_property_id_unique`; a preflight rejects legacy cross-property links before replacing the earlier single-column FK. Fresh/replay migration tests and live PostgreSQL verify both the catalog definition and a real cross-property insertion failure.
 
-The live mutex suite now contains five PostgreSQL tests. It exercises the actual `BookingRequestService.amendStay` and `NightAuditService` write seams against real reservation, snapshot, folio, charge, source-key, audit, and outbox rows: a night-audit poster queued behind an amendment re-reads the committed snapshot and writes only the new room amount, and replay writes nothing. It also runs the public `AncillaryService` cancellation/posting race with the real `FolioService`: cancellation-first writes no charge, while posting-first commits the accepted base/tax group and a losing cancellation rolls back without changing `posted`. The narrow parameterized advisory-lock statement remains the documented raw-SQL exception because Drizzle has no transaction-advisory-lock query primitive.
+The live mutex suite now contains six PostgreSQL tests. It exercises both orders of the actual `BookingRequestService.amendStay` and `NightAuditService` write seams against real reservation, snapshot, folio, charge, source-key, audit, and outbox rows: a night-audit poster queued behind an amendment re-reads the committed snapshot and writes only the new room amount, while posting-first commits the old group and is followed by one exact signed correction. Replay writes nothing in either order. It also runs the public `AncillaryService` cancellation/posting race with the real `FolioService`: cancellation-first writes no charge, while posting-first commits the accepted base/tax group and a losing cancellation rolls back without changing `posted`. The narrow parameterized advisory-lock statement remains the documented raw-SQL exception because Drizzle has no transaction-advisory-lock query primitive.
 
 ## Final review follow-up
 
@@ -96,8 +96,16 @@ The last review loop closes the remaining public and presentation boundaries:
 - generic create-charge HTTP/DTO/service input cannot supply `isReversal`, `originalChargeId`, `parentChargeId`, `adjustsChargeId`, or `sourceKey`; whitelist validation rejects forged HTTP fields and the service rejects forged runtime objects before any insert;
 - `reverseCharge` is the only generic folio operation that writes `is_reversal=true`; repeated or reversal-of-reversal attempts remain rejected, while accepted group reversal retains signed base/child reporting semantics;
 - accepted and manual duplicate extras are row-aware for once and per-night scheduling: accepted ownership uses the frozen snapshot, while manual/front-desk ownership uses live price/category/tax and its own `[svc:<reservationServiceId>]` idempotency identity;
-- `getCharges` presents row-local `canMove`/`canReverse` authority hints, so a paginated tax/custom child stays non-operable even when its base is absent from the current dashboard page; backend write guards remain authoritative;
+- `getCharges` presents `canMove`/`canReverse` authority hints with relationship metadata outside the current page, so accepted children stay non-operable without blocking generic tax children; backend write guards remain authoritative;
 - migration and push-schema constraint catalog checks now scope the name lookup to `conrelid = 'charges'::regclass`, preventing an unrelated table's same-named constraint from suppressing the tenant-safe charge FK.
+
+## Posting-first and pagination final review follow-up
+
+The final live PostgreSQL race uses the public `NightAuditService.postRoomTariffs` and `BookingRequestService.amendStay` seams with the real reservation, folio, charge, audit, and consequence tables. A deterministic trigger holds the actual room-charge insert after Night Audit has acquired the shared mutex. The initial red test exposed a genuine lock cycle: amendment held property/request `FOR UPDATE` locks while waiting for the mutex, and the poster holding the mutex still needed a foreign-key key-share lock to finish its charge. Amendment now resolves the immutable accepted-reservation link without a row lock, acquires the pricing/posting mutex first, and only then locks property, request, reservation, and inventory. The inverse race remains covered.
+
+In posting-first order, Night Audit commits the old canonical room group at `100.00`; amendment then re-reads it and converges to the authoritative `80.00` room value with one linked `-20.00` non-reversal correction. There are no duplicate canonical rows or reversals. Exact replay leaves two room ledger rows and exactly one amendment, actor-bearing audit, completed outbox consequence, and persisted dispatch.
+
+Folio operability hints are now pagination-safe. `getCharges` resolves relevant parents outside the page within the same property/folio and existing reversals anywhere in the same property, matching the backend reversal guard. A child is non-operable only when its parent belongs to an accepted-pricing group; an ordinary generic tax child retains the same reverse/move behavior enforced by the write service. An original whose canonical reversal is on another page receives `canReverse: false`, and the dashboard consumes that authoritative hint without requiring the reversal row locally.
 
 ## TDD and review findings
 
@@ -124,14 +132,14 @@ The final focused set covers schema/migration safety, pricing, transactional orc
 | Focused database schema/migration tests | Pass: 22/22 |
 | Focused Task 12 API tests | Pass: pricing, amendment, reservation, availability, night-audit, folio, and ancillary suites |
 | Focused dashboard tests | Pass: Modify Stay modal plus Booking Requests page |
-| Full monorepo test suite | Pass; shared 10/10, database 22/22, booking 44/44, dashboard 146/146, API 225 files / 1919 tests (13 intentional skips remain) |
-| Final focused review set | Pass: API 158/158, database 18/18, dashboard 39/39 |
-| Live PostgreSQL contract | Pass: final 5/5 helper/actual-amendment/night-audit/ancillary/FK contract, fresh push, seed, push replay, migration 0030 replay twice, and scoped catalog checks |
+| Full monorepo test suite | Pass; shared 10/10, database 22/22, booking 44/44, dashboard 148/148, API 225 files / 1921 tests (14 intentional skips remain) |
+| Final focused review set | Pass: latest API amendment/folio/night-audit/ancillary/report set 147/147 and Folios dashboard 12/12 |
+| Live PostgreSQL contract | Pass: final 6/6 helper/actual two-order amendment/night-audit/ancillary/FK contract, fresh push, seed, push replay, migration 0030 replay twice, and scoped catalog checks |
 | Repository typecheck | Pass |
 | Repository lint | Pass: 0 errors; the repository's warning baseline remains (primarily explicit `any` and type-only imports) |
 | Production build | Pass; the existing Vite large-chunk advisory remains |
 | Eight-locale JSON/key parity | Pass |
-| React Doctor changed-scope scan | Pass: 54 Task 12 files against `main` (63/100) and 2 final-loop dashboard files against `b7dc5a5` (71/100), with no issues reported |
+| React Doctor changed-scope scan | Pass: 33 changed dashboard files against `main` (63/100), with no issues reported |
 | `git diff --check` | Pass |
 
 ## Design and scope

@@ -506,6 +506,149 @@ suite('accepted-pricing mutex against PostgreSQL', () => {
     expect(roomCount?.count).toBe(1);
   }, 30_000);
 
+  it('reconciles a room group claimed by real night audit before the real amendment', async () => {
+    await setupActualServiceFixture();
+    const { bookingRequest, nightAudit, webhook } = actualServiceGraph();
+    await client`
+      UPDATE rate_plans SET base_amount = 80.00
+      WHERE id = ${actualIds.ratePlan} AND property_id = ${actualIds.property}
+    `;
+    const dates = { arrivalDate: '2026-10-01', departureDate: '2026-10-02' };
+    const preview = await bookingRequest.stayAmendmentPreview(
+      actualIds.bookingRequest,
+      actualIds.property,
+      { propertyId: actualIds.property, ...dates },
+    );
+    const amendmentInput = {
+      ...dates,
+      priceSource: 'current' as const,
+      previewToken: preview.previewToken,
+      idempotencyKey: 'task12-live-audit-vs-amend',
+    };
+
+    await client.unsafe(`
+      CREATE OR REPLACE FUNCTION task12_delay_charge() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.source_key = 'accepted-pricing:reservation:${actualIds.reservation}:night:2026-10-01' THEN
+          PERFORM pg_sleep(0.35);
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await client.unsafe(`
+      CREATE TRIGGER task12_delay_charge BEFORE INSERT ON charges
+      FOR EACH ROW EXECUTE FUNCTION task12_delay_charge()
+    `);
+
+    const tariffPosting = nightAudit.postRoomTariffs(actualIds.property, '2026-10-01');
+    await waitForAdvisoryLock();
+    const amendment = bookingRequest.amendStay(
+      actualIds.bookingRequest,
+      actualIds.property,
+      amendmentInput,
+      { userEmail: 'night.manager@example.invalid' },
+    );
+
+    const [tariff, amended] = await Promise.all([tariffPosting, amendment]);
+    expect(tariff).toMatchObject({
+      totalRoom: '100.00',
+      totalTax: '0.00',
+      count: 1,
+      errors: [],
+    });
+    expect(amended).toMatchObject({
+      previousTotalAmount: '122.00',
+      newTotalAmount: '100.00',
+      priceSource: 'current',
+    });
+
+    const roomLedger = await client<{
+      id: string;
+      amount: string;
+      isReversal: boolean;
+      sourceKey: string | null;
+      adjustsChargeId: string | null;
+      parentChargeId: string | null;
+    }[]>`
+      SELECT id, amount::text AS amount, is_reversal AS "isReversal",
+        source_key AS "sourceKey", adjusts_charge_id AS "adjustsChargeId",
+        parent_charge_id AS "parentChargeId"
+      FROM charges
+      WHERE property_id = ${actualIds.property} AND type = 'room'
+      ORDER BY created_at, id
+    `;
+    expect(roomLedger).toHaveLength(2);
+    const base = roomLedger.find((row) => row.adjustsChargeId == null);
+    const correction = roomLedger.find((row) => row.adjustsChargeId != null);
+    expect(base).toMatchObject({
+      amount: '100.00',
+      isReversal: false,
+      sourceKey: `accepted-pricing:reservation:${actualIds.reservation}:night:2026-10-01`,
+      parentChargeId: null,
+    });
+    expect(correction).toMatchObject({
+      amount: '-20.00',
+      isReversal: false,
+      adjustsChargeId: base?.id,
+      parentChargeId: base?.id,
+    });
+    expect(correction?.sourceKey).toContain(
+      `accepted-pricing:reservation:${actualIds.reservation}:amendment:${amended.amendmentId}`,
+    );
+    expect(roomLedger.reduce((sum, row) => sum + Number(row.amount), 0)).toBe(80);
+
+    const replay = await bookingRequest.amendStay(
+      actualIds.bookingRequest,
+      actualIds.property,
+      amendmentInput,
+      { userEmail: 'night.manager@example.invalid' },
+    );
+    expect(replay.amendmentId).toBe(amended.amendmentId);
+    await expect(
+      nightAudit.postRoomTariffs(actualIds.property, '2026-10-01'),
+    ).resolves.toMatchObject({ count: 0, errors: [] });
+
+    const [effects] = await client<{
+      ledgerCount: number;
+      reversals: number;
+      amendmentCount: number;
+      auditCount: number;
+      consequenceCount: number;
+      completedConsequences: number;
+    }[]>`
+      SELECT
+        (SELECT count(*)::int FROM charges
+          WHERE property_id = ${actualIds.property} AND type = 'room') AS "ledgerCount",
+        (SELECT count(*)::int FROM charges
+          WHERE property_id = ${actualIds.property} AND is_reversal) AS reversals,
+        (SELECT count(*)::int FROM booking_request_stay_amendments
+          WHERE property_id = ${actualIds.property}
+            AND booking_request_id = ${actualIds.bookingRequest}) AS "amendmentCount",
+        (SELECT count(*)::int FROM audit_logs
+          WHERE property_id = ${actualIds.property}
+            AND booking_request_id = ${actualIds.bookingRequest}
+            AND description = 'Accepted Booking Request stay amended') AS "auditCount",
+        (SELECT count(*)::int FROM booking_request_consequences
+          WHERE property_id = ${actualIds.property}
+            AND booking_request_id = ${actualIds.bookingRequest}
+            AND kind LIKE 'amend:%') AS "consequenceCount",
+        (SELECT count(*)::int FROM booking_request_consequences
+          WHERE property_id = ${actualIds.property}
+            AND booking_request_id = ${actualIds.bookingRequest}
+            AND kind LIKE 'amend:%' AND status = 'completed') AS "completedConsequences"
+    `;
+    expect(effects).toEqual({
+      ledgerCount: 2,
+      reversals: 0,
+      amendmentCount: 1,
+      auditCount: 1,
+      consequenceCount: 1,
+      completedConsequences: 1,
+    });
+    expect(webhook.dispatchPersisted).toHaveBeenCalledTimes(1);
+  }, 30_000);
+
   it('serializes the real ancillary posting and cancellation service seams', async () => {
     await setupActualServiceFixture();
     const webhookService = { emit: vi.fn().mockResolvedValue(undefined) };

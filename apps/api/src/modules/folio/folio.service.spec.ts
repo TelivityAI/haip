@@ -932,25 +932,40 @@ describe('FolioService', () => {
   });
 
   describe('getCharges', () => {
-    it('should return paginated charges with filters', async () => {
+    function getChargesDb(
+      pageRows: any[],
+      metadataRows: any[] = [],
+      total = pageRows.length,
+    ) {
       let selectCall = 0;
-      const db = {
-        select: vi.fn().mockImplementation(() => ({
-          from: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({
-              limit: vi.fn().mockReturnValue({
-                offset: vi.fn().mockReturnValue({
-                  orderBy: vi.fn().mockResolvedValue([mockCharge]),
-                }),
+      return {
+        select: vi.fn().mockImplementation(() => {
+          selectCall += 1;
+          const currentCall = selectCall;
+          return {
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockImplementation(() => {
+                if (currentCall === 1) {
+                  return {
+                    limit: vi.fn().mockReturnValue({
+                      offset: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockResolvedValue(pageRows),
+                      }),
+                    }),
+                  };
+                }
+                return Promise.resolve(
+                  currentCall === 2 ? [{ count: total }] : metadataRows,
+                );
               }),
-              then: (resolve: any) => {
-                selectCall++;
-                resolve([{ count: 1 }]);
-              },
             }),
-          }),
-        })),
+          };
+        }),
       };
+    }
+
+    it('should return paginated charges with filters', async () => {
+      const db = getChargesDb([mockCharge]);
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           FolioService,
@@ -976,27 +991,17 @@ describe('FolioService', () => {
       expect(result.page).toBe(1);
     });
 
-    it('marks a paginated group child non-operable without needing its base row', async () => {
+    it('marks a paginated accepted-pricing child non-operable from its off-page base', async () => {
       const taxChild = {
         ...mockCharge,
         id: 'tax-child-on-page-two',
         type: 'tax',
         parentChargeId: 'accepted-base-on-page-one',
       };
-      const db = {
-        select: vi.fn().mockImplementation(() => ({
-          from: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({
-              limit: vi.fn().mockReturnValue({
-                offset: vi.fn().mockReturnValue({
-                  orderBy: vi.fn().mockResolvedValue([taxChild]),
-                }),
-              }),
-              then: (resolve: any) => resolve([{ count: 21 }]),
-            }),
-          }),
-        })),
-      };
+      const db = getChargesDb([taxChild], [{
+        id: taxChild.parentChargeId,
+        sourceKey: 'accepted-pricing:reservation:res-1:night:2026-06-02',
+      }], 21);
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           FolioService,
@@ -1017,6 +1022,60 @@ describe('FolioService', () => {
         canMove: false,
         canReverse: false,
       }]);
+    });
+
+    it('preserves generic tax-child operations when its off-page base is not accepted pricing', async () => {
+      const taxChild = {
+        ...mockCharge,
+        id: 'generic-tax-child-on-page-two',
+        type: 'tax',
+        parentChargeId: 'generic-base-on-page-one',
+      };
+      const db = getChargesDb([taxChild], [{
+        id: taxChild.parentChargeId,
+        sourceKey: null,
+      }], 21);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+
+      const result = await module.get(FolioService).getCharges('folio-001', {
+        propertyId: 'prop-001',
+        page: 2,
+        limit: 20,
+      });
+
+      expect(result.data[0]).toMatchObject({ canMove: true, canReverse: true });
+    });
+
+    it('marks an original non-reversible when its reversal is outside the current page', async () => {
+      const original = { ...mockCharge, id: 'original-on-page-two' };
+      const db = getChargesDb([original], [{
+        id: 'reversal-on-page-one',
+        isReversal: true,
+        originalChargeId: original.id,
+      }], 21);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+
+      const result = await module.get(FolioService).getCharges('folio-001', {
+        propertyId: 'prop-001',
+        page: 2,
+        limit: 20,
+      });
+
+      expect(result.data[0]).toMatchObject({ canReverse: false });
     });
   });
 

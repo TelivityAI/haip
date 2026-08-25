@@ -618,7 +618,7 @@ describe('BookingRequestService accepted stay amendment commit', () => {
     );
   });
 
-  it('locks in order, updates only operational state, audits, and emits one durable event after commit', async () => {
+  it('takes the pricing mutex before row locks, updates operational state, and emits one durable event', async () => {
     const harness = makeHarness();
     const requestBefore = structuredClone(harness.state.requests[0]);
     const preview = await harness.service.stayAmendmentPreview(REQUEST, PROPERTY, dates);
@@ -637,9 +637,9 @@ describe('BookingRequestService accepted stay amendment commit', () => {
     );
 
     expect(harness.lockOrder).toEqual([
+      'pricing-lock',
       'property',
       'request',
-      'pricing-lock',
       'reservation',
       'inventory',
     ]);

@@ -207,6 +207,52 @@ describe('Folios — split folios', () => {
       .not.toBeInTheDocument();
     expect(within(chargeSelect).getByRole('option', { name: /Minibar/ })).toBeInTheDocument();
   });
+
+  it('keeps an off-page generic tax child operable from the authoritative server hint', async () => {
+    const genericTaxChild = {
+      ...CHARGE,
+      id: 'generic-tax-page-two',
+      description: 'Generic tax from an earlier page',
+      type: 'tax',
+      parentChargeId: 'generic-base-page-one',
+      canMove: true,
+      canReverse: true,
+    };
+    mockGet({
+      '/v1/folios/folio-1/charges': [genericTaxChild],
+    });
+    renderDetail();
+
+    const childRow = (await screen.findByText(genericTaxChild.description)).closest('tr')!;
+    expect(within(childRow).getByText('Reverse')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Move Transactions'));
+    expect(within(screen.getByLabelText('Charge')).getByRole('option', {
+      name: /Generic tax from an earlier page/,
+    })).toBeInTheDocument();
+  });
+
+  it('hides reversal for an original whose reversal is on another page', async () => {
+    const reversedOriginal = {
+      ...CHARGE,
+      id: 'reversed-original-page-two',
+      description: 'Original reversed on page one',
+      canMove: true,
+      canReverse: false,
+    };
+    mockGet({
+      '/v1/folios/folio-1/charges': [reversedOriginal],
+    });
+    renderDetail();
+
+    const originalRow = (await screen.findByText(reversedOriginal.description)).closest('tr')!;
+    expect(within(originalRow).queryByText('Reverse')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Move Transactions'));
+    expect(within(screen.getByLabelText('Charge')).getByRole('option', {
+      name: /Original reversed on page one/,
+    })).toBeInTheDocument();
+  });
 });
 
 describe('Folios — payment corrections', () => {

@@ -5,7 +5,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { eq, and, sql, gte, lte } from 'drizzle-orm';
+import { eq, and, or, inArray, sql, gte, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import {
   folios,
@@ -1145,19 +1145,63 @@ export class FolioService {
         .where(whereClause),
     ]);
 
+    const pageIds: string[] = data.map((charge: any) => charge.id);
+    const parentIds: string[] = [...new Set<string>(
+      data
+        .map((charge: any) => charge.parentChargeId)
+        .filter((id: unknown): id is string => typeof id === 'string'),
+    )];
+    const metadataPredicates: any[] = [];
+    if (parentIds.length > 0) {
+      metadataPredicates.push(and(
+        eq(charges.folioId, folioId),
+        inArray(charges.id, parentIds),
+      ));
+    }
+    if (pageIds.length > 0) {
+      metadataPredicates.push(and(
+        eq(charges.isReversal, true),
+        inArray(charges.originalChargeId, pageIds),
+      ));
+    }
+    const relatedCharges = metadataPredicates.length > 0
+      ? await this.db
+        .select()
+        .from(charges)
+        .where(and(
+          eq(charges.propertyId, dto.propertyId),
+          or(...metadataPredicates),
+        ))
+      : [];
+    const acceptedParentIds = new Set(
+      relatedCharges
+        .filter((charge: any) => parentIds.includes(charge.id)
+          && typeof charge.sourceKey === 'string'
+          && charge.sourceKey.startsWith('accepted-pricing:'))
+        .map((charge: any) => charge.id),
+    );
+    const reversedOriginalIds = new Set(
+      relatedCharges
+        .filter((charge: any) => charge.isReversal && charge.originalChargeId)
+        .map((charge: any) => charge.originalChargeId),
+    );
+
     return {
-      // Present row-local authority hints so a tax/custom group child remains
-      // non-operable even when its base is on another result page. The write
-      // services still enforce the same rules as the final authority.
+      // The authority hints include related rows outside this page. That keeps
+      // accepted-pricing children internal and already-reversed originals
+      // non-reversible without treating ordinary tax children as internal.
       data: data.map((charge: any) => {
-        const canReverse = !charge.isLocked
+        const isAcceptedChild = Boolean(
+          charge.parentChargeId && acceptedParentIds.has(charge.parentChargeId),
+        );
+        const isIndividuallyOperable = !charge.isLocked
           && !charge.isReversal
           && !charge.adjustsChargeId
-          && !charge.parentChargeId;
+          && !isAcceptedChild;
         return {
           ...charge,
-          canReverse,
-          canMove: canReverse
+          canReverse: isIndividuallyOperable && !reversedOriginalIds.has(charge.id),
+          canMove: isIndividuallyOperable
             && !(typeof charge.sourceKey === 'string'
               && charge.sourceKey.startsWith('accepted-pricing:')),
         };
