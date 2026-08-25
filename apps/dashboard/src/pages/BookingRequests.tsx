@@ -385,7 +385,7 @@ function BookingRequestDetailPage({ propertyId, canWrite }: { propertyId: string
 
       {acceptOpen ? <AcceptRequestModal request={scopedRequest} propertyId={propertyId} onClose={() => setAcceptOpen(false)} /> : null}
       {denyOpen ? <DenyRequestModal requestId={scopedRequest.id} propertyId={propertyId} currencyCode={scopedRequest.currencyCode} unresolvedAmount={unresolvedTotal} onClose={() => setDenyOpen(false)} onResolveMoney={() => { setDenyOpen(false); setTab('payments'); }} /> : null}
-      {paymentAction ? <PaymentActionModal action={paymentAction} requestId={scopedRequest.id} propertyId={propertyId} currencyCode={scopedRequest.currencyCode} onClose={() => setPaymentAction(null)} /> : null}
+      {paymentAction ? <PaymentActionModal action={paymentAction} requestId={scopedRequest.id} propertyId={propertyId} currencyCode={scopedRequest.currencyCode} reservationId={scopedRequest.acceptedReservationId} onClose={() => setPaymentAction(null)} /> : null}
     </div>
   );
 }

@@ -22,6 +22,10 @@ const emailRetryMigration = readFileSync(
   new URL('./migrations/0026_booking_request_email_retry_policy.sql', import.meta.url),
   'utf8',
 );
+const auditRelationshipMigration = readFileSync(
+  new URL('./migrations/0028_booking_request_audit_relationship.sql', import.meta.url),
+  'utf8',
+);
 
 describe('booking request accepted-pricing migration safety', () => {
   it('fails instead of accepting an already-accepted request without an operational snapshot', () => {
@@ -139,6 +143,55 @@ describe('booking request email recovery migration safety', () => {
       expect(source).toContain('ADD COLUMN IF NOT EXISTS provider_message_id');
       expect(source).toContain('booking_request_email_deliveries_recovery_idx');
       expect(source).toMatch(/WHERE status IN \('pending', 'processing'\)/i);
+    }
+  });
+});
+
+describe('booking request immutable audit relationship migration safety', () => {
+  it('adds the request relationship before its guarded backfill and timeline index', () => {
+    const addColumn = auditRelationshipMigration.indexOf(
+      'ADD COLUMN IF NOT EXISTS booking_request_id',
+    );
+    const backfill = auditRelationshipMigration.indexOf('UPDATE audit_logs');
+    const index = auditRelationshipMigration.indexOf(
+      'audit_logs_booking_request_timeline_idx',
+    );
+
+    expect(addColumn).toBeGreaterThanOrEqual(0);
+    expect(backfill).toBeGreaterThan(addColumn);
+    expect(index).toBeGreaterThan(backfill);
+    expect(auditRelationshipMigration).toContain(
+      "~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'",
+    );
+  });
+
+  it('keeps the direct relationship and bounded timeline index in push schema', () => {
+    expect(pushSchema).toContain('booking_request_id uuid');
+    expect(pushSchema).toContain('ADD COLUMN IF NOT EXISTS booking_request_id uuid');
+    expect(pushSchema).toContain('audit_logs_booking_request_timeline_idx');
+    expect(pushSchema).toMatch(
+      /\(property_id, booking_request_id, occurred_at DESC, id DESC\)/,
+    );
+    expect(pushSchema).toMatch(
+      /INSERT INTO audit_logs \(\s*property_id, booking_request_id,[\s\S]*?SELECT mutation\.property_id,\s*mutation\.booking_request_id,/,
+    );
+    expect(pushSchema).toMatch(
+      /INSERT INTO audit_logs \(\s*property_id, booking_request_id,[\s\S]*?SELECT repaired\.property_id,\s*repaired\.booking_request_id,/,
+    );
+  });
+
+  it('casts legacy request metadata only after each candidate passes UUID validation', () => {
+    for (const source of [auditRelationshipMigration, pushSchema]) {
+      for (const candidate of [
+        "new_value->>'bookingRequestId'",
+        "new_value->>'requestId'",
+        "previous_value->>'bookingRequestId'",
+        "previous_value->>'requestId'",
+      ]) {
+        expect(source).toContain(`CASE WHEN ${candidate} ~*`);
+        expect(source).toContain(`THEN (${candidate})::uuid END`);
+      }
+      expect(source).not.toMatch(/NULLIF\([^)]*->>'(?:bookingRequestId|requestId)'[^)]*\)::uuid/);
     }
   });
 });

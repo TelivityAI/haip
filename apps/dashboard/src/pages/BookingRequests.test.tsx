@@ -123,6 +123,11 @@ const stripePayment = {
   netCapturedAmount: '192.00',
   allocatedAmount: '50.00',
   reservedResolutionAmount: '0.00',
+  availableToAllocate: '142.00',
+  availableToResolve: '192.00',
+  unresolvedAmount: '192.00',
+  returnedAmount: '0.00',
+  retainedAmount: '0.00',
   availableAmount: '142.00',
   currencyCode: 'EUR',
   source: 'saved_card',
@@ -145,6 +150,11 @@ const externalPayment = {
   netCapturedAmount: '100.00',
   allocatedAmount: '0.00',
   reservedResolutionAmount: '0.00',
+  availableToAllocate: '100.00',
+  availableToResolve: '100.00',
+  unresolvedAmount: '100.00',
+  returnedAmount: '0.00',
+  retainedAmount: '0.00',
   availableAmount: '100.00',
   source: 'external',
   gatewayProvider: 'stripe',
@@ -162,9 +172,9 @@ function mockApi(overrides?: {
   payments?: unknown;
   installments?: unknown;
   emails?: unknown;
-  folio?: unknown;
+  folio?: unknown | (() => unknown);
   preview?: unknown;
-  audit?: unknown | ((offset: number) => unknown);
+  audit?: unknown | ((cursor: string | null) => unknown);
 }) {
   vi.mocked(api.get).mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
     if (url === '/v1/booking-requests') {
@@ -193,10 +203,10 @@ function mockApi(overrides?: {
     }
     if (url === `/v1/booking-requests/${REQUEST_ID}/audit-history`) {
       const audit = typeof overrides?.audit === 'function'
-        ? overrides.audit(Number(config?.params?.offset ?? 0))
+        ? overrides.audit(typeof config?.params?.cursor === 'string' ? config.params.cursor : null)
         : overrides?.audit ?? [];
       return Promise.resolve({
-        data: Array.isArray(audit) ? { data: audit, nextOffset: null } : audit,
+        data: Array.isArray(audit) ? { data: audit, nextCursor: null } : audit,
       } as never);
     }
     if (url === `/v1/booking-requests/${REQUEST_ID}/payments`) {
@@ -210,7 +220,10 @@ function mockApi(overrides?: {
       return Promise.resolve({ data: overrides?.emails ?? [] } as never);
     }
     if (url === '/v1/folios/folio-1') {
-      return Promise.resolve({ data: overrides?.folio ?? {} } as never);
+      const folio = typeof overrides?.folio === 'function'
+        ? overrides.folio()
+        : overrides?.folio ?? {};
+      return Promise.resolve({ data: folio } as never);
     }
     return Promise.resolve({ data: [] } as never);
   });
@@ -434,6 +447,66 @@ describe('Booking request decisions', () => {
     expect(screen.getByRole('button', { name: 'Retain with reason' })).toBeInTheDocument();
   });
 
+  it('uses authoritative net, reserved, allocation, and unresolved fields for every staff amount', async () => {
+    const parent = {
+      ...stripePayment,
+      amount: '100.00',
+      netCapturedAmount: '60.00',
+      allocatedAmount: '5.00',
+      reservedResolutionAmount: '20.00',
+      availableToAllocate: '25.00',
+      availableToResolve: '30.00',
+      unresolvedAmount: '50.00',
+      returnedAmount: '40.00',
+      retainedAmount: '10.00',
+      availableAmount: '25.00',
+    };
+    const child = {
+      ...stripePayment,
+      id: 'payment-child-return',
+      amount: '-40.00',
+      netCapturedAmount: '0.00',
+      allocatedAmount: '0.00',
+      reservedResolutionAmount: '0.00',
+      availableToAllocate: '0.00',
+      availableToResolve: '0.00',
+      unresolvedAmount: '0.00',
+      returnedAmount: '0.00',
+      retainedAmount: '0.00',
+      availableAmount: '0.00',
+      originalPaymentId: PAYMENT_ID,
+    };
+    mockApi({
+      payments: {
+        movements: [parent, child],
+        allocations: [],
+        resolutions: [{
+          id: 'resolution-pending',
+          propertyId: 'property-1',
+          bookingRequestId: REQUEST_ID,
+          paymentId: PAYMENT_ID,
+          type: 'refund',
+          status: 'pending',
+          amount: '20.00',
+        }],
+      },
+    });
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Deny request' }));
+    const denial = screen.getByRole('dialog', { name: 'Deny booking request' });
+    expect(within(denial).getByRole('alert')).toHaveTextContent('€50.00 remains unresolved');
+    await userEvent.click(within(denial).getByRole('button', { name: 'Resolve money first' }));
+
+    expect(await screen.findByText('Request money summary')).toBeInTheDocument();
+    expect(screen.getByText('€60.00')).toBeInTheDocument();
+    expect(screen.getByText('€40.00')).toBeInTheDocument();
+    expect(screen.getByText('€10.00')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Refund' }));
+    expect(within(screen.getByRole('dialog', { name: 'Refund saved-card payment' }))
+      .getByRole('textbox', { name: 'Amount' })).toHaveValue('30');
+  });
+
   it('never enables denial when the authoritative money state failed to load', async () => {
     mockApi({ payments: new Error('network unavailable') });
     renderAt(`/booking-requests/${REQUEST_ID}`);
@@ -605,6 +678,47 @@ describe('Booking request payments, messages, and audit', () => {
     ));
   });
 
+  it('refreshes the exact request folio summary immediately after a money action', async () => {
+    const accepted = {
+      ...requestDetail,
+      status: 'accepted',
+      acceptedPriceSource: 'current',
+      acceptedTotal: '670.00',
+      acceptedReservationId: 'reservation-1',
+      acceptedFolioId: 'folio-1',
+    };
+    let folioReads = 0;
+    mockApi({
+      detail: accepted,
+      payments: { movements: [stripePayment], allocations: [], resolutions: [] },
+      installments: [],
+      folio: () => {
+        folioReads += 1;
+        return {
+          id: 'folio-1',
+          folioNumber: 'F-1042',
+          status: 'open',
+          totalCharges: '700.00',
+          totalPayments: folioReads === 1 ? '192.00' : '300.00',
+          balance: folioReads === 1 ? '508.00' : '400.00',
+          currencyCode: 'EUR',
+        };
+      },
+    });
+
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+    expect(await screen.findByText('€508.00')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refund' }));
+    const dialog = screen.getByRole('dialog', { name: 'Refund saved-card payment' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Refund' }));
+
+    expect(await screen.findByText('€400.00')).toBeInTheDocument();
+    expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === '/v1/folios/folio-1'))
+      .toHaveLength(2);
+  });
+
   it('retries failed messages through the scoped staff endpoint', async () => {
     renderAt(`/booking-requests/${REQUEST_ID}`);
     await userEvent.click(await screen.findByRole('tab', { name: 'Messages' }));
@@ -719,7 +833,7 @@ describe('Booking request payments, messages, and audit', () => {
     expect(document.body).not.toHaveTextContent('pm_secret_should_not_render');
     expect(api.get).toHaveBeenCalledWith(
       `/v1/booking-requests/${REQUEST_ID}/audit-history`,
-      { params: { propertyId: 'property-1', limit: 25, offset: 0 } },
+      { params: { propertyId: 'property-1', limit: 25 } },
     );
 
     await userEvent.click(screen.getByRole('tab', { name: 'Payments & plan' }));
@@ -729,9 +843,10 @@ describe('Booking request payments, messages, and audit', () => {
 
   it('loads additional immutable audit pages without replacing the first page', async () => {
     mockApi({
-      audit: (offset: number) => offset === 0
+      audit: (cursor: string | null) => cursor == null
         ? {
           data: [{
+            source: 'audit_log',
             id: 'audit-new',
             action: 'update',
             actorDisplay: 'staff@example.com',
@@ -739,10 +854,19 @@ describe('Booking request payments, messages, and audit', () => {
             summary: 'request.accepted',
             details: { acceptedTotal: '670.00' },
           }],
-          nextOffset: 25,
+          nextCursor: 'opaque-older-page',
         }
         : {
           data: [{
+            source: 'audit_log',
+            id: 'audit-new',
+            action: 'update',
+            actorDisplay: 'staff@example.com',
+            occurredAt: '2026-08-25T12:00:00.000Z',
+            summary: 'request.accepted',
+            details: { acceptedTotal: '670.00' },
+          }, {
+            source: 'audit_log',
             id: 'audit-old',
             action: 'create',
             actorDisplay: 'System',
@@ -750,7 +874,7 @@ describe('Booking request payments, messages, and audit', () => {
             summary: 'request.pending',
             details: {},
           }],
-          nextOffset: null,
+          nextCursor: null,
         },
     });
 
@@ -761,9 +885,10 @@ describe('Booking request payments, messages, and audit', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
     expect(await screen.findByText('Request submitted')).toBeInTheDocument();
     expect(screen.getByText('Request accepted')).toBeInTheDocument();
+    expect(screen.getAllByText('Request accepted')).toHaveLength(1);
     expect(api.get).toHaveBeenCalledWith(
       `/v1/booking-requests/${REQUEST_ID}/audit-history`,
-      { params: { propertyId: 'property-1', limit: 25, offset: 25 } },
+      { params: { propertyId: 'property-1', limit: 25, cursor: 'opaque-older-page' } },
     );
   });
 });
@@ -797,10 +922,21 @@ describe('Booking request locales', () => {
     expect(es.bookingRequests.amounts).toMatchObject({ quoted: 'Cotización', captured: 'Cobrado' });
     expect(ptBR.bookingRequests.amounts).toMatchObject({ quoted: 'Cotação', captured: 'Cobrado' });
 
+    expect(de.bookingRequests.overview).toMatchObject({
+      application: 'Anfrage',
+      noQuestions: 'Es wurden keine zusätzlichen Angaben zur Anfrage eingereicht.',
+    });
+    expect(de.bookingRequests.accept.recheckedOnAccept).toBe('Bei Annahme erneut geprüft');
+    expect(hr.bookingRequests.detail.moneyActions).toBe('Financije');
+    expect(hr.bookingRequests.overview.application).toBe('Zahtjev');
+    expect(itMessages.bookingRequests.detail.moneyActions).toBe('Operazioni finanziarie');
+    expect(itMessages.bookingRequests.overview.application).toBe('Richiesta');
+    expect(itMessages.bookingRequests.payments.folioSummary).toBe('Riepilogo del conto operativo');
+
     const forbidden: Array<[string, unknown, RegExp]> = [
-      ['de', de.bookingRequests, /Zitiert|Gefangen|aufgeladen|Anklage|Rekordrückkehr|Externe Rendite/],
-      ['hr', hr.bookingRequests, /Citirano|Zarobljen|Trenutni citat|Vratio se|Poricanje/],
-      ['it', itMessages.bookingRequests, /Citato|Catturato|Citazione attuale|Negazione|Mantenuto/],
+      ['de', de.bookingRequests, /Zitiert|Gefangen|aufgeladen|Anklage|Rekordrückkehr|Externe Rendite|Bewerbung|Bewerbungs|Abnahme|\bAntrag\b|Geldaktion/],
+      ['hr', hr.bookingRequests, /Citirano|Zarobljen|Trenutni citat|Vratio se|Poricanje|Primjena|novčane akcije|Novčana akcija|prijav[aeu]/i],
+      ['it', itMessages.bookingRequests, /Citato|Catturato|Citazione attuale|Negazione|Mantenuto|Applicazione|azioni di denaro|azione relativa al denaro|foglio operativo|\bSoldi\b/i],
       ['sr-Latn', srLatn.bookingRequests, /Citirano|Trenutni citat|Predat citat/],
       ['fr', fr.bookingRequests, /Cité|Capturé|Déni/],
       ['es', es.bookingRequests, /\bcitado\b|\bcapturado\b|Negación|Regreso récord|puerta de enlace/],

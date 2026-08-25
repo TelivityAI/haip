@@ -70,6 +70,7 @@ export interface BookingRequestAcceptancePreview {
 }
 
 export interface BookingRequestAuditHistoryItem {
+  source: 'audit_log';
   id: string;
   action: string;
   actorDisplay: string;
@@ -106,6 +107,12 @@ export interface BookingRequestPayment {
   netCapturedAmount: string;
   allocatedAmount: string;
   reservedResolutionAmount: string;
+  availableToAllocate: string;
+  availableToResolve: string;
+  unresolvedAmount: string;
+  returnedAmount: string;
+  retainedAmount: string;
+  /** @deprecated Use availableToAllocate. */
   availableAmount: string;
   currencyCode: string;
   source: 'saved_card' | 'external';
@@ -192,18 +199,8 @@ export function unresolvedPayments(
   if (!response) return [];
   const unresolved: UnresolvedPayment[] = [];
   for (const payment of response.movements) {
-    if (
-      payment.originalPaymentId
-      || !['captured', 'settled', 'partially_refunded'].includes(payment.status)
-      || Number(payment.amount) <= 0
-    ) continue;
-    let resolved = 0;
-    for (const resolution of response.resolutions) {
-      if (resolution.paymentId === payment.id && resolution.status === 'completed') {
-        resolved += Number(resolution.amount);
-      }
-    }
-    const amount = Math.max(0, Number(payment.amount) - resolved);
+    if (payment.originalPaymentId) continue;
+    const amount = Number(payment.unresolvedAmount);
     if (amount > 0.000001) unresolved.push({ payment, amount });
   }
   return unresolved;

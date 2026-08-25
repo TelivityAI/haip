@@ -75,7 +75,7 @@ export default function AcceptRequestModal({
         queryClient.invalidateQueries({ queryKey: bookingRequestKeys.messages(propertyId, request.id) }),
         queryClient.invalidateQueries({ queryKey: bookingRequestKeys.audit(propertyId, request.id) }),
         queryClient.invalidateQueries({ queryKey: ['reservations', propertyId] }),
-        queryClient.invalidateQueries({ queryKey: ['folios', propertyId] }),
+        queryClient.invalidateQueries({ queryKey: bookingRequestKeys.genericFoliosRoot(propertyId) }),
         queryClient.invalidateQueries({ queryKey: ['payments', propertyId] }),
       ]);
       onClose();

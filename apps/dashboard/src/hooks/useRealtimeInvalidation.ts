@@ -59,7 +59,14 @@ export function realtimeQueryKeys(
       [...bookingRequestKeys.messages(propertyId, requestId)],
       [...bookingRequestKeys.audit(propertyId, requestId)],
     ] : []),
-    ...(folioId ? [[...bookingRequestKeys.folio(propertyId, folioId)]] : []),
+    ...(requestId && folioId ? [[
+      ...bookingRequestKeys.folio(
+        propertyId,
+        requestId,
+        reservationId ?? null,
+        folioId,
+      ),
+    ]] : []),
   ];
 
   if (payload.event.startsWith('booking_request.')) {

@@ -56,6 +56,10 @@ describe('booking request schema', () => {
     expect(getTableConfig(auditLogs).indexes.map((index) => index.config.name)).toContain(
       'audit_logs_property_entity_timeline_idx',
     );
+    expect(auditLogs.bookingRequestId).toBeDefined();
+    expect(getTableConfig(auditLogs).indexes.map((index) => index.config.name)).toContain(
+      'audit_logs_booking_request_timeline_idx',
+    );
 
     const indexNames = getTableConfig(bookingRequests).indexes.map((index) => index.config.name);
     expect(indexNames).toContain('booking_requests_property_submission_key_unique');

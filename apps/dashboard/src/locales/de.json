@@ -587,7 +587,7 @@
       "denied": "Abgelehnt"
     },
     "tabs": {
-      "label": "Arbeitsbereich anfordern",
+      "label": "Arbeitsbereich der Anfrage",
       "overview": "Übersicht",
       "payments": "Zahlungen & Plan",
       "messages": "Nachrichten",
@@ -595,7 +595,7 @@
     },
     "queue": {
       "title": "Buchungsanfragen",
-      "description": "Überprüfen Sie die Gastanträge, die Aufenthaltsdetails und den Geldstatus, bevor Sie eine konkrete Maßnahme ergreifen.",
+      "description": "Prüfen Sie die Gastanfrage, die Aufenthaltsdetails und den Zahlungsstatus, bevor Sie eine konkrete Maßnahme ergreifen.",
       "filters": "Filter für Buchungsanfragen",
       "guest": "Gast",
       "card": "Karte",
@@ -628,9 +628,9 @@
       "back": "Alle Buchungsanfragen",
       "reference": "{{reference}} · Eingereicht {{date}}",
       "decisionActions": "Entscheidung",
-      "moneyActions": "Geld",
+      "moneyActions": "Finanzen",
       "decisionComplete": "Entscheidung abgeschlossen",
-      "independence": "Buchungsentscheidungen und Geldaktionen sind unabhängig voneinander. Mit der Annahme einer Zahlung wird niemals eine Anfrage angenommen, und die Annahme löst niemals eine Zahlung aus."
+      "independence": "Buchungsentscheidungen und finanzielle Vorgänge sind unabhängig voneinander. Mit der Annahme einer Zahlung wird niemals eine Anfrage angenommen, und die Annahme löst niemals eine Zahlung aus."
     },
     "amounts": {
       "quoted": "Angebot",
@@ -653,8 +653,8 @@
       "email": "E-Mail",
       "phone": "Telefon",
       "specialRequests": "Sonderwünsche",
-      "application": "Bewerbung",
-      "noQuestions": "Es wurden keine weiteren Bewerbungsfragen eingereicht.",
+      "application": "Anfrage",
+      "noQuestions": "Es wurden keine zusätzlichen Angaben zur Anfrage eingereicht.",
       "priceComparison": "Preisvergleich",
       "card": "Karte im Archiv",
       "cardGeneric": "Karte",
@@ -677,7 +677,7 @@
       "currentDescription": "Überprüfen Sie die Verfügbarkeit erneut und berechnen Sie bei der Annahme das maßgebliche aktuelle Angebot.",
       "custom": "Benutzerdefinierte Summe",
       "customDescription": "Legen Sie eine explizite Summe fest und notieren Sie, warum sie abweicht.",
-      "recheckedOnAccept": "Bei Abnahme noch einmal überprüft",
+      "recheckedOnAccept": "Bei Annahme erneut geprüft",
       "enterAmount": "Geben Sie einen Betrag ein",
       "customTotal": "Benutzerdefinierte Summe",
       "customReason": "Grund für die benutzerdefinierte Summe",
@@ -693,7 +693,7 @@
       "resolveFirst": "Lösen Sie zuerst das Geld",
       "confirm": "Ablehnung bestätigen",
       "denying": "Wird abgelehnt…",
-      "error": "Der Antrag konnte nicht abgelehnt werden. Überprüfen Sie den Geldstatus und versuchen Sie es erneut.",
+      "error": "Die Anfrage konnte nicht abgelehnt werden. Überprüfen Sie den Zahlungsstatus und versuchen Sie es erneut.",
       "moneyLoading": "Zahlungsstatus vor der Ablehnung wird geprüft…",
       "moneyLoadError": "Der Zahlungsstatus konnte nicht geprüft werden. Die Ablehnung bleibt gesperrt.",
       "retryMoney": "Zahlungsstatus erneut prüfen"
@@ -788,7 +788,7 @@
       "reference": "Referenz",
       "notes": "Notizen (optional)",
       "saving": "Sparen…",
-      "error": "Die Geldaktion konnte nicht abgeschlossen werden. Ihre eingegebenen Daten sind noch hier.",
+      "error": "Der finanzielle Vorgang konnte nicht abgeschlossen werden. Ihre eingegebenen Daten sind noch vorhanden.",
       "paymentRequired": "Wählen Sie zunächst eine Zahlungsbewegung aus.",
       "charge": {
         "title": "Gespeicherte Karte belasten",
@@ -820,7 +820,7 @@
     },
     "messages": {
       "title": "Nachrichtenübermittlungen",
-      "description": "Transaktions-E-Mails sind eine Folge von Mitarbeiteraktionen. Eine fehlgeschlagene Lieferung macht niemals eine Entscheidung oder Geldbewegung rückgängig.",
+      "description": "Transaktions-E-Mails sind eine Folge von Mitarbeiteraktionen. Eine fehlgeschlagene Zustellung macht niemals eine Entscheidung oder einen Zahlungsvorgang rückgängig.",
       "loading": "Nachrichtenverlauf wird geladen…",
       "loadError": "Der Nachrichtenverlauf konnte nicht geladen werden.",
       "empty": "Es wurden noch keine Transaktionsnachrichten aufgezeichnet.",
@@ -847,13 +847,13 @@
     },
     "audit": {
       "title": "Geschäftszeitleiste",
-      "description": "Eine sichere Betriebsansicht, abgeleitet aus den den Mitarbeitern zur Verfügung stehenden Anforderungs-, Bewegungs-, Lösungs- und Lieferaufzeichnungen.",
-      "submitted": "Antrag eingereicht",
-      "submittedDescription": "Die Gastbewerbung und der eingereichte Angebots-Snapshot wurden aufgezeichnet.",
+      "description": "Eine sichere Betriebsansicht aus den für das Personal verfügbaren Anfrage-, Zahlungs-, Klärungs- und Zustellprotokollen.",
+      "submitted": "Anfrage eingereicht",
+      "submittedDescription": "Die Gastanfrage und der eingereichte Angebots-Snapshot wurden aufgezeichnet.",
       "accepted": "Anfrage angenommen",
       "acceptedDescription": "Akzeptiert unter {{amount}} unter Verwendung der {{source}}.",
       "denied": "Anfrage abgelehnt",
-      "deniedDescription": "Der Antrag wurde abgelehnt, nachdem der Geldstatus geklärt war.",
+      "deniedDescription": "Die Anfrage wurde abgelehnt, nachdem der Zahlungsstatus geklärt war.",
       "paymentCaptured": "Zahlung erfasst",
       "paymentFailed": "Die Zahlung ist fehlgeschlagen",
       "paymentReturned": "Zahlung zurückgezahlt",

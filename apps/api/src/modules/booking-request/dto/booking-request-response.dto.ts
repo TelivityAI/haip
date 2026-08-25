@@ -63,6 +63,7 @@ export interface DeniedBookingRequestDecisionDto {
 }
 
 export interface BookingRequestAuditHistoryItemDto {
+  source: 'audit_log';
   id: string;
   action: string;
   actorDisplay: string;
@@ -153,6 +154,7 @@ export function toBookingRequestAuditHistoryItem(
 ): BookingRequestAuditHistoryItemDto {
   const details = safeAuditDetails(row);
   return {
+    source: 'audit_log',
     id: row.id,
     action: row.action,
     actorDisplay: row.userEmail || (row.userId ? 'Staff' : 'System'),

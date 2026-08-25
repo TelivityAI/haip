@@ -72,6 +72,7 @@ describe('Booking Request net allocation reconciliation', () => {
       ['installment-2', { id: 'installment-2', resolvedAmount: '40.00' }],
     ]);
     const updates: Array<{ table: unknown; values: Record<string, unknown> }> = [];
+    const audits: Array<Record<string, unknown>> = [];
     const tx = {
       select: vi.fn().mockImplementation(() => ({
         from: vi.fn((table: unknown) => ({
@@ -97,7 +98,10 @@ describe('Booking Request net allocation reconciliation', () => {
       })),
       delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
       insert: vi.fn((table: unknown) => ({
-        values: vi.fn().mockResolvedValue(table === auditLogs ? undefined : undefined),
+        values: vi.fn((values: Record<string, unknown>) => {
+          if (table === auditLogs) audits.push(values);
+          return Promise.resolve(undefined);
+        }),
       })),
     };
 
@@ -117,5 +121,11 @@ describe('Booking Request net allocation reconciliation', () => {
         values: expect.objectContaining({ allocatedAmount: '10.00', status: 'partial' }),
       }),
     ]));
+    expect(audits).toEqual([
+      expect.objectContaining({
+        bookingRequestId: 'request-1',
+        entityType: 'booking_request_payment_allocation',
+      }),
+    ]);
   });
 });

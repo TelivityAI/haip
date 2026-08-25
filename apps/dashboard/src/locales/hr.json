@@ -1909,7 +1909,7 @@
     },
     "queue": {
       "title": "Zahtjevi za rezervaciju",
-      "description": "Pregledajte prijave gostiju, podatke o boravku i stanje novca prije poduzimanja izričite radnje.",
+      "description": "Pregledajte zahtjeve gostiju, podatke o boravku i stanje plaćanja prije poduzimanja izričite radnje.",
       "filters": "Filtri zahtjeva za rezervaciju",
       "guest": "Gost",
       "card": "Kartica",
@@ -1942,9 +1942,9 @@
       "back": "Svi zahtjevi za rezervacije",
       "reference": "{{reference}} · Poslano {{date}}",
       "decisionActions": "Odluka",
-      "moneyActions": "Novac",
+      "moneyActions": "Financije",
       "decisionComplete": "Odluka dovršena",
-      "independence": "Odluke o rezervaciji i novčane akcije su neovisne. Prihvaćanje plaćanja nikada ne prihvaća zahtjev, a prihvaćanje nikada ne pokreće plaćanje."
+      "independence": "Odluke o rezervaciji i financijske radnje neovisne su. Prihvaćanje plaćanja nikada ne prihvaća zahtjev, a prihvaćanje nikada ne pokreće plaćanje."
     },
     "amounts": {
       "quoted": "Ponuda",
@@ -1967,8 +1967,8 @@
       "email": "E-mail",
       "phone": "Telefon",
       "specialRequests": "Posebni zahtjevi",
-      "application": "Primjena",
-      "noQuestions": "Nisu poslana dodatna pitanja za prijavu.",
+      "application": "Zahtjev",
+      "noQuestions": "Nisu poslani dodatni odgovori uz zahtjev.",
       "priceComparison": "Usporedba cijena",
       "card": "Kartica u dosjeu",
       "cardGeneric": "kartica",
@@ -2102,7 +2102,7 @@
       "reference": "Referenca",
       "notes": "Bilješke (nije obavezno)",
       "saving": "Spremanje...",
-      "error": "Novčana akcija nije mogla biti dovršena. Vaši uneseni podaci su još uvijek ovdje.",
+      "error": "Financijska radnja nije mogla biti dovršena. Uneseni podaci ostaju sačuvani.",
       "paymentRequired": "Prvo odaberite način plaćanja.",
       "charge": {
         "title": "Naplati spremljenu karticu",
@@ -2163,7 +2163,7 @@
       "title": "Poslovna vremenska linija",
       "description": "Siguran radni pregled izveden iz zapisa o zahtjevima, kretanju, rješavanju i isporuci dostupnih osoblju.",
       "submitted": "Zahtjev poslan",
-      "submittedDescription": "Snimljena je prijava gosta i dostavljena snimka ponude.",
+      "submittedDescription": "Snimljeni su zahtjev gosta i dostavljena ponuda.",
       "accepted": "Zahtjev prihvaćen",
       "acceptedDescription": "Prihvaćeno na {{amount}} koristeći {{source}}.",
       "denied": "Zahtjev odbijen",

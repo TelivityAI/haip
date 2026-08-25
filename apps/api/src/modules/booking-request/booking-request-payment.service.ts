@@ -30,9 +30,12 @@ import {
   SAVED_PAYMENT_METHOD_GATEWAY,
   type SavedPaymentMethodGateway,
 } from '../payment/interfaces/saved-payment-method-gateway.interface';
-import { remainingCapturedAmount } from '../payment/payment-ledger';
 import { reconcileBookingRequestPaymentAllocations } from './booking-request-allocation-reconciler';
 import { ensureBookingRequestFinancialConsequence } from './booking-request-payment-consequence';
+import {
+  summarizeBookingRequestPaymentLedger,
+  type BookingRequestPaymentLedgerSummary,
+} from './booking-request-payment-ledger';
 import { BookingRequestMailerService } from './booking-request-mailer.service';
 import { assertAllocationAmount, resolveInstallmentAmount } from './booking-request-money';
 import type {
@@ -63,20 +66,6 @@ const EXTERNAL_PAYMENT_METHODS = new Set([
   'pix',
   'other',
 ]);
-
-const ALLOCATABLE_PARENT_STATUSES = new Set([
-  'captured',
-  'settled',
-  'partially_refunded',
-  'refunded',
-]);
-
-type PaymentAllocationSummary = {
-  netCaptured: Decimal;
-  allocated: Decimal;
-  reservedResolution: Decimal;
-  available: Decimal;
-};
 
 @Injectable()
 export class BookingRequestPaymentService {
@@ -137,7 +126,7 @@ export class BookingRequestPaymentService {
       row.propertyId === propertyId && row.bookingRequestId === bookingRequestId);
     return {
       movements: scopedMovements.map((row: PaymentRow) => {
-        const summary = this.paymentAllocationSummary(
+        const summary = summarizeBookingRequestPaymentLedger(
           row,
           scopedMovements,
           scopedAllocations,
@@ -148,7 +137,12 @@ export class BookingRequestPaymentService {
           netCapturedAmount: summary.netCaptured.toFixed(2),
           allocatedAmount: summary.allocated.toFixed(2),
           reservedResolutionAmount: summary.reservedResolution.toFixed(2),
-          availableAmount: summary.available.toFixed(2),
+          availableToAllocate: summary.availableToAllocate.toFixed(2),
+          availableToResolve: summary.availableToResolve.toFixed(2),
+          unresolvedAmount: summary.unresolved.toFixed(2),
+          returnedAmount: summary.returned.toFixed(2),
+          retainedAmount: summary.retained.toFixed(2),
+          availableAmount: summary.availableToAllocate.toFixed(2),
         };
       }),
       allocations: scopedAllocations,
@@ -181,6 +175,7 @@ export class BookingRequestPaymentService {
         .returning();
       await this.audit(tx, {
         propertyId,
+        bookingRequestId,
         action: 'create',
         entityType: 'booking_request_installment',
         entityId: created.id,
@@ -260,6 +255,7 @@ export class BookingRequestPaymentService {
       if (!updated) throw new NotFoundException(`Installment ${installmentId} not found`);
       await this.audit(tx, {
         propertyId,
+        bookingRequestId,
         action: 'update',
         entityType: 'booking_request_installment',
         entityId: installmentId,
@@ -306,6 +302,7 @@ export class BookingRequestPaymentService {
         ));
       await this.audit(tx, {
         propertyId,
+        bookingRequestId,
         action: 'delete',
         entityType: 'booking_request_installment',
         entityId: installmentId,
@@ -366,6 +363,7 @@ export class BookingRequestPaymentService {
         ));
       await this.audit(tx, {
         propertyId,
+        bookingRequestId,
         action: 'update',
         entityType: 'booking_request',
         entityId: bookingRequestId,
@@ -421,10 +419,7 @@ export class BookingRequestPaymentService {
         propertyId,
         payment,
       );
-      const allocatableNet = Decimal.max(
-        summary.netCaptured.minus(summary.reservedResolution),
-        0,
-      );
+      const allocatableNet = summary.availableToResolve;
       if (allocatableNet.lte(0)) {
         throw new ConflictException('Fully returned payment movement cannot be allocated');
       }
@@ -503,6 +498,7 @@ export class BookingRequestPaymentService {
       };
       await this.audit(tx, {
         propertyId,
+        bookingRequestId,
         action: existing ? 'update' : 'create',
         entityType: 'booking_request_payment_allocation',
         entityId: allocation.id,
@@ -606,6 +602,7 @@ export class BookingRequestPaymentService {
       }
       await this.audit(tx, {
         propertyId,
+        bookingRequestId,
         action: 'create',
         entityType: 'payment',
         entityId: created.id,
@@ -663,6 +660,7 @@ export class BookingRequestPaymentService {
           ));
         await this.audit(tx, {
           propertyId,
+          bookingRequestId,
           action: 'update',
           entityType: 'payment',
           entityId: existing.id,
@@ -698,6 +696,7 @@ export class BookingRequestPaymentService {
           ));
         await this.audit(tx, {
           propertyId,
+          bookingRequestId,
           action: 'update',
           entityType: 'payment',
           entityId: existing.id,
@@ -749,6 +748,7 @@ export class BookingRequestPaymentService {
       };
       await this.audit(tx, {
         propertyId,
+        bookingRequestId,
         action: 'update',
         entityType: 'payment',
         entityId: updated.id,
@@ -869,6 +869,7 @@ export class BookingRequestPaymentService {
       }
       await this.audit(tx, {
         propertyId,
+        bookingRequestId,
         action: 'create',
         entityType: 'payment',
         entityId: created.id,
@@ -1007,6 +1008,7 @@ export class BookingRequestPaymentService {
         .returning();
       await this.audit(tx, {
         propertyId,
+        bookingRequestId,
         action: 'create',
         entityType: 'booking_request_payment_resolution',
         entityId: claim.id,
@@ -1230,6 +1232,7 @@ export class BookingRequestPaymentService {
       });
       await this.audit(tx, {
         propertyId,
+        bookingRequestId,
         action: 'create',
         entityType: 'payment',
         entityId: movement.id,
@@ -1447,6 +1450,7 @@ export class BookingRequestPaymentService {
         ));
       await this.audit(tx, {
         propertyId: input.propertyId,
+        bookingRequestId: input.bookingRequestId,
         action: 'update',
         entityType: 'booking_request_payment_resolution',
         entityId: claim.id,
@@ -1512,6 +1516,7 @@ export class BookingRequestPaymentService {
         ));
       await this.audit(tx, {
         propertyId: input.propertyId,
+        bookingRequestId: input.bookingRequestId,
         action: 'update',
         entityType: 'booking_request_payment_resolution',
         entityId: claim.id,
@@ -1653,6 +1658,7 @@ export class BookingRequestPaymentService {
       };
       await this.audit(tx, {
         propertyId: input.propertyId,
+        bookingRequestId: input.bookingRequestId,
         action: 'create',
         entityType: 'payment',
         entityId: movement.id,
@@ -1669,6 +1675,7 @@ export class BookingRequestPaymentService {
       });
       await this.audit(tx, {
         propertyId: input.propertyId,
+        bookingRequestId: input.bookingRequestId,
         action: 'update',
         entityType: 'booking_request_payment_resolution',
         entityId: claim.id,
@@ -2026,7 +2033,7 @@ export class BookingRequestPaymentService {
     bookingRequestId: string,
     propertyId: string,
     payment: PaymentRow,
-  ): Promise<PaymentAllocationSummary> {
+  ): Promise<BookingRequestPaymentLedgerSummary> {
     const [movementRows, allocationRows, resolutionRows] = await Promise.all([
       db
         .select()
@@ -2056,48 +2063,7 @@ export class BookingRequestPaymentService {
       row.bookingRequestId === bookingRequestId && row.propertyId === propertyId);
     const resolutions = resolutionRows.filter((row: ResolutionRow) =>
       row.bookingRequestId === bookingRequestId && row.propertyId === propertyId);
-    return this.paymentAllocationSummary(payment, movements, allocations, resolutions);
-  }
-
-  private paymentAllocationSummary(
-    payment: PaymentRow,
-    movements: PaymentRow[],
-    allocations: AllocationRow[],
-    resolutions: ResolutionRow[],
-  ): PaymentAllocationSummary {
-    if (
-      payment.originalPaymentId != null
-      || !ALLOCATABLE_PARENT_STATUSES.has(payment.status)
-      || new Decimal(payment.amount).lte(0)
-    ) {
-      return {
-        netCaptured: new Decimal(0),
-        allocated: new Decimal(0),
-        reservedResolution: new Decimal(0),
-        available: new Decimal(0),
-      };
-    }
-    const children = movements.filter((row: PaymentRow) =>
-      row.originalPaymentId === payment.id
-      && row.status === 'captured');
-    const capturedChildIds = new Set(children.map((row) => row.id));
-    const netCaptured = Decimal.max(remainingCapturedAmount(payment.amount, children), 0);
-    const allocated = allocations
-      .filter((allocation) => allocation.paymentId === payment.id)
-      .reduce((sum, allocation) => sum.plus(allocation.amount), new Decimal(0));
-    const reservedResolution = resolutions
-      .filter((resolution) => resolution.paymentId === payment.id)
-      .filter((resolution) => resolution.status === 'pending'
-        || (
-          resolution.status === 'completed'
-          && (!resolution.movementId || !capturedChildIds.has(resolution.movementId))
-        ))
-      .reduce((sum, resolution) => sum.plus(resolution.amount), new Decimal(0));
-    const available = Decimal.max(
-      netCaptured.minus(reservedResolution).minus(allocated),
-      0,
-    );
-    return { netCaptured, allocated, reservedResolution, available };
+    return summarizeBookingRequestPaymentLedger(payment, movements, allocations, resolutions);
   }
 
   private async reconcileAllocationsForPayment(
@@ -2156,16 +2122,15 @@ export class BookingRequestPaymentService {
     payment: PaymentRow,
     amount: Decimal,
   ): Promise<void> {
-    const resolutions = await this.scopedResolutions(db, bookingRequestId, propertyId);
-    const resolved = resolutions
-      .filter((row) =>
-        row.paymentId === payment.id
-        && (row.status == null || row.status === 'pending' || row.status === 'completed'))
-      .reduce((sum, row) => sum.plus(row.amount), new Decimal(0));
-    const remaining = new Decimal(payment.amount).minus(resolved);
-    if (amount.gt(remaining)) {
+    const summary = await this.paymentAllocationSummaryFromDatabase(
+      db,
+      bookingRequestId,
+      propertyId,
+      payment,
+    );
+    if (amount.gt(summary.availableToResolve)) {
       throw new ConflictException(
-        `Resolution amount ${amount.toFixed(2)} exceeds remaining captured amount ${remaining.toFixed(2)}`,
+        `Resolution amount ${amount.toFixed(2)} exceeds remaining captured amount ${summary.availableToResolve.toFixed(2)}`,
       );
     }
   }
@@ -2264,6 +2229,7 @@ export class BookingRequestPaymentService {
       .returning();
     await this.audit(tx, {
       propertyId: input.propertyId,
+      bookingRequestId: input.bookingRequestId,
       action: 'create',
       entityType: 'booking_request_payment_resolution',
       entityId: resolution.id,
@@ -2346,6 +2312,7 @@ export class BookingRequestPaymentService {
     db: any,
     input: {
       propertyId: string;
+      bookingRequestId: string;
       action: 'create' | 'update' | 'delete';
       entityType: string;
       entityId: string;
@@ -2357,6 +2324,7 @@ export class BookingRequestPaymentService {
   ): Promise<void> {
     await db.insert(auditLogs).values({
       propertyId: input.propertyId,
+      bookingRequestId: input.bookingRequestId,
       action: input.action,
       entityType: input.entityType,
       entityId: input.entityId,

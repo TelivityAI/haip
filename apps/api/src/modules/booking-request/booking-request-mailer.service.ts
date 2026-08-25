@@ -98,6 +98,7 @@ export class BookingRequestMailerService {
     if (created) {
       await executor.insert(auditLogs).values({
         propertyId: input.propertyId,
+        bookingRequestId: input.bookingRequestId,
         action: 'create',
         entityType: 'booking_request_email_delivery',
         entityId: created.id,
@@ -211,6 +212,7 @@ export class BookingRequestMailerService {
       if (!manualClaim) throw new ConflictException('Email delivery retry state changed');
       await tx.insert(auditLogs).values({
         propertyId,
+        bookingRequestId,
         action: 'update',
         entityType: 'booking_request_email_delivery',
         entityId: deliveryId,
@@ -320,6 +322,7 @@ export class BookingRequestMailerService {
       if (!claimed) return undefined;
       await tx.insert(auditLogs).values({
         propertyId,
+        bookingRequestId,
         action: 'update',
         entityType: 'booking_request_email_delivery',
         entityId: deliveryId,
@@ -390,6 +393,7 @@ export class BookingRequestMailerService {
       }
       await tx.insert(auditLogs).values({
         propertyId: updated.propertyId,
+        bookingRequestId: updated.bookingRequestId,
         action: 'update',
         entityType: 'booking_request_email_delivery',
         entityId: updated.id,
@@ -480,6 +484,7 @@ export class BookingRequestMailerService {
       if (!updated) return false;
       await tx.insert(auditLogs).values({
         propertyId: updated.propertyId,
+        bookingRequestId: updated.bookingRequestId,
         action: 'update',
         entityType: 'booking_request_email_delivery',
         entityId: updated.id,

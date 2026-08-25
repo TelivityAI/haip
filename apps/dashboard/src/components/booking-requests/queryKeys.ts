@@ -19,6 +19,27 @@ export const bookingRequestKeys = {
   audit: (propertyId: string, requestId: string) =>
     ['booking-request-audit', propertyId, requestId] as const,
   foliosRoot: (propertyId: string) => ['booking-request-folios', propertyId] as const,
-  folio: (propertyId: string, folioId: string) =>
-    ['booking-request-folios', propertyId, folioId] as const,
+  folioWorkspace: (
+    propertyId: string,
+    requestId: string,
+    reservationId: string | null,
+  ) => [
+    'booking-request-folios',
+    propertyId,
+    requestId,
+    reservationId ?? 'pre-acceptance',
+  ] as const,
+  folio: (
+    propertyId: string,
+    requestId: string,
+    reservationId: string | null,
+    folioId: string,
+  ) => [
+    'booking-request-folios',
+    propertyId,
+    requestId,
+    reservationId ?? 'pre-acceptance',
+    folioId,
+  ] as const,
+  genericFoliosRoot: (propertyId: string) => ['folios', propertyId] as const,
 };

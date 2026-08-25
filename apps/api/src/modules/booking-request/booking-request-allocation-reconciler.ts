@@ -136,6 +136,7 @@ export async function reconcileBookingRequestPaymentAllocations(
     }
     await tx.insert(auditLogs).values({
       propertyId: input.propertyId,
+      bookingRequestId: input.bookingRequestId,
       action: new Decimal(nextAmount).isZero() ? 'delete' : 'update',
       entityType: 'booking_request_payment_allocation',
       entityId: allocation.id,

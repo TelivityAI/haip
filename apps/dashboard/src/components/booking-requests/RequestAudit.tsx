@@ -33,34 +33,52 @@ export default function RequestAudit({
   }), [i18n.language]);
   const historyQuery = useInfiniteQuery<{
     data: BookingRequestAuditHistoryItem[];
-    nextOffset: number | null;
+    nextCursor: string | null;
   }>({
     queryKey: bookingRequestKeys.audit(propertyId, request.id),
-    initialPageParam: 0,
+    initialPageParam: null,
     queryFn: ({ pageParam }) => api.get(
       `/v1/booking-requests/${request.id}/audit-history`,
-      { params: { propertyId, limit: 25, offset: pageParam as number } },
+      {
+        params: {
+          propertyId,
+          limit: 25,
+          ...(typeof pageParam === 'string' ? { cursor: pageParam } : {}),
+        },
+      },
     ).then((response) => {
       const envelope = response.data;
       const payload = envelope?.data ?? envelope;
       if (Array.isArray(payload)) {
         return {
           data: payload,
-          nextOffset: typeof envelope?.nextOffset === 'number'
-            ? envelope.nextOffset
+          nextCursor: typeof envelope?.nextCursor === 'string'
+            ? envelope.nextCursor
             : null,
         };
       }
       return {
         data: payload?.data ?? [],
-        nextOffset: typeof payload?.nextOffset === 'number'
-          ? payload.nextOffset
+        nextCursor: typeof payload?.nextCursor === 'string'
+          ? payload.nextCursor
           : null,
       };
     }),
-    getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
-  const entries = historyQuery.data?.pages.flatMap((page) => page.data) ?? [];
+  const entries = useMemo(() => {
+    const seen = new Set<string>();
+    const uniqueEntries: BookingRequestAuditHistoryItem[] = [];
+    for (const page of historyQuery.data?.pages ?? []) {
+      for (const entry of page.data) {
+        const identity = `${entry.source ?? 'audit_log'}:${entry.id}`;
+        if (seen.has(identity)) continue;
+        seen.add(identity);
+        uniqueEntries.push(entry);
+      }
+    }
+    return uniqueEntries;
+  }, [historyQuery.data?.pages]);
 
   const amountFor = (entry: BookingRequestAuditHistoryItem) => {
     const amount = entry.details['acceptedTotal']

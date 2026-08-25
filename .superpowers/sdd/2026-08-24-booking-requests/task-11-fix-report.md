@@ -9,38 +9,40 @@ Resolved the Task 11 review findings without changing Task 12.
 - The safe queue DTO exposes submitted/requested total and currency, with accepted total separate. Whitelisted server-side sorting runs before pagination (including numeric requested-total sorting), and the dashboard performs one list call rather than N+1 detail reads.
 - Acceptance uses a property-scoped preview with submitted/current authoritative totals and an opaque versioned fingerprint. The locked acceptance transaction recomputes the quote and returns `409` before mutation when it changed; the modal refreshes the preview while preserving the draft.
 - Denial stays blocked until the payment/resolution query succeeds. Loading, unknown, and failure states cannot be mistaken for zero money exposure.
-- Audit history is read directly from property/request-owned entity IDs, ordered stably by `occurredAt` and ID, capped at 100 rows per page, and exposed through load-more pagination. The allowlisted DTO includes safe summaries/actor display while removing processor tokens, claims, idempotency, consent, application answers, internal IDs, and provider secrets. A composite property/entity/timeline index and migration support the bounded query.
-- Payment availability is calculated by the same server helper used by allocation: net captured minus negative child movements, existing allocations, and pending/legacy reserved resolutions without double-counting. The safe DTO exposes net/allocated/reserved/available values.
+- Audit history is read directly through an immutable `bookingRequestId` relationship, ordered stably by descending `occurredAt` and ID, capped at 100 rows per page, and exposed through opaque keyset load-more pagination. Current child IDs remain only as a backward-compatibility fallback, so deleted installment/allocation tombstones remain visible. The allowlisted DTO includes safe summaries/actor display while removing processor tokens, claims, idempotency, consent, application answers, internal IDs, and provider secrets. A composite property/request/timeline index and guarded backfill support the bounded query.
+- Payment availability and denial exposure are calculated by one canonical server ledger helper. Negative captured child movements reduce net once; movement-backed resolutions are provenance rather than a second subtraction; pending claims reserve capacity; movement-less returns and retained resolutions consume unresolved capacity. The safe DTO exposes net captured, allocated, reserved, available-to-allocate, available-to-resolve, unresolved, returned, and retained values, and the dashboard does not reconstruct them from gross movements.
 - Payment movement provenance is derived server-side as `saved_card` or `external` from trusted origin data, never a user-entered provider label. The dashboard selects Refund versus External Return only from that discriminator.
 - Installment reorder is a single property/request-scoped bulk mutation. It locks the request and installment set, validates an exact unique ID set, writes contiguous order atomically, and records one audit event. Allocated installments permit order-only changes; rollback and concurrent calls are covered.
 - All staff money fields validate canonical decimal strings without rounding, enforce currency precision (including JPY), reject zero/nonnumeric/excess precision, and preserve exact submitted text.
 - Native dialog lifecycle, independent Accept/Deny versus payment actions, per-delivery retry pending state, keyboard reorder controls, permissions, and request-scoped query keys remain intact.
 - All eight locale namespaces have key/placeholder parity and context-appropriate PMS vocabulary, with targeted German, Croatian, Italian, Serbian-Latin, French, Spanish, and Portuguese terminology regressions.
+- Booking-request folio cache keys now include property, request, and accepted reservation scope. Every charge, external collection, refund, external return, and retention invalidates that workspace and the generic folio namespace, so an active accepted-request summary refreshes immediately without waiting for realtime.
 
 ## TDD evidence
 
-Red/green cycles covered socket reconnect/property switching, reservation-ID-only realtime envelopes, audit rows lacking legacy aggregate payload fields, bounded audit pagination, queue list call count/server sorting, captured/refunded/reserved allocation arithmetic, trusted provenance, atomic reorder rollback/concurrency, and locale terminology. The final audit regression failed with an empty history before the server-owned entity-set check was corrected, then passed with the related sanitization tests.
+Red/green cycles covered socket reconnect/property switching, reservation-ID-only realtime envelopes, audit tombstones and cursor pagination, queue list call count/server sorting, canonical child-return/pending/retain arithmetic, authoritative dashboard defaults and denial blocking, trusted provenance, atomic reorder rollback/concurrency, exact folio refresh, and locale terminology. The audit migration-safety regression also caught an unsafe legacy JSON UUID cast and a non-directional index before the guarded backfill and descending composite index were implemented.
 
 ## Verification
 
 | Check | Result |
 | --- | --- |
-| Focused API decision/payment suites | Pass: 103 tests |
-| Focused dashboard queue/property/realtime suites | Pass: 30 tests |
-| Full API suite | Pass: 220 files / 1,836 tests; 2 files / 6 environment-gated tests skipped |
-| Full dashboard suite | Pass: 17 files / 135 tests |
-| Full database suite | Pass: 3 files / 15 tests |
+| Focused API booking-request suites | Pass: 8 files / 189 tests; 1 live-DB file gated in the ordinary run |
+| Focused dashboard queue/property/realtime suites | Pass: 3 files / 32 tests |
+| Full API suite | Pass: 220 files / 1,843 tests; 2 files / 6 environment-gated tests skipped |
+| Full dashboard suite | Pass: 17 files / 137 tests |
+| Full database suite | Pass: 3 files / 18 tests |
+| Isolated PostgreSQL schema/payment run | Pass: schema push plus 5/5 payment concurrency tests; temporary container removed |
 | API, dashboard, and database typecheck | Pass |
 | API lint | Pass: 0 errors; 2,652 existing warnings |
 | Dashboard lint | Pass: 0 errors; 44 existing warnings |
 | Database lint | Pass: 0 errors; 41 existing warnings |
 | API, dashboard, and database production builds | Pass; existing Vite large-chunk advisory remains |
 | Locale parity/placeholders/terminology | Pass in the full dashboard suite for all 8 locales |
-| React Doctor changed-scope scan | 28 files scanned; no issues found after the memo dependency fix |
+| React Doctor changed-scope scan | 29 files scanned; no issues found after combining audit pagination/dedupe passes |
 | `git diff --check` | Pass |
 
-The live Postgres payment spec was invoked through the full API run and remained environment-gated because `DATABASE_URL` is not available. Schema shape and migration-safety tests pass locally. Screenshots were not repeated because the authenticated browser fixture was unavailable; capture is non-blocking in the brief.
+The normal full API run keeps its external DB and release-smoke files environment-gated. The payment DB suite was additionally run against a fresh isolated PostgreSQL 16 schema and all five tests passed. Screenshots were not repeated because the authenticated browser fixture was unavailable; capture is non-blocking in the brief.
 
 ## Scope
 
-Task 11 fixes only. One Task 11 audit timeline index migration was added. No Task 12 amendments, push, or pull request were performed.
+Task 11 fixes only. Migration `0028_booking_request_audit_relationship.sql` adds the immutable audit relationship, guarded legacy backfill, and descending property/request timeline index. No Task 12 amendments, push, or pull request were performed.

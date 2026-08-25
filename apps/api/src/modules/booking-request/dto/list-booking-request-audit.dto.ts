@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
 export class ListBookingRequestAuditDto {
   @ApiProperty({ format: 'uuid' })
@@ -15,10 +15,9 @@ export class ListBookingRequestAuditDto {
   @Max(100)
   limit = 50;
 
-  @ApiPropertyOptional({ minimum: 0, default: 0 })
+  @ApiPropertyOptional({ description: 'Opaque keyset cursor from the previous page' })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  offset = 0;
+  @IsString()
+  @MaxLength(1000)
+  cursor?: string;
 }

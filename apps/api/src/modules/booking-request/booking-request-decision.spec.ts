@@ -715,20 +715,74 @@ describe('BookingRequestService staff reads', () => {
     const result = await call(harness.service, 'auditHistory', [
       REQUEST_ID,
       PROPERTY_ID,
-      { limit: 2, offset: 0 },
+      { limit: 2 },
     ]);
 
     expect(result.data).toHaveLength(2);
     expect(result.data.every((row: { id: string }) => row.id !== '10000000-0000-4000-a000-000000000099'))
       .toBe(true);
-    expect(result.nextOffset).toBe(2);
+    expect(result.nextCursor).toEqual(expect.any(String));
     const selectCalls = (harness.database.db['select'] as ReturnType<typeof vi.fn>).mock.results;
     const auditQuery = selectCalls.at(-1)?.value as {
       limit: ReturnType<typeof vi.fn>;
-      offset: ReturnType<typeof vi.fn>;
     };
     expect(auditQuery.limit).toHaveBeenCalledWith(3);
-    expect(auditQuery.offset).toHaveBeenCalledWith(0);
+  });
+
+  it('uses an opaque keyset cursor so a newer append cannot duplicate or skip older rows', async () => {
+    const harness = makeHarness();
+    harness.state.audits.push(...[1, 2, 3].map((sequence) => ({
+      id: `10000000-0000-4000-a000-00000000003${sequence}`,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      action: 'update',
+      entityType: 'booking_request',
+      entityId: REQUEST_ID,
+      newValue: { status: 'pending' },
+      occurredAt: new Date(`2026-08-25T10:0${sequence}:00.000Z`),
+    })));
+
+    const first = await call(harness.service, 'auditHistory', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { limit: 2 },
+    ]);
+    harness.state.audits.push({
+      id: '10000000-0000-4000-a000-000000000034',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      action: 'update',
+      entityType: 'booking_request',
+      entityId: REQUEST_ID,
+      newValue: { status: 'accepted' },
+      occurredAt: new Date('2026-08-25T10:04:00.000Z'),
+    });
+    const second = await call(harness.service, 'auditHistory', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { limit: 2, cursor: first.nextCursor },
+    ]);
+
+    expect(first.data.map((row: { id: string }) => row.id)).toEqual([
+      '10000000-0000-4000-a000-000000000033',
+      '10000000-0000-4000-a000-000000000032',
+    ]);
+    expect(second.data.map((row: { id: string }) => row.id)).toEqual([
+      '10000000-0000-4000-a000-000000000031',
+    ]);
+    expect(new Set([...first.data, ...second.data].map((row: { id: string }) => row.id)).size)
+      .toBe(3);
+    expect(second.nextCursor).toBeNull();
+  });
+
+  it('rejects a malformed audit cursor before querying audit rows', async () => {
+    const harness = makeHarness();
+
+    await expect(call(harness.service, 'auditHistory', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { limit: 25, cursor: 'not-an-audit-cursor' },
+    ])).rejects.toThrow(/invalid booking request audit cursor/i);
   });
 
   it('includes request-owned audit rows even when a legacy payload omits the request id', async () => {
@@ -757,6 +811,39 @@ describe('BookingRequestService staff reads', () => {
         summary: 'payment.updated',
       }),
     ]);
+  });
+
+  it('keeps directly related installment and allocation tombstones after child deletion', async () => {
+    const harness = makeHarness();
+    harness.state.audits.push({
+      id: '10000000-0000-4000-a000-000000000021',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      action: 'delete',
+      entityType: 'booking_request_installment',
+      entityId: '20000000-0000-4000-a000-000000000021',
+      previousValue: { label: 'Deleted deposit', fixedAmount: '40.00' },
+      description: 'Booking request installment deleted',
+      occurredAt: new Date('2026-08-25T10:21:00.000Z'),
+    }, {
+      id: '10000000-0000-4000-a000-000000000022',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      action: 'delete',
+      entityType: 'booking_request_payment_allocation',
+      entityId: '20000000-0000-4000-a000-000000000022',
+      previousValue: { amount: '40.00' },
+      description: 'Booking request allocation removed',
+      occurredAt: new Date('2026-08-25T10:22:00.000Z'),
+    });
+
+    const page = await call(harness.service, 'auditHistory', [REQUEST_ID, PROPERTY_ID]);
+
+    expect(page.data.map((row: { id: string }) => row.id)).toEqual([
+      '10000000-0000-4000-a000-000000000022',
+      '10000000-0000-4000-a000-000000000021',
+    ]);
+    expect(JSON.stringify(page.data)).not.toContain('bookingRequestId');
   });
 
   it('returns immutable related audit rows through an explicit sanitized DTO', async () => {
@@ -874,7 +961,7 @@ describe('BookingRequestService staff reads', () => {
     const result = page.data;
 
     expect(result).toHaveLength(6);
-    expect(page.nextOffset).toBeNull();
+    expect(page.nextCursor).toBeNull();
     expect(result.find((entry: { summary: string }) => entry.summary === 'request.accepted')).toMatchObject({
       action: 'update',
       actorDisplay: actor.userEmail,
@@ -1467,6 +1554,123 @@ describe('BookingRequestService denial', () => {
       actor,
     ])).rejects.toThrow(/pending refund|pending payment resolution/i);
     expect(harness.state.requests[0]?.status).toBe('pending');
+  });
+
+  it('treats canonical child returns and retained remainder as resolved without double subtraction', async () => {
+    const childId = '22222222-0000-4000-a000-000000000099';
+    const harness = makeHarness();
+    harness.state.payments.push({
+      id: PAYMENT_ID,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      originalPaymentId: null,
+      status: 'captured',
+      amount: '100.00',
+    }, {
+      id: childId,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      originalPaymentId: PAYMENT_ID,
+      status: 'captured',
+      amount: '-40.00',
+    });
+    harness.state.resolutions.push({
+      id: '66666666-0000-4000-a000-000000000011',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      paymentId: PAYMENT_ID,
+      movementId: childId,
+      type: 'refund',
+      status: 'completed',
+      amount: '40.00',
+      reason: 'Canonical return provenance',
+    }, {
+      id: '66666666-0000-4000-a000-000000000012',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      paymentId: PAYMENT_ID,
+      movementId: null,
+      type: 'retained',
+      status: 'completed',
+      amount: '60.00',
+      reason: 'Non-refundable supplier cost',
+    });
+
+    await expect(call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Unable to accommodate' },
+      actor,
+    ])).resolves.toMatchObject({ status: 'denied' });
+  });
+
+  it('treats a full generic canonical child return as resolved without a resolution row', async () => {
+    const harness = makeHarness();
+    harness.state.payments.push({
+      id: PAYMENT_ID,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      originalPaymentId: null,
+      status: 'captured',
+      amount: '100.00',
+    }, {
+      id: '22222222-0000-4000-a000-000000000097',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      originalPaymentId: PAYMENT_ID,
+      status: 'captured',
+      amount: '-100.00',
+    });
+
+    await expect(call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Unable to accommodate' },
+      actor,
+    ])).resolves.toMatchObject({ status: 'denied' });
+  });
+
+  it('still blocks denial for the unresolved remainder after partial child and retain evidence', async () => {
+    const harness = makeHarness();
+    harness.state.payments.push({
+      id: PAYMENT_ID,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      originalPaymentId: null,
+      status: 'captured',
+      amount: '100.00',
+    }, {
+      id: '22222222-0000-4000-a000-000000000098',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      folioId: null,
+      originalPaymentId: PAYMENT_ID,
+      status: 'captured',
+      amount: '-40.00',
+    });
+    harness.state.resolutions.push({
+      id: '66666666-0000-4000-a000-000000000013',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      paymentId: PAYMENT_ID,
+      movementId: null,
+      type: 'retained',
+      status: 'completed',
+      amount: '50.00',
+      reason: 'Partial supplier cost',
+    });
+
+    await expect(call(harness.service, 'deny', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { reason: 'Unable to accommodate' },
+      actor,
+    ])).rejects.toThrow(/10\.00.*unresolved|unresolved money/i);
   });
 
   it('denies after money is resolved, records actor, and delivers consequences after commit', async () => {

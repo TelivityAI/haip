@@ -14,6 +14,7 @@ interface PaymentActionModalProps {
   requestId: string;
   propertyId: string;
   currencyCode: string;
+  reservationId: string | null;
   payment?: BookingRequestPayment;
   initialAmount?: string;
   onClose: () => void;
@@ -28,6 +29,7 @@ export default function PaymentActionModal({
   requestId,
   propertyId,
   currencyCode,
+  reservationId,
   payment,
   initialAmount = '',
   onClose,
@@ -97,7 +99,10 @@ export default function PaymentActionModal({
         queryClient.invalidateQueries({ queryKey: bookingRequestKeys.installments(propertyId, requestId) }),
         queryClient.invalidateQueries({ queryKey: bookingRequestKeys.messages(propertyId, requestId) }),
         queryClient.invalidateQueries({ queryKey: bookingRequestKeys.audit(propertyId, requestId) }),
-        queryClient.invalidateQueries({ queryKey: ['folios', propertyId] }),
+        queryClient.invalidateQueries({
+          queryKey: bookingRequestKeys.folioWorkspace(propertyId, requestId, reservationId),
+        }),
+        queryClient.invalidateQueries({ queryKey: bookingRequestKeys.genericFoliosRoot(propertyId) }),
       ]);
       onClose();
     },

@@ -49,6 +49,7 @@ export const auditRuns = pgTable('audit_runs', {
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
   propertyId: uuid('property_id').references(() => properties.id), // Null for system-level events
+  bookingRequestId: uuid('booking_request_id'),
 
   // What happened
   action: varchar('action', { length: 50 }).notNull(), // "create", "update", "delete", "access", "export"
@@ -70,4 +71,6 @@ export const auditLogs = pgTable('audit_logs', {
 }, (table) => ({
   propertyEntityTimeline: index('audit_logs_property_entity_timeline_idx')
     .on(table.propertyId, table.entityType, table.entityId, table.occurredAt, table.id),
+  bookingRequestTimeline: index('audit_logs_booking_request_timeline_idx')
+    .on(table.propertyId, table.bookingRequestId, table.occurredAt.desc(), table.id.desc()),
 }));

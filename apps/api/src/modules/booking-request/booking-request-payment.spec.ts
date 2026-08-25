@@ -1238,7 +1238,7 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     expect(result.movements[0]).not.toHaveProperty('idempotencyKey');
     expect(result.movements[0]).toMatchObject({
       allocatedAmount: '10.00',
-      reservedResolutionAmount: '10.00',
+      reservedResolutionAmount: '0.00',
       availableAmount: '80.00',
     });
     expect(result.allocations).toHaveLength(1);
@@ -1326,18 +1326,92 @@ describe('BookingRequestPaymentService external movements and denial resolutions
       netCapturedAmount: '60.00',
       allocatedAmount: '10.00',
       reservedResolutionAmount: '0.00',
-      availableAmount: '50.00',
+      availableToAllocate: '50.00',
+      availableToResolve: '60.00',
+      unresolvedAmount: '60.00',
     });
-    expect(byId.get(fullId)).toMatchObject({ netCapturedAmount: '0.00', availableAmount: '0.00' });
+    expect(byId.get(fullId)).toMatchObject({
+      netCapturedAmount: '0.00',
+      availableToAllocate: '0.00',
+      availableToResolve: '0.00',
+      unresolvedAmount: '0.00',
+    });
     expect(byId.get(legacyId)).toMatchObject({
       netCapturedAmount: '100.00',
-      reservedResolutionAmount: '40.00',
-      availableAmount: '60.00',
+      reservedResolutionAmount: '0.00',
+      availableToAllocate: '60.00',
+      availableToResolve: '60.00',
+      unresolvedAmount: '60.00',
     });
     expect(byId.get(pendingId)).toMatchObject({
       netCapturedAmount: '100.00',
       reservedResolutionAmount: '25.00',
-      availableAmount: '75.00',
+      availableToAllocate: '75.00',
+      availableToResolve: '75.00',
+      unresolvedAmount: '100.00',
+    });
+  });
+
+  it('uses generic negative child movements and durable claims for every resolution capacity', async () => {
+    const legacyChildId = 'dddddddd-0000-4000-a000-000000000151';
+    const harness = makeHarness({
+      payments: [
+        capturedPayment({ amount: '100.00' }),
+        capturedPayment({
+          id: legacyChildId,
+          originalPaymentId: PAYMENT_ID,
+          amount: '-40.00',
+          idempotencyKey: 'legacy-generic-return',
+        }),
+      ],
+      resolutions: [{
+        id: '00000000-0000-4000-a000-000000000061',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        paymentId: PAYMENT_ID,
+        type: 'retained',
+        status: 'completed',
+        amount: '10.00',
+        movementId: null,
+        reason: 'Supplier fee',
+      }, {
+        id: '00000000-0000-4000-a000-000000000062',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        paymentId: PAYMENT_ID,
+        type: 'refund',
+        status: 'pending',
+        amount: '20.00',
+        movementId: null,
+        reason: 'Pending durable claim',
+      }],
+    });
+
+    await expect(harness.service.recordExternalReturn(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      {
+        amount: '30.01',
+        processedAt: '2026-08-20T10:00:00.000Z',
+        reference: 'would-overdraw-canonical-net',
+      },
+      actor,
+    )).rejects.toThrow(/remaining/i);
+    await expect(harness.service.retainForDenial(
+      REQUEST_ID,
+      PAYMENT_ID,
+      PROPERTY_ID,
+      { amount: '30.01', reason: 'Would overdraw canonical net' },
+      actor,
+    )).rejects.toThrow(/remaining/i);
+
+    const list = await harness.service.listPayments(REQUEST_ID, PROPERTY_ID);
+    expect(list.movements.find((movement) => movement.id === PAYMENT_ID)).toMatchObject({
+      netCapturedAmount: '60.00',
+      reservedResolutionAmount: '20.00',
+      availableToResolve: '30.00',
+      unresolvedAmount: '50.00',
     });
   });
 
@@ -2366,5 +2440,7 @@ describe('BookingRequestPaymentService external movements and denial resolutions
         userId: actor.userId,
       }),
     ]));
+    expect(harness.state.audits.every((entry) =>
+      entry['bookingRequestId'] === REQUEST_ID)).toBe(true);
   });
 });

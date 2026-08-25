@@ -1874,7 +1874,7 @@
     },
     "property": {
       "title": "Scegli una proprietà",
-      "description": "Le richieste di prenotazione vengono esaminate una proprietà alla volta in modo che i record degli ospiti, del denaro e delle decisioni rimangano al sicuro."
+      "description": "Le richieste di prenotazione vengono esaminate una struttura alla volta, così i dati degli ospiti, dei pagamenti e delle decisioni restano protetti."
     },
     "notFound": {
       "title": "Richiesta non trovata",
@@ -1901,7 +1901,7 @@
       "denied": "Negato"
     },
     "tabs": {
-      "label": "Richiedi spazio di lavoro",
+      "label": "Area di lavoro della richiesta",
       "overview": "Panoramica",
       "payments": "Pagamenti e piano",
       "messages": "Messaggi",
@@ -1909,7 +1909,7 @@
     },
     "queue": {
       "title": "Richieste di prenotazione",
-      "description": "Esamina le richieste degli ospiti, i dettagli del soggiorno e lo stato del denaro prima di intraprendere un'azione esplicita.",
+      "description": "Esamina le richieste degli ospiti, i dettagli del soggiorno e lo stato dei pagamenti prima di eseguire un'azione esplicita.",
       "filters": "Filtri per la richiesta di prenotazione",
       "guest": "Ospite",
       "card": "Carta",
@@ -1942,9 +1942,9 @@
       "back": "Tutte le richieste di prenotazione",
       "reference": "{{reference}} · Inserito {{date}}",
       "decisionActions": "Decisione",
-      "moneyActions": "Soldi",
+      "moneyActions": "Operazioni finanziarie",
       "decisionComplete": "Decisione completata",
-      "independence": "Le decisioni di prenotazione e le azioni di denaro sono indipendenti. L'accettazione del pagamento non accetta mai una richiesta e l'accettazione non attiva mai il pagamento."
+      "independence": "Le decisioni di prenotazione e le operazioni finanziarie sono indipendenti. L'incasso di un pagamento non accetta mai una richiesta e l'accettazione non avvia mai un pagamento."
     },
     "amounts": {
       "quoted": "Preventivo",
@@ -1967,8 +1967,8 @@
       "email": "E-mail",
       "phone": "Telefono",
       "specialRequests": "Richieste speciali",
-      "application": "Applicazione",
-      "noQuestions": "Non sono state presentate ulteriori domande sulla domanda.",
+      "application": "Richiesta",
+      "noQuestions": "Non sono state fornite altre risposte con la richiesta.",
       "priceComparison": "Confronto dei prezzi",
       "card": "Scheda in archivio",
       "cardGeneric": "carta",
@@ -2004,7 +2004,7 @@
       "reason": "Motivo di rifiuto",
       "unresolved": "{{amount}} rimane irrisolto",
       "unresolvedDirection": "Rimborsare un pagamento con carta salvato, registrare un reso esterno o trattenere l'importo con un motivo prima di rifiutarlo.",
-      "resolveFirst": "Risolvi prima i soldi",
+      "resolveFirst": "Risolvi prima i pagamenti",
       "confirm": "Conferma il rifiuto",
       "denying": "Rifiuto in corso…",
       "error": "Non è stato possibile rifiutare la richiesta. Controlla lo stato dei pagamenti e riprova.",
@@ -2057,12 +2057,12 @@
       "savedCardProvenance": "Carta salvata · {{brand}} •••• {{lastFour}}",
       "externalProvenance": "Esterno · {{method}} · {{reference}}",
       "loadError": "Impossibile caricare il piano di pagamento e la cronologia dei movimenti.",
-      "folioSummary": "Riepilogo del foglio operativo",
+      "folioSummary": "Riepilogo del conto operativo",
       "acceptedDeal": "Totale accettato",
-      "folioCharges": "Addebiti del folio",
-      "folioPayments": "Pagamenti in folio",
+      "folioCharges": "Addebiti del conto",
+      "folioPayments": "Pagamenti del conto",
       "balanceDue": "Saldo dovuto",
-      "folioError": "Impossibile caricare il riepilogo del folio collegato."
+      "folioError": "Impossibile caricare il riepilogo del conto collegato."
     },
     "installmentStatuses": {
       "unpaid": "Non pagato",
@@ -2102,7 +2102,7 @@
       "reference": "Riferimento",
       "notes": "Note (facoltativo)",
       "saving": "Salvataggio…",
-      "error": "Impossibile completare l'azione relativa al denaro. I dettagli inseriti sono ancora qui.",
+      "error": "Impossibile completare l'operazione finanziaria. I dati inseriti restano disponibili.",
       "paymentRequired": "Scegli prima un movimento di pagamento.",
       "charge": {
         "title": "Addebita la carta salvata",
@@ -2112,7 +2112,7 @@
       "external": {
         "title": "Registra il pagamento esterno",
         "action": "Registra il pagamento esterno",
-        "description": "Registra il denaro già raccolto al di fuori del gateway delle carte salvate."
+        "description": "Registra un pagamento già incassato al di fuori del gateway delle carte salvate."
       },
       "refund": {
         "title": "Rimborso del pagamento con carta salvata",
@@ -2122,19 +2122,19 @@
       "external_return": {
         "title": "Registra il rimborso esterno",
         "action": "Registra rimborso",
-        "description": "Registrare che il denaro raccolto esternamente è stato restituito."
+        "description": "Registra la restituzione di un pagamento incassato esternamente."
       },
       "retain": {
         "title": "Trattieni l'importo",
         "action": "Trattieni l'importo",
         "open": "Trattieni con motivazione",
         "description": "Risolvi questo importo come trattenuto prima del rifiuto. Un motivo commerciale è obbligatorio.",
-        "reason": "Motivo per trattenere il denaro"
+        "reason": "Motivo della trattenuta"
       }
     },
     "messages": {
       "title": "Consegne di messaggi",
-      "description": "La posta elettronica transazionale è una conseguenza delle azioni del personale. Una mancata consegna non annulla mai una decisione o un movimento di denaro.",
+      "description": "L'e-mail transazionale è una conseguenza delle azioni del personale. Una mancata consegna non annulla mai una decisione o un'operazione finanziaria.",
       "loading": "Caricamento cronologia messaggi…",
       "loadError": "Impossibile caricare la cronologia dei messaggi.",
       "empty": "Nessun messaggio transazionale è stato ancora registrato.",
@@ -2176,7 +2176,7 @@
       "resolutions": {
         "refund": "Rimborso gateway registrato",
         "external_return": "Rimborso esterno registrato",
-        "retained": "Soldi trattenuti"
+        "retained": "Importo trattenuto"
       },
       "message": "Messaggio {{kind}}",
       "messageDescription": "Stato di consegna: {{status}}",
@@ -2203,7 +2203,7 @@
         "payment_updated": "Pagamento aggiornato",
         "resolution_refund": "Rimborso registrato",
         "resolution_external_return": "Restituzione esterna registrata",
-        "resolution_retained": "Denaro trattenuto",
+        "resolution_retained": "Importo trattenuto",
         "resolution_recorded": "Risoluzione del pagamento registrata",
         "email_pending": "E-mail in coda",
         "email_processing": "Tentativo di consegna e-mail",

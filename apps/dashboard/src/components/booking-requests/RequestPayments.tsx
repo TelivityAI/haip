@@ -21,7 +21,6 @@ import { validateMoneyInput, validatePercentageInput } from './moneyInput';
 import {
   apiErrorMessage,
   quoteTotal,
-  unresolvedPayments,
   type BookingRequestDetail,
   type BookingRequestInstallment,
   type BookingRequestPayment,
@@ -163,7 +162,7 @@ function AllocationEditor({
     selectedPayment?.currencyCode ?? 'XXX',
   );
   const maximumAmount = Math.min(
-    Number(selectedPayment?.availableAmount ?? 0),
+    Number(selectedPayment?.availableToAllocate ?? 0),
     Math.max(0, Number(installment.resolvedAmount) - Number(installment.allocatedAmount)),
   );
   const mutation = useMutation({
@@ -191,7 +190,7 @@ function AllocationEditor({
             {payments.map((payment) => (
               <option key={payment.id} value={payment.id}>
                 {t('bookingRequests.payments.availableForAllocation', {
-                  available: formatMoney(payment.availableAmount, payment.currencyCode),
+                  available: formatMoney(payment.availableToAllocate, payment.currencyCode),
                   allocated: formatMoney(payment.allocatedAmount, payment.currencyCode),
                   method: t(`bookingRequests.methods.${payment.method}`, { defaultValue: payment.method }),
                 })}
@@ -237,8 +236,13 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
   });
   const folioQuery = useQuery({
     queryKey: request.acceptedFolioId
-      ? bookingRequestKeys.folio(propertyId, request.acceptedFolioId)
-      : ['folios', propertyId, 'none'],
+      ? bookingRequestKeys.folio(
+        propertyId,
+        request.id,
+        request.acceptedReservationId,
+        request.acceptedFolioId,
+      )
+      : bookingRequestKeys.folioWorkspace(propertyId, request.id, null),
     queryFn: () => api.get(`/v1/folios/${request.acceptedFolioId}`, { params: { propertyId } })
       .then((response) => response.data?.data ?? response.data),
     enabled: Boolean(request.acceptedFolioId),
@@ -260,15 +264,14 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
     && ['captured', 'settled', 'partially_refunded'].includes(movement.status)
     && Number(movement.amount) > 0);
   const allocatablePayments = originalCaptured.filter((movement) =>
-    Number(movement.availableAmount) > 0);
-  const captured = originalCaptured.reduce((sum, movement) => sum + Number(movement.amount), 0);
-  const returned = payments.resolutions
-    .filter((resolution) => resolution.status === 'completed' && resolution.type !== 'retained')
-    .reduce((sum, resolution) => sum + Number(resolution.amount), 0);
-  const retained = payments.resolutions
-    .filter((resolution) => resolution.status === 'completed' && resolution.type === 'retained')
-    .reduce((sum, resolution) => sum + Number(resolution.amount), 0);
-  const unresolvedByPayment = new Map(unresolvedPayments(payments).map((entry) => [entry.payment.id, entry.amount]));
+    Number(movement.availableToAllocate) > 0);
+  const captured = originalCaptured.reduce((sum, movement) => sum + Number(movement.netCapturedAmount), 0);
+  const returned = originalCaptured.reduce((sum, movement) => sum + Number(movement.returnedAmount), 0);
+  const retained = originalCaptured.reduce((sum, movement) => sum + Number(movement.retainedAmount), 0);
+  const availableResolutionByPayment = new Map(originalCaptured.map((payment) => [
+    payment.id,
+    Number(payment.availableToResolve),
+  ]));
   const requestedTotal = quoteTotal(request.submittedQuoteSnapshot);
 
   const remove = useMutation({
@@ -424,7 +427,7 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
         <h2 className="font-semibold text-telivity-navy">{t('bookingRequests.payments.movements')}</h2>
         <div className="mt-4 space-y-3">
           {payments.movements.map((payment) => {
-            const remaining = unresolvedByPayment.get(payment.id) ?? 0;
+            const remaining = availableResolutionByPayment.get(payment.id) ?? 0;
             return (
               <article key={payment.id} className="rounded-xl border border-slate-200 p-4">
                 <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
@@ -437,7 +440,7 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
                     {!payment.originalPaymentId ? (
                       <p className="mt-1 text-xs text-telivity-slate">
                         {t('bookingRequests.payments.allocationAvailability', {
-                          available: formatMoney(payment.availableAmount, payment.currencyCode),
+                          available: formatMoney(payment.availableToAllocate, payment.currencyCode),
                           allocated: formatMoney(payment.allocatedAmount, payment.currencyCode),
                         })}
                       </p>
@@ -466,6 +469,7 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
           requestId={request.id}
           propertyId={propertyId}
           currencyCode={request.currencyCode}
+          reservationId={request.acceptedReservationId}
           payment={paymentAction.payment}
           initialAmount={paymentAction.amount}
           onClose={() => setPaymentAction(null)}

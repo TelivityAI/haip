@@ -34,6 +34,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lt,
   lte,
   or,
   sql,
@@ -74,9 +75,9 @@ import {
 } from '../webhook/webhook.service';
 import { assertCanonicalStayDates } from './booking-request-date.validator';
 import {
-  assertDenialMoneyResolved,
   type BookingRequestPriceSource,
 } from './booking-request-money';
+import { summarizeBookingRequestPaymentLedger } from './booking-request-payment-ledger';
 import { assertBookingRequestTransition } from './booking-request-state';
 import { buildAcceptedPricingSnapshot } from './booking-request-pricing';
 import {
@@ -97,6 +98,56 @@ import {
   toDeniedBookingRequestDecision,
   toBookingRequestAuditHistoryItem,
 } from './dto/booking-request-response.dto';
+
+type BookingRequestAuditCursor = {
+  version: 1;
+  occurredAt: string;
+  source: 'audit_log';
+  id: string;
+};
+
+function encodeBookingRequestAuditCursor(row: { id: string; occurredAt: Date }): string {
+  const cursor: BookingRequestAuditCursor = {
+    version: 1,
+    occurredAt: row.occurredAt.toISOString(),
+    source: 'audit_log',
+    id: row.id,
+  };
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
+function decodeBookingRequestAuditCursor(value: string | undefined): BookingRequestAuditCursor | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Partial<BookingRequestAuditCursor>;
+    const occurredAt = new Date(parsed.occurredAt ?? '');
+    if (
+      parsed.version !== 1
+      || parsed.source !== 'audit_log'
+      || typeof parsed.id !== 'string'
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parsed.id)
+      || Number.isNaN(occurredAt.getTime())
+    ) throw new Error('invalid cursor');
+    return {
+      version: 1,
+      source: 'audit_log',
+      id: parsed.id,
+      occurredAt: occurredAt.toISOString(),
+    };
+  } catch {
+    throw new BadRequestException('Invalid booking request audit cursor');
+  }
+}
+
+function auditRowPrecedesCursor(
+  row: { id: string; occurredAt: Date },
+  cursor: BookingRequestAuditCursor | null,
+): boolean {
+  if (!cursor) return true;
+  const cursorTime = new Date(cursor.occurredAt).getTime();
+  const rowTime = row.occurredAt.getTime();
+  return rowTime < cursorTime || (rowTime === cursorTime && row.id < cursor.id);
+}
 
 export type AcceptBookingRequestInput = {
   priceSource: BookingRequestPriceSource;
@@ -275,7 +326,7 @@ export class BookingRequestService {
   async auditHistory(
     id: string,
     propertyId: string,
-    pagination: { limit?: number; offset?: number } = {},
+    pagination: { limit?: number; cursor?: string } = {},
   ) {
     await this.findRequest(this.db, id, propertyId);
     const [installments, allocations, paymentRows, resolutions, emails] = await Promise.all([
@@ -308,6 +359,7 @@ export class BookingRequestService {
         )),
     ]);
     const entityConditions = [
+      eq(auditLogs.bookingRequestId, id),
       and(eq(auditLogs.entityType, 'booking_request'), eq(auditLogs.entityId, id)),
       ...(installments.length ? [and(
         eq(auditLogs.entityType, 'booking_request_installment'),
@@ -330,15 +382,36 @@ export class BookingRequestService {
         inArray(auditLogs.entityId, emails.map((row) => row.id)),
       )] : []),
     ].filter((condition): condition is NonNullable<typeof condition> => condition != null);
+    const allowedEntityTypes = [
+      'booking_request',
+      'booking_request_installment',
+      'booking_request_payment_allocation',
+      'payment',
+      'booking_request_payment_resolution',
+      'booking_request_email_delivery',
+    ];
     const limit = Math.max(1, Math.min(pagination.limit ?? 50, 100));
-    const offset = Math.max(0, pagination.offset ?? 0);
+    const cursor = decodeBookingRequestAuditCursor(pagination.cursor);
+    const cursorOccurredAt = cursor ? new Date(cursor.occurredAt) : null;
     const selected = await this.db
       .select()
       .from(auditLogs)
-      .where(and(eq(auditLogs.propertyId, propertyId), or(...entityConditions)))
+      .where(and(
+        eq(auditLogs.propertyId, propertyId),
+        inArray(auditLogs.entityType, allowedEntityTypes),
+        or(...entityConditions),
+        cursor && cursorOccurredAt
+          ? or(
+            lt(auditLogs.occurredAt, cursorOccurredAt),
+            and(
+              eq(auditLogs.occurredAt, cursorOccurredAt),
+              lt(auditLogs.id, cursor.id),
+            ),
+          )
+          : undefined,
+      ))
       .orderBy(desc(auditLogs.occurredAt), desc(auditLogs.id))
-      .limit(limit + 1)
-      .offset(offset);
+      .limit(limit + 1);
     const rows = selected.filter((row) => row.propertyId === propertyId);
     const relatedEntities = new Set<string>([
       `booking_request:${id}`,
@@ -348,23 +421,24 @@ export class BookingRequestService {
       ...resolutions.map((row) => `booking_request_payment_resolution:${row.id}`),
       ...emails.map((row) => `booking_request_email_delivery:${row.id}`),
     ]);
-    const allowedEntityTypes = new Set([
-      'booking_request',
-      'booking_request_installment',
-      'booking_request_payment_allocation',
-      'payment',
-      'booking_request_payment_resolution',
-      'booking_request_email_delivery',
-    ]);
-    const data = rows
-      .filter((row) => allowedEntityTypes.has(row.entityType)
-        && relatedEntities.has(`${row.entityType}:${row.entityId ?? ''}`))
-      .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
-      .slice(0, limit)
-      .map(toBookingRequestAuditHistoryItem);
+    const allowedEntityTypeSet = new Set(allowedEntityTypes);
+    const pageRows = rows
+      .filter((row) => allowedEntityTypeSet.has(row.entityType)
+        && (
+          row.bookingRequestId === id
+          || relatedEntities.has(`${row.entityType}:${row.entityId ?? ''}`)
+        )
+        && auditRowPrecedesCursor(row, cursor))
+      .sort((left, right) => {
+        const time = right.occurredAt.getTime() - left.occurredAt.getTime();
+        return time !== 0 ? time : right.id.localeCompare(left.id);
+      });
+    const data = pageRows.slice(0, limit).map(toBookingRequestAuditHistoryItem);
     return {
       data,
-      nextOffset: selected.length > limit ? offset + limit : null,
+      nextCursor: pageRows.length > limit
+        ? encodeBookingRequestAuditCursor(pageRows[limit - 1]!)
+        : null,
     };
   }
 
@@ -684,6 +758,7 @@ export class BookingRequestService {
       }
       await tx.insert(auditLogs).values({
         propertyId,
+        bookingRequestId: id,
         action: 'update',
         entityType: 'booking_request',
         entityId: id,
@@ -739,10 +814,9 @@ export class BookingRequestService {
           eq(bookingRequestPaymentResolutions.bookingRequestId, id),
         ));
       const scopedMovements = movementRows.filter((row) =>
-        row.propertyId === propertyId
-        && row.bookingRequestId === id
-        && row.originalPaymentId == null);
-      if (scopedMovements.some((row) => row.status === 'pending')) {
+        row.propertyId === propertyId && row.bookingRequestId === id);
+      const parentMovements = scopedMovements.filter((row) => row.originalPaymentId == null);
+      if (parentMovements.some((row) => row.status === 'pending')) {
         throw new ConflictException(
           'Booking request has a pending payment attempt; retry or resolve it before denial',
         );
@@ -754,19 +828,30 @@ export class BookingRequestService {
           'Booking request has a pending payment resolution; retry it before denial',
         );
       }
-      assertDenialMoneyResolved(
-        scopedMovements,
-        scopedResolutions
-          .filter((row) => row.status == null || row.status === 'completed')
-          .map((row) => ({
-            id: row.id,
-            paymentId: row.paymentId,
-            movementId: row.movementId ?? undefined,
-            type: row.type,
-            amount: row.amount,
-            reason: row.reason,
-          })),
-      );
+      const parentIds = new Set(parentMovements.map((row) => row.id));
+      for (const resolution of scopedResolutions) {
+        if (!parentIds.has(resolution.paymentId)) {
+          throw new ConflictException(
+            `Resolution references unknown captured movement '${resolution.paymentId}'`,
+          );
+        }
+        if (resolution.type === 'retained' && !resolution.reason?.trim()) {
+          throw new ConflictException('A reason is required for retained money');
+        }
+      }
+      for (const payment of parentMovements) {
+        const summary = summarizeBookingRequestPaymentLedger(
+          payment,
+          scopedMovements,
+          [],
+          scopedResolutions,
+        );
+        if (summary.unresolved.gt(0)) {
+          throw new ConflictException(
+            `Captured movement '${payment.id}' has unresolved money: ${summary.unresolved.toFixed(2)} remains`,
+          );
+        }
+      }
 
       const decidedAt = new Date();
       const [updated] = await tx
@@ -804,6 +889,7 @@ export class BookingRequestService {
       );
       await tx.insert(auditLogs).values({
         propertyId,
+        bookingRequestId: id,
         action: 'update',
         entityType: 'booking_request',
         entityId: id,
@@ -966,6 +1052,7 @@ export class BookingRequestService {
         });
         await tx.insert(auditLogs).values({
           propertyId,
+          bookingRequestId: request.id,
           action: 'create',
           entityType: 'booking_request',
           entityId: request.id,
@@ -1291,6 +1378,7 @@ export class BookingRequestService {
     });
     await tx.insert(auditLogs).values({
       propertyId,
+      bookingRequestId: requestId,
       action: 'create',
       entityType: payload.entityType,
       entityId: payload.entityId,

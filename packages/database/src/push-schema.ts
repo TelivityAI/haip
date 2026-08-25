@@ -545,6 +545,7 @@ async function main() {
     `CREATE TABLE IF NOT EXISTS audit_logs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id uuid REFERENCES properties(id),
+      booking_request_id uuid,
       action varchar(50) NOT NULL,
       entity_type varchar(50) NOT NULL,
       entity_id uuid,
@@ -556,8 +557,27 @@ async function main() {
       description text,
       occurred_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS booking_request_id uuid`,
+    `UPDATE audit_logs
+      SET booking_request_id = CASE
+        WHEN entity_type = 'booking_request' THEN entity_id
+        ELSE COALESCE(
+          CASE WHEN new_value->>'bookingRequestId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+            THEN (new_value->>'bookingRequestId')::uuid END,
+          CASE WHEN new_value->>'requestId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+            THEN (new_value->>'requestId')::uuid END,
+          CASE WHEN previous_value->>'bookingRequestId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+            THEN (previous_value->>'bookingRequestId')::uuid END,
+          CASE WHEN previous_value->>'requestId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+            THEN (previous_value->>'requestId')::uuid END
+        )
+      END
+      WHERE booking_request_id IS NULL
+        AND (entity_type = 'booking_request' OR new_value IS NOT NULL OR previous_value IS NOT NULL)`,
     `CREATE INDEX IF NOT EXISTS audit_logs_property_entity_timeline_idx
       ON audit_logs (property_id, entity_type, entity_id, occurred_at, id)`,
+    `CREATE INDEX IF NOT EXISTS audit_logs_booking_request_timeline_idx
+      ON audit_logs (property_id, booking_request_id, occurred_at DESC, id DESC)`,
     // channel_connections
     `CREATE TABLE IF NOT EXISTS channel_connections (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1839,9 +1859,11 @@ async function main() {
         SELECT * FROM updated
       ), audit_evidence AS (
         INSERT INTO audit_logs (
-          property_id, action, entity_type, entity_id, previous_value, new_value, description
+          property_id, booking_request_id, action, entity_type, entity_id,
+          previous_value, new_value, description
         )
         SELECT mutation.property_id,
+          mutation.booking_request_id,
           CASE WHEN mutation.new_amount = 0 THEN 'delete' ELSE 'update' END,
           'booking_request_payment_allocation',
           mutation.id,
@@ -1901,9 +1923,11 @@ async function main() {
           changes.new_allocated_amount, changes.new_status
       ), audit_evidence AS (
         INSERT INTO audit_logs (
-          property_id, action, entity_type, entity_id, previous_value, new_value, description
+          property_id, booking_request_id, action, entity_type, entity_id,
+          previous_value, new_value, description
         )
         SELECT repaired.property_id,
+          repaired.booking_request_id,
           'update',
           'booking_request_installment',
           repaired.id,

@@ -144,6 +144,7 @@ async function ensureFinancialEmail(
   if (created) {
     await tx.insert(auditLogs).values({
       propertyId: input.propertyId,
+      bookingRequestId: input.bookingRequestId,
       action: 'create',
       entityType: 'booking_request_email_delivery',
       entityId: created.id,
