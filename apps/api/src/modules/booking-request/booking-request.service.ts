@@ -18,7 +18,6 @@ import {
 } from '@telivityhaip/database';
 import type {
   AcceptedPricingSnapshot,
-  BookingFormQuestion,
   PaymentMethodCollection,
 } from '@telivityhaip/database';
 import { createHash } from 'node:crypto';
@@ -50,6 +49,7 @@ import { reservationServiceAttachedPayload } from '../ancillary/reservation-serv
 import { BookingEngineConfigService } from '../booking-engine/booking-engine-config.service';
 import { BookingEngineService } from '../booking-engine/booking-engine.service';
 import {
+  isSupportedQuestion,
   validateApplicationAnswers,
   validateQuestionDefinitions,
 } from '../booking-engine/booking-form-questions';
@@ -1436,8 +1436,10 @@ export class BookingRequestService {
     locked: LockedRequestConfig,
   ): boolean {
     const lockedFormQuestions = validateQuestionDefinitions(
-      (locked.formQuestions ?? []) as BookingFormQuestion[],
+      locked.formQuestions ?? [],
+      { allowActiveUnsupported: true },
     )
+      .filter(isSupportedQuestion)
       .filter((question) => question.isActive)
       .sort((a, b) => a.order - b.order);
     const initialSnapshot = {

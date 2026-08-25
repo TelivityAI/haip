@@ -25,6 +25,7 @@ const CONSEQUENCE_ID = 'bbbbbbbb-0000-4000-a000-000000000002';
 const ROOM_TYPE_ID = 'cccccccc-0000-4000-a000-000000000001';
 const RATE_PLAN_ID = 'dddddddd-0000-4000-a000-000000000001';
 const QUESTION_ID = 'eeeeeeee-0000-4000-a000-000000000001';
+const FUTURE_QUESTION_ID = 'eeeeeeee-0000-4000-a000-000000000002';
 
 const formQuestion = {
   id: QUESTION_ID,
@@ -908,6 +909,36 @@ describe('BookingRequestService.submit', () => {
     );
     expect(harness.values).not.toHaveBeenCalled();
     expect(harness.webhook.dispatchPersisted).not.toHaveBeenCalled();
+  });
+
+  it('ignores a stored active future question in both public and locked config semantics', async () => {
+    (harness.lockedConfig.formQuestions as Array<Record<string, unknown>>).push({
+      id: FUTURE_QUESTION_ID,
+      label: 'Future satisfaction score',
+      type: 'rating_scale',
+      order: 1,
+      isActive: true,
+      isRequired: false,
+      futureConfig: { maximum: 5, icon: 'star' },
+    });
+
+    await expect(harness.service.submit(PROPERTY_ID, submitDto)).resolves.toMatchObject({
+      requestId: REQUEST_ID,
+      status: 'pending',
+    });
+    expect(harness.insertedValues?.['formSnapshot']).toEqual([formQuestion]);
+  });
+
+  it('still detects a supported question change during the locked config recheck', async () => {
+    harness.lockedConfig.formQuestions[0] = {
+      ...harness.lockedConfig.formQuestions[0]!,
+      label: 'Updated purpose of stay',
+    };
+
+    await expect(harness.service.submit(PROPERTY_ID, submitDto)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(harness.values).not.toHaveBeenCalled();
   });
 
   it('does not commit a card-policy snapshot that changed during submission', async () => {
