@@ -27,3 +27,14 @@
   color: var(--haip-text);
   line-height: 1.5;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .haip-booking *,
+  .haip-booking *::before,
+  .haip-booking *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

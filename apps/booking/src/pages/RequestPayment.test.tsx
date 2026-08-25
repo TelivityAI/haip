@@ -1,0 +1,278 @@
+import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import type { BookingConfig, QuoteResponse, SearchRate, SearchRoomType } from '../api/types';
+import { BookingFlowProvider, useBookingFlow } from '../context/BookingFlowContext';
+import { ConfigProvider } from '../context/ConfigContext';
+import { RequestPayment } from './RequestPayment';
+import { RequestReceived } from './RequestReceived';
+
+const mocks = vi.hoisted(() => ({
+  config: vi.fn(),
+  createSetup: vi.fn(),
+  submitRequest: vi.fn(),
+  loadStripe: vi.fn(),
+  confirmSetup: vi.fn(),
+}));
+
+vi.mock('../api/client', () => ({
+  bookingApi: {
+    config: mocks.config,
+    createRequestPaymentMethodSetup: mocks.createSetup,
+    submitRequest: mocks.submitRequest,
+  },
+  errorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : 'Something went wrong',
+}));
+
+vi.mock('@stripe/stripe-js', () => ({
+  loadStripe: mocks.loadStripe,
+}));
+
+vi.mock('@stripe/react-stripe-js', () => ({
+  Elements: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PaymentElement: () => <div aria-label="Secure card entry" />,
+  useElements: () => ({ id: 'elements' }),
+  useStripe: () => ({ confirmSetup: mocks.confirmSetup }),
+}));
+
+const ROOM_TYPE_ID = '11111111-1111-4111-8111-111111111111';
+const RATE_PLAN_ID = '22222222-2222-4222-8222-222222222222';
+const QUESTION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+const quote: QuoteResponse = {
+  nights: 2,
+  currencyCode: 'EUR',
+  lineItems: [{ date: '2026-09-10', rate: '290.00', tax: '30.00' }],
+  roomTotal: '580.00',
+  taxTotal: '60.00',
+  grandTotal: '640.00',
+  depositPolicy: { type: 'none', refundable: true },
+  depositDue: '0.00',
+};
+
+const roomType: SearchRoomType = {
+  roomTypeId: ROOM_TYPE_ID,
+  roomTypeName: 'Deluxe room',
+};
+
+const rate: SearchRate = {
+  ratePlanId: RATE_PLAN_ID,
+  totalAmount: 640,
+  currencyCode: 'EUR',
+};
+
+function config(policy: BookingConfig['paymentMethodCollection']): BookingConfig {
+  return {
+    isEnabled: true,
+    displayName: 'Hotel Mirador',
+    depositPolicy: { type: 'none', refundable: true },
+    stripePublishableKey: 'pk_test_public',
+    sellableRoomTypeIds: [ROOM_TYPE_ID],
+    sellableRatePlanIds: [RATE_PLAN_ID],
+    bookingMode: 'request',
+    paymentMethodCollection: policy,
+    formQuestions: [],
+  };
+}
+
+function SeedPayment() {
+  const flow = useBookingFlow();
+  const navigate = useNavigate();
+
+  return (
+    <button
+      onClick={() => {
+        flow.setCriteria({
+          checkIn: '2026-09-10',
+          checkOut: '2026-09-12',
+          adults: 2,
+          children: 0,
+        });
+        flow.setSelection(roomType, rate);
+        flow.setQuote(quote);
+        flow.setGuest({
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          email: 'ada@example.com',
+        });
+        flow.setApplicationAnswers({ [QUESTION_ID]: '18:00' });
+        navigate('/request/payment');
+      }}
+    >
+      Begin payment
+    </button>
+  );
+}
+
+function renderPayment(policy: BookingConfig['paymentMethodCollection']) {
+  mocks.config.mockResolvedValue(config(policy));
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <MemoryRouter initialEntries={['/']}>
+      <QueryClientProvider client={queryClient}>
+        <ConfigProvider>
+          <BookingFlowProvider>
+            <Routes>
+              <Route path="/" element={<SeedPayment />} />
+              <Route path="/request/payment" element={<RequestPayment />} />
+              <Route path="/request/application" element={<p>Application page</p>} />
+              <Route path="/request/received" element={<RequestReceived />} />
+            </Routes>
+          </BookingFlowProvider>
+        </ConfigProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+}
+
+async function begin() {
+  await userEvent.click(screen.getByRole('button', { name: 'Begin payment' }));
+  await screen.findByRole('heading', { name: 'Secure your request' });
+}
+
+describe('RequestPayment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.loadStripe.mockResolvedValue({});
+    mocks.createSetup.mockResolvedValue({
+      setupIntentId: 'seti_server',
+      clientSecret: 'seti_server_secret_value',
+    });
+    mocks.confirmSetup.mockResolvedValue({
+      setupIntent: { id: 'seti_succeeded', status: 'succeeded' },
+    });
+    mocks.submitRequest.mockResolvedValue({
+      requestId: 'request-123',
+      status: 'pending',
+      message: 'Your booking request has been received and is pending review.',
+    });
+  });
+
+  it('lets an optional card be explicitly skipped without loading Stripe', async () => {
+    renderPayment('optional');
+    await begin();
+
+    expect(screen.getByRole('button', { name: 'Add a card' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Continue without a card' })).toBeVisible();
+    expect(mocks.createSetup).not.toHaveBeenCalled();
+    expect(mocks.loadStripe).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Secure card entry')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue without a card' }));
+
+    await waitFor(() => expect(mocks.submitRequest).toHaveBeenCalledOnce());
+    const payload = mocks.submitRequest.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('setupIntentId');
+    expect(payload).not.toHaveProperty('consentAccepted');
+    expect(await screen.findByText('Request received · Pending review')).toBeVisible();
+  });
+
+  it('redirects disabled collection without loading Stripe or requesting a setup', async () => {
+    renderPayment('disabled');
+    await userEvent.click(screen.getByRole('button', { name: 'Begin payment' }));
+
+    expect(await screen.findByText('Application page')).toBeVisible();
+    expect(mocks.createSetup).not.toHaveBeenCalled();
+    expect(mocks.loadStripe).not.toHaveBeenCalled();
+    expect(mocks.submitRequest).not.toHaveBeenCalled();
+  });
+
+  it('loads the Payment Element only after an optional guest chooses to add a card', async () => {
+    renderPayment('optional');
+    await begin();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add a card' }));
+
+    await waitFor(() => expect(mocks.createSetup).toHaveBeenCalledOnce());
+    expect(mocks.loadStripe).toHaveBeenCalledWith('pk_test_public');
+    expect(await screen.findByLabelText('Secure card entry')).toBeVisible();
+  });
+
+  it('requires consent and a successful SetupIntent before required submission', async () => {
+    renderPayment('required');
+    await begin();
+
+    expect(await screen.findByLabelText('Secure card entry')).toBeVisible();
+    const submit = screen.getByRole('button', { name: 'Save card and submit booking request' });
+    expect(submit).toBeDisabled();
+    expect(screen.getByText(/You will not be charged now/i)).toBeVisible();
+    expect(screen.getByText(/charge amounts explicitly recorded against this stay/i)).toBeVisible();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /I authorize Hotel Mirador/i }));
+    await userEvent.click(submit);
+
+    await waitFor(() => expect(mocks.confirmSetup).toHaveBeenCalledOnce());
+    expect(mocks.confirmSetup).toHaveBeenCalledWith({
+      elements: { id: 'elements' },
+      redirect: 'if_required',
+    });
+    await waitFor(() => expect(mocks.submitRequest).toHaveBeenCalledOnce());
+    const payload = mocks.submitRequest.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      setupIntentId: 'seti_succeeded',
+      consentAccepted: true,
+      consentVersion: 'request-card-v1',
+    });
+    expect(payload).not.toHaveProperty('paymentMethodId');
+    expect(payload).not.toHaveProperty('cardBrand');
+    expect(payload).not.toHaveProperty('cardLastFour');
+  });
+
+  it('blocks required submission when Stripe does not complete setup', async () => {
+    mocks.confirmSetup.mockResolvedValue({
+      error: { message: 'Your card could not be saved.' },
+    });
+    renderPayment('required');
+    await begin();
+    await screen.findByLabelText('Secure card entry');
+    await userEvent.click(screen.getByRole('checkbox', { name: /I authorize Hotel Mirador/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Save card and submit booking request' }),
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your card could not be saved.');
+    expect(mocks.submitRequest).not.toHaveBeenCalled();
+  });
+
+  it('ignores a late Stripe result after the guest navigates back', async () => {
+    let resolveConfirmation!: (value: {
+      setupIntent: { id: string; status: string };
+    }) => void;
+    mocks.confirmSetup.mockReturnValue(
+      new Promise((resolve) => {
+        resolveConfirmation = resolve;
+      }),
+    );
+    renderPayment('required');
+    await begin();
+    await screen.findByLabelText('Secure card entry');
+    await userEvent.click(screen.getByRole('checkbox', { name: /I authorize Hotel Mirador/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Save card and submit booking request' }),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Back to your details/ }));
+    expect(await screen.findByText('Application page')).toBeVisible();
+    resolveConfirmation({
+      setupIntent: { id: 'seti_late', status: 'succeeded' },
+    });
+
+    await waitFor(() => expect(mocks.confirmSetup).toHaveBeenCalledOnce());
+    expect(mocks.submitRequest).not.toHaveBeenCalled();
+    expect(screen.getByText('Application page')).toBeVisible();
+  });
+
+  it('shows setup and submission server errors without navigating or double submitting', async () => {
+    mocks.createSetup.mockRejectedValueOnce(new Error('Card setup is unavailable.'));
+    renderPayment('required');
+    await begin();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Card setup is unavailable.');
+    expect(mocks.submitRequest).not.toHaveBeenCalled();
+  });
+});

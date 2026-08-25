@@ -1,5 +1,7 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useReducer, useRef } from 'react';
 import type {
+  BookingApplicationAnswers,
+  BookingRequestAcknowledgement,
   Branding,
   QuoteResponse,
   SearchRate,
@@ -43,48 +45,115 @@ interface BookingFlowState {
   guest?: GuestInfo;
   setGuest: (g: GuestInfo) => void;
 
+  applicationAnswers: BookingApplicationAnswers;
+  setApplicationAnswers: (answers: BookingApplicationAnswers) => void;
+
+  setupIntentId?: string;
+  setSetupIntentId: (id?: string) => void;
+
+  setupIntentConsentText?: string;
+  setSetupIntentConsentText: (text?: string) => void;
+
+  requestAcknowledgement?: BookingRequestAcknowledgement;
+  setRequestAcknowledgement: (ack?: BookingRequestAcknowledgement) => void;
+
+  requestIdempotencyKey?: string;
+  ensureRequestIdempotencyKey: () => string;
+
   reset: () => void;
+}
+
+interface BookingFlowData {
+  criteria?: SearchCriteria;
+  branding?: Branding;
+  roomType?: SearchRoomType;
+  rate?: SearchRate;
+  serviceIds: string[];
+  quote?: QuoteResponse;
+  guest?: GuestInfo;
+  applicationAnswers: BookingApplicationAnswers;
+  setupIntentId?: string;
+  setupIntentConsentText?: string;
+  requestAcknowledgement?: BookingRequestAcknowledgement;
+  requestIdempotencyKey?: string;
+}
+
+type BookingFlowAction =
+  | { type: 'patch'; value: Partial<BookingFlowData> }
+  | { type: 'selection'; roomType: SearchRoomType; rate: SearchRate }
+  | { type: 'reset' };
+
+const initialFlow: BookingFlowData = {
+  serviceIds: [],
+  applicationAnswers: {},
+};
+
+function bookingFlowReducer(
+  state: BookingFlowData,
+  action: BookingFlowAction,
+): BookingFlowData {
+  switch (action.type) {
+    case 'patch':
+      return { ...state, ...action.value };
+    case 'selection':
+      return {
+        ...state,
+        roomType: action.roomType,
+        rate: action.rate,
+        serviceIds: [],
+      };
+    case 'reset':
+      return {
+        criteria: state.criteria,
+        branding: state.branding,
+        serviceIds: [],
+        applicationAnswers: {},
+      };
+  }
 }
 
 const BookingFlowContext = createContext<BookingFlowState | null>(null);
 
 export function BookingFlowProvider({ children }: { children: React.ReactNode }) {
-  const [criteria, setCriteria] = useState<SearchCriteria>();
-  const [branding, setBranding] = useState<Branding>();
-  const [roomType, setRoomType] = useState<SearchRoomType>();
-  const [rate, setRate] = useState<SearchRate>();
-  const [serviceIds, setServiceIds] = useState<string[]>([]);
-  const [quote, setQuote] = useState<QuoteResponse>();
-  const [guest, setGuest] = useState<GuestInfo>();
+  const [state, dispatch] = useReducer(bookingFlowReducer, initialFlow);
+  const requestKey = useRef<string>();
 
   const value = useMemo<BookingFlowState>(
     () => ({
-      criteria,
-      setCriteria,
-      branding,
-      setBranding,
-      roomType,
-      rate,
-      setSelection: (rt, r) => {
-        setRoomType(rt);
-        setRate(r);
-        setServiceIds([]);
+      ...state,
+      setCriteria: (criteria) => dispatch({ type: 'patch', value: { criteria } }),
+      setBranding: (branding) => dispatch({ type: 'patch', value: { branding } }),
+      setSelection: (roomType, rate) =>
+        dispatch({ type: 'selection', roomType, rate }),
+      setServiceIds: (serviceIds) =>
+        dispatch({ type: 'patch', value: { serviceIds } }),
+      setQuote: (quote) => dispatch({ type: 'patch', value: { quote } }),
+      setGuest: (guest) => dispatch({ type: 'patch', value: { guest } }),
+      setApplicationAnswers: (applicationAnswers) =>
+        dispatch({ type: 'patch', value: { applicationAnswers } }),
+      setSetupIntentId: (setupIntentId) =>
+        dispatch({ type: 'patch', value: { setupIntentId } }),
+      setSetupIntentConsentText: (setupIntentConsentText) =>
+        dispatch({ type: 'patch', value: { setupIntentConsentText } }),
+      setRequestAcknowledgement: (requestAcknowledgement) =>
+        dispatch({ type: 'patch', value: { requestAcknowledgement } }),
+      ensureRequestIdempotencyKey: () => {
+        if (state.requestIdempotencyKey) return state.requestIdempotencyKey;
+        if (requestKey.current) return requestKey.current;
+        const id = `booking-widget-${crypto.randomUUID()}`;
+        requestKey.current = id;
+        dispatch({
+          type: 'patch',
+          value: { requestIdempotencyKey: id },
+        });
+        return id;
       },
-      serviceIds,
-      setServiceIds,
-      quote,
-      setQuote,
-      guest,
-      setGuest,
       reset: () => {
-        setRoomType(undefined);
-        setRate(undefined);
-        setServiceIds([]);
-        setQuote(undefined);
-        setGuest(undefined);
+        requestKey.current = undefined;
+        dispatch({ type: 'reset' });
       },
     }),
-    [criteria, branding, roomType, rate, serviceIds, quote, guest],
+    [state],
   );
 
   return (

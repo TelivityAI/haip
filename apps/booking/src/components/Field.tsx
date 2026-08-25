@@ -18,4 +18,4 @@ export function Field({ label, htmlFor, children, required }: FieldProps) {
 }
 
 export const inputClass =
-  'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-400';
+  'w-full rounded-brand border border-[#D0D5DD] px-3 py-2 text-sm focus-visible:border-[var(--haip-primary,#0D9488)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--haip-primary,#0D9488)]/30';
