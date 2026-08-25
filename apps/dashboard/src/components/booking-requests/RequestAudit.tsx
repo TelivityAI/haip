@@ -6,18 +6,17 @@ import { api } from '../../lib/api';
 import { formatMoney } from '../../lib/money';
 import { bookingRequestKeys } from './queryKeys';
 import type {
+  BookingRequestAuditHistoryItem,
   BookingRequestDetail,
-  BookingRequestEmailDelivery,
-  BookingRequestPaymentsResponse,
 } from './types';
 
-interface AuditEntry {
-  key: string;
-  title: string;
-  description: string;
-  timestamp: string;
-  actor?: string | null;
-  icon: typeof FileCheck2;
+function auditIcon(summary: string) {
+  if (summary.startsWith('payment.') || summary.startsWith('resolution.') || summary.startsWith('allocation.')) {
+    return CircleDollarSign;
+  }
+  if (summary.startsWith('email.')) return Mail;
+  if (summary === 'request.accepted' || summary === 'request.denied') return CheckCircle2;
+  return FileCheck2;
 }
 
 export default function RequestAudit({
@@ -32,107 +31,75 @@ export default function RequestAudit({
     dateStyle: 'medium',
     timeStyle: 'short',
   }), [i18n.language]);
-  const paymentsQuery = useQuery({
-    queryKey: bookingRequestKeys.payments(propertyId, request.id),
-    queryFn: () => api.get(`/v1/booking-requests/${request.id}/payments`, { params: { propertyId } })
-      .then((response) => response.data?.data ?? response.data),
+  const historyQuery = useQuery({
+    queryKey: bookingRequestKeys.audit(propertyId, request.id),
+    queryFn: () => api.get(
+      `/v1/booking-requests/${request.id}/audit-history`,
+      { params: { propertyId } },
+    ).then((response) => response.data?.data ?? response.data ?? []),
   });
-  const messagesQuery = useQuery({
-    queryKey: bookingRequestKeys.messages(propertyId, request.id),
-    queryFn: () => api.get(`/v1/booking-requests/${request.id}/emails`, { params: { propertyId } })
-      .then((response) => response.data?.data ?? response.data ?? []),
-  });
-  const paymentData = paymentsQuery.data as BookingRequestPaymentsResponse | undefined;
-  const messages = Array.isArray(messagesQuery.data)
-    ? messagesQuery.data as BookingRequestEmailDelivery[]
-    : [];
-  const entries: AuditEntry[] = [
-    {
-      key: 'submitted',
-      title: t('bookingRequests.audit.submitted'),
-      description: t('bookingRequests.audit.submittedDescription'),
-      timestamp: request.createdAt,
-      icon: FileCheck2,
-    },
-    ...(request.decidedAt ? [{
-      key: 'decision',
-      title: request.status === 'accepted'
-        ? t('bookingRequests.audit.accepted')
-        : t('bookingRequests.audit.denied'),
-      description: request.status === 'accepted'
-        ? t('bookingRequests.audit.acceptedDescription', {
-          amount: formatMoney(request.acceptedTotal, request.currencyCode),
-          source: request.acceptedPriceSource
-            ? t(`bookingRequests.priceSources.${request.acceptedPriceSource}`)
-            : '—',
-        })
-        : t('bookingRequests.audit.deniedDescription'),
-      timestamp: request.decidedAt,
-      actor: request.decidedBy,
-      icon: CheckCircle2,
-    } satisfies AuditEntry] : []),
-    ...(paymentData?.movements ?? []).map((movement): AuditEntry => ({
-      key: `movement-${movement.id}`,
-      title: movement.status === 'failed'
-        ? t('bookingRequests.audit.paymentFailed')
-        : movement.originalPaymentId
-          ? t('bookingRequests.audit.paymentReturned')
-          : t('bookingRequests.audit.paymentCaptured'),
-      description: t('bookingRequests.audit.paymentDescription', {
-        amount: formatMoney(movement.amount, movement.currencyCode),
-        method: t(`bookingRequests.methods.${movement.method}`, { defaultValue: movement.method }),
-      }),
-      timestamp: movement.processedAt ?? movement.createdAt,
-      icon: CircleDollarSign,
-    })),
-    ...(paymentData?.resolutions ?? []).map((resolution): AuditEntry => ({
-      key: `resolution-${resolution.id}`,
-      title: t(`bookingRequests.audit.resolutions.${resolution.type}`),
-      description: t('bookingRequests.audit.resolutionDescription', {
-        amount: formatMoney(resolution.amount, request.currencyCode),
-      }),
-      timestamp: resolution.resolvedAt ?? resolution.createdAt,
-      actor: resolution.resolvedBy,
-      icon: CircleDollarSign,
-    })),
-    ...messages.map((message): AuditEntry => ({
-      key: `message-${message.id}`,
-      title: t('bookingRequests.audit.message', { kind: t(`bookingRequests.messageKinds.${message.kind}`) }),
-      description: t('bookingRequests.audit.messageDescription', {
-        status: t(`bookingRequests.messageStatuses.${message.status}`),
-      }),
-      timestamp: message.sentAt ?? message.lastAttemptAt ?? message.createdAt,
-      icon: Mail,
-    })),
-  ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const entries = (Array.isArray(historyQuery.data)
+    ? historyQuery.data
+    : []) as BookingRequestAuditHistoryItem[];
 
-  const formatDate = (value: string) => dateFormatter.format(new Date(value));
+  const amountFor = (entry: BookingRequestAuditHistoryItem) => {
+    const amount = entry.details['acceptedTotal']
+      ?? entry.details['amount']
+      ?? entry.details['fixedAmount'];
+    return typeof amount === 'string' || typeof amount === 'number'
+      ? formatMoney(amount, request.currencyCode)
+      : null;
+  };
 
   return (
     <section aria-labelledby="request-audit-title" className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 id="request-audit-title" className="font-semibold text-telivity-navy">{t('bookingRequests.audit.title')}</h2>
       <p className="mt-1 text-sm text-telivity-slate">{t('bookingRequests.audit.description')}</p>
-      <ol className="mt-6 space-y-0">
-        {entries.map((entry, index) => {
-          const Icon = entry.icon;
-          return (
-            <li key={entry.key} className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-3 pb-6 last:pb-0">
-              {index < entries.length - 1 ? <span aria-hidden="true" className="absolute bottom-0 left-[0.9375rem] top-8 w-px bg-slate-200" /> : null}
-              <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full bg-telivity-deep-blue/10 text-telivity-deep-blue">
-                <Icon size={16} aria-hidden="true" />
-              </span>
-              <div className="min-w-0 pt-1">
-                <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-baseline">
-                  <h3 className="font-semibold text-telivity-navy">{entry.title}</h3>
-                  <time className="text-xs text-telivity-slate">{formatDate(entry.timestamp)}</time>
+
+      {historyQuery.isLoading ? (
+        <p className="mt-6 text-sm text-telivity-slate">{t('bookingRequests.common.loading')}</p>
+      ) : historyQuery.isError ? (
+        <div role="alert" className="mt-6 flex items-center justify-between gap-3 rounded-lg border border-telivity-orange/40 bg-telivity-orange/10 p-3 text-sm text-telivity-navy">
+          <span>{t('bookingRequests.audit.loadError')}</span>
+          <button type="button" onClick={() => historyQuery.refetch()} className="font-semibold text-telivity-deep-blue underline underline-offset-2">
+            {t('bookingRequests.common.retry')}
+          </button>
+        </div>
+      ) : entries.length === 0 ? (
+        <p className="mt-6 text-sm text-telivity-slate">{t('bookingRequests.audit.empty')}</p>
+      ) : (
+        <ol className="mt-6 space-y-0">
+          {entries.map((entry, index) => {
+            const Icon = auditIcon(entry.summary);
+            const amount = amountFor(entry);
+            const label = entry.details['label'];
+            return (
+              <li key={entry.id} className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-3 pb-6 last:pb-0">
+                {index < entries.length - 1 ? <span aria-hidden="true" className="absolute bottom-0 left-[0.9375rem] top-8 w-px bg-slate-200" /> : null}
+                <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full bg-telivity-deep-blue/10 text-telivity-deep-blue">
+                  <Icon size={16} aria-hidden="true" />
+                </span>
+                <div className="min-w-0 pt-1">
+                  <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-baseline">
+                    <h3 className="font-semibold text-telivity-navy">
+                      {t(`bookingRequests.audit.events.${entry.summary.replace('.', '_')}`)}
+                    </h3>
+                    <time className="text-xs text-telivity-slate">{dateFormatter.format(new Date(entry.occurredAt))}</time>
+                  </div>
+                  {amount || typeof label === 'string' ? (
+                    <p className="mt-1 text-sm text-telivity-slate">
+                      {[typeof label === 'string' ? label : null, amount].filter(Boolean).join(' · ')}
+                    </p>
+                  ) : null}
+                  <p className="mt-1 text-xs text-telivity-slate">
+                    {t('bookingRequests.audit.actor', { actor: entry.actorDisplay })}
+                  </p>
                 </div>
-                <p className="mt-1 text-sm text-telivity-slate">{entry.description}</p>
-                {entry.actor ? <p className="mt-1 text-xs text-telivity-slate">{t('bookingRequests.audit.actor', { actor: entry.actor })}</p> : null}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+              </li>
+            );
+          })}
+        </ol>
+      )}
     </section>
   );
 }

@@ -1886,13 +1886,14 @@
       "status": "Status",
       "yes": "Da",
       "no": "Ne",
-      "notProvided": "Nije obezbeđeno"
+      "notProvided": "Nije navedeno",
+      "retry": "Pokušaj ponovo"
     },
     "actions": {
       "accept": "Prihvatite zahtev",
-      "deny": "Odbijte zahtev",
+      "deny": "Odbij zahtev",
       "charge": "Naplati karticu",
-      "record": "Evidencija plaćanja"
+      "record": "Evidentiraj uplatu"
     },
     "statuses": {
       "pending": "Na čekanju",
@@ -1925,7 +1926,7 @@
         "newest": "Najnovije prvo",
         "arrival": "Datum dolaska",
         "guest": "Ime gosta",
-        "amountDesc": "Najveći iznos"
+        "amountDesc": "Najveći traženi iznos"
       },
       "clear": "Obriši",
       "loading": "Učitavanje zahteva za rezervaciju…",
@@ -2006,10 +2007,19 @@
       "resolveFirst": "Prvo reši novac",
       "confirm": "Potvrdite odbijanje",
       "denying": "Odbijanje…",
-      "error": "Zahtev se nije mogao odbiti. Pregledajte stanje novca i pokušajte ponovo."
+      "error": "Zahtev se nije mogao odbiti. Pregledajte stanje novca i pokušajte ponovo.",
+      "moneyLoading": "Provera stanja plaćanja pre odbijanja…",
+      "moneyLoadError": "Stanje plaćanja nije moguće proveriti. Odbijanje ostaje blokirano.",
+      "retryMoney": "Ponovo proveri stanje plaćanja"
     },
     "validation": {
-      "positiveAmount": "Unesite iznos veći od nule."
+      "positiveAmount": "Unesite iznos veći od nule.",
+      "required": "Unesite iznos.",
+      "format": "Unesite važeći decimalni iznos.",
+      "positive": "Unesite iznos veći od nule.",
+      "precision": "Koristite samo decimalna mesta koja podržava ova valuta.",
+      "unsupportedCurrency": "Glavna knjiga ne podržava decimalna mesta ove valute.",
+      "maximum": "Unesite iznos unutar dozvoljenog maksimuma."
     },
     "payments": {
       "requestSummary": "Zatražite sažetak novca",
@@ -2037,6 +2047,11 @@
       "movement": "Naplaćena uplata",
       "allocate": "Dodeli",
       "allocationError": "Uplata nije mogla biti dodeljena.",
+      "availableForAllocation": "{{available}} dostupno · {{allocated}} dodeljeno · {{method}}",
+      "allocationAvailability": "{{available}} dostupno · {{allocated}} dodeljeno",
+      "moveUp": "Pomeri {{label}} gore",
+      "moveDown": "Pomeri {{label}} dole",
+      "reorderError": "Redosled rata nije moguće sačuvati. Pokušajte ponovo.",
       "movements": "Kretanja novca",
       "noMovements": "Još nema kretanja novca.",
       "savedCardProvenance": "Sačuvana kartica · {{brand}} •••• {{lastFour}}",
@@ -2165,7 +2180,35 @@
       },
       "message": "{{kind}} poruka",
       "messageDescription": "Status isporuke: {{status}}",
-      "actor": "Glumac: {{actor}}"
+      "actor": "Izvršio/la: {{actor}}",
+      "loadError": "Istoriju revizije nije moguće učitati.",
+      "empty": "Nema evidentiranih revizijskih događaja.",
+      "events": {
+        "request_pending": "Zahtev poslat",
+        "request_accepted": "Zahtev prihvaćen",
+        "request_denied": "Zahtev odbijen",
+        "request_updated": "Zahtev ažuriran",
+        "installment_created": "Rata kreirana",
+        "installment_updated": "Rata ažurirana",
+        "installment_deleted": "Rata obrisana",
+        "allocation_recorded": "Plaćanje dodeljeno",
+        "allocation_removed": "Dodela plaćanja uklonjena",
+        "payment_pending": "Plaćanje na čekanju",
+        "payment_captured": "Plaćanje naplaćeno",
+        "payment_failed": "Plaćanje nije uspelo",
+        "payment_recorded": "Plaćanje evidentirano",
+        "payment_updated": "Plaćanje ažurirano",
+        "resolution_refund": "Povraćaj sredstava evidentiran",
+        "resolution_external_return": "Eksterni povraćaj evidentiran",
+        "resolution_retained": "Novac zadržan",
+        "resolution_recorded": "Rešenje plaćanja evidentirano",
+        "email_pending": "E-pošta stavljena na čekanje",
+        "email_processing": "Pokušana dostava e-pošte",
+        "email_sent": "E-pošta dostavljena",
+        "email_failed": "Dostava e-pošte nije uspela",
+        "email_queued": "E-pošta stavljena na čekanje",
+        "email_updated": "Dostava e-pošte ažurirana"
+      }
     }
   }
 }

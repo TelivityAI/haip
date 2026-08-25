@@ -588,6 +588,25 @@ describe('BookingRequestPaymentService installments', () => {
     )).rejects.toThrow(/allocated/i);
   });
 
+  it('allows an allocated installment to be reordered without changing financial fields', async () => {
+    const allocated = installment({ allocatedAmount: '1.00', status: 'partial', sortOrder: 3 });
+    const harness = makeHarness({ installments: [allocated] });
+
+    const updated = await harness.service.updateInstallment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      { sortOrder: 0 },
+      actor,
+    );
+
+    expect(updated).toMatchObject({
+      sortOrder: 0,
+      label: allocated.label,
+      allocatedAmount: '1.00',
+    });
+  });
+
   it('uses locked allocation rows rather than a stale cached allocated amount', async () => {
     const harness = makeHarness({
       installments: [installment({ allocatedAmount: '0.00', status: 'unpaid' })],
@@ -1050,6 +1069,11 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     expect(result.movements).toHaveLength(1);
     expect(result.movements[0]).not.toHaveProperty('gatewayPaymentToken');
     expect(result.movements[0]).not.toHaveProperty('idempotencyKey');
+    expect(result.movements[0]).toMatchObject({
+      allocatedAmount: '10.00',
+      reservedResolutionAmount: '10.00',
+      availableAmount: '80.00',
+    });
     expect(result.allocations).toHaveLength(1);
     expect(result.resolutions).toHaveLength(1);
     expect(result.resolutions[0]).not.toHaveProperty('idempotencyKey');

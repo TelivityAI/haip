@@ -1865,7 +1865,8 @@
       "status": "Status",
       "yes": "Yes",
       "no": "No",
-      "notProvided": "Not provided"
+      "notProvided": "Not provided",
+      "retry": "Retry"
     },
     "actions": {
       "accept": "Accept request",
@@ -1904,7 +1905,7 @@
         "newest": "Newest first",
         "arrival": "Arrival date",
         "guest": "Guest name",
-        "amountDesc": "Highest amount"
+        "amountDesc": "Highest requested amount"
       },
       "clear": "Clear",
       "loading": "Loading booking requests…",
@@ -1985,10 +1986,19 @@
       "resolveFirst": "Resolve money first",
       "confirm": "Confirm denial",
       "denying": "Denying…",
-      "error": "The request could not be denied. Review its money state and try again."
+      "error": "The request could not be denied. Review its money state and try again.",
+      "moneyLoading": "Verifying payment state before denial…",
+      "moneyLoadError": "Payment state could not be verified. Denial remains blocked.",
+      "retryMoney": "Retry payment state"
     },
     "validation": {
-      "positiveAmount": "Enter an amount greater than zero."
+      "positiveAmount": "Enter an amount greater than zero.",
+      "required": "Enter an amount.",
+      "format": "Enter a valid decimal amount.",
+      "positive": "Enter an amount greater than zero.",
+      "precision": "Use only the minor units supported by this currency.",
+      "unsupportedCurrency": "This currency's minor units are not supported by the ledger.",
+      "maximum": "Enter an amount within the allowed maximum."
     },
     "payments": {
       "requestSummary": "Request money summary",
@@ -2016,6 +2026,11 @@
       "movement": "Captured movement",
       "allocate": "Allocate",
       "allocationError": "The payment could not be allocated.",
+      "availableForAllocation": "{{available}} available · {{allocated}} allocated · {{method}}",
+      "allocationAvailability": "{{available}} available · {{allocated}} allocated",
+      "moveUp": "Move {{label}} up",
+      "moveDown": "Move {{label}} down",
+      "reorderError": "The installment order could not be saved. Try again.",
       "movements": "Money movements",
       "noMovements": "No money movements yet.",
       "savedCardProvenance": "Saved card · {{brand}} •••• {{lastFour}}",
@@ -2144,7 +2159,35 @@
       },
       "message": "{{kind}} message",
       "messageDescription": "Delivery status: {{status}}",
-      "actor": "Actor: {{actor}}"
+      "actor": "Performed by: {{actor}}",
+      "loadError": "The audit history could not be loaded.",
+      "empty": "No audit events have been recorded.",
+      "events": {
+        "request_pending": "Request submitted",
+        "request_accepted": "Request accepted",
+        "request_denied": "Request denied",
+        "request_updated": "Request updated",
+        "installment_created": "Installment created",
+        "installment_updated": "Installment updated",
+        "installment_deleted": "Installment deleted",
+        "allocation_recorded": "Payment allocated",
+        "allocation_removed": "Payment allocation removed",
+        "payment_pending": "Payment pending",
+        "payment_captured": "Payment captured",
+        "payment_failed": "Payment failed",
+        "payment_recorded": "Payment recorded",
+        "payment_updated": "Payment updated",
+        "resolution_refund": "Refund recorded",
+        "resolution_external_return": "External return recorded",
+        "resolution_retained": "Money retained",
+        "resolution_recorded": "Payment resolution recorded",
+        "email_pending": "Email queued",
+        "email_processing": "Email delivery attempted",
+        "email_sent": "Email delivered",
+        "email_failed": "Email delivery failed",
+        "email_queued": "Email queued",
+        "email_updated": "Email delivery updated"
+      }
     }
   },
   "errors": {

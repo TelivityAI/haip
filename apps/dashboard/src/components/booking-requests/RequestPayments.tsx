@@ -4,6 +4,8 @@ import {
   Banknote,
   CalendarClock,
   CreditCard,
+  ChevronDown,
+  ChevronUp,
   Pencil,
   Plus,
   Trash2,
@@ -11,11 +13,11 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../lib/api';
-import { moneyString } from '../../lib/api-helpers';
 import { formatMoney } from '../../lib/money';
 import StatusBadge from '../ui/StatusBadge';
 import PaymentActionModal, { type PaymentAction } from './PaymentActionModal';
 import { bookingRequestKeys } from './queryKeys';
+import { validateMoneyInput, validatePercentageInput } from './moneyInput';
 import {
   apiErrorMessage,
   quoteTotal,
@@ -36,12 +38,14 @@ interface RequestPaymentsProps {
 function InstallmentEditor({
   requestId,
   propertyId,
+  currencyCode,
   installment,
   nextSortOrder,
   onClose,
 }: {
   requestId: string;
   propertyId: string;
+  currencyCode: string;
   installment?: BookingRequestInstallment;
   nextSortOrder: number;
   onClose: () => void;
@@ -57,11 +61,11 @@ function InstallmentEditor({
     installment?.dueMilestone ?? 'manual',
   );
   const [dueDate, setDueDate] = useState(installment?.dueDate ?? '');
-  const numericAmount = Number(amount);
+  const amountValidation = amountKind === 'fixed'
+    ? validateMoneyInput(amount, currencyCode)
+    : validatePercentageInput(amount);
   const valid = label.trim().length > 0
-    && Number.isFinite(numericAmount)
-    && numericAmount > 0
-    && (amountKind !== 'percentage' || numericAmount <= 100)
+    && amountValidation.canonical != null
     && (milestone !== 'date' || Boolean(dueDate));
 
   const save = useMutation({
@@ -70,8 +74,8 @@ function InstallmentEditor({
         label: label.trim(),
         sortOrder: installment?.sortOrder ?? nextSortOrder,
         ...(amountKind === 'fixed'
-          ? { fixedAmount: moneyString(amount) }
-          : { percentage: moneyString(amount) }),
+          ? { fixedAmount: amountValidation.canonical! }
+          : { percentage: amountValidation.canonical! }),
         dueMilestone: milestone,
         ...(milestone === 'date' ? { dueDate } : {}),
       };
@@ -110,6 +114,7 @@ function InstallmentEditor({
         <label className="text-sm font-medium text-telivity-slate">
           {t('bookingRequests.paymentActions.amount')}
           <input type="text" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
+          {amount !== '' && amountValidation.error ? <span className="mt-1 block text-xs font-medium text-telivity-orange">{t(`bookingRequests.validation.${amountValidation.error}`)}</span> : null}
         </label>
         <label className="text-sm font-medium text-telivity-slate">
           {t('bookingRequests.payments.milestone')}
@@ -152,11 +157,19 @@ function AllocationEditor({
   const queryClient = useQueryClient();
   const [paymentId, setPaymentId] = useState(payments[0]?.id ?? '');
   const [amount, setAmount] = useState('');
-  const numericAmount = Number(amount);
+  const selectedPayment = payments.find((payment) => payment.id === paymentId);
+  const amountValidation = validateMoneyInput(
+    amount,
+    selectedPayment?.currencyCode ?? 'XXX',
+  );
+  const maximumAmount = Math.min(
+    Number(selectedPayment?.availableAmount ?? 0),
+    Math.max(0, Number(installment.resolvedAmount) - Number(installment.allocatedAmount)),
+  );
   const mutation = useMutation({
     mutationFn: () => api.post(
       `/v1/booking-requests/${requestId}/installments/${installment.id}/allocations`,
-      { paymentId, amount: moneyString(amount) },
+      { paymentId, amount: amountValidation.canonical! },
       { params: { propertyId } },
     ),
     onSuccess: async () => {
@@ -175,16 +188,25 @@ function AllocationEditor({
         <label className="text-xs font-medium text-telivity-slate">
           {t('bookingRequests.payments.movement')}
           <select value={paymentId} onChange={(event) => setPaymentId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
-            {payments.map((payment) => <option key={payment.id} value={payment.id}>{formatMoney(payment.amount, payment.currencyCode)} · {payment.method}</option>)}
+            {payments.map((payment) => (
+              <option key={payment.id} value={payment.id}>
+                {t('bookingRequests.payments.availableForAllocation', {
+                  available: formatMoney(payment.availableAmount, payment.currencyCode),
+                  allocated: formatMoney(payment.allocatedAmount, payment.currencyCode),
+                  method: t(`bookingRequests.methods.${payment.method}`, { defaultValue: payment.method }),
+                })}
+              </option>
+            ))}
           </select>
         </label>
         <label className="text-xs font-medium text-telivity-slate">
           {t('bookingRequests.paymentActions.amount')}
           <input type="text" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+          {amount !== '' && amountValidation.error ? <span className="mt-1 block text-xs font-medium text-telivity-orange">{t(`bookingRequests.validation.${amountValidation.error}`)}</span> : null}
         </label>
         <div className="flex items-end gap-2">
           <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-telivity-slate">{t('bookingRequests.common.cancel')}</button>
-          <button type="button" onClick={() => mutation.mutate()} disabled={!paymentId || !Number.isFinite(numericAmount) || numericAmount <= 0 || mutation.isPending} className="rounded-lg bg-telivity-deep-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{t('bookingRequests.payments.allocate')}</button>
+          <button type="button" onClick={() => mutation.mutate()} disabled={!paymentId || amountValidation.canonical == null || Number(amountValidation.canonical) > maximumAmount || mutation.isPending} className="rounded-lg bg-telivity-deep-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{t('bookingRequests.payments.allocate')}</button>
         </div>
       </div>
       {mutation.isError ? <p role="alert" className="mt-2 text-sm text-telivity-orange">{apiErrorMessage(mutation.error, t('bookingRequests.payments.allocationError'))}</p> : null}
@@ -224,7 +246,8 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
 
   const installments = (Array.isArray(installmentsQuery.data)
     ? installmentsQuery.data as BookingRequestInstallment[]
-    : []).filter((item) => item.propertyId === propertyId && item.bookingRequestId === request.id);
+    : []).filter((item) => item.propertyId === propertyId && item.bookingRequestId === request.id)
+    .sort((left, right) => left.sortOrder - right.sortOrder);
   const rawPayments = paymentsQuery.data as BookingRequestPaymentsResponse | undefined;
   const payments: BookingRequestPaymentsResponse = {
     movements: (rawPayments?.movements ?? []).filter((item) => item.propertyId === propertyId && item.bookingRequestId === request.id),
@@ -236,6 +259,8 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
     !movement.originalPaymentId
     && ['captured', 'settled', 'partially_refunded'].includes(movement.status)
     && Number(movement.amount) > 0);
+  const allocatablePayments = originalCaptured.filter((movement) =>
+    Number(movement.availableAmount) > 0);
   const captured = originalCaptured.reduce((sum, movement) => sum + Number(movement.amount), 0);
   const returned = payments.resolutions
     .filter((resolution) => resolution.status === 'completed' && resolution.type !== 'retained')
@@ -252,6 +277,22 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
       { params: { propertyId } },
     ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: bookingRequestKeys.installments(propertyId, request.id) }),
+  });
+  const reorder = useMutation({
+    mutationFn: async ({ from, to }: { from: number; to: number }) => {
+      const next = [...installments];
+      const [moved] = next.splice(from, 1);
+      if (!moved) return;
+      next.splice(to, 0, moved);
+      await Promise.all(next.map((installment, sortOrder) => api.patch(
+        `/v1/booking-requests/${request.id}/installments/${installment.id}`,
+        { sortOrder },
+        { params: { propertyId } },
+      )));
+    },
+    onSuccess: () => queryClient.invalidateQueries({
+      queryKey: bookingRequestKeys.installments(propertyId, request.id),
+    }),
   });
 
   const milestoneLabel = (installment: BookingRequestInstallment) => installment.dueMilestone === 'date'
@@ -340,12 +381,12 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
 
         {editing ? (
           <div className="mt-4">
-            <InstallmentEditor requestId={request.id} propertyId={propertyId} installment={editing === 'new' ? undefined : editing} nextSortOrder={installments.length} onClose={() => setEditing(null)} />
+            <InstallmentEditor requestId={request.id} propertyId={propertyId} currencyCode={request.currencyCode} installment={editing === 'new' ? undefined : editing} nextSortOrder={installments.length} onClose={() => setEditing(null)} />
           </div>
         ) : null}
 
         <div className="mt-4 space-y-3">
-          {installments.map((installment) => (
+          {installments.map((installment, index) => (
             <article key={installment.id} className="rounded-xl border border-slate-200 p-4">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                 <div>
@@ -363,16 +404,19 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
                 </div>
                 {canWrite && request.status !== 'denied' ? (
                   <div className="flex flex-wrap gap-2">
-                    {originalCaptured.length ? <button type="button" aria-label={t('bookingRequests.payments.allocateLabel', { label: installment.label })} onClick={() => setAllocating(installment)} className="rounded-lg border border-slate-300 p-2 text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"><ArrowDownToLine size={16} aria-hidden="true" /></button> : null}
+                    {allocatablePayments.length && Number(installment.allocatedAmount) < Number(installment.resolvedAmount) ? <button type="button" aria-label={t('bookingRequests.payments.allocateLabel', { label: installment.label })} onClick={() => setAllocating(installment)} className="rounded-lg border border-slate-300 p-2 text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"><ArrowDownToLine size={16} aria-hidden="true" /></button> : null}
+                    <button type="button" aria-label={t('bookingRequests.payments.moveUp', { label: installment.label })} onClick={() => reorder.mutate({ from: index, to: index - 1 })} disabled={index === 0 || reorder.isPending} className="rounded-lg border border-slate-300 p-2 text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue disabled:opacity-40"><ChevronUp size={16} aria-hidden="true" /></button>
+                    <button type="button" aria-label={t('bookingRequests.payments.moveDown', { label: installment.label })} onClick={() => reorder.mutate({ from: index, to: index + 1 })} disabled={index === installments.length - 1 || reorder.isPending} className="rounded-lg border border-slate-300 p-2 text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue disabled:opacity-40"><ChevronDown size={16} aria-hidden="true" /></button>
                     <button type="button" aria-label={t('bookingRequests.payments.editLabel', { label: installment.label })} onClick={() => setEditing(installment)} disabled={Number(installment.allocatedAmount) > 0} className="rounded-lg border border-slate-300 p-2 text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue disabled:opacity-40"><Pencil size={16} aria-hidden="true" /></button>
                     <button type="button" aria-label={t('bookingRequests.payments.deleteLabel', { label: installment.label })} onClick={() => remove.mutate(installment.id)} disabled={Number(installment.allocatedAmount) > 0 || remove.isPending} className="rounded-lg border border-slate-300 p-2 text-telivity-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-orange disabled:opacity-40"><Trash2 size={16} aria-hidden="true" /></button>
                   </div>
                 ) : null}
               </div>
-              {allocating?.id === installment.id ? <AllocationEditor requestId={request.id} propertyId={propertyId} installment={installment} payments={originalCaptured} onClose={() => setAllocating(null)} /> : null}
+              {allocating?.id === installment.id ? <AllocationEditor requestId={request.id} propertyId={propertyId} installment={installment} payments={allocatablePayments} onClose={() => setAllocating(null)} /> : null}
             </article>
           ))}
           {!installments.length && !installmentsQuery.isLoading ? <p className="py-6 text-center text-sm text-telivity-slate">{t('bookingRequests.payments.noInstallments')}</p> : null}
+          {reorder.isError ? <p role="alert" className="text-sm text-telivity-orange">{t('bookingRequests.payments.reorderError')}</p> : null}
         </div>
       </section>
 
@@ -390,6 +434,14 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
                       <StatusBadge status={payment.status} label={t(`bookingRequests.paymentStatuses.${payment.status}`, { defaultValue: payment.status })} />
                     </div>
                     <p className="mt-1 text-sm text-telivity-slate">{provenance(payment)}</p>
+                    {!payment.originalPaymentId ? (
+                      <p className="mt-1 text-xs text-telivity-slate">
+                        {t('bookingRequests.payments.allocationAvailability', {
+                          available: formatMoney(payment.availableAmount, payment.currencyCode),
+                          allocated: formatMoney(payment.allocatedAmount, payment.currencyCode),
+                        })}
+                      </p>
+                    ) : null}
                     {payment.notes ? <p className="mt-1 text-xs text-telivity-slate">{payment.notes}</p> : null}
                   </div>
                   {canWrite && !payment.originalPaymentId && remaining > 0 && request.status !== 'denied' ? (

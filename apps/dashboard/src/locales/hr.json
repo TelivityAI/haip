@@ -1884,15 +1884,16 @@
       "cancel": "Odustani",
       "loading": "Učitavanje zahtjeva za rezervaciju…",
       "status": "Status",
-      "yes": "da",
-      "no": "br",
-      "notProvided": "Nije osigurano"
+      "yes": "Da",
+      "no": "Ne",
+      "notProvided": "Nije navedeno",
+      "retry": "Pokušaj ponovno"
     },
     "actions": {
       "accept": "Prihvati zahtjev",
       "deny": "Odbij zahtjev",
-      "charge": "Kartica za naplatu",
-      "record": "Rekordno plaćanje"
+      "charge": "Naplati karticu",
+      "record": "Evidentiraj uplatu"
     },
     "statuses": {
       "pending": "Na čekanju",
@@ -1925,7 +1926,7 @@
         "newest": "Prvo najnoviji",
         "arrival": "Datum dolaska",
         "guest": "Ime gosta",
-        "amountDesc": "Najviši iznos"
+        "amountDesc": "Najviši zatraženi iznos"
       },
       "clear": "čisto",
       "loading": "Učitavanje zahtjeva za rezervaciju…",
@@ -2005,11 +2006,20 @@
       "unresolvedDirection": "Vratite novac za plaćanje spremljenom karticom, zabilježite vanjski povrat ili zadržite iznos s razlogom prije odbijanja.",
       "resolveFirst": "Prvo riješite novac",
       "confirm": "Potvrdite odbijanje",
-      "denying": "Uskraćivanje...",
-      "error": "Zahtjev nije mogao biti odbijen. Pregledajte stanje novca i pokušajte ponovno."
+      "denying": "Odbijanje…",
+      "error": "Zahtjev nije mogao biti odbijen. Pregledajte stanje novca i pokušajte ponovno.",
+      "moneyLoading": "Provjera stanja plaćanja prije odbijanja…",
+      "moneyLoadError": "Stanje plaćanja nije moguće provjeriti. Odbijanje ostaje blokirano.",
+      "retryMoney": "Ponovno provjeri stanje plaćanja"
     },
     "validation": {
-      "positiveAmount": "Unesite iznos veći od nule."
+      "positiveAmount": "Unesite iznos veći od nule.",
+      "required": "Unesite iznos.",
+      "format": "Unesite valjani decimalni iznos.",
+      "positive": "Unesite iznos veći od nule.",
+      "precision": "Upotrijebite samo decimalna mjesta koja podržava ova valuta.",
+      "unsupportedCurrency": "Glavna knjiga ne podržava decimalna mjesta ove valute.",
+      "maximum": "Unesite iznos unutar dopuštenog maksimuma."
     },
     "payments": {
       "requestSummary": "Sažetak zahtjeva za novac",
@@ -2037,6 +2047,11 @@
       "movement": "Uhvaćen pokret",
       "allocate": "Dodijeliti",
       "allocationError": "Plaćanje nije bilo moguće dodijeliti.",
+      "availableForAllocation": "{{available}} dostupno · {{allocated}} dodijeljeno · {{method}}",
+      "allocationAvailability": "{{available}} dostupno · {{allocated}} dodijeljeno",
+      "moveUp": "Pomakni {{label}} gore",
+      "moveDown": "Pomakni {{label}} dolje",
+      "reorderError": "Redoslijed obroka nije moguće spremiti. Pokušajte ponovno.",
       "movements": "Kretanja novca",
       "noMovements": "Još nema kretanja novca.",
       "savedCardProvenance": "Spremljena kartica · {{brand}} •••• {{lastFour}}",
@@ -2165,7 +2180,35 @@
       },
       "message": "{{kind}} poruka",
       "messageDescription": "Status isporuke: {{status}}",
-      "actor": "Glumac: {{actor}}"
+      "actor": "Izvršio/la: {{actor}}",
+      "loadError": "Povijest revizije nije moguće učitati.",
+      "empty": "Nema zabilježenih revizijskih događaja.",
+      "events": {
+        "request_pending": "Zahtjev poslan",
+        "request_accepted": "Zahtjev prihvaćen",
+        "request_denied": "Zahtjev odbijen",
+        "request_updated": "Zahtjev ažuriran",
+        "installment_created": "Obrok izrađen",
+        "installment_updated": "Obrok ažuriran",
+        "installment_deleted": "Obrok izbrisan",
+        "allocation_recorded": "Plaćanje dodijeljeno",
+        "allocation_removed": "Dodjela plaćanja uklonjena",
+        "payment_pending": "Plaćanje na čekanju",
+        "payment_captured": "Plaćanje naplaćeno",
+        "payment_failed": "Plaćanje nije uspjelo",
+        "payment_recorded": "Plaćanje evidentirano",
+        "payment_updated": "Plaćanje ažurirano",
+        "resolution_refund": "Povrat novca evidentiran",
+        "resolution_external_return": "Vanjski povrat evidentiran",
+        "resolution_retained": "Novac zadržan",
+        "resolution_recorded": "Rješenje plaćanja evidentirano",
+        "email_pending": "E-pošta stavljena u red",
+        "email_processing": "Pokušana dostava e-pošte",
+        "email_sent": "E-pošta dostavljena",
+        "email_failed": "Dostava e-pošte nije uspjela",
+        "email_queued": "E-pošta stavljena u red",
+        "email_updated": "Dostava e-pošte ažurirana"
+      }
     }
   }
 }

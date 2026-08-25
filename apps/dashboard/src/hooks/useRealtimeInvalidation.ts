@@ -2,12 +2,12 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { WEBHOOK_EVENTS } from '@telivityhaip/shared';
 import { getSocket } from '../lib/socket';
+import { useProperty } from '../context/PropertyContext';
 
 interface PmsEventPayload {
   event: string;
-  entityId?: string;
-  propertyId?: string;
   data?: Record<string, unknown>;
+  timestamp: string;
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -25,12 +25,14 @@ function uniqueKeys(keys: string[][]): string[][] {
 }
 
 /**
- * Map only the shared, typed event catalog. Every returned key carries the
- * event's property scope so activity at one hotel cannot disturb another
- * hotel's in-progress review workspace.
+ * Socket events are delivered to an authenticated property room. The envelope
+ * intentionally does not repeat that property ID, so the active room — never
+ * untrusted event data — supplies the query scope.
  */
-export function realtimeQueryKeys(payload: PmsEventPayload): string[][] {
-  const propertyId = payload.propertyId ?? stringValue(payload.data?.propertyId);
+export function realtimeQueryKeys(
+  propertyId: string | null,
+  payload: PmsEventPayload,
+): string[][] {
   if (
     !propertyId
     || !Object.prototype.hasOwnProperty.call(WEBHOOK_EVENTS, payload.event)
@@ -38,16 +40,14 @@ export function realtimeQueryKeys(payload: PmsEventPayload): string[][] {
 
   const data = payload.data ?? {};
   const requestId = stringValue(data.bookingRequestId)
-    ?? stringValue(data.requestId)
-    ?? (payload.event.startsWith('booking_request.') ? payload.entityId : undefined);
-  const reservationId = stringValue(data.reservationId)
-    ?? (payload.event.startsWith('reservation.') ? payload.entityId : undefined);
-  const folioId = stringValue(data.folioId)
-    ?? (payload.event.startsWith('folio.') ? payload.entityId : undefined);
+    ?? stringValue(data.requestId);
+  const reservationId = stringValue(data.reservationId);
+  const folioId = stringValue(data.folioId);
 
-  const requestKeys = (includeRoot = true): string[][] => [
-    ...(includeRoot ? [['booking-requests', propertyId]] : []),
+  const requestKeys = (): string[][] => [
+    ['booking-requests', propertyId],
     ...(requestId ? [
+      ['booking-requests', propertyId, 'detail', requestId],
       ['booking-request-payments', propertyId, requestId],
       ['booking-request-installments', propertyId, requestId],
       ['booking-request-messages', propertyId, requestId],
@@ -67,7 +67,7 @@ export function realtimeQueryKeys(payload: PmsEventPayload): string[][] {
     return uniqueKeys([
       ['payments', propertyId],
       ['folios', propertyId],
-      ...requestKeys(Boolean(requestId)),
+      ...requestKeys(),
     ]);
   }
   if (payload.event.startsWith('reservation.')) {
@@ -75,21 +75,27 @@ export function realtimeQueryKeys(payload: PmsEventPayload): string[][] {
       ['reservations', propertyId],
       ['rooms', propertyId],
       ['reports', propertyId],
-      ...(requestId || reservationId ? requestKeys(Boolean(requestId)) : []),
+      ...requestKeys(),
     ]);
   }
   if (payload.event.startsWith('folio.')) {
     return uniqueKeys([
       ['folios', propertyId],
       ['payments', propertyId],
-      ...(requestId || folioId ? requestKeys(Boolean(requestId)) : []),
+      ...requestKeys(),
     ]);
   }
   if (payload.event.startsWith('audit.')) {
     return uniqueKeys([
       ['audit', propertyId],
       ['reports', propertyId],
-      ...requestKeys(Boolean(requestId)),
+      ...requestKeys(),
+    ]);
+  }
+  if (payload.event === 'guest.communication_sent') {
+    return uniqueKeys([
+      ['communications', propertyId],
+      ...requestKeys(),
     ]);
   }
   if (payload.event.startsWith('room.')) return [['rooms', propertyId], ['housekeeping', propertyId]];
@@ -105,13 +111,15 @@ export function realtimeQueryKeys(payload: PmsEventPayload): string[][] {
 
 export function useRealtimeInvalidation() {
   const queryClient = useQueryClient();
+  const { propertyId, isPortfolioMode } = useProperty();
+  const activePropertyId = isPortfolioMode ? null : propertyId;
 
   useEffect(() => {
     const socket = getSocket();
 
     function handleEvent(payload: PmsEventPayload) {
       if (!payload?.event) return;
-      for (const key of realtimeQueryKeys(payload)) {
+      for (const key of realtimeQueryKeys(activePropertyId, payload)) {
         queryClient.invalidateQueries({ queryKey: key });
       }
     }
@@ -120,5 +128,5 @@ export function useRealtimeInvalidation() {
     return () => {
       socket.off('pmsEvent', handleEvent);
     };
-  }, [queryClient]);
+  }, [activePropertyId, queryClient]);
 }

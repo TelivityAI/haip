@@ -28,7 +28,10 @@ import { AncillaryService } from '../ancillary/ancillary.service';
 import { FolioService } from '../folio/folio.service';
 import { GuestService } from '../guest/guest.service';
 import { ReservationService } from '../reservation/reservation.service';
-import { BookingRequestService } from './booking-request.service';
+import {
+  acceptancePreviewFingerprint,
+  BookingRequestService,
+} from './booking-request.service';
 
 const PROPERTY_ID = 'aaaaaaaa-0000-4000-a000-000000000001';
 const OTHER_PROPERTY_ID = 'aaaaaaaa-0000-4000-a000-000000000002';
@@ -143,6 +146,19 @@ function pendingRequest(overrides: Partial<RequestRow> = {}): RequestRow {
     updatedAt: new Date('2026-08-24T10:00:00.000Z'),
     ...overrides,
   };
+}
+
+function previewToken(
+  quote: { currencyCode: string; grandTotal: string } = currentQuote,
+  request: RequestRow = pendingRequest(),
+) {
+  return acceptancePreviewFingerprint({
+    requestId: request.id,
+    propertyId: request.propertyId,
+    requestUpdatedAt: request.updatedAt,
+    currencyCode: quote.currencyCode,
+    currentTotal: quote.grandTotal,
+  });
 }
 
 type State = {
@@ -443,7 +459,7 @@ function makeHarness(requests: RequestRow[] = [pendingRequest()]) {
 
 async function call(
   service: BookingRequestService & Record<string, (...args: any[]) => Promise<any>>,
-  method: 'list' | 'findById' | 'accept' | 'deny',
+  method: 'list' | 'findById' | 'auditHistory' | 'acceptancePreview' | 'accept' | 'deny',
   args: unknown[],
 ): Promise<any> {
   const fn = service[method];
@@ -476,6 +492,12 @@ describe('Booking Request staff HTTP contract', () => {
       'reservations.read',
     ]);
     expect(reflector.get(PERMISSIONS_KEY, Controller.prototype.findById)).toEqual([
+      'reservations.read',
+    ]);
+    expect(reflector.get(PERMISSIONS_KEY, Controller.prototype.acceptancePreview)).toEqual([
+      'reservations.read',
+    ]);
+    expect(reflector.get(PERMISSIONS_KEY, Controller.prototype.auditHistory)).toEqual([
       'reservations.read',
     ]);
     expect(reflector.get(PERMISSIONS_KEY, Controller.prototype.accept)).toEqual([
@@ -512,12 +534,17 @@ describe('Booking Request staff HTTP contract', () => {
       acceptDtoModule.AcceptBookingRequestDto,
       { priceSource: 'charged' },
     ));
+    const missingPreview = await validate(plainToInstance(
+      acceptDtoModule.AcceptBookingRequestDto,
+      { priceSource: 'current' },
+    ));
     const blankDenial = await validate(plainToInstance(
       denyDtoModule.DenyBookingRequestDto,
       { reason: '' },
     ));
     expect(missingScope.some((error) => error.property === 'propertyId')).toBe(true);
     expect(invalidSource.some((error) => error.property === 'priceSource')).toBe(true);
+    expect(missingPreview.some((error) => error.property === 'previewToken')).toBe(true);
     expect(blankDenial.some((error) => error.property === 'reason')).toBe(true);
   });
 });
@@ -575,12 +602,15 @@ describe('BookingRequestService staff reads', () => {
     expect(list.data[0]).toEqual(expect.objectContaining({
       id: REQUEST_ID,
       hasCard: true,
+      submittedTotal: '220.00',
+      currencyCode: 'EUR',
     }));
     expect(Object.keys(list.data[0]).sort()).toEqual([
       'acceptedPriceSource', 'acceptedReservationId', 'acceptedTotal', 'adults',
       'arrivalDate', 'children', 'createdAt', 'departureDate', 'guestEmail',
       'guestFirstName', 'guestLastName', 'hasCard', 'id', 'propertyId',
-      'ratePlanId', 'roomTypeId', 'status', 'updatedAt',
+      'ratePlanId', 'roomTypeId', 'status', 'submittedTotal', 'currencyCode',
+      'updatedAt',
     ].sort());
     expect(detail.card).toEqual({ brand: 'visa', lastFour: '4242' });
     expect(detail.applicationAnswers).toEqual({
@@ -610,11 +640,151 @@ describe('BookingRequestService staff reads', () => {
       [REQUEST_ID, PROPERTY_ID],
     )).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('returns immutable related audit rows through an explicit sanitized DTO', async () => {
+    const harness = makeHarness();
+    harness.state.audits.push(
+      {
+        id: '10000000-0000-4000-a000-000000000001',
+        propertyId: PROPERTY_ID,
+        action: 'update',
+        entityType: 'booking_request',
+        entityId: REQUEST_ID,
+        userId: actor.userId,
+        userEmail: actor.userEmail,
+        previousValue: { status: 'pending', consentText: 'secret consent' },
+        newValue: {
+          status: 'accepted',
+          acceptedTotal: '240.00',
+          priceSource: 'custom',
+          processorToken: 'tok_secret',
+        },
+        description: 'Booking request accepted',
+        occurredAt: new Date('2026-08-25T10:00:00.000Z'),
+      },
+      {
+        id: '10000000-0000-4000-a000-000000000002',
+        propertyId: PROPERTY_ID,
+        action: 'create',
+        entityType: 'booking_request_installment',
+        entityId: '20000000-0000-4000-a000-000000000001',
+        userEmail: null,
+        newValue: {
+          requestId: REQUEST_ID,
+          label: 'Deposit',
+          fixedAmount: '80.00',
+          applicationAnswers: { passport: 'secret' },
+        },
+        description: 'Booking request installment created',
+        occurredAt: new Date('2026-08-25T10:01:00.000Z'),
+      },
+      {
+        id: '10000000-0000-4000-a000-000000000003',
+        propertyId: PROPERTY_ID,
+        action: 'create',
+        entityType: 'payment',
+        entityId: PAYMENT_ID,
+        userEmail: actor.userEmail,
+        newValue: {
+          requestId: REQUEST_ID,
+          amount: '80.00',
+          currencyCode: 'EUR',
+          status: 'captured',
+          gatewayTransactionId: 'pi_secret',
+        },
+        description: 'Booking request saved-card charge captured',
+        occurredAt: new Date('2026-08-25T10:02:00.000Z'),
+      },
+      {
+        id: '10000000-0000-4000-a000-000000000004',
+        propertyId: PROPERTY_ID,
+        action: 'create',
+        entityType: 'booking_request_email_delivery',
+        entityId: '30000000-0000-4000-a000-000000000001',
+        newValue: { bookingRequestId: REQUEST_ID, kind: 'accepted', status: 'pending' },
+        description: 'Booking request accepted email queued',
+        occurredAt: new Date('2026-08-25T10:03:00.000Z'),
+      },
+      {
+        id: '10000000-0000-4000-a000-000000000005',
+        propertyId: PROPERTY_ID,
+        action: 'update',
+        entityType: 'booking_request_email_delivery',
+        entityId: '30000000-0000-4000-a000-000000000001',
+        newValue: { status: 'sent', attempts: 2, providerMessageId: 'msg_secret' },
+        description: 'Booking request email delivered',
+        occurredAt: new Date('2026-08-25T10:04:00.000Z'),
+      },
+      {
+        id: '10000000-0000-4000-a000-000000000006',
+        propertyId: OTHER_PROPERTY_ID,
+        action: 'create',
+        entityType: 'payment',
+        entityId: PAYMENT_ID,
+        newValue: { requestId: REQUEST_ID, processorToken: 'cross-property-secret' },
+        description: 'Unrelated payment',
+        occurredAt: new Date('2026-08-25T10:05:00.000Z'),
+      },
+      {
+        id: '10000000-0000-4000-a000-000000000007',
+        propertyId: PROPERTY_ID,
+        action: 'update',
+        entityType: 'booking_request_email_delivery',
+        entityId: '30000000-0000-4000-a000-000000000001',
+        newValue: { status: 'provider_secret_state' },
+        description: 'Booking request email state changed',
+        occurredAt: new Date('2026-08-25T10:06:00.000Z'),
+      },
+    );
+
+    const result = await call(harness.service, 'auditHistory', [REQUEST_ID, PROPERTY_ID]);
+
+    expect(result).toHaveLength(6);
+    expect(result.find((entry: { summary: string }) => entry.summary === 'request.accepted')).toMatchObject({
+      action: 'update',
+      actorDisplay: actor.userEmail,
+      summary: 'request.accepted',
+      details: { status: 'accepted', acceptedTotal: '240.00', priceSource: 'custom' },
+    });
+    expect(result.map((entry: { summary: string }) => entry.summary)).toEqual(expect.arrayContaining([
+      'installment.created',
+      'payment.captured',
+      'email.pending',
+      'email.sent',
+      'email.updated',
+    ]));
+    const serialized = JSON.stringify(result);
+    for (const forbidden of [
+      'processorToken', 'tok_secret', 'gatewayTransactionId', 'pi_secret',
+      'providerMessageId', 'msg_secret', 'consentText', 'applicationAnswers',
+      'cross-property-secret', actor.userId,
+    ]) expect(serialized).not.toContain(forbidden);
+  });
 });
 
 describe('BookingRequestService acceptance', () => {
   beforeEach(() => {
     vi.useRealTimers();
+  });
+
+  it('previews only submitted/current totals and an opaque property-scoped fingerprint', async () => {
+    const harness = makeHarness();
+
+    const preview = await call(harness.service, 'acceptancePreview', [
+      REQUEST_ID,
+      PROPERTY_ID,
+    ]);
+
+    expect(preview).toEqual({
+      requestId: REQUEST_ID,
+      submittedTotal: '220.00',
+      currentTotal: '260.00',
+      currencyCode: 'EUR',
+      previewVersion: 1,
+      previewToken: previewToken(),
+    });
+    expect(JSON.stringify(preview)).not.toContain('lineItems');
+    expect(harness.quoteTransactionStates).toEqual([false]);
   });
 
   it.each([
@@ -628,7 +798,7 @@ describe('BookingRequestService acceptance', () => {
       const result = await call(harness.service, 'accept', [
         REQUEST_ID,
         PROPERTY_ID,
-        { priceSource, customTotal, customReason },
+        { priceSource, customTotal, customReason, previewToken: previewToken() },
         actor,
       ]);
 
@@ -690,12 +860,30 @@ describe('BookingRequestService acceptance', () => {
     await expect(call(harness.service, 'accept', [
       REQUEST_ID,
       PROPERTY_ID,
-      { priceSource: 'custom', customTotal: '240.00' },
+      { priceSource: 'custom', customTotal: '240.00', previewToken: previewToken() },
       actor,
     ])).rejects.toThrow(/reason/i);
     expect(harness.state.requests[0]?.status).toBe('pending');
     expect(harness.state.reservations).toHaveLength(0);
     expect(harness.state.guests).toHaveLength(0);
+  });
+
+  it('rejects custom totals with excess currency precision instead of rounding them', async () => {
+    const harness = makeHarness();
+
+    await expect(call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      {
+        priceSource: 'custom',
+        customTotal: '240.001',
+        customReason: 'Must remain exact',
+        previewToken: previewToken(),
+      },
+      actor,
+    ])).rejects.toThrow(/minor units|precision/i);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+    expect(harness.state.reservations).toHaveLength(0);
   });
 
   it('persists, audits, and returns an equal-total custom reason independently of adjustment', async () => {
@@ -708,6 +896,7 @@ describe('BookingRequestService acceptance', () => {
         priceSource: 'custom',
         customTotal: '260.00',
         customReason: 'Matched a written offer',
+        previewToken: previewToken(),
       },
       actor,
     ]);
@@ -747,7 +936,7 @@ describe('BookingRequestService acceptance', () => {
     const acceptance = call(harness.service, 'accept', [
       REQUEST_ID,
       PROPERTY_ID,
-      { priceSource: 'current' },
+      { priceSource: 'current', previewToken: previewToken() },
       actor,
     ]);
     await expect(acceptance).rejects.toBeInstanceOf(ConflictException);
@@ -766,7 +955,7 @@ describe('BookingRequestService acceptance', () => {
     await expect(call(harness.service, 'accept', [
       REQUEST_ID,
       PROPERTY_ID,
-      { priceSource: 'submitted' },
+      { priceSource: 'submitted', previewToken: previewToken() },
       actor,
     ])).rejects.toBeInstanceOf(ConflictException);
     expect(harness.state.requests[0]?.status).toBe('pending');
@@ -783,11 +972,38 @@ describe('BookingRequestService acceptance', () => {
     await expect(call(harness.service, 'accept', [
       REQUEST_ID,
       PROPERTY_ID,
-      { priceSource: 'current' },
+      { priceSource: 'current', previewToken: previewToken({ ...currentQuote, currencyCode: 'USD' }) },
       actor,
     ])).rejects.toThrow(/currency/i);
     expect(harness.state.requests[0]?.status).toBe('pending');
     expect(harness.state.reservations).toHaveLength(0);
+  });
+
+  it('rejects acceptance when the authoritative quote changes after preview', async () => {
+    const harness = makeHarness();
+    const preview = await call(harness.service, 'acceptancePreview', [
+      REQUEST_ID,
+      PROPERTY_ID,
+    ]);
+    harness.bookingEngine.quote.mockResolvedValueOnce({
+      ...structuredClone(currentQuote),
+      roomTotal: '260.00',
+      grandTotal: '280.00',
+      lineItems: [
+        { date: '2026-10-01', rate: '130.00', tax: '10.00' },
+        { date: '2026-10-02', rate: '130.00', tax: '10.00' },
+      ],
+    });
+
+    await expect(call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { priceSource: 'current', previewToken: preview.previewToken },
+      actor,
+    ])).rejects.toThrow(/preview.*changed/i);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+    expect(harness.state.reservations).toHaveLength(0);
+    expect(harness.state.guests).toHaveLength(0);
   });
 
   it('serializes simultaneous acceptance and creates exactly one reservation', async () => {
@@ -797,13 +1013,13 @@ describe('BookingRequestService acceptance', () => {
       call(harness.service, 'accept', [
         REQUEST_ID,
         PROPERTY_ID,
-        { priceSource: 'submitted' },
+        { priceSource: 'submitted', previewToken: previewToken() },
         actor,
       ]),
       call(harness.service, 'accept', [
         REQUEST_ID,
         PROPERTY_ID,
-        { priceSource: 'submitted' },
+        { priceSource: 'submitted', previewToken: previewToken() },
         actor,
       ]),
     ]);
@@ -868,13 +1084,13 @@ describe('BookingRequestService acceptance', () => {
       call(first.service, 'accept', [
         REQUEST_ID,
         PROPERTY_ID,
-        { priceSource: 'current' },
+        { priceSource: 'current', previewToken: previewToken() },
         actor,
       ]),
       call(second.service, 'accept', [
         otherRequestId,
         PROPERTY_ID,
-        { priceSource: 'current' },
+        { priceSource: 'current', previewToken: previewToken() },
         actor,
       ]),
     ]);
@@ -908,7 +1124,7 @@ describe('BookingRequestService acceptance', () => {
     const result = await call(harness.service, 'accept', [
       REQUEST_ID,
       PROPERTY_ID,
-      { priceSource: 'submitted' },
+      { priceSource: 'submitted', previewToken: previewToken() },
       actor,
     ]);
 
@@ -939,7 +1155,7 @@ describe('BookingRequestService acceptance', () => {
     await call(harness.service, 'accept', [
       REQUEST_ID,
       PROPERTY_ID,
-      { priceSource: 'submitted' },
+      { priceSource: 'submitted', previewToken: previewToken() },
       actor,
     ]);
 
@@ -956,7 +1172,7 @@ describe('BookingRequestService acceptance', () => {
     const harness = makeHarness([
       pendingRequest({ serviceIds: [serviceId] }),
     ]);
-    harness.bookingEngine.quote.mockResolvedValue({
+    const acceptedQuote = {
       ...structuredClone(currentQuote),
       services: [{
         serviceId,
@@ -974,7 +1190,8 @@ describe('BookingRequestService acceptance', () => {
       servicesTotal: '15.00',
       servicesTaxTotal: '2.00',
       grandTotal: '277.00',
-    });
+    };
+    harness.bookingEngine.quote.mockResolvedValue(acceptedQuote);
     harness.ancillary.attachToReservation.mockResolvedValue({
       id: '44444444-0000-4000-a000-000000000001',
       reservationId: RESERVATION_ID,
@@ -999,7 +1216,7 @@ describe('BookingRequestService acceptance', () => {
     await call(harness.service, 'accept', [
       REQUEST_ID,
       PROPERTY_ID,
-      { priceSource: 'current' },
+      { priceSource: 'current', previewToken: previewToken(acceptedQuote) },
       actor,
     ]);
 
@@ -1034,7 +1251,7 @@ describe('BookingRequestService acceptance', () => {
     await expect(call(harness.service, 'accept', [
       REQUEST_ID,
       PROPERTY_ID,
-      { priceSource: 'submitted' },
+      { priceSource: 'submitted', previewToken: previewToken() },
       actor,
     ])).rejects.toBeInstanceOf(NotFoundException);
     expect(harness.state.reservations).toHaveLength(0);

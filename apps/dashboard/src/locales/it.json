@@ -1886,13 +1886,14 @@
       "status": "Stato",
       "yes": "Sì",
       "no": "No",
-      "notProvided": "Non fornito"
+      "notProvided": "Non fornito",
+      "retry": "Riprova"
     },
     "actions": {
       "accept": "Accetta la richiesta",
       "deny": "Rifiuta la richiesta",
-      "charge": "Carta di addebito",
-      "record": "Registrare il pagamento"
+      "charge": "Addebita la carta",
+      "record": "Registra pagamento"
     },
     "statuses": {
       "pending": "In sospeso",
@@ -1925,7 +1926,7 @@
         "newest": "Prima il più recente",
         "arrival": "Data di arrivo",
         "guest": "Nome dell'ospite",
-        "amountDesc": "Importo più alto"
+        "amountDesc": "Importo richiesto più alto"
       },
       "clear": "Chiaro",
       "loading": "Caricamento richieste di prenotazione...",
@@ -2005,11 +2006,20 @@
       "unresolvedDirection": "Rimborsare un pagamento con carta salvato, registrare un reso esterno o trattenere l'importo con un motivo prima di rifiutarlo.",
       "resolveFirst": "Risolvi prima i soldi",
       "confirm": "Conferma il rifiuto",
-      "denying": "Negare…",
-      "error": "La richiesta non poteva essere respinta. Controlla lo stato del denaro e riprova."
+      "denying": "Rifiuto in corso…",
+      "error": "Non è stato possibile rifiutare la richiesta. Controlla lo stato dei pagamenti e riprova.",
+      "moneyLoading": "Verifica dello stato dei pagamenti prima del rifiuto…",
+      "moneyLoadError": "Non è stato possibile verificare lo stato dei pagamenti. Il rifiuto resta bloccato.",
+      "retryMoney": "Verifica di nuovo i pagamenti"
     },
     "validation": {
-      "positiveAmount": "Inserisci un importo maggiore di zero."
+      "positiveAmount": "Inserisci un importo maggiore di zero.",
+      "required": "Inserisci un importo.",
+      "format": "Inserisci un importo decimale valido.",
+      "positive": "Inserisci un importo maggiore di zero.",
+      "precision": "Usa solo i decimali supportati da questa valuta.",
+      "unsupportedCurrency": "I decimali di questa valuta non sono supportati dal registro.",
+      "maximum": "Inserisci un importo entro il massimo consentito."
     },
     "payments": {
       "requestSummary": "Richiedi riepilogo denaro",
@@ -2037,6 +2047,11 @@
       "movement": "Movimento catturato",
       "allocate": "Assegnare",
       "allocationError": "Non è stato possibile assegnare il pagamento.",
+      "availableForAllocation": "{{available}} disponibile · {{allocated}} assegnato · {{method}}",
+      "allocationAvailability": "{{available}} disponibile · {{allocated}} assegnato",
+      "moveUp": "Sposta {{label}} in alto",
+      "moveDown": "Sposta {{label}} in basso",
+      "reorderError": "Non è stato possibile salvare l’ordine delle rate. Riprova.",
       "movements": "Movimenti di denaro",
       "noMovements": "Nessun movimento di denaro ancora.",
       "savedCardProvenance": "Scheda salvata · {{brand}} •••• {{lastFour}}",
@@ -2165,7 +2180,35 @@
       },
       "message": "Messaggio {{kind}}",
       "messageDescription": "Stato di consegna: {{status}}",
-      "actor": "Attore: {{actor}}"
+      "actor": "Eseguito da: {{actor}}",
+      "loadError": "Non è stato possibile caricare la cronologia di audit.",
+      "empty": "Non è stato registrato alcun evento di audit.",
+      "events": {
+        "request_pending": "Richiesta inviata",
+        "request_accepted": "Richiesta accettata",
+        "request_denied": "Richiesta rifiutata",
+        "request_updated": "Richiesta aggiornata",
+        "installment_created": "Rata creata",
+        "installment_updated": "Rata aggiornata",
+        "installment_deleted": "Rata eliminata",
+        "allocation_recorded": "Pagamento assegnato",
+        "allocation_removed": "Assegnazione del pagamento rimossa",
+        "payment_pending": "Pagamento in sospeso",
+        "payment_captured": "Pagamento acquisito",
+        "payment_failed": "Pagamento non riuscito",
+        "payment_recorded": "Pagamento registrato",
+        "payment_updated": "Pagamento aggiornato",
+        "resolution_refund": "Rimborso registrato",
+        "resolution_external_return": "Restituzione esterna registrata",
+        "resolution_retained": "Denaro trattenuto",
+        "resolution_recorded": "Risoluzione del pagamento registrata",
+        "email_pending": "E-mail in coda",
+        "email_processing": "Tentativo di consegna e-mail",
+        "email_sent": "E-mail consegnata",
+        "email_failed": "Consegna e-mail non riuscita",
+        "email_queued": "E-mail in coda",
+        "email_updated": "Consegna e-mail aggiornata"
+      }
     }
   }
 }

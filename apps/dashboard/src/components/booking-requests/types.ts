@@ -35,6 +35,8 @@ export interface BookingRequestListItem {
   guestLastName: string;
   guestEmail: string;
   hasCard: boolean;
+  submittedTotal: string;
+  currencyCode: string;
   acceptedPriceSource: BookingRequestPriceSource;
   acceptedTotal: string | null;
   acceptedReservationId: string | null;
@@ -50,13 +52,30 @@ export interface BookingRequestDetail extends Omit<BookingRequestListItem, 'hasC
   applicationAnswers: Record<string, unknown>;
   submittedQuoteSnapshot: QuoteSnapshot;
   currentQuoteSnapshot: QuoteSnapshot | null;
-  currencyCode: string;
   card: { brand: string | null; lastFour: string | null } | null;
   customPriceReason: string | null;
   acceptedFolioId: string | null;
   decidedBy: string | null;
   decidedAt: string | null;
   denialReason: string | null;
+}
+
+export interface BookingRequestAcceptancePreview {
+  requestId: string;
+  submittedTotal: string;
+  currentTotal: string;
+  currencyCode: string;
+  previewVersion: 1;
+  previewToken: string;
+}
+
+export interface BookingRequestAuditHistoryItem {
+  id: string;
+  action: string;
+  actorDisplay: string;
+  occurredAt: string;
+  summary: string;
+  details: Record<string, string | number | boolean | null>;
 }
 
 export interface BookingRequestInstallment {
@@ -84,6 +103,9 @@ export interface BookingRequestPayment {
   method: string;
   status: string;
   amount: string;
+  allocatedAmount: string;
+  reservedResolutionAmount: string;
+  availableAmount: string;
   currencyCode: string;
   gatewayProvider: string | null;
   reference: string | null;

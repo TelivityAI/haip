@@ -1884,15 +1884,16 @@
       "cancel": "Cancelar",
       "loading": "Cargando solicitud de reserva…",
       "status": "Estado",
-      "yes": "si",
+      "yes": "Sí",
       "no": "No",
-      "notProvided": "No proporcionado"
+      "notProvided": "No proporcionado",
+      "retry": "Reintentar"
     },
     "actions": {
       "accept": "Aceptar solicitud",
-      "deny": "Denegar solicitud",
-      "charge": "Tarjeta de cargo",
-      "record": "Pago récord"
+      "deny": "Rechazar solicitud",
+      "charge": "Cobrar a la tarjeta",
+      "record": "Registrar pago"
     },
     "statuses": {
       "pending": "Pendiente",
@@ -1925,7 +1926,7 @@
         "newest": "Lo nuevo primero",
         "arrival": "Fecha de llegada",
         "guest": "Nombre del invitado",
-        "amountDesc": "Cantidad más alta"
+        "amountDesc": "Importe solicitado más alto"
       },
       "clear": "Borrar",
       "loading": "Cargando solicitudes de reserva…",
@@ -2005,11 +2006,20 @@
       "unresolvedDirection": "Reembolsar un pago con tarjeta guardada, registrar una devolución externa o retener el monto con un motivo antes de rechazarlo.",
       "resolveFirst": "Resolver el dinero primero",
       "confirm": "Confirmar denegación",
-      "denying": "Negando…",
-      "error": "La solicitud no pudo ser denegada. Revise su estado monetario e inténtelo nuevamente."
+      "denying": "Rechazando…",
+      "error": "La solicitud no pudo ser rechazada. Revise su estado de pagos e inténtelo de nuevo.",
+      "moneyLoading": "Verificando el estado de los pagos antes de rechazar…",
+      "moneyLoadError": "No se pudo verificar el estado de los pagos. El rechazo sigue bloqueado.",
+      "retryMoney": "Volver a verificar los pagos"
     },
     "validation": {
-      "positiveAmount": "Ingrese una cantidad mayor que cero."
+      "positiveAmount": "Introduzca un importe mayor que cero.",
+      "required": "Introduzca un importe.",
+      "format": "Introduzca un importe decimal válido.",
+      "positive": "Introduzca un importe mayor que cero.",
+      "precision": "Use solo los decimales admitidos por esta moneda.",
+      "unsupportedCurrency": "El libro mayor no admite los decimales de esta moneda.",
+      "maximum": "Introduzca un importe dentro del máximo permitido."
     },
     "payments": {
       "requestSummary": "Solicitar resumen de dinero",
@@ -2035,8 +2045,13 @@
       "allocateLabel": "Asignar pago al {{label}}",
       "allocateTo": "Asignar pago al {{label}}",
       "movement": "Movimiento capturado",
-      "allocate": "asignar",
+      "allocate": "Asignar",
       "allocationError": "No se pudo asignar el pago.",
+      "availableForAllocation": "{{available}} disponible · {{allocated}} asignado · {{method}}",
+      "allocationAvailability": "{{available}} disponible · {{allocated}} asignado",
+      "moveUp": "Subir {{label}}",
+      "moveDown": "Bajar {{label}}",
+      "reorderError": "No se pudo guardar el orden de las cuotas. Inténtelo de nuevo.",
       "movements": "Movimientos de dinero",
       "noMovements": "Aún no hay movimientos de dinero.",
       "savedCardProvenance": "Tarjeta guardada · {{brand}} •••• {{lastFour}}",
@@ -2165,7 +2180,35 @@
       },
       "message": "{{kind}} mensaje",
       "messageDescription": "Estado de entrega: {{status}}",
-      "actor": "Actor: {{actor}}"
+      "actor": "Realizado por: {{actor}}",
+      "loadError": "No se pudo cargar el historial de auditoría.",
+      "empty": "No se han registrado eventos de auditoría.",
+      "events": {
+        "request_pending": "Solicitud enviada",
+        "request_accepted": "Solicitud aceptada",
+        "request_denied": "Solicitud rechazada",
+        "request_updated": "Solicitud actualizada",
+        "installment_created": "Cuota creada",
+        "installment_updated": "Cuota actualizada",
+        "installment_deleted": "Cuota eliminada",
+        "allocation_recorded": "Pago asignado",
+        "allocation_removed": "Asignación de pago eliminada",
+        "payment_pending": "Pago pendiente",
+        "payment_captured": "Pago cobrado",
+        "payment_failed": "Pago fallido",
+        "payment_recorded": "Pago registrado",
+        "payment_updated": "Pago actualizado",
+        "resolution_refund": "Reembolso registrado",
+        "resolution_external_return": "Devolución externa registrada",
+        "resolution_retained": "Dinero retenido",
+        "resolution_recorded": "Resolución de pago registrada",
+        "email_pending": "Correo en cola",
+        "email_processing": "Entrega de correo intentada",
+        "email_sent": "Correo entregado",
+        "email_failed": "Error en la entrega del correo",
+        "email_queued": "Correo en cola",
+        "email_updated": "Entrega de correo actualizada"
+      }
     }
   }
 }

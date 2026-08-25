@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../lib/api';
-import { moneyString } from '../../lib/api-helpers';
 import Modal from '../ui/Modal';
 import { bookingRequestKeys } from './queryKeys';
+import { validateMoneyInput } from './moneyInput';
 import { apiErrorMessage, type BookingRequestPayment } from './types';
 
 export type PaymentAction = 'charge' | 'external' | 'refund' | 'external_return' | 'retain';
@@ -42,14 +42,13 @@ export default function PaymentActionModal({
   const [notes, setNotes] = useState('');
   const [reason, setReason] = useState('');
   const [idempotencyKey] = useState(newIdentity);
-  const numericAmount = Number(amount);
-  const hasAmountError = amount !== '' && (!Number.isFinite(numericAmount) || numericAmount <= 0);
-  const positiveAmount = Number.isFinite(numericAmount) && numericAmount > 0;
+  const amountValidation = validateMoneyInput(amount, currencyCode);
+  const hasAmountError = amount !== '' && amountValidation.error != null;
 
   const title = t(`bookingRequests.paymentActions.${action}.title`);
   const actionLabel = t(`bookingRequests.paymentActions.${action}.action`);
   const needsReference = action === 'external' || action === 'external_return';
-  const isReady = positiveAmount
+  const isReady = amountValidation.canonical != null
     && (!needsReference || reference.trim().length > 0)
     && (action !== 'retain' || reason.trim().length > 0);
 
@@ -58,11 +57,11 @@ export default function PaymentActionModal({
       const base = `/v1/booking-requests/${requestId}/payments`;
       const config = { params: { propertyId } };
       if (action === 'charge') {
-        return api.post(`${base}/charge`, { amount: moneyString(amount), idempotencyKey }, config);
+        return api.post(`${base}/charge`, { amount: amountValidation.canonical!, idempotencyKey }, config);
       }
       if (action === 'external') {
         return api.post(`${base}/external`, {
-          amount: moneyString(amount),
+          amount: amountValidation.canonical!,
           currencyCode,
           method,
           processedAt: new Date(processedAt).toISOString(),
@@ -74,20 +73,20 @@ export default function PaymentActionModal({
       if (!payment) throw new Error(t('bookingRequests.paymentActions.paymentRequired'));
       if (action === 'refund') {
         return api.post(`${base}/${payment.id}/refunds`, {
-          amount: moneyString(amount),
+          amount: amountValidation.canonical!,
           idempotencyKey,
         }, config);
       }
       if (action === 'external_return') {
         return api.post(`${base}/${payment.id}/external-returns`, {
-          amount: moneyString(amount),
+          amount: amountValidation.canonical!,
           processedAt: new Date(processedAt).toISOString(),
           reference: reference.trim(),
           ...(notes.trim() ? { notes: notes.trim() } : {}),
         }, config);
       }
       return api.post(`${base}/${payment.id}/retentions`, {
-        amount: moneyString(amount),
+        amount: amountValidation.canonical!,
         reason: reason.trim(),
       }, config);
     },
@@ -123,7 +122,7 @@ export default function PaymentActionModal({
           />
           {hasAmountError ? (
             <span className="mt-1 block text-xs font-medium text-telivity-orange">
-              {t('bookingRequests.validation.positiveAmount')}
+              {t(`bookingRequests.validation.${amountValidation.error}`)}
             </span>
           ) : null}
         </label>

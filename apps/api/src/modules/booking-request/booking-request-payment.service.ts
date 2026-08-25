@@ -114,17 +114,34 @@ export class BookingRequestPaymentService {
           eq(bookingRequestPaymentResolutions.propertyId, propertyId),
         )),
     ]);
+    const scopedAllocations = allocationRows.filter((row: AllocationRow) =>
+      row.propertyId === propertyId && row.bookingRequestId === bookingRequestId);
+    const scopedResolutions = resolutionRows.filter((row: ResolutionRow) =>
+      row.propertyId === propertyId && row.bookingRequestId === bookingRequestId);
+    const scopedMovements = movementRows.filter((row: PaymentRow) =>
+      row.propertyId === propertyId && row.bookingRequestId === bookingRequestId);
     return {
-      movements: movementRows
-        .filter((row: PaymentRow) =>
-          row.propertyId === propertyId && row.bookingRequestId === bookingRequestId)
-        .map((row: PaymentRow) => this.paymentResponse(row)),
-      allocations: allocationRows.filter((row: AllocationRow) =>
-        row.propertyId === propertyId && row.bookingRequestId === bookingRequestId),
-      resolutions: resolutionRows
-        .filter((row: ResolutionRow) =>
-          row.propertyId === propertyId && row.bookingRequestId === bookingRequestId)
-        .map((row: ResolutionRow) => this.resolutionResponse(row)),
+      movements: scopedMovements.map((row: PaymentRow) => {
+        const allocated = scopedAllocations
+          .filter((allocation: AllocationRow) => allocation.paymentId === row.id)
+          .reduce((sum: Decimal, allocation: AllocationRow) => sum.plus(allocation.amount), new Decimal(0));
+        const reservedResolution = scopedResolutions
+          .filter((resolution: ResolutionRow) =>
+            resolution.paymentId === row.id
+            && (resolution.status === 'pending' || resolution.status === 'completed'))
+          .reduce((sum: Decimal, resolution: ResolutionRow) => sum.plus(resolution.amount), new Decimal(0));
+        const available = row.originalPaymentId == null && row.status === 'captured'
+          ? Decimal.max(new Decimal(row.amount).minus(allocated).minus(reservedResolution), 0)
+          : new Decimal(0);
+        return {
+          ...this.paymentResponse(row),
+          allocatedAmount: allocated.toFixed(2),
+          reservedResolutionAmount: reservedResolution.toFixed(2),
+          availableAmount: available.toFixed(2),
+        };
+      }),
+      allocations: scopedAllocations,
+      resolutions: scopedResolutions.map((row: ResolutionRow) => this.resolutionResponse(row)),
     };
   }
 
@@ -190,7 +207,16 @@ export class BookingRequestPaymentService {
         installmentId,
         propertyId,
       );
-      if (new Decimal(existing.allocatedAmount).gt(0) || persistedAllocation.gt(0)) {
+      const reorderOnly = input.sortOrder != null
+        && input.label == null
+        && input.dueMilestone == null
+        && input.dueDate == null
+        && input.fixedAmount == null
+        && input.percentage == null;
+      if (
+        !reorderOnly
+        && (new Decimal(existing.allocatedAmount).gt(0) || persistedAllocation.gt(0))
+      ) {
         throw new ConflictException('An allocated installment cannot be edited');
       }
 

@@ -66,6 +66,8 @@ const requestListItem = {
   hasCard: true,
   acceptedPriceSource: null,
   acceptedTotal: null,
+  submittedTotal: '640.00',
+  currencyCode: 'EUR',
   acceptedReservationId: null,
   createdAt: '2026-08-24T10:00:00.000Z',
   updatedAt: '2026-08-24T10:00:00.000Z',
@@ -118,6 +120,9 @@ const stripePayment = {
   method: 'credit_card',
   status: 'captured',
   amount: '192.00',
+  allocatedAmount: '50.00',
+  reservedResolutionAmount: '0.00',
+  availableAmount: '142.00',
   currencyCode: 'EUR',
   gatewayProvider: 'stripe',
   reference: null,
@@ -135,6 +140,9 @@ const externalPayment = {
   id: EXTERNAL_PAYMENT_ID,
   method: 'bank_transfer',
   amount: '100.00',
+  allocatedAmount: '0.00',
+  reservedResolutionAmount: '0.00',
+  availableAmount: '100.00',
   gatewayProvider: 'bank',
   reference: 'BANK-42',
   cardLastFour: null,
@@ -151,6 +159,8 @@ function mockApi(overrides?: {
   installments?: unknown;
   emails?: unknown;
   folio?: unknown;
+  preview?: unknown;
+  audit?: unknown;
 }) {
   vi.mocked(api.get).mockImplementation((url: string) => {
     if (url === '/v1/booking-requests') {
@@ -167,7 +177,21 @@ function mockApi(overrides?: {
     if (url === `/v1/booking-requests/${REQUEST_ID}`) {
       return Promise.resolve({ data: overrides?.detail ?? requestDetail } as never);
     }
+    if (url === `/v1/booking-requests/${REQUEST_ID}/acceptance-preview`) {
+      return Promise.resolve({ data: overrides?.preview ?? {
+        requestId: REQUEST_ID,
+        submittedTotal: '640.00',
+        currentTotal: '670.00',
+        currencyCode: 'EUR',
+        previewVersion: 1,
+        previewToken: 'v1:preview-token',
+      } } as never);
+    }
+    if (url === `/v1/booking-requests/${REQUEST_ID}/audit-history`) {
+      return Promise.resolve({ data: overrides?.audit ?? [] } as never);
+    }
     if (url === `/v1/booking-requests/${REQUEST_ID}/payments`) {
+      if (overrides?.payments instanceof Error) return Promise.reject(overrides.payments);
       return Promise.resolve({ data: overrides?.payments ?? paymentsEmpty } as never);
     }
     if (url === `/v1/booking-requests/${REQUEST_ID}/installments`) {
@@ -216,7 +240,7 @@ describe('Booking request queue', () => {
     vi.mocked(api.delete).mockResolvedValue({ data: {} } as never);
   });
 
-  it('scopes list and amount-enrichment reads and sends queue filters', async () => {
+  it('uses the safe list amount without N+1 detail reads and sends queue filters', async () => {
     renderAt();
 
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
@@ -228,10 +252,8 @@ describe('Booking request queue', () => {
     expect(listCall?.[1]).toEqual({
       params: expect.objectContaining({ propertyId: 'property-1', page: 1, limit: 20 }),
     });
-    expect(vi.mocked(api.get)).toHaveBeenCalledWith(
-      `/v1/booking-requests/${REQUEST_ID}`,
-      { params: { propertyId: 'property-1' } },
-    );
+    expect(vi.mocked(api.get).mock.calls.filter(([url]) =>
+      url === `/v1/booking-requests/${REQUEST_ID}`)).toHaveLength(0);
 
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'accepted');
     await userEvent.type(screen.getByRole('searchbox', { name: 'Guest' }), 'Ada');
@@ -330,6 +352,12 @@ describe('Booking request decisions', () => {
     expect(within(dialog).getByText('Enter an amount greater than zero.')).toBeInTheDocument();
 
     await userEvent.clear(within(dialog).getByRole('textbox', { name: 'Custom total' }));
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Custom total' }), 'abc');
+    expect(within(dialog).getByText('Enter a valid decimal amount.')).toBeInTheDocument();
+    await userEvent.clear(within(dialog).getByRole('textbox', { name: 'Custom total' }));
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Custom total' }), '625.555');
+    expect(within(dialog).getByText('Use only the minor units supported by this currency.')).toBeInTheDocument();
+    await userEvent.clear(within(dialog).getByRole('textbox', { name: 'Custom total' }));
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Custom total' }), '625');
     expect(within(dialog).getByRole('button', { name: 'Accept request' })).toBeDisabled();
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Reason for custom total' }), 'Written offer');
@@ -337,7 +365,12 @@ describe('Booking request decisions', () => {
 
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       `/v1/booking-requests/${REQUEST_ID}/accept`,
-      { priceSource: 'custom', customTotal: '625.00', customReason: 'Written offer' },
+      {
+        priceSource: 'custom',
+        customTotal: '625.00',
+        customReason: 'Written offer',
+        previewToken: 'v1:preview-token',
+      },
       { params: { propertyId: 'property-1' } },
     ));
     expect(invalidate).toHaveBeenCalledWith({
@@ -381,6 +414,20 @@ describe('Booking request decisions', () => {
     expect(screen.getByRole('tab', { name: 'Payments & plan' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('button', { name: 'Refund' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retain with reason' })).toBeInTheDocument();
+  });
+
+  it('never enables denial when the authoritative money state failed to load', async () => {
+    mockApi({ payments: new Error('network unavailable') });
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+
+    const deny = await screen.findByRole('button', { name: 'Deny request' });
+    expect(deny).toBeDisabled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Payment state could not be verified. Denial remains blocked.',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Retry payment state' }));
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.filter(([url]) =>
+      url === `/v1/booking-requests/${REQUEST_ID}/payments`).length).toBeGreaterThan(1));
   });
 });
 
@@ -468,6 +515,29 @@ describe('Booking request payments, messages, and audit', () => {
     ));
   });
 
+  it('shows net allocation availability and reorders installments with buttons', async () => {
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Allocate payment to Final balance' }));
+    const movement = screen.getByRole('combobox', { name: 'Captured movement' });
+    expect(within(movement).getByRole('option', { name: /€142.00 available.*€50.00 allocated/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Move Final balance up' }));
+    await waitFor(() => {
+      expect(api.patch).toHaveBeenCalledWith(
+        `/v1/booking-requests/${REQUEST_ID}/installments/installment-2`,
+        { sortOrder: 0 },
+        { params: { propertyId: 'property-1' } },
+      );
+      expect(api.patch).toHaveBeenCalledWith(
+        `/v1/booking-requests/${REQUEST_ID}/installments/installment-1`,
+        { sortOrder: 1 },
+        { params: { propertyId: 'property-1' } },
+      );
+    });
+  });
+
   it('keeps saved-card and external collection separate and rejects zero amounts', async () => {
     renderAt(`/booking-requests/${REQUEST_ID}`);
     await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
@@ -533,6 +603,47 @@ describe('Booking request payments, messages, and audit', () => {
     ));
   });
 
+  it('tracks simultaneous message retries independently by delivery ID', async () => {
+    const secondDelivery = {
+      id: 'delivery-2',
+      kind: 'accepted',
+      status: 'failed',
+      subject: 'Your request decision',
+      bodyText: 'Decision message.',
+      errorMessage: 'Delivery failed',
+      attempts: 2,
+      nextAttemptAt: null,
+      lastAttemptAt: '2026-08-25T10:01:00.000Z',
+      sentAt: null,
+      createdAt: '2026-08-24T10:01:00.000Z',
+      updatedAt: '2026-08-25T10:01:00.000Z',
+    };
+    const firstDelivery = {
+      ...secondDelivery,
+      id: 'delivery-1',
+      kind: 'receipt',
+      subject: 'We received your request',
+    };
+    mockApi({ emails: [firstDelivery, secondDelivery] });
+    const resolvers = new Map<string, () => void>();
+    vi.mocked(api.post).mockImplementation((url: string) => new Promise((resolve) => {
+      resolvers.set(url, () => resolve({ data: {} }));
+    }) as never);
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Messages' }));
+    const retries = await screen.findAllByRole('button', { name: 'Retry delivery' });
+
+    await userEvent.click(retries[0]!);
+    await userEvent.click(retries[1]!);
+    expect(retries[0]).toBeDisabled();
+    expect(retries[1]).toBeDisabled();
+
+    resolvers.get(`/v1/booking-requests/${REQUEST_ID}/emails/delivery-1/retry`)?.();
+    await waitFor(() => expect(retries[0]).toBeEnabled());
+    expect(retries[1]).toBeDisabled();
+    resolvers.get(`/v1/booking-requests/${REQUEST_ID}/emails/delivery-2/retry`)?.();
+  });
+
   it('renders a safe audit timeline without internal or payment tokens', async () => {
     const accepted = {
       ...requestDetail,
@@ -549,6 +660,32 @@ describe('Booking request payments, messages, and audit', () => {
       detail: accepted,
       payments: { movements: [stripePayment], allocations: [], resolutions: [] },
       emails: [],
+      audit: [
+        {
+          id: 'audit-3',
+          action: 'create',
+          actorDisplay: 'staff@example.com',
+          occurredAt: '2026-08-25T12:00:00.000Z',
+          summary: 'payment.captured',
+          details: { amount: '192.00', currencyCode: 'EUR', status: 'captured' },
+        },
+        {
+          id: 'audit-2',
+          action: 'update',
+          actorDisplay: 'staff-user-1',
+          occurredAt: '2026-08-25T11:00:00.000Z',
+          summary: 'request.accepted',
+          details: { acceptedTotal: '670.00', priceSource: 'current' },
+        },
+        {
+          id: 'audit-1',
+          action: 'create',
+          actorDisplay: 'System',
+          occurredAt: '2026-08-24T10:00:00.000Z',
+          summary: 'request.pending',
+          details: {},
+        },
+      ],
       folio: {
         id: 'folio-1',
         folioNumber: 'F-1042',
@@ -566,6 +703,10 @@ describe('Booking request payments, messages, and audit', () => {
     expect(screen.getByText('Payment captured')).toBeInTheDocument();
     expect(screen.getByText(/staff-user-1/)).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('pm_secret_should_not_render');
+    expect(api.get).toHaveBeenCalledWith(
+      `/v1/booking-requests/${REQUEST_ID}/audit-history`,
+      { params: { propertyId: 'property-1' } },
+    );
 
     await userEvent.click(screen.getByRole('tab', { name: 'Payments & plan' }));
     expect(await screen.findByText('Operational folio summary')).toBeInTheDocument();
@@ -574,6 +715,27 @@ describe('Booking request payments, messages, and audit', () => {
 });
 
 describe('Booking request locales', () => {
+  it('uses domain-appropriate financial and audit terminology', () => {
+    expect(en.bookingRequests.queue.sortOptions.amountDesc).toBe('Highest requested amount');
+    expect(de.bookingRequests.actions).toMatchObject({
+      charge: 'Karte belasten',
+      deny: 'Anfrage ablehnen',
+    });
+    expect(de.bookingRequests.audit.actor).toBe('Ausgeführt von: {{actor}}');
+
+    expect(fr.bookingRequests.actions.charge).toBe('Facturer la carte');
+    expect(fr.bookingRequests.audit.events.resolution_refund).toContain('Remboursement');
+
+    expect(hr.bookingRequests.actions).toMatchObject({
+      charge: 'Naplati karticu',
+      record: 'Evidentiraj uplatu',
+    });
+    expect(hr.bookingRequests.audit.actor).toContain('Izvršio');
+
+    expect(srLatn.bookingRequests.actions.charge).toBe('Naplati karticu');
+    expect(srLatn.bookingRequests.audit.actor).toContain('Izvršio');
+  });
+
   it('defines every visible booking-request leaf in all eight locales', () => {
     const locales = { en, de, es, fr, hr, it: itMessages, 'pt-BR': ptBR, 'sr-Latn': srLatn };
     const leafPaths = (value: unknown, prefix = ''): string[] => {
@@ -591,6 +753,17 @@ describe('Booking request locales', () => {
     for (const [locale, messages] of Object.entries(locales)) {
       for (const path of paths) {
         expect(read(messages, path), `${locale} is missing ${path}`).not.toBeUndefined();
+        const englishValue = read(en, path);
+        const localizedValue = read(messages, path);
+        if (typeof englishValue === 'string' && typeof localizedValue === 'string') {
+          const placeholders = (value: string) => [...value.matchAll(/\{\{([^}]+)\}\}/g)]
+            .map((match) => match[1])
+            .sort();
+          expect(
+            placeholders(localizedValue),
+            `${locale} has mismatched placeholders in ${path}`,
+          ).toEqual(placeholders(englishValue));
+        }
       }
     }
   });

@@ -229,7 +229,27 @@ export function buildAcceptedPricingSnapshot(
   if (!custom.isFinite() || custom.lessThanOrEqualTo(0)) {
     throw new BadRequestException('Custom accepted total must be greater than zero');
   }
-  custom = custom.toDecimalPlaces(2);
+  let exponent: number;
+  try {
+    const resolvedExponent = new Intl.NumberFormat('en', {
+      style: 'currency',
+      currency: input.requestCurrencyCode.toUpperCase(),
+    }).resolvedOptions().maximumFractionDigits;
+    if (resolvedExponent == null) throw new Error('unknown exponent');
+    exponent = resolvedExponent;
+  } catch {
+    throw new BadRequestException('Request currency is not supported');
+  }
+  if (exponent > 2) {
+    throw new BadRequestException(
+      `${input.requestCurrencyCode.toUpperCase()} minor units exceed ledger precision`,
+    );
+  }
+  if (custom.decimalPlaces() > exponent) {
+    throw new BadRequestException(
+      `Custom accepted total has fractional minor units for ${input.requestCurrencyCode.toUpperCase()}`,
+    );
+  }
   const adjustment = custom.minus(normalized['grandTotal']).toDecimalPlaces(2);
   return {
     version: 1,

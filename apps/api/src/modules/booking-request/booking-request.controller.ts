@@ -67,6 +67,28 @@ export class BookingRequestController {
     return this.service.findById(id, propertyId);
   }
 
+  @Get(':id/audit-history')
+  @RequirePermissions('reservations.read')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'List immutable sanitized Booking Request audit history' })
+  auditHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.service.auditHistory(id, propertyId);
+  }
+
+  @Get(':id/acceptance-preview')
+  @RequirePermissions('reservations.read')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Preview authoritative totals before accepting a request' })
+  acceptancePreview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.service.acceptancePreview(id, propertyId);
+  }
+
   @Get(':id/emails')
   @RequirePermissions('reservations.read')
   @ApiQuery({ name: 'propertyId', required: true })

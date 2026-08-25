@@ -90,13 +90,37 @@ import {
   toBookingRequestDetail,
   toBookingRequestListItem,
   toDeniedBookingRequestDecision,
+  toBookingRequestAuditHistoryItem,
 } from './dto/booking-request-response.dto';
 
 export type AcceptBookingRequestInput = {
   priceSource: BookingRequestPriceSource;
+  previewToken: string;
   customTotal?: string;
   customReason?: string;
 };
+
+type AcceptancePreviewFingerprintInput = {
+  requestId: string;
+  propertyId: string;
+  requestUpdatedAt: Date;
+  currencyCode: string;
+  currentTotal: string;
+};
+
+export function acceptancePreviewFingerprint(
+  input: AcceptancePreviewFingerprintInput,
+): string {
+  const serialized = JSON.stringify({
+    version: 1,
+    requestId: input.requestId,
+    propertyId: input.propertyId,
+    requestUpdatedAt: input.requestUpdatedAt.toISOString(),
+    currencyCode: input.currencyCode,
+    currentTotal: input.currentTotal,
+  });
+  return `v1:${createHash('sha256').update(serialized).digest('hex')}`;
+}
 
 export type { AuditActor } from '../../common/audit/audit-actor';
 
@@ -228,6 +252,81 @@ export class BookingRequestService {
     return toBookingRequestDetail(await this.findRequest(this.db, id, propertyId));
   }
 
+  async auditHistory(id: string, propertyId: string) {
+    await this.findRequest(this.db, id, propertyId);
+    const selected = await this.db
+      .select()
+      .from(auditLogs)
+      .where(eq(auditLogs.propertyId, propertyId))
+      .orderBy(desc(auditLogs.occurredAt));
+    const rows = selected.filter((row) => row.propertyId === propertyId);
+    const relatedEntities = new Set<string>([`booking_request:${id}`]);
+    const aggregateId = (value: unknown): string | undefined => {
+      if (!value || typeof value !== 'object') return undefined;
+      const record = value as Record<string, unknown>;
+      const candidate = record['requestId'] ?? record['bookingRequestId'];
+      return typeof candidate === 'string' ? candidate : undefined;
+    };
+    for (const row of rows) {
+      if (
+        aggregateId(row.newValue) === id
+        || aggregateId(row.previousValue) === id
+      ) relatedEntities.add(`${row.entityType}:${row.entityId ?? ''}`);
+    }
+    const allowedEntityTypes = new Set([
+      'booking_request',
+      'booking_request_installment',
+      'booking_request_payment_allocation',
+      'payment',
+      'booking_request_payment_resolution',
+      'booking_request_email_delivery',
+    ]);
+    return rows
+      .filter((row) => allowedEntityTypes.has(row.entityType)
+        && relatedEntities.has(`${row.entityType}:${row.entityId ?? ''}`))
+      .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
+      .map(toBookingRequestAuditHistoryItem);
+  }
+
+  async acceptancePreview(id: string, propertyId: string) {
+    const request = await this.findRequest(this.db, id, propertyId);
+    if (request.status !== 'pending') {
+      throw new ConflictException('Only pending booking requests can be previewed');
+    }
+    const currentQuote = await this.bookingEngineService.quote(propertyId, {
+      roomTypeId: request.roomTypeId,
+      ratePlanId: request.ratePlanId,
+      checkIn: request.arrivalDate,
+      checkOut: request.departureDate,
+      adults: request.adults,
+      children: request.children,
+      serviceIds: request.serviceIds,
+    });
+    const submittedQuote = request.submittedQuoteSnapshot as Record<string, unknown>;
+    const submittedTotal = submittedQuote['grandTotal'];
+    if (typeof submittedTotal !== 'string' && typeof submittedTotal !== 'number') {
+      throw new ConflictException('Submitted quote total is unavailable');
+    }
+    if (currentQuote.currencyCode !== request.currencyCode) {
+      throw new ConflictException('Current quote currency does not match the request');
+    }
+    const currentTotal = String(currentQuote.grandTotal);
+    return {
+      requestId: request.id,
+      submittedTotal: String(submittedTotal),
+      currentTotal,
+      currencyCode: request.currencyCode,
+      previewVersion: 1 as const,
+      previewToken: acceptancePreviewFingerprint({
+        requestId: request.id,
+        propertyId: request.propertyId,
+        requestUpdatedAt: request.updatedAt,
+        currencyCode: request.currencyCode,
+        currentTotal,
+      }),
+    };
+  }
+
   /**
    * Recover durable consequences after an API process stops between the
    * decision commit and dispatch. Claims remain property-scoped and the
@@ -321,6 +420,18 @@ export class BookingRequestService {
         customTotal: input.customTotal,
         customReason: input.customReason,
       });
+      const expectedPreviewToken = acceptancePreviewFingerprint({
+        requestId: locked.id,
+        propertyId: locked.propertyId,
+        requestUpdatedAt: locked.updatedAt,
+        currencyCode: currentQuote.currencyCode,
+        currentTotal: String(currentQuote.grandTotal),
+      });
+      if (input.previewToken !== expectedPreviewToken) {
+        throw new ConflictException(
+          'Acceptance preview changed; refresh the quote before accepting',
+        );
+      }
       const guest = await this.guestService.create({
         firstName: locked.guestFirstName,
         lastName: locked.guestLastName,

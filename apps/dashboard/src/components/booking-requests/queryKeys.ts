@@ -4,6 +4,8 @@ export const bookingRequestKeys = {
     ['booking-requests', propertyId, 'list', filters] as const,
   detail: (propertyId: string, requestId: string) =>
     ['booking-requests', propertyId, 'detail', requestId] as const,
+  acceptancePreview: (propertyId: string, requestId: string) =>
+    ['booking-requests', propertyId, 'acceptance-preview', requestId] as const,
   payments: (propertyId: string, requestId: string) =>
     ['booking-request-payments', propertyId, requestId] as const,
   installments: (propertyId: string, requestId: string) =>

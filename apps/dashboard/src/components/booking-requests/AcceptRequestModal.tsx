@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../lib/api';
-import { moneyString } from '../../lib/api-helpers';
 import { formatMoney } from '../../lib/money';
 import Modal from '../ui/Modal';
 import { bookingRequestKeys } from './queryKeys';
+import { validateMoneyInput } from './moneyInput';
 import {
   apiErrorMessage,
   quoteTotal,
+  type BookingRequestAcceptancePreview,
   type BookingRequestDetail,
   type BookingRequestPriceSource,
 } from './types';
@@ -30,24 +31,42 @@ export default function AcceptRequestModal({
   const [customTotal, setCustomTotal] = useState('');
   const [customReason, setCustomReason] = useState('');
   const submittedTotal = quoteTotal(request.submittedQuoteSnapshot);
-  const currentTotal = quoteTotal(request.currentQuoteSnapshot);
-  const numericCustomTotal = Number(customTotal);
-  const customAmountError = priceSource === 'custom' && customTotal !== '' && numericCustomTotal <= 0;
+  const previewQuery = useQuery({
+    queryKey: bookingRequestKeys.acceptancePreview(propertyId, request.id),
+    queryFn: () => api.get(
+      `/v1/booking-requests/${request.id}/acceptance-preview`,
+      { params: { propertyId } },
+    ).then((response) => response.data?.data ?? response.data),
+  });
+  const candidatePreview = previewQuery.data as BookingRequestAcceptancePreview | undefined;
+  const preview = candidatePreview?.requestId === request.id
+    ? candidatePreview
+    : undefined;
+  const currentTotal = preview?.currentTotal;
+  const customValidation = validateMoneyInput(customTotal, request.currencyCode);
+  const customAmountError = priceSource === 'custom'
+    && customTotal !== ''
+    && customValidation.error != null;
   const customReady = priceSource !== 'custom'
-    || (Number.isFinite(numericCustomTotal) && numericCustomTotal > 0 && customReason.trim().length > 0);
+    || (customValidation.canonical != null && customReason.trim().length > 0);
 
   const mutation = useMutation({
     mutationFn: () => api.post(
       `/v1/booking-requests/${request.id}/accept`,
       {
         priceSource,
+        previewToken: preview?.previewToken,
         ...(priceSource === 'custom' ? {
-          customTotal: moneyString(customTotal),
+          customTotal: customValidation.canonical!,
           customReason: customReason.trim(),
         } : {}),
       },
       { params: { propertyId } },
     ),
+    onError: async (error) => {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status === 409) await previewQuery.refetch();
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: bookingRequestKeys.root(propertyId) }),
@@ -97,6 +116,19 @@ export default function AcceptRequestModal({
         {t('bookingRequests.accept.independence')}
       </p>
 
+      {previewQuery.isLoading ? (
+        <div className="mb-4 rounded-lg border border-slate-200 bg-telivity-light-grey/40 p-3 text-sm text-telivity-slate">
+          {t('bookingRequests.common.loading')}
+        </div>
+      ) : previewQuery.isError || !preview ? (
+        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-telivity-orange/40 bg-telivity-orange/10 p-3 text-sm text-telivity-navy">
+          <span>{t('bookingRequests.accept.error')}</span>
+          <button type="button" onClick={() => previewQuery.refetch()} className="font-semibold text-telivity-deep-blue underline underline-offset-2">
+            {t('bookingRequests.common.retry')}
+          </button>
+        </div>
+      ) : null}
+
       <fieldset className="space-y-3">
         <legend className="sr-only">{t('bookingRequests.accept.priceChoice')}</legend>
         {options.map((option) => (
@@ -142,7 +174,7 @@ export default function AcceptRequestModal({
             />
             {customAmountError ? (
               <span className="mt-1 block text-xs font-medium text-telivity-orange">
-                {t('bookingRequests.validation.positiveAmount')}
+                {t(`bookingRequests.validation.${customValidation.error}`)}
               </span>
             ) : null}
           </label>
@@ -176,7 +208,7 @@ export default function AcceptRequestModal({
         <button
           type="button"
           onClick={() => mutation.mutate()}
-          disabled={!customReady || mutation.isPending}
+          disabled={!preview || !customReady || mutation.isPending}
           className="rounded-lg bg-telivity-deep-blue px-4 py-2 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {mutation.isPending ? t('bookingRequests.accept.accepting') : t('bookingRequests.actions.accept')}

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Banknote,
@@ -98,24 +98,12 @@ function BookingRequestQueue({ propertyId }: { propertyId: string }) {
   const payload = listQuery.data?.data ?? listQuery.data ?? {};
   const listed = (Array.isArray(payload) ? payload : payload.data ?? []) as BookingRequestListItem[];
   const rows = listed.filter((row) => row.propertyId === propertyId);
-  const detailQueries = useQueries({
-    queries: rows.map((row) => ({
-      queryKey: bookingRequestKeys.detail(propertyId, row.id),
-      queryFn: () => api.get(`/v1/booking-requests/${row.id}`, { params: { propertyId } })
-        .then((response) => response.data?.data ?? response.data),
-    })),
-  });
-  const details = new Map<string, BookingRequestDetail>();
-  rows.forEach((row, index) => {
-    const detail = detailQueries[index]?.data as BookingRequestDetail | undefined;
-    if (detail?.propertyId === propertyId && detail.id === row.id) details.set(row.id, detail);
-  });
   const sortedRows = [...rows].sort((a, b) => {
     if (sort === 'guest') return `${a.guestLastName} ${a.guestFirstName}`.localeCompare(`${b.guestLastName} ${b.guestFirstName}`);
     if (sort === 'arrival') return a.arrivalDate.localeCompare(b.arrivalDate);
     if (sort === 'amount_desc') {
-      const amountA = Number(a.acceptedTotal ?? quoteTotal(details.get(a.id)?.submittedQuoteSnapshot) ?? 0);
-      const amountB = Number(b.acceptedTotal ?? quoteTotal(details.get(b.id)?.submittedQuoteSnapshot) ?? 0);
+      const amountA = Number(a.submittedTotal);
+      const amountB = Number(b.submittedTotal);
       return amountB - amountA;
     }
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -199,12 +187,11 @@ function BookingRequestQueue({ propertyId }: { propertyId: string }) {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-telivity-slate">{t('bookingRequests.common.status')}</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-telivity-slate">{t('bookingRequests.queue.card')}</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-telivity-slate">{t('bookingRequests.queue.amount')}</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-telivity-slate">{t('bookingRequests.amounts.accepted')}</th>
               </tr>
             </thead>
             <tbody>
               {sortedRows.map((request) => {
-                const detail = details.get(request.id);
-                const amount = request.acceptedTotal ?? quoteTotal(detail?.submittedQuoteSnapshot);
                 return (
                   <tr key={request.id} className="border-b border-slate-100 last:border-0 hover:bg-telivity-light-grey/40 focus-within:bg-telivity-light-grey/40">
                     <td className="px-4 py-3">
@@ -216,11 +203,12 @@ function BookingRequestQueue({ propertyId }: { propertyId: string }) {
                     <td className="px-4 py-3 text-sm text-telivity-navy"><span className="inline-flex items-center gap-2"><CalendarDays size={15} className="text-telivity-deep-blue" aria-hidden="true" />{request.arrivalDate} → {request.departureDate}</span></td>
                     <td className="px-4 py-3"><StatusBadge status={request.status === 'accepted' ? 'success' : request.status === 'denied' ? 'error' : 'pending'} label={t(`bookingRequests.statuses.${request.status}`)} /></td>
                     <td className="px-4 py-3 text-sm text-telivity-slate">{request.hasCard ? <span className="inline-flex items-center gap-2"><Check size={15} className="text-telivity-dark-teal" aria-hidden="true" />{t('bookingRequests.queue.cardSaved')}</span> : t('bookingRequests.queue.noCard')}</td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-telivity-navy">{formatMoney(amount, detail?.currencyCode)}</td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-telivity-navy">{formatMoney(request.submittedTotal, request.currencyCode)}</td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-telivity-navy">{formatMoney(request.acceptedTotal, request.currencyCode)}</td>
                   </tr>
                 );
               })}
-              {!sortedRows.length ? <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-telivity-slate">{t('bookingRequests.queue.empty')}</td></tr> : null}
+              {!sortedRows.length ? <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-telivity-slate">{t('bookingRequests.queue.empty')}</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -265,6 +253,7 @@ function BookingRequestDetailPage({ propertyId, canWrite }: { propertyId: string
   const request = detailQuery.data as BookingRequestDetail | undefined;
   const scopedRequest = request?.propertyId === propertyId && request.id === id ? request : undefined;
   const paymentData = paymentsQuery.data as BookingRequestPaymentsResponse | undefined;
+  const moneyStateVerified = paymentsQuery.isSuccess && paymentData != null;
   const scopedPaymentData: BookingRequestPaymentsResponse = {
     movements: (paymentData?.movements ?? []).filter((row) => row.propertyId === propertyId && row.bookingRequestId === id),
     allocations: (paymentData?.allocations ?? []).filter((row) => row.propertyId === propertyId && row.bookingRequestId === id),
@@ -324,10 +313,22 @@ function BookingRequestDetailPage({ propertyId, canWrite }: { propertyId: string
                   {scopedRequest.status === 'pending' ? (
                     <>
                       <button type="button" onClick={() => setAcceptOpen(true)} className="flex-1 rounded-lg bg-telivity-deep-blue px-3 py-2 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2">{t('bookingRequests.actions.accept')}</button>
-                      <button type="button" onClick={() => setDenyOpen(true)} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-telivity-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-orange">{t('bookingRequests.actions.deny')}</button>
+                      <button type="button" onClick={() => setDenyOpen(true)} disabled={!moneyStateVerified} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-telivity-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-orange disabled:cursor-not-allowed disabled:opacity-50">{t('bookingRequests.actions.deny')}</button>
                     </>
                   ) : <p className="text-sm font-medium text-telivity-slate">{t('bookingRequests.detail.decisionComplete')}</p>}
                 </div>
+                {!moneyStateVerified ? (
+                  <div role={paymentsQuery.isError ? 'alert' : 'status'} className="mt-2 text-xs text-telivity-slate">
+                    <span>{paymentsQuery.isError
+                      ? t('bookingRequests.deny.moneyLoadError')
+                      : t('bookingRequests.deny.moneyLoading')}</span>
+                    {paymentsQuery.isError ? (
+                      <button type="button" onClick={() => paymentsQuery.refetch()} className="ml-2 font-semibold text-telivity-deep-blue underline underline-offset-2">
+                        {t('bookingRequests.deny.retryMoney')}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
               <div>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-telivity-slate">{t('bookingRequests.detail.moneyActions')}</p>

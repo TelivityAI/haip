@@ -572,13 +572,14 @@
       "status": "Status",
       "yes": "Ja",
       "no": "Nein",
-      "notProvided": "Nicht bereitgestellt"
+      "notProvided": "Nicht bereitgestellt",
+      "retry": "Erneut versuchen"
     },
     "actions": {
       "accept": "Anfrage annehmen",
       "deny": "Anfrage ablehnen",
-      "charge": "Ladekarte",
-      "record": "Zahlung aufzeichnen"
+      "charge": "Karte belasten",
+      "record": "Zahlung erfassen"
     },
     "statuses": {
       "pending": "Ausstehend",
@@ -611,7 +612,7 @@
         "newest": "Das Neueste zuerst",
         "arrival": "Ankunftsdatum",
         "guest": "Gastname",
-        "amountDesc": "Höchster Betrag"
+        "amountDesc": "Höchster angefragter Betrag"
       },
       "clear": "Klar",
       "loading": "Buchungsanfragen werden geladen…",
@@ -691,11 +692,20 @@
       "unresolvedDirection": "Erstatten Sie eine gespeicherte Kartenzahlung, erfassen Sie eine externe Rückgabe oder behalten Sie den Betrag mit Angabe von Gründen ein, bevor Sie ihn ablehnen.",
       "resolveFirst": "Lösen Sie zuerst das Geld",
       "confirm": "Ablehnung bestätigen",
-      "denying": "Leugnen…",
-      "error": "Der Antrag konnte nicht abgelehnt werden. Überprüfen Sie den Geldstatus und versuchen Sie es erneut."
+      "denying": "Wird abgelehnt…",
+      "error": "Der Antrag konnte nicht abgelehnt werden. Überprüfen Sie den Geldstatus und versuchen Sie es erneut.",
+      "moneyLoading": "Zahlungsstatus vor der Ablehnung wird geprüft…",
+      "moneyLoadError": "Der Zahlungsstatus konnte nicht geprüft werden. Die Ablehnung bleibt gesperrt.",
+      "retryMoney": "Zahlungsstatus erneut prüfen"
     },
     "validation": {
-      "positiveAmount": "Geben Sie einen Betrag größer als Null ein."
+      "positiveAmount": "Geben Sie einen Betrag größer als Null ein.",
+      "required": "Geben Sie einen Betrag ein.",
+      "format": "Geben Sie einen gültigen Dezimalbetrag ein.",
+      "positive": "Geben Sie einen Betrag größer als Null ein.",
+      "precision": "Verwenden Sie nur die für diese Währung zulässigen Nachkommastellen.",
+      "unsupportedCurrency": "Die Nachkommastellen dieser Währung werden vom Hauptbuch nicht unterstützt.",
+      "maximum": "Geben Sie einen Betrag innerhalb des zulässigen Höchstwerts ein."
     },
     "payments": {
       "requestSummary": "Fordern Sie eine Geldübersicht an",
@@ -723,6 +733,11 @@
       "movement": "Erfasste Bewegung",
       "allocate": "Zuordnen",
       "allocationError": "Die Zahlung konnte nicht zugeordnet werden.",
+      "availableForAllocation": "{{available}} verfügbar · {{allocated}} zugeordnet · {{method}}",
+      "allocationAvailability": "{{available}} verfügbar · {{allocated}} zugeordnet",
+      "moveUp": "{{label}} nach oben verschieben",
+      "moveDown": "{{label}} nach unten verschieben",
+      "reorderError": "Die Reihenfolge der Raten konnte nicht gespeichert werden. Versuchen Sie es erneut.",
       "movements": "Geldbewegungen",
       "noMovements": "Noch keine Geldbewegungen.",
       "savedCardProvenance": "Gespeicherte Karte · {{brand}} •••• {{lastFour}}",
@@ -851,7 +866,35 @@
       },
       "message": "{{kind}} Nachricht",
       "messageDescription": "Lieferstatus: {{status}}",
-      "actor": "Schauspieler: {{actor}}"
+      "actor": "Ausgeführt von: {{actor}}",
+      "loadError": "Der Prüfverlauf konnte nicht geladen werden.",
+      "empty": "Es wurden noch keine Prüfereignisse aufgezeichnet.",
+      "events": {
+        "request_pending": "Anfrage eingereicht",
+        "request_accepted": "Anfrage angenommen",
+        "request_denied": "Anfrage abgelehnt",
+        "request_updated": "Anfrage aktualisiert",
+        "installment_created": "Rate erstellt",
+        "installment_updated": "Rate aktualisiert",
+        "installment_deleted": "Rate gelöscht",
+        "allocation_recorded": "Zahlung zugeordnet",
+        "allocation_removed": "Zahlungszuordnung entfernt",
+        "payment_pending": "Zahlung ausstehend",
+        "payment_captured": "Zahlung erfasst",
+        "payment_failed": "Zahlung fehlgeschlagen",
+        "payment_recorded": "Zahlung aufgezeichnet",
+        "payment_updated": "Zahlung aktualisiert",
+        "resolution_refund": "Rückerstattung erfasst",
+        "resolution_external_return": "Externe Rückzahlung erfasst",
+        "resolution_retained": "Geld einbehalten",
+        "resolution_recorded": "Zahlungsklärung erfasst",
+        "email_pending": "E-Mail eingereiht",
+        "email_processing": "E-Mail-Zustellung versucht",
+        "email_sent": "E-Mail zugestellt",
+        "email_failed": "E-Mail-Zustellung fehlgeschlagen",
+        "email_queued": "E-Mail eingereiht",
+        "email_updated": "E-Mail-Zustellung aktualisiert"
+      }
     }
   }
 }

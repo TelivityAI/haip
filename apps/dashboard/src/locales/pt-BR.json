@@ -1771,12 +1771,13 @@
       "status": "Estado",
       "yes": "Sim",
       "no": "Não",
-      "notProvided": "Não fornecido"
+      "notProvided": "Não fornecido",
+      "retry": "Tentar novamente"
     },
     "actions": {
       "accept": "Aceitar solicitação",
       "deny": "Negar solicitação",
-      "charge": "Cartão de cobrança",
+      "charge": "Cobrar no cartão",
       "record": "Registrar pagamento"
     },
     "statuses": {
@@ -1810,7 +1811,7 @@
         "newest": "O mais novo primeiro",
         "arrival": "Data de chegada",
         "guest": "Nome do convidado",
-        "amountDesc": "Valor mais alto"
+        "amountDesc": "Maior valor solicitado"
       },
       "clear": "Limpar",
       "loading": "Carregando solicitações de reserva…",
@@ -1891,10 +1892,19 @@
       "resolveFirst": "Resolva o dinheiro primeiro",
       "confirm": "Confirmar negação",
       "denying": "Negando…",
-      "error": "O pedido não poderia ser negado. Revise o estado do dinheiro e tente novamente."
+      "error": "A solicitação não pôde ser negada. Revise o estado dos pagamentos e tente novamente.",
+      "moneyLoading": "Verificando o estado dos pagamentos antes de negar…",
+      "moneyLoadError": "Não foi possível verificar o estado dos pagamentos. A negação continua bloqueada.",
+      "retryMoney": "Verificar os pagamentos novamente"
     },
     "validation": {
-      "positiveAmount": "Insira um valor maior que zero."
+      "positiveAmount": "Insira um valor maior que zero.",
+      "required": "Insira um valor.",
+      "format": "Insira um valor decimal válido.",
+      "positive": "Insira um valor maior que zero.",
+      "precision": "Use somente as casas decimais aceitas por esta moeda.",
+      "unsupportedCurrency": "As casas decimais desta moeda não são aceitas pelo livro-razão.",
+      "maximum": "Insira um valor dentro do máximo permitido."
     },
     "payments": {
       "requestSummary": "Solicitar resumo de dinheiro",
@@ -1922,6 +1932,11 @@
       "movement": "Movimento capturado",
       "allocate": "Alocar",
       "allocationError": "O pagamento não pôde ser alocado.",
+      "availableForAllocation": "{{available}} disponível · {{allocated}} alocado · {{method}}",
+      "allocationAvailability": "{{available}} disponível · {{allocated}} alocado",
+      "moveUp": "Mover {{label}} para cima",
+      "moveDown": "Mover {{label}} para baixo",
+      "reorderError": "Não foi possível salvar a ordem das parcelas. Tente novamente.",
       "movements": "Movimentos de dinheiro",
       "noMovements": "Ainda não há movimentos de dinheiro.",
       "savedCardProvenance": "Cartão salvo · {{brand}} •••• {{lastFour}}",
@@ -2050,7 +2065,35 @@
       },
       "message": "mensagem {{kind}}",
       "messageDescription": "Status de entrega: {{status}}",
-      "actor": "Ator: {{actor}}"
+      "actor": "Executado por: {{actor}}",
+      "loadError": "Não foi possível carregar o histórico de auditoria.",
+      "empty": "Nenhum evento de auditoria foi registrado.",
+      "events": {
+        "request_pending": "Solicitação enviada",
+        "request_accepted": "Solicitação aceita",
+        "request_denied": "Solicitação negada",
+        "request_updated": "Solicitação atualizada",
+        "installment_created": "Parcela criada",
+        "installment_updated": "Parcela atualizada",
+        "installment_deleted": "Parcela excluída",
+        "allocation_recorded": "Pagamento alocado",
+        "allocation_removed": "Alocação de pagamento removida",
+        "payment_pending": "Pagamento pendente",
+        "payment_captured": "Pagamento capturado",
+        "payment_failed": "Falha no pagamento",
+        "payment_recorded": "Pagamento registrado",
+        "payment_updated": "Pagamento atualizado",
+        "resolution_refund": "Reembolso registrado",
+        "resolution_external_return": "Devolução externa registrada",
+        "resolution_retained": "Dinheiro retido",
+        "resolution_recorded": "Resolução de pagamento registrada",
+        "email_pending": "E-mail na fila",
+        "email_processing": "Tentativa de entrega do e-mail",
+        "email_sent": "E-mail entregue",
+        "email_failed": "Falha na entrega do e-mail",
+        "email_queued": "E-mail na fila",
+        "email_updated": "Entrega do e-mail atualizada"
+      }
     }
   }
 }

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Mail, RotateCcw } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +16,7 @@ interface RequestMessagesProps {
 export default function RequestMessages({ requestId, propertyId, canWrite }: RequestMessagesProps) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
+  const [pendingDeliveryIds, setPendingDeliveryIds] = useState<Set<string>>(() => new Set());
   const dateFormatter = useMemo(() => new Intl.DateTimeFormat(i18n.language, {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -35,11 +36,21 @@ export default function RequestMessages({ requestId, propertyId, canWrite }: Req
       undefined,
       { params: { propertyId } },
     ),
+    onMutate: (deliveryId) => {
+      setPendingDeliveryIds((current) => new Set(current).add(deliveryId));
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: bookingRequestKeys.messages(propertyId, requestId) }),
         queryClient.invalidateQueries({ queryKey: bookingRequestKeys.audit(propertyId, requestId) }),
       ]);
+    },
+    onSettled: (_data, _error, deliveryId) => {
+      setPendingDeliveryIds((current) => {
+        const next = new Set(current);
+        next.delete(deliveryId);
+        return next;
+      });
     },
   });
   const formatDate = (value: string | null) => value
@@ -77,7 +88,7 @@ export default function RequestMessages({ requestId, propertyId, canWrite }: Req
                   <button
                     type="button"
                     onClick={() => retry.mutate(delivery.id)}
-                    disabled={retry.isPending && retry.variables === delivery.id}
+                    disabled={pendingDeliveryIds.has(delivery.id)}
                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue disabled:opacity-50"
                   >
                     <RotateCcw size={15} aria-hidden="true" />
