@@ -5,7 +5,10 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../ui/Toast';
 import BookingQuestionBuilder from './BookingQuestionBuilder';
-import type { BookingFormQuestion } from './booking-request-config';
+import type {
+  BookingFormQuestion,
+  BookingFormQuestionDefinition,
+} from './booking-request-config';
 import BookingEngineSettings from './BookingEngineSettings';
 import en from '../../locales/en.json';
 import de from '../../locales/de.json';
@@ -57,11 +60,11 @@ function BuilderHarness({
   idFactory,
   onValue,
 }: {
-  initial?: BookingFormQuestion[];
+  initial?: BookingFormQuestionDefinition[];
   idFactory?: () => string;
-  onValue?: (value: BookingFormQuestion[]) => void;
+  onValue?: (value: BookingFormQuestionDefinition[]) => void;
 }) {
-  const [questions, setQuestions] = useState(initial);
+  const [questions, setQuestions] = useState<BookingFormQuestionDefinition[]>(initial);
   return (
     <BookingQuestionBuilder
       questions={questions}
@@ -86,7 +89,7 @@ describe('BookingQuestionBuilder', () => {
   });
 
   it('adds one exact Task 3 question with a stable, collision-free UUID', async () => {
-    const changes: BookingFormQuestion[][] = [];
+    const changes: BookingFormQuestionDefinition[][] = [];
     const idFactory = vi.fn()
       .mockReturnValueOnce(FIRST_ID)
       .mockReturnValueOnce(THIRD_ID);
@@ -103,12 +106,12 @@ describe('BookingQuestionBuilder', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save question' }));
 
     expect(changes.at(-1)).toEqual([
-      arrivalQuestion,
+      { ...arrivalQuestion, order: 0 },
       {
         id: THIRD_ID,
         label: 'Travel purpose',
         type: 'short_text',
-        order: 5,
+        order: 1,
         isActive: true,
         isRequired: false,
       },
@@ -123,13 +126,13 @@ describe('BookingQuestionBuilder', () => {
     expect(changes.at(-1)?.[1]).toMatchObject({
       id: THIRD_ID,
       label: 'Reason for stay',
-      order: 5,
+      order: 1,
     });
     expect(idFactory).toHaveBeenCalledTimes(2);
   });
 
   it('edits and orders select options, normalizes whitespace, and rejects blank or duplicate options', async () => {
-    const changes: BookingFormQuestion[][] = [];
+    const changes: BookingFormQuestionDefinition[][] = [];
     render(
       <BuilderHarness
         initial={[arrivalQuestion]}
@@ -140,11 +143,15 @@ describe('BookingQuestionBuilder', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit Arrival time' }));
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Question type' }), 'multi_select');
     const firstOption = screen.getByRole('textbox', { name: 'Option 1' });
+    const optionsGroup = screen.getByRole('group', { name: 'Answer options' });
+    expect(optionsGroup.firstElementChild?.tagName).toBe('LEGEND');
     await userEvent.type(firstOption, '  Vegan  ');
     await userEvent.click(screen.getByRole('button', { name: 'Add option' }));
     await userEvent.type(screen.getByRole('textbox', { name: 'Option 2' }), 'vegan');
 
     expect(screen.getByText('Options must be unique.')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Option 2' })).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('textbox', { name: 'Option 2' })).toHaveAttribute('aria-describedby');
     expect(screen.getByRole('button', { name: 'Save question' })).toBeDisabled();
 
     await userEvent.clear(screen.getByRole('textbox', { name: 'Option 2' }));
@@ -155,13 +162,14 @@ describe('BookingQuestionBuilder', () => {
 
     expect(changes.at(-1)?.[0]).toEqual({
       ...arrivalQuestion,
+      order: 0,
       type: 'multi_select',
       options: ['Gluten-free', 'Vegan'],
     });
   });
 
   it('removes select options when the type changes to a non-select type', async () => {
-    const changes: BookingFormQuestion[][] = [];
+    const changes: BookingFormQuestionDefinition[][] = [];
     render(
       <BuilderHarness
         initial={[breakfastQuestion]}
@@ -178,14 +186,14 @@ describe('BookingQuestionBuilder', () => {
       id: SECOND_ID,
       label: 'Breakfast preference',
       type: 'date',
-      order: 9,
+      order: 0,
       isActive: false,
       isRequired: false,
     });
   });
 
   it('reorders without changing identity and disables without dropping historical definitions', async () => {
-    const changes: BookingFormQuestion[][] = [];
+    const changes: BookingFormQuestionDefinition[][] = [];
     render(
       <BuilderHarness
         initial={[arrivalQuestion, breakfastQuestion]}
@@ -207,8 +215,8 @@ describe('BookingQuestionBuilder', () => {
     expect(screen.getAllByText('Inactive')).toHaveLength(2);
   });
 
-  it('removes a question without renumbering the survivors', async () => {
-    const changes: BookingFormQuestion[][] = [];
+  it('removes a question and normalizes survivor order', async () => {
+    const changes: BookingFormQuestionDefinition[][] = [];
     render(
       <BuilderHarness
         initial={[arrivalQuestion, breakfastQuestion]}
@@ -217,7 +225,87 @@ describe('BookingQuestionBuilder', () => {
     );
 
     await userEvent.click(screen.getByRole('button', { name: 'Remove Arrival time' }));
-    expect(changes.at(-1)).toEqual([breakfastQuestion]);
+    expect(changes.at(-1)).toEqual([{ ...breakfastQuestion, order: 0 }]);
+  });
+
+  it('locks list mutations while editing so saving cannot restore stale row state', async () => {
+    const changes: BookingFormQuestionDefinition[][] = [];
+    render(<BuilderHarness initial={[arrivalQuestion, breakfastQuestion]} onValue={(value) => changes.push(value)} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Arrival time' }));
+    expect(screen.getByRole('button', { name: 'Move Breakfast preference up' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Enable Breakfast preference' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remove Breakfast preference' })).toBeDisabled();
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Question label' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Question label' }), 'Arrival details');
+    await userEvent.click(screen.getByRole('button', { name: 'Save question' }));
+
+    expect(changes.at(-1)).toEqual([
+      { ...arrivalQuestion, label: 'Arrival details', order: 0 },
+      { ...breakfastQuestion, order: 1 },
+    ]);
+  });
+
+  it('focuses the editor and restores focus after cancel, save, and remove', async () => {
+    render(<BuilderHarness initial={[arrivalQuestion, breakfastQuestion]} idFactory={() => THIRD_ID} />);
+    const add = screen.getByRole('button', { name: 'Add question' });
+
+    await userEvent.click(add);
+    expect(screen.getByRole('textbox', { name: 'Question label' })).toHaveFocus();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(add).toHaveFocus());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Arrival time' }));
+    const label = screen.getByRole('textbox', { name: 'Question label' });
+    expect(label).toHaveFocus();
+    await userEvent.clear(label);
+    await userEvent.type(label, 'Arrival details');
+    await userEvent.click(screen.getByRole('button', { name: 'Save question' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit Arrival details' })).toHaveFocus());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Breakfast preference' }));
+    await waitFor(() => expect(add).toHaveFocus());
+  });
+
+  it('preserves an unsupported inactive definition opaquely and prevents destructive controls', async () => {
+    const futureQuestion: BookingFormQuestionDefinition = {
+      id: THIRD_ID,
+      label: 'Legacy satisfaction score',
+      type: 'rating_scale',
+      order: 12,
+      isActive: false,
+      isRequired: false,
+      options: ['1', '2', '3', '4', '5'],
+      futureConfig: { maximum: 5, icon: 'star' },
+    };
+    const changes: BookingFormQuestionDefinition[][] = [];
+    render(<BuilderHarness initial={[arrivalQuestion, futureQuestion]} onValue={(value) => changes.push(value)} />);
+
+    expect(screen.getByText('Unsupported question')).toBeInTheDocument();
+    expect(screen.queryByText('bookingEngine.questions.types.rating_scale')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit Legacy satisfaction score' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Enable Legacy satisfaction score' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remove Legacy satisfaction score' })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Arrival time' }));
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Question label' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Question label' }), 'Arrival details');
+    await userEvent.click(screen.getByRole('button', { name: 'Save question' }));
+
+    expect(changes.at(-1)?.[1]).toEqual({
+      ...futureQuestion,
+      order: 1,
+    });
+  });
+
+  it('uses AA dashboard tokens for text, primary actions, and focus indicators', () => {
+    const { container } = render(<BuilderHarness initial={[arrivalQuestion]} />);
+    const section = container.querySelector('section[aria-labelledby="guest-form-blueprint-title"]');
+
+    expect(section?.querySelectorAll('.text-telivity-mid-grey')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Add question' })).toHaveClass('bg-telivity-deep-blue');
+    expect(screen.getByRole('button', { name: 'Add question' })).toHaveClass('focus-visible:ring-telivity-deep-blue');
   });
 
   it('offers exactly the six approved question types and blocks a 51st question', async () => {
@@ -246,7 +334,7 @@ describe('BookingQuestionBuilder', () => {
 
     rerender(<BuilderHarness key="full" initial={questions} />);
     expect(screen.getByRole('button', { name: 'Add question' })).toBeDisabled();
-    expect(screen.getByText('50 of 50 questions')).toBeInTheDocument();
+    expect(screen.getByText('Questions: 50 / 50')).toBeInTheDocument();
   });
 });
 
@@ -266,6 +354,7 @@ const baseConfig = {
   bookingMode: 'request' as const,
   paymentMethodCollection: 'optional' as const,
   formQuestions: [arrivalQuestion, breakfastQuestion],
+  updatedAt: '2026-08-25T00:00:00.000Z',
 };
 
 function mockQueries(config: Record<string, unknown> = baseConfig) {
@@ -284,13 +373,14 @@ function renderSettings() {
       mutations: { retry: false },
     },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <BookingEngineSettings propertyId="property-1" />
       </ToastProvider>
     </QueryClientProvider>,
   );
+  return Object.assign(view, { queryClient });
 }
 
 describe('BookingEngineSettings request configuration', () => {
@@ -310,7 +400,7 @@ describe('BookingEngineSettings request configuration', () => {
 
     expect(await screen.findByRole('combobox', { name: 'Booking mode' })).toHaveValue('instant');
     expect(screen.getByRole('combobox', { name: 'Card collection' })).toHaveValue('disabled');
-    expect(screen.getByText('0 of 50 questions')).toBeInTheDocument();
+    expect(screen.getByText('Questions: 0 / 50')).toBeInTheDocument();
   });
 
   it('warns and prevents saving required card collection without a Stripe publishable key', async () => {
@@ -329,7 +419,7 @@ describe('BookingEngineSettings request configuration', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
   });
 
-  it('resets dirty request changes and saves the exact Task 3 payload shape', async () => {
+  it('resets dirty request changes and saves only changed fields with the expected version', async () => {
     renderSettings();
     const mode = await screen.findByRole('combobox', { name: 'Booking mode' });
     const cardPolicy = screen.getByRole('combobox', { name: 'Card collection' });
@@ -349,28 +439,98 @@ describe('BookingEngineSettings request configuration', () => {
     expect(vi.mocked(api.patch).mock.calls[0]).toEqual([
       '/v1/admin/booking-engine/config',
       {
-        isEnabled: true,
-        displayName: 'Harbour Hotel',
-        logoMediaId: null,
-        primaryColor: '#016491',
-        accentColor: '#f2641b',
-        sellableRoomTypeIds: ['room-type-1'],
-        sellableRatePlanIds: ['rate-plan-1'],
-        depositPolicy: { type: 'none', refundable: true },
-        autoConfirm: false,
-        stripePublishableKey: 'pk_test_property',
-        bookingMode: 'request',
+        expectedUpdatedAt: '2026-08-25T00:00:00.000Z',
         paymentMethodCollection: 'required',
         formQuestions: [
-          { ...arrivalQuestion, isActive: false },
-          breakfastQuestion,
+          { ...arrivalQuestion, order: 0, isActive: false },
+          { ...breakfastQuestion, order: 1 },
         ],
       },
       { params: { propertyId: 'property-1' } },
     ]);
   });
 
-  it('retains disabled historical definitions when another setting is saved', async () => {
+  it('uses the refreshed server version for the next save', async () => {
+    vi.mocked(api.patch)
+      .mockResolvedValueOnce({ data: { data: { ...baseConfig, bookingMode: 'instant', updatedAt: '2026-08-25T00:00:01.000Z' } } } as never)
+      .mockResolvedValueOnce({ data: { data: { ...baseConfig, bookingMode: 'instant', paymentMethodCollection: 'disabled', updatedAt: '2026-08-25T00:00:02.000Z' } } } as never);
+    renderSettings();
+
+    await userEvent.selectOptions(
+      await screen.findByRole('combobox', { name: 'Booking mode' }),
+      'instant',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument());
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Card collection' }), 'disabled');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(2));
+
+    expect(vi.mocked(api.patch).mock.calls[1]?.[1]).toEqual({
+      expectedUpdatedAt: '2026-08-25T00:00:01.000Z',
+      paymentMethodCollection: 'disabled',
+    });
+  });
+
+  it('keeps a stale draft intact and reloads latest settings only on explicit review', async () => {
+    const latest = {
+      ...baseConfig,
+      bookingMode: 'request' as const,
+      paymentMethodCollection: 'disabled' as const,
+      updatedAt: '2026-08-25T00:00:10.000Z',
+    };
+    let configReads = 0;
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/v1/admin/booking-engine/config') {
+        configReads += 1;
+        return Promise.resolve({ data: { data: configReads === 1 ? baseConfig : latest } } as never);
+      }
+      return Promise.resolve({ data: { data: [] } } as never);
+    });
+    vi.mocked(api.patch).mockRejectedValue({ response: { status: 409 } });
+    renderSettings();
+
+    const mode = await screen.findByRole('combobox', { name: 'Booking mode' });
+    await userEvent.selectOptions(mode, 'instant');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByRole('alert', { name: 'Settings conflict' })).toHaveTextContent('changed since you opened this page');
+    expect(mode).toHaveValue('instant');
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reload latest settings' }));
+    await waitFor(() => expect(mode).toHaveValue('request'));
+    expect(screen.getByRole('combobox', { name: 'Card collection' })).toHaveValue('disabled');
+    expect(screen.queryByRole('alert', { name: 'Settings conflict' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the conflict draft when reloading the latest settings fails', async () => {
+    let configReads = 0;
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/v1/admin/booking-engine/config') {
+        configReads += 1;
+        return configReads === 1
+          ? Promise.resolve({ data: { data: baseConfig } } as never)
+          : Promise.reject(new Error('offline'));
+      }
+      return Promise.resolve({ data: { data: [] } } as never);
+    });
+    vi.mocked(api.patch).mockRejectedValue({ response: { status: 409 } });
+    renderSettings();
+
+    const mode = await screen.findByRole('combobox', { name: 'Booking mode' });
+    await userEvent.selectOptions(mode, 'instant');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Reload latest settings' }));
+
+    await waitFor(() => expect(configReads).toBe(2));
+    expect(mode).toHaveValue('instant');
+    expect(screen.getByRole('alert', { name: 'Settings conflict' })).toBeInTheDocument();
+  });
+
+  it('omits untouched historical definitions when another setting is saved', async () => {
     renderSettings();
     await screen.findByRole('combobox', { name: 'Booking mode' });
     await userEvent.click(screen.getByRole('switch', { name: 'Disable Arrival time' }));
@@ -379,9 +539,76 @@ describe('BookingEngineSettings request configuration', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(api.patch).toHaveBeenCalledOnce());
-    expect(vi.mocked(api.patch).mock.calls[0]?.[1]).toMatchObject({
-      formQuestions: [arrivalQuestion, breakfastQuestion],
+    expect(vi.mocked(api.patch).mock.calls[0]?.[1]).toEqual({
+      expectedUpdatedAt: baseConfig.updatedAt,
+      bookingMode: 'instant',
     });
+  });
+
+  it('treats an open question draft as unsaved and reset explicitly discards it', async () => {
+    renderSettings();
+    await screen.findByRole('combobox', { name: 'Booking mode' });
+    await userEvent.click(screen.getByRole('button', { name: 'Add question' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Question label' }), 'Pending draft');
+
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    const reset = screen.getByRole('button', { name: 'Reset changes' });
+    expect(reset).toBeEnabled();
+    await userEvent.click(reset);
+
+    expect(screen.queryByRole('heading', { name: 'Add a question' })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Pending draft')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+  });
+
+  it('keeps cached settings usable when a background refresh fails', async () => {
+    const { queryClient } = renderSettings();
+    const mode = await screen.findByRole('combobox', { name: 'Booking mode' });
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/v1/admin/booking-engine/config') return Promise.reject(new Error('offline'));
+      return Promise.resolve({ data: { data: [] } } as never);
+    });
+
+    await queryClient.invalidateQueries({ queryKey: ['booking-engine', 'config', 'property-1'] });
+
+    expect(await screen.findByText('Latest settings could not be checked. Your loaded settings are still available.')).toBeInTheDocument();
+    expect(mode).toBeInTheDocument();
+    expect(mode).toHaveValue('request');
+  });
+
+  it('preserves unknown definitions on unrelated saves and blocks question publishing when one is active', async () => {
+    const futureQuestion = {
+      id: THIRD_ID,
+      label: 'Future score',
+      type: 'rating_scale',
+      order: 0,
+      isActive: true,
+      isRequired: false,
+      futureConfig: { maximum: 10 },
+    };
+    mockQueries({ ...baseConfig, formQuestions: [futureQuestion] });
+    vi.mocked(api.patch).mockResolvedValue({
+      data: { data: { ...baseConfig, bookingMode: 'instant', formQuestions: [futureQuestion], updatedAt: '2026-08-25T00:00:01.000Z' } },
+    } as never);
+    renderSettings();
+
+    expect(await screen.findByText('An unsupported question is active')).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Booking mode' }), 'instant');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.patch).mock.calls[0]?.[1]).toEqual({
+      expectedUpdatedAt: baseConfig.updatedAt,
+      bookingMode: 'instant',
+    });
+
+    vi.mocked(api.patch).mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Add question' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Question label' }), 'Known question');
+    await userEvent.click(screen.getByRole('button', { name: 'Save question' }));
+
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(screen.getByText('Use a newer dashboard before publishing changes to this guest form.')).toBeInTheDocument();
   });
 
   it('shows loading, load failure with retry, and save failure states', async () => {

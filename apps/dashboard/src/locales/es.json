@@ -148,6 +148,7 @@
     "requestSettings": {
       "autoConfirmDescription": "La confirmación automática solo se aplica a reservas instantáneas; las peticiones siempre requieren una decisión del personal.",
       "bookingMode": "Modo de reserva",
+      "backgroundLoadError": "No se pudo comprobar la configuración más reciente. La configuración cargada sigue disponible.",
       "cardCollection": "Recopilación de tarjeta",
       "cardDescriptions": {
         "disabled": "Los huéspedes envían la petición sin añadir una tarjeta.",
@@ -159,6 +160,8 @@
         "optional": "Opcional",
         "required": "Obligatoria"
       },
+      "conflictDescription": "Esta configuración cambió desde que abrió la página. Su borrador sigue aquí. Recargue la configuración más reciente antes de volver a editar.",
+      "conflictTitle": "Conflicto de configuración",
       "description": "Elija si los huéspedes reservan al instante o envían una solicitud para que su equipo la revise.",
       "engineToggle": "Activar el motor de reserva directa",
       "invalidQuestions": "Corrija el formulario del huésped antes de guardar estos ajustes.",
@@ -173,6 +176,7 @@
         "request": "Petición de reserva"
       },
       "requiredCardWarning": "Añada una clave publicable de Stripe antes de exigir una tarjeta.",
+      "reloadLatest": "Recargar la configuración más reciente",
       "reset": "Restablecer cambios",
       "retry": "Intentar de nuevo",
       "save": "Guardar cambios",
@@ -182,7 +186,8 @@
       "stripeKeyDescription": "Use la clave publicable de esta propiedad. Las claves secretas de Stripe permanecen en el servidor.",
       "stripeKeyPlaceholder": "pk_live_…",
       "title": "Flujo de peticiones de reserva",
-      "unsaved": "Cambios sin guardar"
+      "unsaved": "Cambios sin guardar",
+      "unsupportedPublishBlocked": "Use una versión más reciente del panel antes de publicar cambios en este formulario de huéspedes."
     },
     "questions": {
       "active": "Activa",
@@ -192,7 +197,7 @@
       "addTitle": "Añadir una pregunta",
       "cancel": "Cancelar",
       "cancelEditor": "Cerrar el editor de preguntas",
-      "count": "{{count}} de {{max}} preguntas",
+      "count": "Preguntas: {{count}} / {{max}}",
       "description": "Cree la solicitud ordenada que los huéspedes completan antes de enviar una petición de reserva.",
       "disable": "Desactivar {{label}}",
       "duplicateIds": "Los identificadores de las preguntas deben ser únicos para poder editar este formulario.",
@@ -222,6 +227,9 @@
       "save": "Guardar pregunta",
       "title": "Estructura del formulario del huésped",
       "type": "Tipo de pregunta",
+      "unsupportedActiveDescription": "Este panel no puede cambiar ni volver a publicar el formulario de huéspedes de forma segura mientras esa pregunta siga activa.",
+      "unsupportedActiveTitle": "Hay una pregunta no compatible activa",
+      "unsupportedType": "Pregunta no compatible",
       "types": {
         "short_text": "Texto corto",
         "long_text": "Texto largo",

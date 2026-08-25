@@ -1,4 +1,12 @@
-import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowDown,
@@ -14,23 +22,26 @@ import {
   QUESTION_TYPES,
   SELECT_TYPES,
   hasDuplicateQuestionIds,
+  isSupportedQuestion,
   questionOptionsAreValid,
   type BookingFormQuestion,
+  type BookingFormQuestionDefinition,
   type BookingFormQuestionType,
 } from './booking-request-config';
 
 interface BookingQuestionBuilderProps {
-  questions: BookingFormQuestion[];
-  onChange: (questions: BookingFormQuestion[]) => void;
+  questions: BookingFormQuestionDefinition[];
+  onChange: (questions: BookingFormQuestionDefinition[]) => void;
   disabled?: boolean;
   idFactory?: () => string;
+  onEditorOpenChange?: (isOpen: boolean) => void;
 }
 
 function defaultIdFactory() {
   return crypto.randomUUID();
 }
 
-function createUniqueId(questions: BookingFormQuestion[], idFactory: () => string) {
+function createUniqueId(questions: BookingFormQuestionDefinition[], idFactory: () => string) {
   const ids = new Set(questions.map((question) => question.id));
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const id = idFactory();
@@ -39,11 +50,15 @@ function createUniqueId(questions: BookingFormQuestion[], idFactory: () => strin
   throw new Error('Could not create a unique question id');
 }
 
-function sortedQuestions(questions: BookingFormQuestion[]) {
+function sortedQuestions(questions: BookingFormQuestionDefinition[]) {
   return questions
     .map((question, index) => ({ question, index }))
     .sort((left, right) => left.question.order - right.question.order || left.index - right.index)
     .map(({ question }) => question);
+}
+
+function normalizedQuestions(questions: BookingFormQuestionDefinition[]) {
+  return sortedQuestions(questions).map((question, order) => ({ ...question, order }));
 }
 
 export default function BookingQuestionBuilder({
@@ -51,6 +66,7 @@ export default function BookingQuestionBuilder({
   onChange,
   disabled = false,
   idFactory = defaultIdFactory,
+  onEditorOpenChange,
 }: BookingQuestionBuilderProps) {
   const { t } = useTranslation();
   const orderedQuestions = useMemo(() => sortedQuestions(questions), [questions]);
@@ -59,7 +75,22 @@ export default function BookingQuestionBuilder({
   const [builderError, setBuilderError] = useState<string | null>(null);
   const [optionKeys, setOptionKeys] = useState<string[]>([]);
   const nextOptionKey = useRef(0);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const labelInputRef = useRef<HTMLInputElement>(null);
+  const editButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const returnFocusRef = useRef<'add' | string>('add');
   const duplicateIds = hasDuplicateQuestionIds(questions);
+
+  useEffect(() => {
+    if (draft) labelInputRef.current?.focus();
+  }, [draft?.id]);
+
+  const restoreFocus = (target = returnFocusRef.current) => {
+    window.setTimeout(() => {
+      if (target === 'add') addButtonRef.current?.focus();
+      else editButtonRefs.current.get(target)?.focus();
+    }, 0);
+  };
 
   const openNewQuestion = () => {
     if (disabled || questions.length >= MAX_QUESTIONS || duplicateIds) return;
@@ -76,8 +107,10 @@ export default function BookingQuestionBuilder({
         isRequired: false,
       });
       setEditingId(null);
+      returnFocusRef.current = 'add';
       setOptionKeys([]);
       setBuilderError(null);
+      onEditorOpenChange?.(true);
     } catch {
       setBuilderError(t('bookingEngine.questions.idError'));
     }
@@ -95,14 +128,19 @@ export default function BookingQuestionBuilder({
       isRequired: question.isRequired,
     });
     setEditingId(question.id);
+    returnFocusRef.current = question.id;
     setOptionKeys((question.options ?? []).map((_, index) => `${question.id}-existing-${index}`));
     setBuilderError(null);
+    onEditorOpenChange?.(true);
   };
 
-  const closeEditor = () => {
+  const closeEditor = (restore = true) => {
+    const target = returnFocusRef.current;
     setDraft(null);
     setEditingId(null);
     setOptionKeys([]);
+    onEditorOpenChange?.(false);
+    if (restore) restoreFocus(target);
   };
 
   const selectType = (type: BookingFormQuestionType) => {
@@ -144,14 +182,14 @@ export default function BookingQuestionBuilder({
       isActive: draft.isActive,
       isRequired: draft.isRequired,
     };
-    onChange(editingId
+    onChange(normalizedQuestions(editingId
       ? questions.map((question) => question.id === editingId ? saved : question)
-      : [...questions, saved]);
+      : [...questions, saved]));
     closeEditor();
   };
 
   const moveQuestion = (id: string, direction: -1 | 1) => {
-    if (disabled) return;
+    if (disabled || draft) return;
     const currentIndex = orderedQuestions.findIndex((question) => question.id === id);
     const targetIndex = currentIndex + direction;
     if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedQuestions.length) return;
@@ -162,17 +200,18 @@ export default function BookingQuestionBuilder({
     onChange(questions.map((item) => ({ ...item, order: orderById.get(item.id)! })));
   };
 
-  const toggleQuestion = (question: BookingFormQuestion) => {
-    if (disabled) return;
+  const toggleQuestion = (question: BookingFormQuestionDefinition) => {
+    if (disabled || draft || !isSupportedQuestion(question)) return;
     onChange(questions.map((item) => item.id === question.id
       ? { ...item, isActive: !item.isActive }
       : item));
   };
 
   const removeQuestion = (id: string) => {
-    if (disabled) return;
-    onChange(questions.filter((question) => question.id !== id));
+    if (disabled || draft) return;
+    onChange(normalizedQuestions(questions.filter((question) => question.id !== id)));
     if (editingId === id) closeEditor();
+    else restoreFocus('add');
   };
 
   const updateOption = (index: number, value: string) => {
@@ -226,7 +265,7 @@ export default function BookingQuestionBuilder({
           <h2 id="guest-form-blueprint-title" className="text-sm font-semibold text-telivity-navy">
             {t('bookingEngine.questions.title')}
           </h2>
-          <p className="text-xs text-telivity-mid-grey mt-1 max-w-2xl">
+          <p className="text-xs text-telivity-slate mt-1 max-w-2xl">
             {t('bookingEngine.questions.description')}
           </p>
           <p className="text-[11px] font-medium text-telivity-slate mt-2">
@@ -234,10 +273,11 @@ export default function BookingQuestionBuilder({
           </p>
         </div>
         <button
+          ref={addButtonRef}
           type="button"
           onClick={openNewQuestion}
           disabled={disabled || !!draft || questions.length >= MAX_QUESTIONS || duplicateIds}
-          className="inline-flex items-center justify-center gap-2 bg-telivity-teal text-white rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-teal focus-visible:ring-offset-2 shrink-0 motion-reduce:transition-none"
+          className="inline-flex items-center justify-center gap-2 bg-telivity-deep-blue text-white rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2 shrink-0 motion-reduce:transition-none"
         >
           <Plus size={15} aria-hidden="true" />
           {t('bookingEngine.questions.add')}
@@ -250,78 +290,31 @@ export default function BookingQuestionBuilder({
         </p>
       )}
 
+      {questions.some((question) => !isSupportedQuestion(question) && question.isActive) && (
+        <div role="alert" className="mx-4 sm:mx-5 mt-4 border-l-4 border-telivity-orange bg-telivity-orange/5 rounded-lg px-3 py-2.5">
+          <p className="text-xs font-semibold text-telivity-navy">{t('bookingEngine.questions.unsupportedActiveTitle')}</p>
+          <p className="text-xs text-telivity-slate mt-1">{t('bookingEngine.questions.unsupportedActiveDescription')}</p>
+        </div>
+      )}
+
       {orderedQuestions.length === 0 && !draft ? (
         <div className="px-5 py-8 text-center">
           <p className="text-sm font-medium text-telivity-navy">{t('bookingEngine.questions.emptyTitle')}</p>
-          <p className="text-xs text-telivity-mid-grey mt-1">{t('bookingEngine.questions.emptyDescription')}</p>
+          <p className="text-xs text-telivity-slate mt-1">{t('bookingEngine.questions.emptyDescription')}</p>
         </div>
       ) : (
-        <ol className="divide-y divide-gray-100">
-          {orderedQuestions.map((question, index) => (
-            <li key={question.id} className="px-4 sm:px-5 py-3">
-              <div className="flex items-start gap-3">
-                <span className="w-7 pt-0.5 text-xs font-semibold tabular-nums text-telivity-mid-grey" aria-hidden="true">
-                  {String(index + 1).padStart(2, '0')}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium text-telivity-navy break-words">{question.label}</span>
-                    <span className="rounded-full bg-telivity-teal/10 px-2 py-0.5 text-[11px] font-medium text-telivity-dark-teal">
-                      {t(`bookingEngine.questions.types.${question.type}`)}
-                    </span>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${question.isRequired ? 'bg-telivity-orange/10 text-telivity-orange' : 'bg-gray-100 text-telivity-mid-grey'}`}>
-                      {question.isRequired ? t('bookingEngine.questions.required') : t('bookingEngine.questions.optional')}
-                    </span>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${question.isActive ? 'bg-telivity-dark-teal/10 text-telivity-dark-teal' : 'bg-gray-100 text-telivity-mid-grey'}`}>
-                      {question.isActive ? t('bookingEngine.questions.active') : t('bookingEngine.questions.inactive')}
-                    </span>
-                  </div>
-                  {question.options && (
-                    <p className="text-xs text-telivity-mid-grey mt-1 truncate">
-                      {question.options.join(' · ')}
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap justify-end gap-1 shrink-0">
-                  <IconButton
-                    label={t('bookingEngine.questions.moveUp', { label: question.label })}
-                    onClick={() => moveQuestion(question.id, -1)}
-                    disabled={disabled || index === 0}
-                  ><ArrowUp size={14} /></IconButton>
-                  <IconButton
-                    label={t('bookingEngine.questions.moveDown', { label: question.label })}
-                    onClick={() => moveQuestion(question.id, 1)}
-                    disabled={disabled || index === orderedQuestions.length - 1}
-                  ><ArrowDown size={14} /></IconButton>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={question.isActive}
-                    aria-label={question.isActive
-                      ? t('bookingEngine.questions.disable', { label: question.label })
-                      : t('bookingEngine.questions.enable', { label: question.label })}
-                    onClick={() => toggleQuestion(question)}
-                    disabled={disabled}
-                    className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-teal focus-visible:ring-offset-2 disabled:opacity-50 motion-reduce:transition-none ${question.isActive ? 'bg-telivity-teal' : 'bg-gray-300'}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform motion-reduce:transition-none ${question.isActive ? 'translate-x-4' : ''}`} />
-                  </button>
-                  <IconButton
-                    label={t('bookingEngine.questions.edit', { label: question.label })}
-                    onClick={() => openEditQuestion(question)}
-                    disabled={disabled || !!draft}
-                  ><Pencil size={14} /></IconButton>
-                  <IconButton
-                    label={t('bookingEngine.questions.remove', { label: question.label })}
-                    onClick={() => removeQuestion(question.id)}
-                    disabled={disabled}
-                    danger
-                  ><Trash2 size={14} /></IconButton>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ol>
+        <QuestionList
+          questions={orderedQuestions}
+          disabled={disabled || !!draft}
+          onMove={moveQuestion}
+          onToggle={toggleQuestion}
+          onEdit={(question) => isSupportedQuestion(question) && openEditQuestion(question)}
+          onRemove={removeQuestion}
+          setEditButtonRef={(id, element) => {
+            if (element) editButtonRefs.current.set(id, element);
+            else editButtonRefs.current.delete(id);
+          }}
+        />
       )}
 
       {draft && <QuestionEditor
@@ -329,6 +322,7 @@ export default function BookingQuestionBuilder({
         setDraft={setDraft}
         editing={!!editingId}
         optionKeys={optionKeys}
+        labelInputRef={labelInputRef}
         onTypeChange={selectType}
         onUpdateOption={updateOption}
         onAddOption={addOption}
@@ -341,11 +335,107 @@ export default function BookingQuestionBuilder({
   );
 }
 
+function QuestionList({
+  questions,
+  disabled,
+  onMove,
+  onToggle,
+  onEdit,
+  onRemove,
+  setEditButtonRef,
+}: {
+  questions: BookingFormQuestionDefinition[];
+  disabled: boolean;
+  onMove: (id: string, direction: -1 | 1) => void;
+  onToggle: (question: BookingFormQuestionDefinition) => void;
+  onEdit: (question: BookingFormQuestionDefinition) => void;
+  onRemove: (id: string) => void;
+  setEditButtonRef: (id: string, element: HTMLButtonElement | null) => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <ol className="divide-y divide-gray-100">
+      {questions.map((question, index) => {
+        const supported = isSupportedQuestion(question);
+        return (
+          <li key={question.id} className="px-4 sm:px-5 py-3">
+            <div className="flex items-start gap-3">
+              <span className="w-7 pt-0.5 text-xs font-semibold tabular-nums text-telivity-slate" aria-hidden="true">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-telivity-navy break-words">{question.label}</span>
+                  <span className="rounded-full bg-telivity-deep-blue/10 px-2 py-0.5 text-[11px] font-medium text-telivity-deep-blue">
+                    {supported
+                      ? t(`bookingEngine.questions.types.${question.type}`)
+                      : t('bookingEngine.questions.unsupportedType')}
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${question.isRequired ? 'bg-telivity-orange/10 text-telivity-navy' : 'bg-gray-100 text-telivity-slate'}`}>
+                    {question.isRequired ? t('bookingEngine.questions.required') : t('bookingEngine.questions.optional')}
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${question.isActive ? 'bg-telivity-deep-blue/10 text-telivity-deep-blue' : 'bg-gray-100 text-telivity-slate'}`}>
+                    {question.isActive ? t('bookingEngine.questions.active') : t('bookingEngine.questions.inactive')}
+                  </span>
+                </div>
+                {Array.isArray(question.options) && (
+                  <p className="text-xs text-telivity-slate mt-1 truncate">
+                    {question.options.join(' · ')}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap justify-end gap-1 shrink-0">
+                <IconButton
+                  label={t('bookingEngine.questions.moveUp', { label: question.label })}
+                  onClick={() => onMove(question.id, -1)}
+                  disabled={disabled || index === 0}
+                ><ArrowUp size={14} /></IconButton>
+                <IconButton
+                  label={t('bookingEngine.questions.moveDown', { label: question.label })}
+                  onClick={() => onMove(question.id, 1)}
+                  disabled={disabled || index === questions.length - 1}
+                ><ArrowDown size={14} /></IconButton>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={question.isActive}
+                  aria-label={question.isActive
+                    ? t('bookingEngine.questions.disable', { label: question.label })
+                    : t('bookingEngine.questions.enable', { label: question.label })}
+                  onClick={() => onToggle(question)}
+                  disabled={disabled || !supported}
+                  className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2 disabled:opacity-50 motion-reduce:transition-none ${question.isActive ? 'bg-telivity-deep-blue' : 'bg-gray-400'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform motion-reduce:transition-none ${question.isActive ? 'translate-x-4' : ''}`} />
+                </button>
+                <IconButton
+                  label={t('bookingEngine.questions.edit', { label: question.label })}
+                  onClick={() => onEdit(question)}
+                  disabled={disabled || !supported}
+                  buttonRef={(element) => setEditButtonRef(question.id, element)}
+                ><Pencil size={14} /></IconButton>
+                <IconButton
+                  label={t('bookingEngine.questions.remove', { label: question.label })}
+                  onClick={() => onRemove(question.id)}
+                  disabled={disabled || !supported}
+                  danger
+                ><Trash2 size={14} /></IconButton>
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function QuestionEditor({
   draft,
   setDraft,
   editing,
   optionKeys,
+  labelInputRef,
   onTypeChange,
   onUpdateOption,
   onAddOption,
@@ -358,6 +448,7 @@ function QuestionEditor({
   setDraft: Dispatch<SetStateAction<BookingFormQuestion | null>>;
   editing: boolean;
   optionKeys: string[];
+  labelInputRef: RefObject<HTMLInputElement>;
   onTypeChange: (type: BookingFormQuestionType) => void;
   onUpdateOption: (index: number, value: string) => void;
   onAddOption: () => void;
@@ -372,6 +463,11 @@ function QuestionEditor({
   const normalizedOptions = optionValues.map((option) => option.trim().toLocaleLowerCase());
   const hasDuplicateOption = !hasBlankOption
     && new Set(normalizedOptions).size !== normalizedOptions.length;
+  const optionErrorId = hasBlankOption
+    ? 'booking-question-options-blank'
+    : hasDuplicateOption
+      ? 'booking-question-options-duplicate'
+      : undefined;
   const labelInvalid = draft.label.trim().length === 0;
   const draftValid = !labelInvalid
     && draft.label.trim().length <= 200
@@ -383,15 +479,16 @@ function QuestionEditor({
         <h3 className="text-sm font-semibold text-telivity-navy">
           {editing ? t('bookingEngine.questions.editTitle') : t('bookingEngine.questions.addTitle')}
         </h3>
-        <button type="button" onClick={onCancel} aria-label={t('bookingEngine.questions.cancelEditor')} className="p-1.5 rounded-lg text-telivity-mid-grey hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-teal motion-reduce:transition-none">
+        <button type="button" onClick={onCancel} aria-label={t('bookingEngine.questions.cancelEditor')} className="p-1.5 rounded-lg text-telivity-slate hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue motion-reduce:transition-none">
           <X size={16} aria-hidden="true" />
         </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="booking-question-label" className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('bookingEngine.questions.label')}</label>
+          <label htmlFor="booking-question-label" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.questions.label')}</label>
           <input
+            ref={labelInputRef}
             id="booking-question-label"
             type="text"
             maxLength={200}
@@ -399,13 +496,13 @@ function QuestionEditor({
             aria-invalid={labelInvalid}
             aria-describedby={labelInvalid ? 'booking-question-label-error' : undefined}
             onChange={(event) => setDraft((current) => current ? { ...current, label: event.target.value } : current)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal focus-visible:ring-2 focus-visible:ring-telivity-teal/20"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"
           />
           {labelInvalid && <p id="booking-question-label-error" className="text-xs text-red-600 mt-1">{t('bookingEngine.questions.labelRequired')}</p>}
         </div>
         <div>
-          <label htmlFor="booking-question-type" className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('bookingEngine.questions.type')}</label>
-          <select id="booking-question-type" value={draft.type} onChange={(event) => onTypeChange(event.target.value as BookingFormQuestionType)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal focus-visible:ring-2 focus-visible:ring-telivity-teal/20">
+          <label htmlFor="booking-question-type" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.questions.type')}</label>
+          <select id="booking-question-type" value={draft.type} onChange={(event) => onTypeChange(event.target.value as BookingFormQuestionType)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
             {QUESTION_TYPES.map((type) => <option key={type} value={type}>{t(`bookingEngine.questions.types.${type}`)}</option>)}
           </select>
         </div>
@@ -413,42 +510,42 @@ function QuestionEditor({
 
       <div className="flex flex-wrap gap-x-5 gap-y-2 mt-4">
         <label className="inline-flex items-center gap-2 text-sm text-telivity-navy cursor-pointer">
-          <input type="checkbox" checked={draft.isRequired} onChange={(event) => setDraft((current) => current ? { ...current, isRequired: event.target.checked } : current)} className="accent-telivity-teal focus:ring-telivity-teal" />
+          <input type="checkbox" checked={draft.isRequired} onChange={(event) => setDraft((current) => current ? { ...current, isRequired: event.target.checked } : current)} className="accent-telivity-deep-blue focus:ring-telivity-deep-blue" />
           {t('bookingEngine.questions.requiredQuestion')}
         </label>
         <label className="inline-flex items-center gap-2 text-sm text-telivity-navy cursor-pointer">
-          <input type="checkbox" checked={draft.isActive} onChange={(event) => setDraft((current) => current ? { ...current, isActive: event.target.checked } : current)} className="accent-telivity-teal focus:ring-telivity-teal" />
+          <input type="checkbox" checked={draft.isActive} onChange={(event) => setDraft((current) => current ? { ...current, isActive: event.target.checked } : current)} className="accent-telivity-deep-blue focus:ring-telivity-deep-blue" />
           {t('bookingEngine.questions.activeQuestion')}
         </label>
       </div>
 
       {SELECT_TYPES.has(draft.type) && (
         <fieldset className="mt-5">
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <legend className="text-xs font-semibold text-telivity-slate">{t('bookingEngine.questions.options')}</legend>
-            <button type="button" onClick={onAddOption} disabled={optionValues.length >= MAX_OPTIONS} className="inline-flex items-center gap-1 text-sm font-semibold text-telivity-teal disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-teal rounded">
+          <legend className="text-xs font-semibold text-telivity-slate mb-2">{t('bookingEngine.questions.options')}</legend>
+          <div className="flex justify-end -mt-7 mb-2">
+            <button type="button" onClick={onAddOption} disabled={optionValues.length >= MAX_OPTIONS} className="inline-flex items-center gap-1 text-sm font-semibold text-telivity-deep-blue disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue rounded">
               <Plus size={14} aria-hidden="true" /> {t('bookingEngine.questions.addOption')}
             </button>
           </div>
           <div className="space-y-2">
             {optionValues.map((option, index) => (
               <div key={optionKeys[index]} className="flex items-center gap-2">
-                <input type="text" maxLength={200} aria-label={t('bookingEngine.questions.optionLabel', { number: index + 1 })} value={option} onChange={(event) => onUpdateOption(index, event.target.value)} className="min-w-0 flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal focus-visible:ring-2 focus-visible:ring-telivity-teal/20" />
+                <input type="text" maxLength={200} aria-label={t('bookingEngine.questions.optionLabel', { number: index + 1 })} aria-invalid={!!optionErrorId} aria-describedby={optionErrorId} value={option} onChange={(event) => onUpdateOption(index, event.target.value)} className="min-w-0 flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
                 <IconButton label={t('bookingEngine.questions.moveOptionUp', { number: index + 1 })} onClick={() => onMoveOption(index, -1)} disabled={index === 0}><ArrowUp size={14} /></IconButton>
                 <IconButton label={t('bookingEngine.questions.moveOptionDown', { number: index + 1 })} onClick={() => onMoveOption(index, 1)} disabled={index === optionValues.length - 1}><ArrowDown size={14} /></IconButton>
                 <IconButton label={t('bookingEngine.questions.removeOption', { number: index + 1 })} onClick={() => onRemoveOption(index)} danger><Trash2 size={14} /></IconButton>
               </div>
             ))}
           </div>
-          {optionValues.length === 0 && <p className="text-xs text-red-600 mt-2">{t('bookingEngine.questions.optionRequired')}</p>}
-          {hasBlankOption && <p className="text-xs text-red-600 mt-2">{t('bookingEngine.questions.optionBlank')}</p>}
-          {hasDuplicateOption && <p className="text-xs text-red-600 mt-2">{t('bookingEngine.questions.optionDuplicate')}</p>}
+          {optionValues.length === 0 && <p className="text-xs text-red-700 mt-2">{t('bookingEngine.questions.optionRequired')}</p>}
+          {hasBlankOption && <p id="booking-question-options-blank" className="text-xs text-red-700 mt-2">{t('bookingEngine.questions.optionBlank')}</p>}
+          {hasDuplicateOption && <p id="booking-question-options-duplicate" className="text-xs text-red-700 mt-2">{t('bookingEngine.questions.optionDuplicate')}</p>}
         </fieldset>
       )}
 
       <div className="flex flex-wrap items-center gap-3 mt-5">
-        <button type="button" onClick={onSave} disabled={!draftValid} className="bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-teal focus-visible:ring-offset-2">{t('bookingEngine.questions.save')}</button>
-        <button type="button" onClick={onCancel} className="text-sm font-medium text-telivity-slate hover:text-telivity-navy focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-teal rounded">{t('bookingEngine.questions.cancel')}</button>
+        <button type="button" onClick={onSave} disabled={!draftValid} className="bg-telivity-deep-blue text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2">{t('bookingEngine.questions.save')}</button>
+        <button type="button" onClick={onCancel} className="text-sm font-medium text-telivity-slate hover:text-telivity-navy focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue rounded">{t('bookingEngine.questions.cancel')}</button>
       </div>
     </div>
   );
@@ -459,22 +556,25 @@ function IconButton({
   onClick,
   disabled = false,
   danger = false,
+  buttonRef,
   children,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
+  buttonRef?: (element: HTMLButtonElement | null) => void;
   children: React.ReactNode;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       aria-label={label}
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className={`p-1.5 rounded-md disabled:opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-teal motion-reduce:transition-none ${danger ? 'text-red-500 hover:bg-red-50' : 'text-telivity-mid-grey hover:bg-telivity-light-grey hover:text-telivity-slate'}`}
+      className={`p-1.5 rounded-md disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue motion-reduce:transition-none ${danger ? 'text-red-600 hover:bg-red-50' : 'text-telivity-slate hover:bg-telivity-light-grey hover:text-telivity-navy'}`}
     >
       {children}
     </button>

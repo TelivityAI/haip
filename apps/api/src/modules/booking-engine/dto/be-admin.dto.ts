@@ -4,6 +4,7 @@ import {
   IsHexColor,
   IsIn,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
   IsUUID,
@@ -89,6 +90,11 @@ export class BookingFormQuestionDto implements BookingFormQuestion {
 
 /** Admin: update per-property booking engine config. */
 export class UpdateBookingEngineConfigDto {
+  @ApiProperty({ description: 'updatedAt value returned by the last admin config read' })
+  @IsString()
+  @IsISO8601({ strict: true })
+  expectedUpdatedAt!: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()

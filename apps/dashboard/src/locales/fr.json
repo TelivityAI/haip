@@ -148,6 +148,7 @@
     "requestSettings": {
       "autoConfirmDescription": "La confirmation automatique concerne uniquement les réservations instantanées ; les demandes exigent toujours une décision du personnel.",
       "bookingMode": "Mode de réservation",
+      "backgroundLoadError": "Impossible de vérifier les réglages les plus récents. Les réglages chargés restent disponibles.",
       "cardCollection": "Enregistrement de la carte",
       "cardDescriptions": {
         "disabled": "Les clients envoient leur demande sans ajouter de carte.",
@@ -159,6 +160,8 @@
         "optional": "Facultatif",
         "required": "Obligatoire"
       },
+      "conflictDescription": "Ces réglages ont changé depuis l’ouverture de cette page. Votre brouillon est conservé. Rechargez les réglages les plus récents avant de reprendre les modifications.",
+      "conflictTitle": "Conflit de réglages",
       "description": "Choisissez entre une réservation instantanée et une demande examinée par votre équipe.",
       "engineToggle": "Activer le moteur de réservation directe",
       "invalidQuestions": "Corrigez le formulaire client avant d’enregistrer ces paramètres.",
@@ -173,6 +176,7 @@
         "request": "Demande de réservation"
       },
       "requiredCardWarning": "Ajoutez une clé publique Stripe avant d’exiger une carte.",
+      "reloadLatest": "Recharger les réglages récents",
       "reset": "Réinitialiser les modifications",
       "retry": "Réessayer",
       "save": "Enregistrer les modifications",
@@ -182,7 +186,8 @@
       "stripeKeyDescription": "Utilisez la clé publique de cet établissement. Les clés secrètes Stripe restent sur le serveur.",
       "stripeKeyPlaceholder": "pk_live_…",
       "title": "Processus de demande de réservation",
-      "unsaved": "Modifications non enregistrées"
+      "unsaved": "Modifications non enregistrées",
+      "unsupportedPublishBlocked": "Utilisez une version plus récente du tableau de bord avant de publier des modifications de ce formulaire client."
     },
     "questions": {
       "active": "Active",
@@ -192,7 +197,7 @@
       "addTitle": "Ajouter une question",
       "cancel": "Annuler",
       "cancelEditor": "Fermer l’éditeur de question",
-      "count": "{{count}} question(s) sur {{max}}",
+      "count": "Questions : {{count}} / {{max}}",
       "description": "Créez le formulaire ordonné que les clients remplissent avant d’envoyer une demande de réservation.",
       "disable": "Désactiver {{label}}",
       "duplicateIds": "Les identifiants des questions doivent être uniques pour modifier ce formulaire.",
@@ -222,6 +227,9 @@
       "save": "Enregistrer la question",
       "title": "Plan du formulaire client",
       "type": "Type de question",
+      "unsupportedActiveDescription": "Ce tableau de bord ne peut pas modifier ni republier ce formulaire client en toute sécurité tant que cette question reste active.",
+      "unsupportedActiveTitle": "Une question non prise en charge est active",
+      "unsupportedType": "Question non prise en charge",
       "types": {
         "short_text": "Texte court",
         "long_text": "Texte long",

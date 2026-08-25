@@ -148,6 +148,7 @@
     "requestSettings": {
       "autoConfirmDescription": "Automatska potvrda odnosi se samo na trenutne rezervacije; zahtjevi uvijek trebaju odluku osoblja.",
       "bookingMode": "Način rezervacije",
+      "backgroundLoadError": "Najnovije postavke nije bilo moguće provjeriti. Učitane postavke i dalje su dostupne.",
       "cardCollection": "Prikupljanje kartice",
       "cardDescriptions": {
         "disabled": "Gosti šalju zahtjev bez dodavanja kartice.",
@@ -159,6 +160,8 @@
         "optional": "Neobavezno",
         "required": "Obavezno"
       },
+      "conflictDescription": "Ove su se postavke promijenile otkako ste otvorili stranicu. Vaš je nacrt sačuvan. Ponovno učitajte najnovije postavke prije nastavka uređivanja.",
+      "conflictTitle": "Sukob postavki",
       "description": "Odaberite rezerviraju li gosti odmah ili šalju prijavu na pregled vašem timu.",
       "engineToggle": "Omogući sustav za izravne rezervacije",
       "invalidQuestions": "Ispravite obrazac za goste prije spremanja ovih postavki.",
@@ -173,6 +176,7 @@
         "request": "Zahtjev za rezervaciju"
       },
       "requiredCardWarning": "Dodajte Stripeov javni ključ prije obaveznog prikupljanja kartice.",
+      "reloadLatest": "Ponovno učitaj najnovije postavke",
       "reset": "Poništi promjene",
       "retry": "Pokušaj ponovno",
       "save": "Spremi promjene",
@@ -182,7 +186,8 @@
       "stripeKeyDescription": "Upotrijebite javni ključ ovog objekta. Tajni Stripeovi ključevi ostaju na poslužitelju.",
       "stripeKeyPlaceholder": "pk_live_…",
       "title": "Tijek zahtjeva za rezervaciju",
-      "unsaved": "Nespremljene promjene"
+      "unsaved": "Nespremljene promjene",
+      "unsupportedPublishBlocked": "Upotrijebite noviju verziju nadzorne ploče prije objave promjena ovog obrasca za goste."
     },
     "questions": {
       "active": "Aktivno",
@@ -192,7 +197,7 @@
       "addTitle": "Dodaj pitanje",
       "cancel": "Odustani",
       "cancelEditor": "Zatvori uređivač pitanja",
-      "count": "{{count}} od {{max}} pitanja",
+      "count": "Pitanja: {{count}} / {{max}}",
       "description": "Sastavite redoslijed prijave koju gosti ispunjavaju prije slanja zahtjeva za rezervaciju.",
       "disable": "Onemogući {{label}}",
       "duplicateIds": "Identifikatori pitanja moraju biti jedinstveni kako bi se obrazac mogao uređivati.",
@@ -222,6 +227,9 @@
       "save": "Spremi pitanje",
       "title": "Plan obrasca za goste",
       "type": "Vrsta pitanja",
+      "unsupportedActiveDescription": "Ova nadzorna ploča ne može sigurno promijeniti ni ponovno objaviti obrazac za goste dok je to pitanje aktivno.",
+      "unsupportedActiveTitle": "Aktivno je nepodržano pitanje",
+      "unsupportedType": "Nepodržano pitanje",
       "types": {
         "short_text": "Kratki tekst",
         "long_text": "Dugi tekst",

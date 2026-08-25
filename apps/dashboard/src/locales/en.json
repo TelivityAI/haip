@@ -148,6 +148,7 @@
     "requestSettings": {
       "autoConfirmDescription": "Auto-confirm applies only to instant bookings; booking requests always require a staff decision.",
       "bookingMode": "Booking mode",
+      "backgroundLoadError": "Latest settings could not be checked. Your loaded settings are still available.",
       "cardCollection": "Card collection",
       "cardDescriptions": {
         "disabled": "Guests submit without adding a card.",
@@ -159,6 +160,8 @@
         "optional": "Optional",
         "required": "Required"
       },
+      "conflictDescription": "These settings changed since you opened this page. Your draft is still here. Reload the latest settings to review before editing again.",
+      "conflictTitle": "Settings conflict",
       "description": "Choose whether guests book instantly or submit an application for your team to review.",
       "engineToggle": "Enable direct booking engine",
       "invalidQuestions": "Fix the guest form before saving these settings.",
@@ -173,6 +176,7 @@
         "request": "Booking request"
       },
       "requiredCardWarning": "Add a Stripe publishable key before requiring card collection.",
+      "reloadLatest": "Reload latest settings",
       "reset": "Reset changes",
       "retry": "Try again",
       "save": "Save changes",
@@ -182,7 +186,8 @@
       "stripeKeyDescription": "Use the publishable key for this property. Stripe secret keys stay on the server.",
       "stripeKeyPlaceholder": "pk_live_…",
       "title": "Booking request workflow",
-      "unsaved": "Unsaved changes"
+      "unsaved": "Unsaved changes",
+      "unsupportedPublishBlocked": "Use a newer dashboard before publishing changes to this guest form."
     },
     "questions": {
       "active": "Active",
@@ -192,7 +197,7 @@
       "addTitle": "Add a question",
       "cancel": "Cancel",
       "cancelEditor": "Close question editor",
-      "count": "{{count}} of {{max}} questions",
+      "count": "Questions: {{count}} / {{max}}",
       "description": "Build the ordered application guests complete before submitting a booking request.",
       "disable": "Disable {{label}}",
       "duplicateIds": "Question IDs must be unique before this form can be edited.",
@@ -222,6 +227,9 @@
       "save": "Save question",
       "title": "Guest form blueprint",
       "type": "Question type",
+      "unsupportedActiveDescription": "This dashboard cannot safely change or republish the guest form while that question remains active.",
+      "unsupportedActiveTitle": "An unsupported question is active",
+      "unsupportedType": "Unsupported question",
       "types": {
         "short_text": "Short text",
         "long_text": "Long text",

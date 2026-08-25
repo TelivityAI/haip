@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { describe, expect, it, vi } from 'vitest';
@@ -129,6 +129,7 @@ describe('validateApplicationAnswers', () => {
 describe('booking form DTO validation', () => {
   it('validates nested question ids and limits the form to fifty definitions', async () => {
     const malformed = plainToInstance(UpdateBookingEngineConfigDto, {
+      expectedUpdatedAt: '2026-08-25T00:00:00.000Z',
       formQuestions: [{
         id: 'not-a-uuid',
         label: 'Purpose',
@@ -140,6 +141,7 @@ describe('booking form DTO validation', () => {
       }],
     });
     const oversized = plainToInstance(UpdateBookingEngineConfigDto, {
+      expectedUpdatedAt: '2026-08-25T00:00:00.000Z',
       formQuestions: Array.from({ length: 51 }, (_, order) => ({
         id: `00000000-0000-4000-8000-${String(order).padStart(12, '0')}`,
         label: `Question ${order}`,
@@ -152,6 +154,19 @@ describe('booking form DTO validation', () => {
 
     expect(await validate(malformed)).not.toEqual([]);
     expect(await validate(oversized)).not.toEqual([]);
+  });
+
+  it('requires a valid config version for every admin update', async () => {
+    const missingVersion = plainToInstance(UpdateBookingEngineConfigDto, {
+      displayName: 'Renamed hotel',
+    });
+    const malformedVersion = plainToInstance(UpdateBookingEngineConfigDto, {
+      displayName: 'Renamed hotel',
+      expectedUpdatedAt: 'yesterday',
+    });
+
+    expect(await validate(missingVersion)).not.toEqual([]);
+    expect(await validate(malformedVersion)).not.toEqual([]);
   });
 });
 
@@ -195,6 +210,7 @@ describe('BookingEngineConfigService request settings', () => {
     autoConfirm: false,
     bookingMode: 'request' as const,
     paymentMethodCollection: 'optional' as const,
+    updatedAt: new Date('2026-08-25T00:00:00.000Z'),
     formQuestions: [
       { ...arrivalQuestion, order: 2 },
       { ...breakfastQuestion, order: 1, isActive: false },
@@ -205,7 +221,8 @@ describe('BookingEngineConfigService request settings', () => {
   it('returns public request settings with only active questions in display order', async () => {
     const { service } = makeConfigService(configRow);
 
-    await expect(service.getPublicConfig(configRow.propertyId)).resolves.toMatchObject({
+    const publicConfig = await service.getPublicConfig(configRow.propertyId);
+    expect(publicConfig).toMatchObject({
       bookingMode: 'request',
       paymentMethodCollection: 'optional',
       formQuestions: [
@@ -213,12 +230,42 @@ describe('BookingEngineConfigService request settings', () => {
         { id: 'notes', order: 3 },
       ],
     });
+    expect(publicConfig).not.toHaveProperty('updatedAt');
+  });
+
+  it('rejects a stale admin save under the row lock before writing', async () => {
+    const { service, update, lock } = makeConfigService(configRow);
+
+    await expect(service.updateConfig(configRow.propertyId, {
+      expectedUpdatedAt: '2026-08-24T23:59:59.000Z',
+      displayName: 'Stale admin name',
+    } as never)).rejects.toBeInstanceOf(ConflictException);
+
+    expect(lock).toHaveBeenCalledWith('update');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('writes only the fresh partial patch and never persists its concurrency token', async () => {
+    const { service, set } = makeConfigService(configRow);
+
+    await service.updateConfig(configRow.propertyId, {
+      expectedUpdatedAt: configRow.updatedAt.toISOString(),
+      displayName: 'Renamed Hotel',
+    } as never);
+
+    const written = set.mock.calls[0][0];
+    expect(written).toMatchObject({ displayName: 'Renamed Hotel' });
+    expect(written).not.toHaveProperty('expectedUpdatedAt');
+    expect(written).not.toHaveProperty('bookingMode');
+    expect(written).not.toHaveProperty('paymentMethodCollection');
+    expect(written).not.toHaveProperty('formQuestions');
   });
 
   it('rejects required request card collection without a publishable card key', async () => {
     const { service, update } = makeConfigService({ ...configRow, stripePublishableKey: null });
 
     await expect(service.updateConfig(configRow.propertyId, {
+      expectedUpdatedAt: configRow.updatedAt.toISOString(),
       paymentMethodCollection: 'required',
     })).rejects.toThrow(/publishable/i);
     expect(update).not.toHaveBeenCalled();
@@ -228,6 +275,7 @@ describe('BookingEngineConfigService request settings', () => {
     const { service, set } = makeConfigService(configRow);
 
     await service.updateConfig(configRow.propertyId, {
+      expectedUpdatedAt: configRow.updatedAt.toISOString(),
       displayName: 'Renamed Hotel',
       bookingMode: undefined,
       paymentMethodCollection: undefined,
@@ -244,7 +292,10 @@ describe('BookingEngineConfigService request settings', () => {
   it('locks the config row while validating and applying a partial update', async () => {
     const { service, transaction, lock } = makeConfigService(configRow);
 
-    await service.updateConfig(configRow.propertyId, { bookingMode: 'request' });
+    await service.updateConfig(configRow.propertyId, {
+      expectedUpdatedAt: configRow.updatedAt.toISOString(),
+      bookingMode: 'request',
+    });
 
     expect(transaction).toHaveBeenCalledOnce();
     expect(lock).toHaveBeenCalledWith('update');

@@ -1,4 +1,10 @@
-import { Injectable, Inject, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { bookingEngineConfig, bookingEngineCredentials } from '@telivityhaip/database';
@@ -26,6 +32,7 @@ function randomToken(bytes: number): string {
 }
 
 export interface UpdateConfigInput {
+  expectedUpdatedAt: string;
   isEnabled?: boolean;
   displayName?: string | null;
   logoMediaId?: string | null;
@@ -103,15 +110,25 @@ export class BookingEngineConfigService {
         throw new NotFoundException(`Booking engine config for property ${propertyId} not found`);
       }
 
-      const bookingMode = input.bookingMode ?? current.bookingMode as BookingMode;
-      const paymentMethodCollection = input.paymentMethodCollection
+      const { expectedUpdatedAt: expectedVersion, ...patch } = input;
+      const currentUpdatedAt = new Date(current.updatedAt);
+      const expectedUpdatedAt = new Date(expectedVersion);
+      if (Number.isNaN(expectedUpdatedAt.valueOf())
+        || expectedUpdatedAt.valueOf() !== currentUpdatedAt.valueOf()) {
+        throw new ConflictException(
+          'Booking engine settings changed since they were loaded',
+        );
+      }
+
+      const bookingMode = patch.bookingMode ?? current.bookingMode as BookingMode;
+      const paymentMethodCollection = patch.paymentMethodCollection
         ?? current.paymentMethodCollection as PaymentMethodCollection;
-      const stripePublishableKey = input.stripePublishableKey === undefined
+      const stripePublishableKey = patch.stripePublishableKey === undefined
         ? current.stripePublishableKey
-        : input.stripePublishableKey;
-      const formQuestions = input.formQuestions === undefined
+        : patch.stripePublishableKey;
+      const formQuestions = patch.formQuestions === undefined
         ? undefined
-        : validateQuestionDefinitions(input.formQuestions);
+        : validateQuestionDefinitions(patch.formQuestions);
 
       if (bookingMode === 'request'
         && paymentMethodCollection === 'required'
@@ -121,14 +138,18 @@ export class BookingEngineConfigService {
         );
       }
 
+      const now = new Date();
+      const nextUpdatedAt = now.valueOf() > currentUpdatedAt.valueOf()
+        ? now
+        : new Date(currentUpdatedAt.valueOf() + 1);
       const [updated] = await tx
         .update(bookingEngineConfig)
         .set({
           ...Object.fromEntries(
-            Object.entries(input).filter(([, value]) => value !== undefined),
+            Object.entries(patch).filter(([, value]) => value !== undefined),
           ),
-          ...(input.formQuestions === undefined ? {} : { formQuestions }),
-          updatedAt: new Date(),
+          ...(patch.formQuestions === undefined ? {} : { formQuestions }),
+          updatedAt: nextUpdatedAt,
         })
         .where(eq(bookingEngineConfig.propertyId, propertyId))
         .returning();

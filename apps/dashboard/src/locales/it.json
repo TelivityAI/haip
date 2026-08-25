@@ -148,6 +148,7 @@
     "requestSettings": {
       "autoConfirmDescription": "La conferma automatica si applica solo alle prenotazioni immediate; le richieste richiedono sempre una decisione del personale.",
       "bookingMode": "Modalità di prenotazione",
+      "backgroundLoadError": "Non è stato possibile verificare le impostazioni più recenti. Le impostazioni caricate restano disponibili.",
       "cardCollection": "Raccolta della carta",
       "cardDescriptions": {
         "disabled": "Gli ospiti inviano la richiesta senza aggiungere una carta.",
@@ -159,6 +160,8 @@
         "optional": "Facoltativa",
         "required": "Obbligatoria"
       },
+      "conflictDescription": "Queste impostazioni sono cambiate da quando hai aperto la pagina. La bozza è ancora disponibile. Ricarica le impostazioni più recenti prima di continuare.",
+      "conflictTitle": "Conflitto nelle impostazioni",
       "description": "Scegli se gli ospiti prenotano subito o inviano una richiesta da esaminare.",
       "engineToggle": "Attiva il motore di prenotazione diretta",
       "invalidQuestions": "Correggi il modulo ospite prima di salvare queste impostazioni.",
@@ -173,6 +176,7 @@
         "request": "Richiesta di prenotazione"
       },
       "requiredCardWarning": "Aggiungi una chiave pubblicabile Stripe prima di rendere obbligatoria la carta.",
+      "reloadLatest": "Ricarica impostazioni recenti",
       "reset": "Ripristina modifiche",
       "retry": "Riprova",
       "save": "Salva modifiche",
@@ -182,7 +186,8 @@
       "stripeKeyDescription": "Usa la chiave pubblicabile di questa struttura. Le chiavi segrete Stripe restano sul server.",
       "stripeKeyPlaceholder": "pk_live_…",
       "title": "Flusso delle richieste di prenotazione",
-      "unsaved": "Modifiche non salvate"
+      "unsaved": "Modifiche non salvate",
+      "unsupportedPublishBlocked": "Usa una versione più recente del pannello prima di pubblicare modifiche a questo modulo ospiti."
     },
     "questions": {
       "active": "Attiva",
@@ -192,7 +197,7 @@
       "addTitle": "Aggiungi una domanda",
       "cancel": "Annulla",
       "cancelEditor": "Chiudi l’editor della domanda",
-      "count": "{{count}} domande su {{max}}",
+      "count": "Domande: {{count}} / {{max}}",
       "description": "Crea il modulo ordinato che gli ospiti compilano prima di inviare una richiesta di prenotazione.",
       "disable": "Disattiva {{label}}",
       "duplicateIds": "Gli identificativi delle domande devono essere univoci per modificare il modulo.",
@@ -222,6 +227,9 @@
       "save": "Salva domanda",
       "title": "Schema del modulo ospite",
       "type": "Tipo di domanda",
+      "unsupportedActiveDescription": "Questo pannello non può modificare o ripubblicare in sicurezza il modulo ospiti finché la domanda resta attiva.",
+      "unsupportedActiveTitle": "È attiva una domanda non supportata",
+      "unsupportedType": "Domanda non supportata",
       "types": {
         "short_text": "Testo breve",
         "long_text": "Testo lungo",
