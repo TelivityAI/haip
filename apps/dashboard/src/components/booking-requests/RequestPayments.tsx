@@ -261,7 +261,7 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
   const folio = folioQuery.data as FolioSummary | undefined;
   const originalCaptured = payments.movements.filter((movement) =>
     !movement.originalPaymentId
-    && ['captured', 'settled', 'partially_refunded'].includes(movement.status)
+    && ['captured', 'settled', 'partially_refunded', 'refunded'].includes(movement.status)
     && Number(movement.amount) > 0);
   const allocatablePayments = originalCaptured.filter((movement) =>
     Number(movement.availableToAllocate) > 0);

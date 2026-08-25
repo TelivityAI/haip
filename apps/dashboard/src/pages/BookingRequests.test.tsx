@@ -507,6 +507,68 @@ describe('Booking request decisions', () => {
       .getByRole('textbox', { name: 'Amount' })).toHaveValue('30');
   });
 
+  it('keeps legacy refunded parents visible without offering a zero-value resolution', async () => {
+    mockApi({
+      payments: {
+        movements: [{
+          ...stripePayment,
+          status: 'refunded',
+          amount: '100.00',
+          netCapturedAmount: '0.00',
+          allocatedAmount: '0.00',
+          reservedResolutionAmount: '0.00',
+          availableToAllocate: '0.00',
+          availableToResolve: '0.00',
+          unresolvedAmount: '0.00',
+          returnedAmount: '100.00',
+          retainedAmount: '0.00',
+          availableAmount: '0.00',
+        }],
+        allocations: [],
+        resolutions: [],
+      },
+    });
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+
+    const summary = (await screen.findByText('Request money summary')).closest('section');
+    expect(summary).not.toBeNull();
+    expect(within(summary!).getByText('€100.00')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retain with reason' })).not.toBeInTheDocument();
+  });
+
+  it('offers the exact authoritative remainder for an inconsistent legacy refunded parent', async () => {
+    mockApi({
+      payments: {
+        movements: [{
+          ...stripePayment,
+          status: 'refunded',
+          amount: '100.00',
+          netCapturedAmount: '25.00',
+          allocatedAmount: '0.00',
+          reservedResolutionAmount: '0.00',
+          availableToAllocate: '25.00',
+          availableToResolve: '25.00',
+          unresolvedAmount: '25.00',
+          returnedAmount: '75.00',
+          retainedAmount: '0.00',
+          availableAmount: '25.00',
+        }],
+        allocations: [],
+        resolutions: [],
+      },
+    });
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Refund' }));
+
+    expect(within(screen.getByRole('dialog', { name: 'Refund saved-card payment' }))
+      .getByRole('textbox', { name: 'Amount' })).toHaveValue('25');
+  });
+
   it('never enables denial when the authoritative money state failed to load', async () => {
     mockApi({ payments: new Error('network unavailable') });
     renderAt(`/booking-requests/${REQUEST_ID}`);
@@ -921,6 +983,9 @@ describe('Booking request locales', () => {
     expect(fr.bookingRequests.amounts).toMatchObject({ quoted: 'Devis', captured: 'Encaissé' });
     expect(es.bookingRequests.amounts).toMatchObject({ quoted: 'Cotización', captured: 'Cobrado' });
     expect(ptBR.bookingRequests.amounts).toMatchObject({ quoted: 'Cotação', captured: 'Cobrado' });
+    expect(ptBR.bookingRequests.overview.application).toBe('Solicitação de reserva');
+    expect(srLatn.bookingRequests.detail.independence).toContain('finansijske radnje');
+    expect(srLatn.bookingRequests.paymentActions.error).toContain('Finansijska radnja');
 
     expect(de.bookingRequests.overview).toMatchObject({
       application: 'Anfrage',
@@ -937,10 +1002,10 @@ describe('Booking request locales', () => {
       ['de', de.bookingRequests, /Zitiert|Gefangen|aufgeladen|Anklage|Rekordrückkehr|Externe Rendite|Bewerbung|Bewerbungs|Abnahme|\bAntrag\b|Geldaktion/],
       ['hr', hr.bookingRequests, /Citirano|Zarobljen|Trenutni citat|Vratio se|Poricanje|Primjena|novčane akcije|Novčana akcija|prijav[aeu]/i],
       ['it', itMessages.bookingRequests, /Citato|Catturato|Citazione attuale|Negazione|Mantenuto|Applicazione|azioni di denaro|azione relativa al denaro|foglio operativo|\bSoldi\b/i],
-      ['sr-Latn', srLatn.bookingRequests, /Citirano|Trenutni citat|Predat citat/],
+      ['sr-Latn', srLatn.bookingRequests, /Citirano|Trenutni citat|Predat citat|novčane akcije|Novčane akcije|Novčana radnja|aplikacije|Aplikacije/],
       ['fr', fr.bookingRequests, /Cité|Capturé|Déni/],
       ['es', es.bookingRequests, /\bcitado\b|\bcapturado\b|Negación|Regreso récord|puerta de enlace/],
-      ['pt-BR', ptBR.bookingRequests, /Citado|Capturado|Negação|Carregar cartão|Registro de retorno/],
+      ['pt-BR', ptBR.bookingRequests, /Citado|Capturado|Negação|Carregar cartão|Registro de retorno|Aplicaç|aplicaç|Inscriç|inscriç/],
     ];
     for (const [locale, namespace, terms] of forbidden) {
       expect(JSON.stringify(namespace), `${locale} has machine-literal admin vocabulary`)

@@ -1909,7 +1909,7 @@
     },
     "queue": {
       "title": "Zahtevi za rezervaciju",
-      "description": "Pregledajte aplikacije za goste, detalje o boravku i stanje novca pre nego što preduzmete eksplicitnu radnju.",
+      "description": "Pregledajte zahteve gostiju, detalje o boravku i stanje novca pre nego što preduzmete eksplicitnu radnju.",
       "filters": "Filteri zahteva za rezervaciju",
       "guest": "Gost",
       "card": "Kartica",
@@ -1944,7 +1944,7 @@
       "decisionActions": "Odluka",
       "moneyActions": "Novac",
       "decisionComplete": "Odluka završena",
-      "independence": "Odluke o rezervaciji i novčane akcije su nezavisne. Primanje plaćanja nikada ne prihvata zahtev, a prihvatanje nikada ne pokreće plaćanje."
+      "independence": "Odluke o rezervaciji i finansijske radnje su nezavisne. Primanje plaćanja nikada ne prihvata zahtev, a prihvatanje nikada ne pokreće plaćanje."
     },
     "amounts": {
       "quoted": "Ponuda",
@@ -2102,7 +2102,7 @@
       "reference": "Referenca",
       "notes": "Beleške (opciono)",
       "saving": "Čuvanje…",
-      "error": "Novčana radnja nije mogla da se završi. Podaci koje ste uneli su i dalje ovde.",
+      "error": "Finansijska radnja nije mogla da se završi. Podaci koje ste uneli su i dalje ovde.",
       "paymentRequired": "Prvo izaberite kretanje plaćanja.",
       "charge": {
         "title": "Naplatite sačuvanu karticu",

@@ -194,4 +194,16 @@ describe('booking request immutable audit relationship migration safety', () => 
       expect(source).not.toMatch(/NULLIF\([^)]*->>'(?:bookingRequestId|requestId)'[^)]*\)::uuid/);
     }
   });
+
+  it('propagates tombstones only from one unambiguous property/entity relationship', () => {
+    for (const source of [auditRelationshipMigration, pushSchema]) {
+      expect(source).toContain('unique_request_relationships');
+      expect(source).toMatch(/GROUP BY property_id, entity_type, entity_id/i);
+      expect(source).toMatch(/HAVING count\(DISTINCT booking_request_id\) = 1/i);
+      expect(source).toMatch(/target\.booking_request_id IS NULL/i);
+      expect(source).toMatch(/target\.property_id = relationship\.property_id/i);
+      expect(source).toMatch(/target\.entity_type = relationship\.entity_type/i);
+      expect(source).toMatch(/target\.entity_id = relationship\.entity_id/i);
+    }
+  });
 });

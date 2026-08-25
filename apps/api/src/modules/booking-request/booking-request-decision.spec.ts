@@ -215,9 +215,16 @@ function makeDatabase(state: State) {
     let offset = 0;
     let limit: number | undefined;
     const resolveRows = () => {
-      const rows = structuredClone(rowsFor(table));
+      let rows = structuredClone(rowsFor(table));
       if (selection && Object.keys(selection).length === 1 && 'count' in selection) {
         return [{ count: rows.length }];
+      }
+      if (table === auditLogs && selection && 'occurredAtMicros' in selection) {
+        rows = rows.map((row) => ({
+          ...row,
+          occurredAtMicros: row['occurredAtMicros']
+            ?? String(BigInt((row['occurredAt'] as Date).getTime()) * 1000n),
+        }));
       }
       return rows.slice(offset, limit == null ? undefined : offset + limit);
     };
@@ -773,6 +780,73 @@ describe('BookingRequestService staff reads', () => {
     expect(new Set([...first.data, ...second.data].map((row: { id: string }) => row.id)).size)
       .toBe(3);
     expect(second.nextCursor).toBeNull();
+  });
+
+  it('keeps PostgreSQL microseconds in the opaque audit cursor and total ordering', async () => {
+    const harness = makeHarness();
+    harness.state.audits.push(
+      {
+        id: '10000000-0000-4000-a000-000000000041',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        action: 'update',
+        entityType: 'booking_request',
+        entityId: REQUEST_ID,
+        newValue: { status: 'accepted' },
+        occurredAt: new Date('2026-08-25T10:00:00.000Z'),
+        occurredAtMicros: '1787652000000900',
+      },
+      {
+        id: '10000000-0000-4000-a000-000000000043',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        action: 'update',
+        entityType: 'booking_request',
+        entityId: REQUEST_ID,
+        newValue: { status: 'pending' },
+        occurredAt: new Date('2026-08-25T10:00:00.000Z'),
+        occurredAtMicros: '1787652000000800',
+      },
+      {
+        id: '10000000-0000-4000-a000-000000000042',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        action: 'update',
+        entityType: 'booking_request',
+        entityId: REQUEST_ID,
+        newValue: { status: 'pending' },
+        occurredAt: new Date('2026-08-25T10:00:00.000Z'),
+        occurredAtMicros: '1787652000000700',
+      },
+    );
+
+    const first = await call(harness.service, 'auditHistory', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { limit: 2 },
+    ]);
+    const decodedCursor = JSON.parse(
+      Buffer.from(first.nextCursor, 'base64url').toString('utf8'),
+    );
+    const second = await call(harness.service, 'auditHistory', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { limit: 2, cursor: first.nextCursor },
+    ]);
+
+    expect(first.data.map((row: { id: string }) => row.id)).toEqual([
+      '10000000-0000-4000-a000-000000000041',
+      '10000000-0000-4000-a000-000000000043',
+    ]);
+    expect(decodedCursor).toMatchObject({
+      occurredAtMicros: '1787652000000800',
+      source: 'audit_log',
+      id: '10000000-0000-4000-a000-000000000043',
+    });
+    expect(decodedCursor).not.toHaveProperty('occurredAt');
+    expect(second.data.map((row: { id: string }) => row.id)).toEqual([
+      '10000000-0000-4000-a000-000000000042',
+    ]);
   });
 
   it('rejects a malformed audit cursor before querying audit rows', async () => {

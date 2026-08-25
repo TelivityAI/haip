@@ -574,6 +574,26 @@ async function main() {
       END
       WHERE booking_request_id IS NULL
         AND (entity_type = 'booking_request' OR new_value IS NOT NULL OR previous_value IS NOT NULL)`,
+    `WITH unique_request_relationships AS (
+        SELECT
+          property_id,
+          entity_type,
+          entity_id,
+          min(booking_request_id::text)::uuid AS booking_request_id
+        FROM audit_logs
+        WHERE property_id IS NOT NULL
+          AND entity_id IS NOT NULL
+          AND booking_request_id IS NOT NULL
+        GROUP BY property_id, entity_type, entity_id
+        HAVING count(DISTINCT booking_request_id) = 1
+      )
+      UPDATE audit_logs AS target
+      SET booking_request_id = relationship.booking_request_id
+      FROM unique_request_relationships AS relationship
+      WHERE target.booking_request_id IS NULL
+        AND target.property_id = relationship.property_id
+        AND target.entity_type = relationship.entity_type
+        AND target.entity_id = relationship.entity_id`,
     `CREATE INDEX IF NOT EXISTS audit_logs_property_entity_timeline_idx
       ON audit_logs (property_id, entity_type, entity_id, occurred_at, id)`,
     `CREATE INDEX IF NOT EXISTS audit_logs_booking_request_timeline_idx

@@ -16,6 +16,7 @@ import {
   roomTypes,
 } from '@telivityhaip/database';
 import { describe, expect, it, vi, beforeAll, afterAll } from 'vitest';
+import { BookingRequestService } from './booking-request.service';
 import { BookingRequestPaymentService } from './booking-request-payment.service';
 
 const databaseUrl = process.env['PAYMENT_DB_TEST_URL'];
@@ -24,12 +25,34 @@ const financialRecoveryMigration = readFileSync(
   new URL('../../../../../packages/database/src/migrations/0024_booking_request_financial_recovery.sql', import.meta.url),
   'utf8',
 );
+const bookingRequestAuditRelationshipMigration = readFileSync(
+  new URL('../../../../../packages/database/src/migrations/0028_booking_request_audit_relationship.sql', import.meta.url),
+  'utf8',
+);
 
-describeDatabase('Booking Request payment PostgreSQL concurrency contract', () => {
+function makeAuditService(database: unknown): BookingRequestService {
+  return new BookingRequestService(
+    database as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+}
+
+describeDatabase('Booking Request PostgreSQL money and audit contract', () => {
   const propertyId = '71000000-0000-4000-a000-000000000001';
   const roomTypeId = '71000000-0000-4000-a000-000000000002';
   const ratePlanId = '71000000-0000-4000-a000-000000000003';
   const requestId = '71000000-0000-4000-a000-000000000004';
+  const auditRequestId = '71000000-0000-4000-a000-000000000020';
   const paymentId = '71000000-0000-4000-a000-000000000005';
   const installmentId = '71000000-0000-4000-a000-000000000006';
   const secondPaymentId = '71000000-0000-4000-a000-000000000007';
@@ -94,6 +117,21 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
       guestFirstName: 'Task',
       guestLastName: 'Seven',
       guestEmail: 'task7@example.com',
+      submittedQuoteSnapshot: { grandTotal: '100.00' },
+      currencyCode: 'EUR',
+    });
+    await db.insert(bookingRequests).values({
+      id: auditRequestId,
+      propertyId,
+      submissionIdempotencyKey: 'task-11-audit-db-contract',
+      submissionFingerprint: 'c'.repeat(64),
+      arrivalDate: '2026-09-03',
+      departureDate: '2026-09-04',
+      roomTypeId,
+      ratePlanId,
+      guestFirstName: 'Audit',
+      guestLastName: 'Cursor',
+      guestEmail: 'audit-cursor@example.com',
       submittedQuoteSnapshot: { grandTotal: '100.00' },
       currencyCode: 'EUR',
     });
@@ -169,6 +207,7 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
     await db.delete(bookingRequestInstallments)
       .where(eq(bookingRequestInstallments.bookingRequestId, requestId));
     await db.delete(bookingRequests).where(eq(bookingRequests.id, requestId));
+    await db.delete(bookingRequests).where(eq(bookingRequests.id, auditRequestId));
     await db.delete(ratePlans).where(eq(ratePlans.id, ratePlanId));
     await db.delete(roomTypes).where(eq(roomTypes.id, roomTypeId));
     await db.delete(properties).where(eq(properties.id, propertyId));
@@ -177,6 +216,150 @@ describeDatabase('Booking Request payment PostgreSQL concurrency contract', () =
     await db.delete(roomTypes).where(eq(roomTypes.id, otherRoomTypeId));
     await db.delete(properties).where(eq(properties.id, otherPropertyId));
     await client.end();
+  });
+
+  it('paginates audit rows by exact PostgreSQL microseconds and rejects invalid cursors', async () => {
+    const auditIds = [
+      '71000000-0000-4000-a000-000000000021',
+      '71000000-0000-4000-a000-000000000022',
+      '71000000-0000-4000-a000-000000000023',
+    ];
+    await db.insert(auditLogs).values(auditIds.map((id) => ({
+      id,
+      propertyId,
+      bookingRequestId: auditRequestId,
+      action: 'update',
+      entityType: 'booking_request',
+      entityId: auditRequestId,
+      newValue: { status: 'pending' },
+    })));
+    for (const [index, id] of auditIds.entries()) {
+      await client.unsafe(
+        'UPDATE audit_logs SET occurred_at = $1::timestamptz WHERE id = $2::uuid',
+        [`2100-01-01 00:00:00.000${9 - index}00+00`, id],
+      );
+    }
+    const service = makeAuditService(db);
+
+    const first = await service.auditHistory(auditRequestId, propertyId, { limit: 2 });
+    const decoded = JSON.parse(Buffer.from(first.nextCursor!, 'base64url').toString('utf8'));
+    const second = await service.auditHistory(auditRequestId, propertyId, {
+      limit: 2,
+      cursor: first.nextCursor!,
+    });
+
+    expect(first.data.map((row) => row.id)).toEqual(auditIds.slice(0, 2));
+    expect(decoded).toMatchObject({
+      occurredAtMicros: '4102444800000800',
+      source: 'audit_log',
+      id: auditIds[1],
+    });
+    expect(decoded).not.toHaveProperty('occurredAt');
+    expect(second.data[0]?.id).toBe(auditIds[2]);
+    expect(new Set([...first.data, ...second.data].map((row) => row.id)).size)
+      .toBe(first.data.length + second.data.length);
+
+    const invalidCursor = Buffer.from(JSON.stringify({
+      version: 2,
+      occurredAtMicros: 'not-microseconds',
+      source: 'audit_log',
+      id: auditIds[1],
+    })).toString('base64url');
+    await expect(service.auditHistory(auditRequestId, propertyId, {
+      limit: 2,
+      cursor: invalidCursor,
+    })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('backfills deleted-child audit tombstones from one unambiguous direct relationship', async () => {
+    const tombstoneInstallmentId = '71000000-0000-4000-a000-000000000024';
+    const tombstoneAllocationId = '71000000-0000-4000-a000-000000000025';
+    const createAuditId = '71000000-0000-4000-a000-000000000026';
+    const deleteAuditId = '71000000-0000-4000-a000-000000000027';
+    const conflictEntityId = '71000000-0000-4000-a000-000000000028';
+    const conflictAuditId = '71000000-0000-4000-a000-000000000029';
+    await db.insert(bookingRequestInstallments).values({
+      id: tombstoneInstallmentId,
+      propertyId,
+      bookingRequestId: requestId,
+      label: 'Deleted audit fixture',
+      fixedAmount: '1.00',
+      resolvedAmount: '1.00',
+      dueMilestone: 'manual',
+      sortOrder: 99,
+    });
+    await db.insert(bookingRequestPaymentAllocations).values({
+      id: tombstoneAllocationId,
+      propertyId,
+      bookingRequestId: requestId,
+      paymentId,
+      installmentId: tombstoneInstallmentId,
+      amount: '1.00',
+    });
+    await db.insert(auditLogs).values({
+      id: createAuditId,
+      propertyId,
+      bookingRequestId: requestId,
+      action: 'create',
+      entityType: 'booking_request_payment_allocation',
+      entityId: tombstoneAllocationId,
+      newValue: { amount: '1.00' },
+      occurredAt: new Date('2099-01-01T00:00:00.002Z'),
+    });
+    await db.delete(bookingRequestPaymentAllocations)
+      .where(eq(bookingRequestPaymentAllocations.id, tombstoneAllocationId));
+    await db.insert(auditLogs).values({
+      id: deleteAuditId,
+      propertyId,
+      bookingRequestId: null,
+      action: 'delete',
+      entityType: 'booking_request_payment_allocation',
+      entityId: tombstoneAllocationId,
+      previousValue: { amount: '1.00' },
+      occurredAt: new Date('2099-01-01T00:00:00.001Z'),
+    });
+    await db.insert(auditLogs).values([{
+      id: '71000000-0000-4000-a000-000000000030',
+      propertyId,
+      bookingRequestId: requestId,
+      action: 'create',
+      entityType: 'booking_request_payment_allocation',
+      entityId: conflictEntityId,
+    }, {
+      id: '71000000-0000-4000-a000-000000000031',
+      propertyId,
+      bookingRequestId: auditRequestId,
+      action: 'update',
+      entityType: 'booking_request_payment_allocation',
+      entityId: conflictEntityId,
+    }, {
+      id: conflictAuditId,
+      propertyId,
+      bookingRequestId: null,
+      action: 'delete',
+      entityType: 'booking_request_payment_allocation',
+      entityId: conflictEntityId,
+    }]);
+
+    await client.unsafe(bookingRequestAuditRelationshipMigration);
+    await client.unsafe(bookingRequestAuditRelationshipMigration);
+
+    const tombstones = await db.select().from(auditLogs)
+      .where(eq(auditLogs.entityId, tombstoneAllocationId));
+    const [conflict] = await db.select().from(auditLogs)
+      .where(eq(auditLogs.id, conflictAuditId));
+    expect(tombstones).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: createAuditId, bookingRequestId: requestId }),
+      expect.objectContaining({ id: deleteAuditId, bookingRequestId: requestId }),
+    ]));
+    expect(conflict.bookingRequestId).toBeNull();
+
+    const service = makeAuditService(db);
+    const history = await service.auditHistory(requestId, propertyId, { limit: 100 });
+    expect(history.data.map((row) => row.id)).toEqual(expect.arrayContaining([
+      createAuditId,
+      deleteAuditId,
+    ]));
   });
 
   it('serializes different-key claims so pending capacity cannot be over-reserved', async () => {

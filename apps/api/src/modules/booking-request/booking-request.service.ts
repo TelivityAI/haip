@@ -29,6 +29,7 @@ import {
   asc,
   desc,
   eq,
+  getTableColumns,
   gte,
   ilike,
   inArray,
@@ -100,16 +101,26 @@ import {
 } from './dto/booking-request-response.dto';
 
 type BookingRequestAuditCursor = {
-  version: 1;
-  occurredAt: string;
+  version: 2;
+  occurredAtMicros: string;
   source: 'audit_log';
   id: string;
 };
 
-function encodeBookingRequestAuditCursor(row: { id: string; occurredAt: Date }): string {
+type BookingRequestAuditRow = typeof auditLogs.$inferSelect & {
+  occurredAtMicros: string;
+};
+
+const POSTGRES_BIGINT_MIN = -9_223_372_036_854_775_808n;
+const POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807n;
+const auditOccurredAtMicros = sql<bigint>`
+  (extract(epoch from ${auditLogs.occurredAt}) * 1000000)::bigint
+`;
+
+function encodeBookingRequestAuditCursor(row: Pick<BookingRequestAuditRow, 'id' | 'occurredAtMicros'>): string {
   const cursor: BookingRequestAuditCursor = {
-    version: 1,
-    occurredAt: row.occurredAt.toISOString(),
+    version: 2,
+    occurredAtMicros: row.occurredAtMicros,
     source: 'audit_log',
     id: row.id,
   };
@@ -120,19 +131,26 @@ function decodeBookingRequestAuditCursor(value: string | undefined): BookingRequ
   if (!value) return null;
   try {
     const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Partial<BookingRequestAuditCursor>;
-    const occurredAt = new Date(parsed.occurredAt ?? '');
+    const occurredAtMicros = parsed.occurredAtMicros;
+    const occurredAtMicrosValue = typeof occurredAtMicros === 'string'
+      && /^-?\d{1,19}$/.test(occurredAtMicros)
+      ? BigInt(occurredAtMicros)
+      : null;
     if (
-      parsed.version !== 1
+      parsed.version !== 2
       || parsed.source !== 'audit_log'
       || typeof parsed.id !== 'string'
+      || typeof occurredAtMicros !== 'string'
       || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parsed.id)
-      || Number.isNaN(occurredAt.getTime())
+      || occurredAtMicrosValue == null
+      || occurredAtMicrosValue < POSTGRES_BIGINT_MIN
+      || occurredAtMicrosValue > POSTGRES_BIGINT_MAX
     ) throw new Error('invalid cursor');
     return {
-      version: 1,
+      version: 2,
       source: 'audit_log',
       id: parsed.id,
-      occurredAt: occurredAt.toISOString(),
+      occurredAtMicros,
     };
   } catch {
     throw new BadRequestException('Invalid booking request audit cursor');
@@ -140,12 +158,12 @@ function decodeBookingRequestAuditCursor(value: string | undefined): BookingRequ
 }
 
 function auditRowPrecedesCursor(
-  row: { id: string; occurredAt: Date },
+  row: Pick<BookingRequestAuditRow, 'id' | 'occurredAtMicros'>,
   cursor: BookingRequestAuditCursor | null,
 ): boolean {
   if (!cursor) return true;
-  const cursorTime = new Date(cursor.occurredAt).getTime();
-  const rowTime = row.occurredAt.getTime();
+  const cursorTime = BigInt(cursor.occurredAtMicros);
+  const rowTime = BigInt(row.occurredAtMicros);
   return rowTime < cursorTime || (rowTime === cursorTime && row.id < cursor.id);
 }
 
@@ -392,19 +410,21 @@ export class BookingRequestService {
     ];
     const limit = Math.max(1, Math.min(pagination.limit ?? 50, 100));
     const cursor = decodeBookingRequestAuditCursor(pagination.cursor);
-    const cursorOccurredAt = cursor ? new Date(cursor.occurredAt) : null;
     const selected = await this.db
-      .select()
+      .select({
+        ...getTableColumns(auditLogs),
+        occurredAtMicros: sql<string>`${auditOccurredAtMicros}::text`,
+      })
       .from(auditLogs)
       .where(and(
         eq(auditLogs.propertyId, propertyId),
         inArray(auditLogs.entityType, allowedEntityTypes),
         or(...entityConditions),
-        cursor && cursorOccurredAt
+        cursor
           ? or(
-            lt(auditLogs.occurredAt, cursorOccurredAt),
+            lt(auditOccurredAtMicros, sql<bigint>`${cursor.occurredAtMicros}::bigint`),
             and(
-              eq(auditLogs.occurredAt, cursorOccurredAt),
+              eq(auditOccurredAtMicros, sql<bigint>`${cursor.occurredAtMicros}::bigint`),
               lt(auditLogs.id, cursor.id),
             ),
           )
@@ -430,8 +450,11 @@ export class BookingRequestService {
         )
         && auditRowPrecedesCursor(row, cursor))
       .sort((left, right) => {
-        const time = right.occurredAt.getTime() - left.occurredAt.getTime();
-        return time !== 0 ? time : right.id.localeCompare(left.id);
+        const leftMicros = BigInt(left.occurredAtMicros);
+        const rightMicros = BigInt(right.occurredAtMicros);
+        return rightMicros !== leftMicros
+          ? (rightMicros > leftMicros ? 1 : -1)
+          : right.id.localeCompare(left.id);
       });
     const data = pageRows.slice(0, limit).map(toBookingRequestAuditHistoryItem);
     return {
