@@ -144,7 +144,93 @@
       "settingsSaved": "Booking engine settings saved",
       "settingsSaveFailed": "Failed to save settings"
     },
-    "type": "Type"
+    "type": "Type",
+    "requestSettings": {
+      "autoConfirmDescription": "Auto-confirm applies only to instant bookings; booking requests always require a staff decision.",
+      "bookingMode": "Booking mode",
+      "cardCollection": "Card collection",
+      "cardDescriptions": {
+        "disabled": "Guests submit without adding a card.",
+        "optional": "Guests choose whether to save a card for staff-initiated payments.",
+        "required": "Guests must save a card before submitting their request. No charge is made automatically."
+      },
+      "cardPolicies": {
+        "disabled": "Disabled",
+        "optional": "Optional",
+        "required": "Required"
+      },
+      "description": "Choose whether guests book instantly or submit an application for your team to review.",
+      "engineToggle": "Enable direct booking engine",
+      "invalidQuestions": "Fix the guest form before saving these settings.",
+      "loadError": "Could not load booking engine settings.",
+      "loading": "Loading booking engine settings",
+      "modeDescriptions": {
+        "instant": "A successful checkout follows the existing instant-booking flow.",
+        "request": "Submission creates a pending request without confirming a reservation."
+      },
+      "modes": {
+        "instant": "Instant booking",
+        "request": "Booking request"
+      },
+      "requiredCardWarning": "Add a Stripe publishable key before requiring card collection.",
+      "reset": "Reset changes",
+      "retry": "Try again",
+      "save": "Save changes",
+      "saveError": "Could not save booking engine settings.",
+      "saving": "Saving changes",
+      "stripeKey": "Stripe publishable key",
+      "stripeKeyDescription": "Use the publishable key for this property. Stripe secret keys stay on the server.",
+      "stripeKeyPlaceholder": "pk_live_…",
+      "title": "Booking request workflow",
+      "unsaved": "Unsaved changes"
+    },
+    "questions": {
+      "active": "Active",
+      "activeQuestion": "Active question",
+      "add": "Add question",
+      "addOption": "Add option",
+      "addTitle": "Add a question",
+      "cancel": "Cancel",
+      "cancelEditor": "Close question editor",
+      "count": "{{count}} of {{max}} questions",
+      "description": "Build the ordered application guests complete before submitting a booking request.",
+      "disable": "Disable {{label}}",
+      "duplicateIds": "Question IDs must be unique before this form can be edited.",
+      "edit": "Edit {{label}}",
+      "editTitle": "Edit question",
+      "emptyDescription": "Add only the information your team needs to review a request.",
+      "emptyTitle": "No application questions yet",
+      "enable": "Enable {{label}}",
+      "idError": "A unique question ID could not be created. Try again.",
+      "inactive": "Inactive",
+      "label": "Question label",
+      "labelRequired": "Enter a question label.",
+      "moveDown": "Move {{label}} down",
+      "moveOptionDown": "Move option {{number}} down",
+      "moveOptionUp": "Move option {{number}} up",
+      "moveUp": "Move {{label}} up",
+      "optionBlank": "Options cannot be blank.",
+      "optionDuplicate": "Options must be unique.",
+      "optionLabel": "Option {{number}}",
+      "optionRequired": "Add at least one option.",
+      "optional": "Optional",
+      "options": "Answer options",
+      "remove": "Remove {{label}}",
+      "removeOption": "Remove option {{number}}",
+      "required": "Required",
+      "requiredQuestion": "Required question",
+      "save": "Save question",
+      "title": "Guest form blueprint",
+      "type": "Question type",
+      "types": {
+        "short_text": "Short text",
+        "long_text": "Long text",
+        "single_select": "Single select",
+        "multi_select": "Multiple select",
+        "yes_no": "Yes / no",
+        "date": "Date"
+      }
+    }
   },
   "cashier": {
     "amount": "Amount",

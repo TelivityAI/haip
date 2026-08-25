@@ -144,7 +144,93 @@
       "settingsSaved": "Postavke sustava za rezervacije su spremljene",
       "settingsSaveFailed": "Spremanje postavki nije uspjelo"
     },
-    "type": "Tip"
+    "type": "Tip",
+    "requestSettings": {
+      "autoConfirmDescription": "Automatska potvrda odnosi se samo na trenutne rezervacije; zahtjevi uvijek trebaju odluku osoblja.",
+      "bookingMode": "Način rezervacije",
+      "cardCollection": "Prikupljanje kartice",
+      "cardDescriptions": {
+        "disabled": "Gosti šalju zahtjev bez dodavanja kartice.",
+        "optional": "Gosti biraju žele li spremiti karticu za plaćanja koja pokreće osoblje.",
+        "required": "Gosti moraju spremiti karticu prije slanja zahtjeva. Nema automatske naplate."
+      },
+      "cardPolicies": {
+        "disabled": "Onemogućeno",
+        "optional": "Neobavezno",
+        "required": "Obavezno"
+      },
+      "description": "Odaberite rezerviraju li gosti odmah ili šalju prijavu na pregled vašem timu.",
+      "engineToggle": "Omogući sustav za izravne rezervacije",
+      "invalidQuestions": "Ispravite obrazac za goste prije spremanja ovih postavki.",
+      "loadError": "Nije moguće učitati postavke sustava za rezervacije.",
+      "loading": "Učitavanje postavki sustava za rezervacije",
+      "modeDescriptions": {
+        "instant": "Uspješna naplata slijedi postojeći tijek trenutne rezervacije.",
+        "request": "Slanje stvara zahtjev na čekanju bez potvrde rezervacije."
+      },
+      "modes": {
+        "instant": "Trenutna rezervacija",
+        "request": "Zahtjev za rezervaciju"
+      },
+      "requiredCardWarning": "Dodajte Stripeov javni ključ prije obaveznog prikupljanja kartice.",
+      "reset": "Poništi promjene",
+      "retry": "Pokušaj ponovno",
+      "save": "Spremi promjene",
+      "saveError": "Nije moguće spremiti postavke sustava za rezervacije.",
+      "saving": "Spremanje promjena",
+      "stripeKey": "Stripeov javni ključ",
+      "stripeKeyDescription": "Upotrijebite javni ključ ovog objekta. Tajni Stripeovi ključevi ostaju na poslužitelju.",
+      "stripeKeyPlaceholder": "pk_live_…",
+      "title": "Tijek zahtjeva za rezervaciju",
+      "unsaved": "Nespremljene promjene"
+    },
+    "questions": {
+      "active": "Aktivno",
+      "activeQuestion": "Aktivno pitanje",
+      "add": "Dodaj pitanje",
+      "addOption": "Dodaj mogućnost",
+      "addTitle": "Dodaj pitanje",
+      "cancel": "Odustani",
+      "cancelEditor": "Zatvori uređivač pitanja",
+      "count": "{{count}} od {{max}} pitanja",
+      "description": "Sastavite redoslijed prijave koju gosti ispunjavaju prije slanja zahtjeva za rezervaciju.",
+      "disable": "Onemogući {{label}}",
+      "duplicateIds": "Identifikatori pitanja moraju biti jedinstveni kako bi se obrazac mogao uređivati.",
+      "edit": "Uredi {{label}}",
+      "editTitle": "Uredi pitanje",
+      "emptyDescription": "Dodajte samo podatke potrebne vašem timu za pregled zahtjeva.",
+      "emptyTitle": "Još nema pitanja u prijavi",
+      "enable": "Omogući {{label}}",
+      "idError": "Nije moguće izraditi jedinstveni identifikator. Pokušajte ponovno.",
+      "inactive": "Neaktivno",
+      "label": "Tekst pitanja",
+      "labelRequired": "Unesite tekst pitanja.",
+      "moveDown": "Pomakni {{label}} dolje",
+      "moveOptionDown": "Pomakni mogućnost {{number}} dolje",
+      "moveOptionUp": "Pomakni mogućnost {{number}} gore",
+      "moveUp": "Pomakni {{label}} gore",
+      "optionBlank": "Mogućnosti ne smiju biti prazne.",
+      "optionDuplicate": "Mogućnosti moraju biti jedinstvene.",
+      "optionLabel": "Mogućnost {{number}}",
+      "optionRequired": "Dodajte barem jednu mogućnost.",
+      "optional": "Neobavezno",
+      "options": "Mogućnosti odgovora",
+      "remove": "Ukloni {{label}}",
+      "removeOption": "Ukloni mogućnost {{number}}",
+      "required": "Obavezno",
+      "requiredQuestion": "Obavezno pitanje",
+      "save": "Spremi pitanje",
+      "title": "Plan obrasca za goste",
+      "type": "Vrsta pitanja",
+      "types": {
+        "short_text": "Kratki tekst",
+        "long_text": "Dugi tekst",
+        "single_select": "Jedan odabir",
+        "multi_select": "Višestruki odabir",
+        "yes_no": "Da / ne",
+        "date": "Datum"
+      }
+    }
   },
   "cashier": {
     "amount": "Iznos",

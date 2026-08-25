@@ -103,26 +103,26 @@ export default function MediaGallery({ propertyId, ownerType, ownerId, canManage
 
       {canManage && (
         <div className="mt-4 border-t border-gray-100 pt-4 space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <LinkIcon size={14} className="text-telivity-mid-grey shrink-0" />
             <input
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder={t('media.urlPlaceholder')}
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
+              className="w-full min-w-0 sm:flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
             />
             <input
               type="text"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
               placeholder={t('media.captionPlaceholder')}
-              className="w-40 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
+              className="w-full sm:w-40 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
             />
             <button
               onClick={submitUrl}
               disabled={!url.trim() || addByUrl.isPending}
-              className="bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 shrink-0"
+              className="w-full sm:w-auto bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 shrink-0"
             >
               {t('media.add')}
             </button>

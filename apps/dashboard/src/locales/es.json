@@ -144,7 +144,93 @@
       "settingsSaved": "Configuración del motor de reservas guardada",
       "settingsSaveFailed": "Error al guardar la configuración"
     },
-    "type": "Tipo"
+    "type": "Tipo",
+    "requestSettings": {
+      "autoConfirmDescription": "La confirmación automática solo se aplica a reservas instantáneas; las peticiones siempre requieren una decisión del personal.",
+      "bookingMode": "Modo de reserva",
+      "cardCollection": "Recopilación de tarjeta",
+      "cardDescriptions": {
+        "disabled": "Los huéspedes envían la petición sin añadir una tarjeta.",
+        "optional": "Los huéspedes eligen si desean guardar una tarjeta para pagos iniciados por el personal.",
+        "required": "Los huéspedes deben guardar una tarjeta antes de enviar la petición. No se realiza ningún cargo automático."
+      },
+      "cardPolicies": {
+        "disabled": "Desactivada",
+        "optional": "Opcional",
+        "required": "Obligatoria"
+      },
+      "description": "Elija si los huéspedes reservan al instante o envían una solicitud para que su equipo la revise.",
+      "engineToggle": "Activar el motor de reserva directa",
+      "invalidQuestions": "Corrija el formulario del huésped antes de guardar estos ajustes.",
+      "loadError": "No se pudo cargar la configuración del motor de reservas.",
+      "loading": "Cargando la configuración del motor de reservas",
+      "modeDescriptions": {
+        "instant": "Un pago correcto sigue el flujo actual de reserva instantánea.",
+        "request": "El envío crea una petición pendiente sin confirmar una reserva."
+      },
+      "modes": {
+        "instant": "Reserva instantánea",
+        "request": "Petición de reserva"
+      },
+      "requiredCardWarning": "Añada una clave publicable de Stripe antes de exigir una tarjeta.",
+      "reset": "Restablecer cambios",
+      "retry": "Intentar de nuevo",
+      "save": "Guardar cambios",
+      "saveError": "No se pudo guardar la configuración del motor de reservas.",
+      "saving": "Guardando cambios",
+      "stripeKey": "Clave publicable de Stripe",
+      "stripeKeyDescription": "Use la clave publicable de esta propiedad. Las claves secretas de Stripe permanecen en el servidor.",
+      "stripeKeyPlaceholder": "pk_live_…",
+      "title": "Flujo de peticiones de reserva",
+      "unsaved": "Cambios sin guardar"
+    },
+    "questions": {
+      "active": "Activa",
+      "activeQuestion": "Pregunta activa",
+      "add": "Añadir pregunta",
+      "addOption": "Añadir opción",
+      "addTitle": "Añadir una pregunta",
+      "cancel": "Cancelar",
+      "cancelEditor": "Cerrar el editor de preguntas",
+      "count": "{{count}} de {{max}} preguntas",
+      "description": "Cree la solicitud ordenada que los huéspedes completan antes de enviar una petición de reserva.",
+      "disable": "Desactivar {{label}}",
+      "duplicateIds": "Los identificadores de las preguntas deben ser únicos para poder editar este formulario.",
+      "edit": "Editar {{label}}",
+      "editTitle": "Editar pregunta",
+      "emptyDescription": "Añada solo la información que su equipo necesita para revisar una petición.",
+      "emptyTitle": "Aún no hay preguntas en la solicitud",
+      "enable": "Activar {{label}}",
+      "idError": "No se pudo crear un identificador único. Inténtelo de nuevo.",
+      "inactive": "Inactiva",
+      "label": "Texto de la pregunta",
+      "labelRequired": "Introduzca el texto de la pregunta.",
+      "moveDown": "Bajar {{label}}",
+      "moveOptionDown": "Bajar la opción {{number}}",
+      "moveOptionUp": "Subir la opción {{number}}",
+      "moveUp": "Subir {{label}}",
+      "optionBlank": "Las opciones no pueden estar vacías.",
+      "optionDuplicate": "Las opciones deben ser únicas.",
+      "optionLabel": "Opción {{number}}",
+      "optionRequired": "Añada al menos una opción.",
+      "optional": "Opcional",
+      "options": "Opciones de respuesta",
+      "remove": "Eliminar {{label}}",
+      "removeOption": "Eliminar la opción {{number}}",
+      "required": "Obligatoria",
+      "requiredQuestion": "Pregunta obligatoria",
+      "save": "Guardar pregunta",
+      "title": "Estructura del formulario del huésped",
+      "type": "Tipo de pregunta",
+      "types": {
+        "short_text": "Texto corto",
+        "long_text": "Texto largo",
+        "single_select": "Selección única",
+        "multi_select": "Selección múltiple",
+        "yes_no": "Sí / no",
+        "date": "Fecha"
+      }
+    }
   },
   "cashier": {
     "amount": "Monto",

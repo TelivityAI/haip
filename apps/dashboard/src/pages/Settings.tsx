@@ -41,12 +41,12 @@ export default function Settings() {
         <h1 className="text-2xl font-semibold text-telivity-navy">{t('settings.title')}</h1>
       </div>
 
-      <div className="flex gap-1 bg-white rounded-xl shadow-sm p-1 mb-4">
+      <div className="flex gap-1 bg-white rounded-xl shadow-sm p-1 mb-4 overflow-x-auto">
         {TABS.map((tabItem) => (
           <button
             key={tabItem.key}
             onClick={() => setTab(tabItem.key)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${tab === tabItem.key ? 'bg-telivity-teal text-white' : 'text-telivity-slate hover:bg-telivity-light-grey'
+            className={`flex-1 min-w-max sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-0 py-2.5 rounded-lg text-sm font-medium transition-colors motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-teal focus-visible:ring-inset ${tab === tabItem.key ? 'bg-telivity-teal text-white' : 'text-telivity-slate hover:bg-telivity-light-grey'
               }`}
           >
             <tabItem.icon size={16} />
@@ -304,4 +304,3 @@ function WebhookSettings({ propertyId }: { propertyId: string }) {
     </div>
   );
 }
-

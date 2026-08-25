@@ -144,7 +144,93 @@
       "settingsSaved": "Paramètres du moteur de réservation enregistrés",
       "settingsSaveFailed": "Échec de l’enregistrement des paramètres"
     },
-    "type": "Type"
+    "type": "Type",
+    "requestSettings": {
+      "autoConfirmDescription": "La confirmation automatique concerne uniquement les réservations instantanées ; les demandes exigent toujours une décision du personnel.",
+      "bookingMode": "Mode de réservation",
+      "cardCollection": "Enregistrement de la carte",
+      "cardDescriptions": {
+        "disabled": "Les clients envoient leur demande sans ajouter de carte.",
+        "optional": "Les clients choisissent d’enregistrer ou non une carte pour les paiements initiés par le personnel.",
+        "required": "Les clients doivent enregistrer une carte avant l’envoi. Aucun débit n’est effectué automatiquement."
+      },
+      "cardPolicies": {
+        "disabled": "Désactivé",
+        "optional": "Facultatif",
+        "required": "Obligatoire"
+      },
+      "description": "Choisissez entre une réservation instantanée et une demande examinée par votre équipe.",
+      "engineToggle": "Activer le moteur de réservation directe",
+      "invalidQuestions": "Corrigez le formulaire client avant d’enregistrer ces paramètres.",
+      "loadError": "Impossible de charger les paramètres du moteur de réservation.",
+      "loading": "Chargement des paramètres du moteur de réservation",
+      "modeDescriptions": {
+        "instant": "Un paiement réussi suit le processus actuel de réservation instantanée.",
+        "request": "L’envoi crée une demande en attente sans confirmer de réservation."
+      },
+      "modes": {
+        "instant": "Réservation instantanée",
+        "request": "Demande de réservation"
+      },
+      "requiredCardWarning": "Ajoutez une clé publique Stripe avant d’exiger une carte.",
+      "reset": "Réinitialiser les modifications",
+      "retry": "Réessayer",
+      "save": "Enregistrer les modifications",
+      "saveError": "Impossible d’enregistrer les paramètres du moteur de réservation.",
+      "saving": "Enregistrement des modifications",
+      "stripeKey": "Clé publique Stripe",
+      "stripeKeyDescription": "Utilisez la clé publique de cet établissement. Les clés secrètes Stripe restent sur le serveur.",
+      "stripeKeyPlaceholder": "pk_live_…",
+      "title": "Processus de demande de réservation",
+      "unsaved": "Modifications non enregistrées"
+    },
+    "questions": {
+      "active": "Active",
+      "activeQuestion": "Question active",
+      "add": "Ajouter une question",
+      "addOption": "Ajouter une option",
+      "addTitle": "Ajouter une question",
+      "cancel": "Annuler",
+      "cancelEditor": "Fermer l’éditeur de question",
+      "count": "{{count}} question(s) sur {{max}}",
+      "description": "Créez le formulaire ordonné que les clients remplissent avant d’envoyer une demande de réservation.",
+      "disable": "Désactiver {{label}}",
+      "duplicateIds": "Les identifiants des questions doivent être uniques pour modifier ce formulaire.",
+      "edit": "Modifier {{label}}",
+      "editTitle": "Modifier la question",
+      "emptyDescription": "Ajoutez uniquement les informations nécessaires à l’examen d’une demande.",
+      "emptyTitle": "Aucune question dans le formulaire",
+      "enable": "Activer {{label}}",
+      "idError": "Impossible de créer un identifiant unique. Réessayez.",
+      "inactive": "Inactive",
+      "label": "Libellé de la question",
+      "labelRequired": "Saisissez le libellé de la question.",
+      "moveDown": "Descendre {{label}}",
+      "moveOptionDown": "Descendre l’option {{number}}",
+      "moveOptionUp": "Monter l’option {{number}}",
+      "moveUp": "Monter {{label}}",
+      "optionBlank": "Les options ne peuvent pas être vides.",
+      "optionDuplicate": "Les options doivent être uniques.",
+      "optionLabel": "Option {{number}}",
+      "optionRequired": "Ajoutez au moins une option.",
+      "optional": "Facultative",
+      "options": "Options de réponse",
+      "remove": "Supprimer {{label}}",
+      "removeOption": "Supprimer l’option {{number}}",
+      "required": "Obligatoire",
+      "requiredQuestion": "Question obligatoire",
+      "save": "Enregistrer la question",
+      "title": "Plan du formulaire client",
+      "type": "Type de question",
+      "types": {
+        "short_text": "Texte court",
+        "long_text": "Texte long",
+        "single_select": "Sélection unique",
+        "multi_select": "Sélection multiple",
+        "yes_no": "Oui / non",
+        "date": "Date"
+      }
+    }
   },
   "cashier": {
     "amount": "Montant",

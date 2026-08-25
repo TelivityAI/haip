@@ -144,7 +144,93 @@
       "settingsSaved": "Podešavanja mehanizma za rezervacije su sačuvana",
       "settingsSaveFailed": "Čuvanje podešavanja nije uspelo"
     },
-    "type": "Tip"
+    "type": "Tip",
+    "requestSettings": {
+      "autoConfirmDescription": "Automatska potvrda važi samo za trenutne rezervacije; zahtevi uvek traže odluku osoblja.",
+      "bookingMode": "Način rezervacije",
+      "cardCollection": "Prikupljanje kartice",
+      "cardDescriptions": {
+        "disabled": "Gosti šalju zahtev bez dodavanja kartice.",
+        "optional": "Gosti biraju da li žele da sačuvaju karticu za plaćanja koja pokreće osoblje.",
+        "required": "Gosti moraju da sačuvaju karticu pre slanja zahteva. Nema automatske naplate."
+      },
+      "cardPolicies": {
+        "disabled": "Onemogućeno",
+        "optional": "Opciono",
+        "required": "Obavezno"
+      },
+      "description": "Izaberite da li gosti rezervišu odmah ili šalju prijavu vašem timu na pregled.",
+      "engineToggle": "Omogući sistem za direktne rezervacije",
+      "invalidQuestions": "Ispravite obrazac za goste pre čuvanja ovih podešavanja.",
+      "loadError": "Nije moguće učitati podešavanja sistema za rezervacije.",
+      "loading": "Učitavanje podešavanja sistema za rezervacije",
+      "modeDescriptions": {
+        "instant": "Uspešna naplata prati postojeći tok trenutne rezervacije.",
+        "request": "Slanje pravi zahtev na čekanju bez potvrde rezervacije."
+      },
+      "modes": {
+        "instant": "Trenutna rezervacija",
+        "request": "Zahtev za rezervaciju"
+      },
+      "requiredCardWarning": "Dodajte Stripe javni ključ pre obaveznog prikupljanja kartice.",
+      "reset": "Poništi promene",
+      "retry": "Pokušaj ponovo",
+      "save": "Sačuvaj promene",
+      "saveError": "Nije moguće sačuvati podešavanja sistema za rezervacije.",
+      "saving": "Čuvanje promena",
+      "stripeKey": "Stripe javni ključ",
+      "stripeKeyDescription": "Koristite javni ključ ovog objekta. Tajni Stripe ključevi ostaju na serveru.",
+      "stripeKeyPlaceholder": "pk_live_…",
+      "title": "Tok zahteva za rezervaciju",
+      "unsaved": "Nesačuvane promene"
+    },
+    "questions": {
+      "active": "Aktivno",
+      "activeQuestion": "Aktivno pitanje",
+      "add": "Dodaj pitanje",
+      "addOption": "Dodaj opciju",
+      "addTitle": "Dodaj pitanje",
+      "cancel": "Otkaži",
+      "cancelEditor": "Zatvori uređivač pitanja",
+      "count": "{{count}} od {{max}} pitanja",
+      "description": "Sastavite redosled prijave koju gosti popunjavaju pre slanja zahteva za rezervaciju.",
+      "disable": "Onemogući {{label}}",
+      "duplicateIds": "Identifikatori pitanja moraju biti jedinstveni da bi obrazac mogao da se uređuje.",
+      "edit": "Uredi {{label}}",
+      "editTitle": "Uredi pitanje",
+      "emptyDescription": "Dodajte samo podatke koji su timu potrebni za pregled zahteva.",
+      "emptyTitle": "Još nema pitanja u prijavi",
+      "enable": "Omogući {{label}}",
+      "idError": "Nije moguće napraviti jedinstveni identifikator. Pokušajte ponovo.",
+      "inactive": "Neaktivno",
+      "label": "Tekst pitanja",
+      "labelRequired": "Unesite tekst pitanja.",
+      "moveDown": "Pomeri {{label}} nadole",
+      "moveOptionDown": "Pomeri opciju {{number}} nadole",
+      "moveOptionUp": "Pomeri opciju {{number}} nagore",
+      "moveUp": "Pomeri {{label}} nagore",
+      "optionBlank": "Opcije ne smeju biti prazne.",
+      "optionDuplicate": "Opcije moraju biti jedinstvene.",
+      "optionLabel": "Opcija {{number}}",
+      "optionRequired": "Dodajte najmanje jednu opciju.",
+      "optional": "Opciono",
+      "options": "Opcije odgovora",
+      "remove": "Ukloni {{label}}",
+      "removeOption": "Ukloni opciju {{number}}",
+      "required": "Obavezno",
+      "requiredQuestion": "Obavezno pitanje",
+      "save": "Sačuvaj pitanje",
+      "title": "Plan obrasca za goste",
+      "type": "Vrsta pitanja",
+      "types": {
+        "short_text": "Kratak tekst",
+        "long_text": "Dugačak tekst",
+        "single_select": "Jedan izbor",
+        "multi_select": "Višestruki izbor",
+        "yes_no": "Da / ne",
+        "date": "Datum"
+      }
+    }
   },
   "cashier": {
     "amount": "Iznos",

@@ -144,7 +144,93 @@
       "settingsSaved": "Impostazioni del motore di prenotazione salvate",
       "settingsSaveFailed": "Salvataggio delle impostazioni non riuscito"
     },
-    "type": "Tipo"
+    "type": "Tipo",
+    "requestSettings": {
+      "autoConfirmDescription": "La conferma automatica si applica solo alle prenotazioni immediate; le richieste richiedono sempre una decisione del personale.",
+      "bookingMode": "Modalità di prenotazione",
+      "cardCollection": "Raccolta della carta",
+      "cardDescriptions": {
+        "disabled": "Gli ospiti inviano la richiesta senza aggiungere una carta.",
+        "optional": "Gli ospiti scelgono se salvare una carta per i pagamenti avviati dal personale.",
+        "required": "Gli ospiti devono salvare una carta prima dell’invio. Non viene effettuato alcun addebito automatico."
+      },
+      "cardPolicies": {
+        "disabled": "Disabilitata",
+        "optional": "Facoltativa",
+        "required": "Obbligatoria"
+      },
+      "description": "Scegli se gli ospiti prenotano subito o inviano una richiesta da esaminare.",
+      "engineToggle": "Attiva il motore di prenotazione diretta",
+      "invalidQuestions": "Correggi il modulo ospite prima di salvare queste impostazioni.",
+      "loadError": "Impossibile caricare le impostazioni del motore di prenotazione.",
+      "loading": "Caricamento delle impostazioni del motore di prenotazione",
+      "modeDescriptions": {
+        "instant": "Un pagamento riuscito segue il flusso di prenotazione immediata esistente.",
+        "request": "L’invio crea una richiesta in attesa senza confermare una prenotazione."
+      },
+      "modes": {
+        "instant": "Prenotazione immediata",
+        "request": "Richiesta di prenotazione"
+      },
+      "requiredCardWarning": "Aggiungi una chiave pubblicabile Stripe prima di rendere obbligatoria la carta.",
+      "reset": "Ripristina modifiche",
+      "retry": "Riprova",
+      "save": "Salva modifiche",
+      "saveError": "Impossibile salvare le impostazioni del motore di prenotazione.",
+      "saving": "Salvataggio delle modifiche",
+      "stripeKey": "Chiave pubblicabile Stripe",
+      "stripeKeyDescription": "Usa la chiave pubblicabile di questa struttura. Le chiavi segrete Stripe restano sul server.",
+      "stripeKeyPlaceholder": "pk_live_…",
+      "title": "Flusso delle richieste di prenotazione",
+      "unsaved": "Modifiche non salvate"
+    },
+    "questions": {
+      "active": "Attiva",
+      "activeQuestion": "Domanda attiva",
+      "add": "Aggiungi domanda",
+      "addOption": "Aggiungi opzione",
+      "addTitle": "Aggiungi una domanda",
+      "cancel": "Annulla",
+      "cancelEditor": "Chiudi l’editor della domanda",
+      "count": "{{count}} domande su {{max}}",
+      "description": "Crea il modulo ordinato che gli ospiti compilano prima di inviare una richiesta di prenotazione.",
+      "disable": "Disattiva {{label}}",
+      "duplicateIds": "Gli identificativi delle domande devono essere univoci per modificare il modulo.",
+      "edit": "Modifica {{label}}",
+      "editTitle": "Modifica domanda",
+      "emptyDescription": "Aggiungi solo le informazioni necessarie al team per valutare una richiesta.",
+      "emptyTitle": "Nessuna domanda nel modulo",
+      "enable": "Attiva {{label}}",
+      "idError": "Impossibile creare un identificativo univoco. Riprova.",
+      "inactive": "Inattiva",
+      "label": "Testo della domanda",
+      "labelRequired": "Inserisci il testo della domanda.",
+      "moveDown": "Sposta {{label}} in basso",
+      "moveOptionDown": "Sposta l’opzione {{number}} in basso",
+      "moveOptionUp": "Sposta l’opzione {{number}} in alto",
+      "moveUp": "Sposta {{label}} in alto",
+      "optionBlank": "Le opzioni non possono essere vuote.",
+      "optionDuplicate": "Le opzioni devono essere univoche.",
+      "optionLabel": "Opzione {{number}}",
+      "optionRequired": "Aggiungi almeno un’opzione.",
+      "optional": "Facoltativa",
+      "options": "Opzioni di risposta",
+      "remove": "Rimuovi {{label}}",
+      "removeOption": "Rimuovi l’opzione {{number}}",
+      "required": "Obbligatoria",
+      "requiredQuestion": "Domanda obbligatoria",
+      "save": "Salva domanda",
+      "title": "Schema del modulo ospite",
+      "type": "Tipo di domanda",
+      "types": {
+        "short_text": "Testo breve",
+        "long_text": "Testo lungo",
+        "single_select": "Selezione singola",
+        "multi_select": "Selezione multipla",
+        "yes_no": "Sì / no",
+        "date": "Data"
+      }
+    }
   },
   "cashier": {
     "amount": "Importo",
