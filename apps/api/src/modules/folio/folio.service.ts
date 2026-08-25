@@ -14,6 +14,7 @@ import {
   reservations,
   bookings,
   reservationServices,
+  auditRuns,
 } from '@telivityhaip/database';
 import type { AcceptedPricingSnapshot } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
@@ -308,12 +309,7 @@ export class FolioService {
       .where(and(eq(folios.id, folioId), eq(folios.propertyId, propertyId)));
   }
 
-  /**
-   * Reconcile only accepted-pricing groups that have already reached the
-   * ledger. Removed unlocked groups receive canonical parent/child reversals;
-   * locked removals and changed posted overlap collapse into one amendment-
-   * linked adjustment. Missing groups are deliberately left for night audit.
-   */
+  /** Reconcile immutable accepted-pricing groups without changing unrelated folio revenue. */
   async reconcileAcceptedStayAmendment(
     input: AcceptedStayAmendmentReconciliationInput,
   ): Promise<{ reversedChargeIds: string[]; adjustmentAmount: string }> {
@@ -369,6 +365,96 @@ export class FolioService {
       ? await chargeQuery.for('update')
       : await chargeQuery)
       .filter((row: any) => row.propertyId === propertyId && row.folioId === folioId);
+    const completedAudits = await tx
+      .select({ businessDate: auditRuns.businessDate })
+      .from(auditRuns)
+      .where(and(
+        eq(auditRuns.propertyId, propertyId),
+        eq(auditRuns.status, 'completed' as any),
+      ));
+    const calendarDate = (value: unknown) => value instanceof Date
+      ? value.toISOString().slice(0, 10)
+      : typeof value === 'string'
+        ? value.slice(0, 10)
+        : null;
+    const latestClosedDate = [
+      ...completedAudits.map((row: any) => calendarDate(row.businessDate)),
+      ...ledger
+        .filter((row: any) => row.isLocked)
+        .map((row: any) => calendarDate(row.lockedByAuditDate)),
+    ]
+      .filter((value): value is string => value != null)
+      .sort()
+      .at(-1);
+
+    type DesiredGroup = {
+      sourceKey: string;
+      serviceDate: string;
+      description: string;
+      baseType: string;
+      baseAmount: string;
+      taxAmount: string;
+      customAdjustment?: { amount: string; reason: string };
+      reservationServiceId?: string;
+    };
+    const desiredGroups = new Map<string, DesiredGroup>();
+    for (const night of newPricing.nights) {
+      const sourceKey = `accepted-pricing:reservation:${reservationId}:night:${night.date}`;
+      desiredGroups.set(sourceKey, {
+        sourceKey,
+        serviceDate: night.date,
+        description: `Room tariff - ${night.date}`,
+        baseType: 'room',
+        baseAmount: night.roomAmount,
+        taxAmount: night.taxAmount,
+        customAdjustment: newPricing.adjustment?.serviceDate === night.date
+          ? {
+              amount: newPricing.adjustment.amount,
+              reason: newPricing.adjustment.reason,
+            }
+          : undefined,
+      });
+    }
+    const serviceRowsByServiceId = new Map<string, any[]>();
+    for (const row of serviceRows) {
+      const current = serviceRowsByServiceId.get(row.serviceId) ?? [];
+      current.push(row);
+      serviceRowsByServiceId.set(row.serviceId, current);
+    }
+    for (const pricedService of [...previousPricing.services, ...newPricing.services]) {
+      if (
+        pricedService.postingRule !== 'on_consumption'
+        && !serviceRowsByServiceId.has(pricedService.serviceId)
+      ) {
+        throw new ConflictException(
+          `Accepted service ${pricedService.code} has no linked reservation service`,
+        );
+      }
+    }
+    for (const pricedService of newPricing.services) {
+      if (pricedService.postingRule === 'on_consumption') continue;
+      const linkedRows = serviceRowsByServiceId.get(pricedService.serviceId) ?? [];
+      for (const row of linkedRows) {
+        const lines = pricedService.postingRule === 'per_night'
+          ? pricedService.lineItems
+          : pricedService.lineItems.slice(0, 1);
+        for (const line of lines) {
+          const suffix = pricedService.postingRule === 'per_night'
+            ? `night:${line.date}`
+            : 'once';
+          const sourceKey = `accepted-pricing:reservation-service:${row.id}:${suffix}`;
+          desiredGroups.set(sourceKey, {
+            sourceKey,
+            serviceDate: line.date,
+            description: `${pricedService.name} [svc:${row.id}]`.slice(0, 255),
+            baseType: pricedService.chargeType,
+            baseAmount: line.amount,
+            taxAmount: line.taxAmount,
+            reservationServiceId: row.id,
+          });
+        }
+      }
+    }
     const acceptedBases = ledger.filter((row: any) =>
       !row.isReversal
       && row.parentChargeId == null
@@ -381,28 +467,6 @@ export class FolioService {
         })()
       ));
 
-    const desiredFor = (sourceKey: string): Decimal | null => {
-      const roomPrefix = `accepted-pricing:reservation:${reservationId}:night:`;
-      if (sourceKey.startsWith(roomPrefix)) {
-        const date = sourceKey.slice(roomPrefix.length);
-        const night = newPricing.nights.find((candidate) => candidate.date === date);
-        if (!night) return null;
-        return new Decimal(night.roomAmount)
-          .plus(night.taxAmount)
-          .plus(newPricing.adjustment?.serviceDate === date
-            ? newPricing.adjustment.amount
-            : 0);
-      }
-      const match = /^accepted-pricing:reservation-service:([^:]+):(once|night:(\d{4}-\d{2}-\d{2}))$/.exec(sourceKey);
-      if (!match) return null;
-      const serviceId = servicesByRowId.get(match[1]!);
-      const service = newPricing.services.find((candidate) => candidate.serviceId === serviceId);
-      if (!service) return null;
-      const line = match[2] === 'once'
-        ? service.lineItems[0]
-        : service.lineItems.find((candidate) => candidate.date === match[3]);
-      return line ? new Decimal(line.amount).plus(line.taxAmount) : null;
-    };
     const groupRows = (base: any) => {
       const children = ledger.filter((row: any) =>
         !row.isReversal && row.parentChargeId === base.id);
@@ -411,109 +475,175 @@ export class FolioService {
         row.isReversal && originals.has(row.originalChargeId));
       return { children, reversals, all: [base, ...children, ...reversals] };
     };
-    const rowAmount = (row: any) => new Decimal(row.amount ?? 0).plus(row.taxAmount ?? 0);
     const reversedChargeIds: string[] = [];
     const amendmentSourcePrefix = `accepted-pricing:reservation:${reservationId}:amendment:`;
-    const priorAmendmentNet = ledger
-      .filter((row: any) =>
+    let adjustment = new Decimal(0);
+
+    const componentKey = (row: any, base: any): string => {
+      const marker = typeof row.sourceKey === 'string'
+        ? /:component:[^:]+:(base:[^:]+|tax|custom)$/.exec(row.sourceKey)?.[1]
+        : undefined;
+      if (marker) return marker;
+      if (row.id === base.id) return `base:${row.type}`;
+      if (row.type === 'tax') return 'tax';
+      if (row.type === 'adjustment') return 'custom';
+      return `base:${row.type}`;
+    };
+    const componentTotals = (base: any, all: any[]) => {
+      const totals = new Map<string, Decimal>();
+      for (const row of all) {
+        const key = componentKey(row, base);
+        totals.set(key, (totals.get(key) ?? new Decimal(0)).plus(row.amount ?? 0));
+        if (!new Decimal(row.taxAmount ?? 0).isZero()) {
+          totals.set('tax', (totals.get('tax') ?? new Decimal(0)).plus(row.taxAmount));
+        }
+      }
+      return totals;
+    };
+    const desiredComponents = (desired?: DesiredGroup) => {
+      const totals = new Map<string, Decimal>();
+      if (!desired) return totals;
+      totals.set(`base:${desired.baseType}`, new Decimal(desired.baseAmount));
+      totals.set('tax', new Decimal(desired.taxAmount));
+      if (desired.customAdjustment) {
+        totals.set('custom', new Decimal(desired.customAdjustment.amount));
+      }
+      return totals;
+    };
+    const insert = async (
+      values: Record<string, any>,
+      claimSource = false,
+    ): Promise<{ row: any; created: boolean }> => {
+      let statement: any = tx.insert(charges).values(values);
+      if (claimSource && typeof statement.onConflictDoNothing === 'function') {
+        statement = statement.onConflictDoNothing({
+          target: [charges.propertyId, charges.folioId, charges.sourceKey],
+        });
+      }
+      const [created] = await statement.returning();
+      if (created || !claimSource) return { row: created, created: true };
+      const [existing] = await tx
+        .select()
+        .from(charges)
+        .where(and(
+          eq(charges.propertyId, propertyId),
+          eq(charges.folioId, folioId),
+          eq(charges.sourceKey, values['sourceKey']),
+        ));
+      return { row: existing, created: false };
+    };
+    const correction = async (
+      base: any,
+      all: any[],
+      key: string,
+      delta: Decimal,
+      desired?: DesiredGroup,
+      trackAdjustment = true,
+    ) => {
+      if (delta.isZero()) return;
+      const type = key.startsWith('base:') ? key.slice(5) : key === 'tax' ? 'tax' : 'adjustment';
+      const original = all.find((row: any) =>
         !row.isReversal
-        && row.parentChargeId == null
-        && typeof row.sourceKey === 'string'
-        && row.sourceKey.startsWith(amendmentSourcePrefix)
-        && row.sourceKey.endsWith(':pricing-delta'))
-      .reduce(
-        (total: Decimal, base: any) => groupRows(base).all.reduce(
-          (groupTotal: Decimal, row: any) => groupTotal.plus(rowAmount(row)),
-          total,
-        ),
-        new Decimal(0),
-      );
-    // Earlier amendment deltas are already part of the ledger's effective
-    // accepted price. Offset them before deriving this amendment's delta so a
-    // retry or later amendment cannot recognize the same revenue twice.
-    let adjustment = priorAmendmentNet.negated();
+        && componentKey(row, base) === key
+        && new Decimal(row.amount ?? 0).greaterThan(0));
+      const isReversal = delta.isNegative() && key !== 'custom' && original != null;
+      await insert({
+        propertyId,
+        folioId,
+        type,
+        description: (
+          key === 'custom'
+            ? `Accepted price adjustment: ${desired?.customAdjustment?.reason ?? 'stay amendment'}`
+            : `Accepted stay amendment ${key === 'tax' ? 'tax' : type} correction`
+        ).slice(0, 255),
+        amount: delta.toFixed(2),
+        currencyCode: newPricing.currencyCode,
+        taxAmount: '0.00',
+        serviceDate: base.serviceDate,
+        isReversal,
+        originalChargeId: isReversal ? original.id : undefined,
+        parentChargeId: base.id,
+        sourceKey: `${amendmentSourcePrefix}${amendmentId}:component:${base.id}:${key}`,
+        postedBy: postedBy ?? undefined,
+      }, true);
+      if (trackAdjustment) adjustment = adjustment.plus(delta);
+    };
 
     for (const base of acceptedBases) {
       const group = groupRows(base);
-      const net = group.all.reduce(
-        (total: Decimal, row: any) => total.plus(rowAmount(row)),
-        new Decimal(0),
-      );
-      const desired = desiredFor(base.sourceKey);
-      if (desired == null && !net.isZero()) {
-        const alreadyReversed = group.reversals.some((row: any) =>
-          row.originalChargeId === base.id);
-        const locked = base.isLocked || group.children.some((row: any) => row.isLocked);
-        if (!locked && !alreadyReversed) {
-          const [baseReversal] = await tx
-            .insert(charges)
-            .values({
-              propertyId,
-              folioId,
-              type: base.type,
-              description: `Stay amendment reversal: ${base.description}`.slice(0, 255),
-              amount: new Decimal(base.amount).negated().toFixed(2),
-              currencyCode: base.currencyCode,
-              taxAmount: new Decimal(base.taxAmount ?? 0).negated().toFixed(2),
-              taxRate: base.taxRate,
-              taxCode: base.taxCode,
-              serviceDate: base.serviceDate,
-              isReversal: true,
-              originalChargeId: base.id,
-              sourceKey: `${amendmentSourcePrefix}${amendmentId}:reversal:${base.id}`,
-              postedBy: postedBy ?? undefined,
-            })
-            .returning();
-          for (const child of group.children) {
-            if (group.reversals.some((row: any) => row.originalChargeId === child.id)) continue;
-            await tx
-              .insert(charges)
-              .values({
-                propertyId,
-                folioId,
-                type: child.type,
-                description: `Stay amendment reversal: ${child.description}`.slice(0, 255),
-                amount: new Decimal(child.amount).negated().toFixed(2),
-                currencyCode: child.currencyCode,
-                taxAmount: new Decimal(child.taxAmount ?? 0).negated().toFixed(2),
-                taxRate: child.taxRate,
-                taxCode: child.taxCode,
-                serviceDate: child.serviceDate,
-                isReversal: true,
-                originalChargeId: child.id,
-                parentChargeId: baseReversal.id,
-                sourceKey: `${amendmentSourcePrefix}${amendmentId}:reversal:${child.id}`,
-                postedBy: postedBy ?? undefined,
-              })
-              .returning();
-          }
-          reversedChargeIds.push(base.id);
-        } else {
-          adjustment = adjustment.minus(net);
-        }
-        continue;
+      const desired = desiredGroups.get(base.sourceKey);
+      const actual = componentTotals(base, group.all);
+      const wanted = desiredComponents(desired);
+      const groupLocked = base.isLocked || group.children.some((row: any) => row.isLocked);
+      for (const key of new Set([...actual.keys(), ...wanted.keys()])) {
+        await correction(
+          base,
+          group.all,
+          key,
+          (wanted.get(key) ?? new Decimal(0)).minus(actual.get(key) ?? 0),
+          desired,
+          desired != null || groupLocked,
+        );
       }
-      if (desired != null && !net.equals(desired)) {
-        adjustment = adjustment.plus(desired.minus(net));
+      if (!desired && !groupLocked && [...actual.values()].some((amount) => !amount.isZero())) {
+        reversedChargeIds.push(base.id);
       }
     }
 
-    if (!adjustment.isZero()) {
-      await tx
-        .insert(charges)
-        .values({
+    const postedServiceRows = new Set(
+      acceptedBases
+        .map((base: any) => /^accepted-pricing:reservation-service:([^:]+):/.exec(base.sourceKey)?.[1])
+        .filter(Boolean),
+    );
+    for (const desired of desiredGroups.values()) {
+      if (acceptedBases.some((base: any) => base.sourceKey === desired.sourceKey)) continue;
+      const isClosed = latestClosedDate != null && desired.serviceDate <= latestClosedDate;
+      const isDueOnce = desired.sourceKey.endsWith(':once')
+        && desired.reservationServiceId != null
+        && postedServiceRows.has(desired.reservationServiceId);
+      if (!isClosed && !isDueOnce) continue;
+      const baseOutcome = await insert({
+        propertyId,
+        folioId,
+        type: desired.baseType,
+        description: desired.description,
+        amount: new Decimal(desired.baseAmount).toFixed(2),
+        currencyCode: newPricing.currencyCode,
+        taxAmount: '0.00',
+        serviceDate: new Date(`${desired.serviceDate}T00:00:00.000Z`),
+        sourceKey: desired.sourceKey,
+        postedBy: postedBy ?? undefined,
+      }, true);
+      const base = baseOutcome.row;
+      if (!base || !baseOutcome.created) continue;
+      if (new Decimal(desired.taxAmount).greaterThan(0)) {
+        await insert({
+          propertyId,
+          folioId,
+          type: 'tax',
+          description: `${desired.description} tax`.slice(0, 255),
+          amount: new Decimal(desired.taxAmount).toFixed(2),
+          currencyCode: newPricing.currencyCode,
+          taxAmount: '0.00',
+          serviceDate: new Date(`${desired.serviceDate}T00:00:00.000Z`),
+          parentChargeId: base.id,
+          postedBy: postedBy ?? undefined,
+        });
+      }
+      if (desired.customAdjustment && !new Decimal(desired.customAdjustment.amount).isZero()) {
+        await insert({
           propertyId,
           folioId,
           type: 'adjustment',
-          description: 'Accepted stay amendment pricing adjustment',
-          amount: adjustment.toFixed(2),
+          description: `Accepted price adjustment: ${desired.customAdjustment.reason}`.slice(0, 255),
+          amount: new Decimal(desired.customAdjustment.amount).toFixed(2),
           currencyCode: newPricing.currencyCode,
           taxAmount: '0.00',
-          serviceDate: new Date(`${newPricing.nights[0]!.date}T00:00:00.000Z`),
-          sourceKey: `${amendmentSourcePrefix}${amendmentId}:pricing-delta`,
+          serviceDate: new Date(`${desired.serviceDate}T00:00:00.000Z`),
+          parentChargeId: base.id,
           postedBy: postedBy ?? undefined,
-        })
-        .returning();
+        });
+      }
     }
     await this.recalculateBalance(folioId, propertyId, tx);
     return { reversedChargeIds, adjustmentAmount: adjustment.toFixed(2) };

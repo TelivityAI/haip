@@ -481,8 +481,6 @@ export class AncillaryService {
         and(
           eq(reservationServices.propertyId, propertyId),
           eq(reservationServices.reservationId, reservationId),
-          eq(reservationServices.status, 'confirmed' as any),
-          inArray(reservationServices.postingRule, ['once', 'included_in_rate'] as any),
         ),
       );
 
@@ -497,10 +495,22 @@ export class AncillaryService {
         serviceDate,
         true,
       );
+      const hasAcceptedPricing = reservation.acceptedPricingSnapshot != null;
+      const effectivePostingRule = acceptedLine?.postingRule ?? rs.postingRule;
+      const effectiveChargeType = acceptedLine?.chargeType ?? rs.chargeType;
+      if (hasAcceptedPricing) {
+        if (!acceptedLine) continue;
+        if (!['once', 'included_in_rate'].includes(effectivePostingRule)) continue;
+      } else if (
+        rs.status !== 'confirmed'
+        || !['once', 'included_in_rate'].includes(effectivePostingRule)
+      ) {
+        continue;
+      }
       // Accepted pricing uses the database source-key claim as its authority.
       // A preflight read can race with the winner and must not grant the loser
       // permission to transition the service row.
-      if (!acceptedLine && await this.hasPostedCharge(folio.id, propertyId, rs.id)) {
+      if (!hasAcceptedPricing && await this.hasPostedCharge(folio.id, propertyId, rs.id)) {
         if (rs.status === 'confirmed') {
           await this.db
             .update(reservationServices)
@@ -524,7 +534,7 @@ export class AncillaryService {
       if (new Decimal(amount).greaterThan(0)) {
         const chargeInput = {
           propertyId,
-          type: rs.chargeType,
+          type: effectiveChargeType,
           description,
           amount,
           currencyCode: acceptedLine?.currencyCode ?? rs.currencyCode,
@@ -571,8 +581,8 @@ export class AncillaryService {
           reservationId,
           folioId: folio.id,
           amount,
-          postingRule: rs.postingRule,
-          chargeType: rs.chargeType,
+          postingRule: effectivePostingRule,
+          chargeType: effectiveChargeType,
         },
         propertyId,
       );
@@ -611,8 +621,6 @@ export class AncillaryService {
       .where(
         and(
           eq(reservationServices.propertyId, propertyId),
-          eq(reservationServices.status, 'confirmed' as any),
-          eq(reservationServices.postingRule, 'per_night' as any),
           inArray(reservations.status, [...IN_HOUSE_STATUSES] as any),
         ),
       );
@@ -623,13 +631,33 @@ export class AncillaryService {
 
     for (const { rs, serviceName, reservation } of rows) {
       try {
-        if (rs.startDate && date < rs.startDate) {
+        const acceptedLine = this.acceptedServiceLine(
+          reservation,
+          rs.serviceId,
+          date,
+          false,
+        );
+        const hasAcceptedPricing = reservation.acceptedPricingSnapshot != null;
+        const effectivePostingRule = acceptedLine?.postingRule ?? rs.postingRule;
+        const effectiveChargeType = acceptedLine?.chargeType ?? rs.chargeType;
+        if (hasAcceptedPricing) {
+          if (!acceptedLine || effectivePostingRule !== 'per_night') {
+            skipped.push(rs.id);
+            continue;
+          }
+        } else if (rs.status !== 'confirmed' || effectivePostingRule !== 'per_night') {
           skipped.push(rs.id);
           continue;
         }
-        if (rs.endDate && date > rs.endDate) {
-          skipped.push(rs.id);
-          continue;
+        if (!hasAcceptedPricing) {
+          if (rs.startDate && date < rs.startDate) {
+            skipped.push(rs.id);
+            continue;
+          }
+          if (rs.endDate && date > rs.endDate) {
+            skipped.push(rs.id);
+            continue;
+          }
         }
 
         const folio = await this.findOpenGuestFolio(reservation.id, propertyId);
@@ -641,17 +669,10 @@ export class AncillaryService {
           continue;
         }
 
-        if (await this.hasPostedCharge(folio.id, propertyId, rs.id, date)) {
+        if (!hasAcceptedPricing && await this.hasPostedCharge(folio.id, propertyId, rs.id, date)) {
           skipped.push(rs.id);
           continue;
         }
-
-        const acceptedLine = this.acceptedServiceLine(
-          reservation,
-          rs.serviceId,
-          date,
-          false,
-        );
         const amount = acceptedLine?.amount
           ?? new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
         if (new Decimal(amount).lessThanOrEqualTo(0)) {
@@ -662,7 +683,7 @@ export class AncillaryService {
         const description = `${serviceName} ${this.svcTag(rs.id)}`;
         const chargeInput = {
           propertyId,
-          type: rs.chargeType,
+          type: effectiveChargeType,
           description,
           amount,
           currencyCode: acceptedLine?.currencyCode ?? rs.currencyCode,
@@ -697,7 +718,8 @@ export class AncillaryService {
             folioId: folio.id,
             amount,
             businessDate: date,
-            postingRule: 'per_night',
+            postingRule: effectivePostingRule,
+            chargeType: effectiveChargeType,
             chargeId: charge.id,
           },
           propertyId,
@@ -723,7 +745,14 @@ export class AncillaryService {
     serviceId: string,
     date: string,
     useFirstLine: boolean,
-  ): { date: string; amount: string; taxAmount: string; currencyCode: string } | null {
+  ): {
+    date: string;
+    amount: string;
+    taxAmount: string;
+    currencyCode: string;
+    postingRule: string;
+    chargeType: string;
+  } | null {
     const pricing = reservation.acceptedPricingSnapshot;
     if (!pricing || !Array.isArray(pricing.services)) return null;
     const service = pricing.services.find(
@@ -739,6 +768,8 @@ export class AncillaryService {
       amount: line.amount,
       taxAmount: line.taxAmount,
       currencyCode: pricing.currencyCode,
+      postingRule: service.postingRule,
+      chargeType: service.chargeType,
     };
   }
 }

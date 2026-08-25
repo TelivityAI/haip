@@ -667,7 +667,7 @@ describe('Accepted Booking Request stay amendments', () => {
       { params: { propertyId: 'property-1' } },
     ));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['booking-requests', 'property-1'] });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['reservations', 'property-1'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['reservations'] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['availability', 'property-1'] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['folios', 'property-1'] });
     expect(invalidate).toHaveBeenCalledWith({

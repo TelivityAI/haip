@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ValidationPipe,
 } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -363,10 +364,36 @@ describe('Booking Request stay amendment DTOs', () => {
     ]));
 
     const preview = plainToInstance(PreviewBookingRequestStayAmendmentDto, {
+      propertyId: PROPERTY,
       arrivalDate: '2026-10-01',
       departureDate: 'invalid',
     });
     expect((await validate(preview)).map((error) => error.property)).toContain('departureDate');
+  });
+
+  it('accepts the real preview query through the global whitelist pipe and controller', async () => {
+    const stayAmendmentPreview = vi.fn().mockResolvedValue({ previewToken: 'token' });
+    const controller = new BookingRequestController(
+      { stayAmendmentPreview } as any,
+      {} as any,
+      {} as any,
+    );
+    const query = await new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }).transform({ propertyId: PROPERTY, ...dates }, {
+      type: 'query',
+      metatype: PreviewBookingRequestStayAmendmentDto,
+    });
+
+    await controller.stayAmendmentPreview(REQUEST, query.propertyId, query);
+
+    expect(stayAmendmentPreview).toHaveBeenCalledWith(
+      REQUEST,
+      PROPERTY,
+      expect.objectContaining({ propertyId: PROPERTY, ...dates }),
+    );
   });
 });
 
@@ -563,8 +590,20 @@ describe('BookingRequestService accepted stay amendment commit', () => {
       entityId: RESERVATION,
       userId: 'staff-1',
       previousValue: expect.objectContaining({ totalAmount: '220.00' }),
-      newValue: expect.objectContaining({ totalAmount: '396.00', priceSource: 'current' }),
+      newValue: expect.objectContaining({
+        previousArrivalDate: '2026-10-01',
+        previousDepartureDate: '2026-10-03',
+        previousTotalAmount: '220.00',
+        previousPriceSource: 'current',
+        arrivalDate: '2026-10-01',
+        departureDate: '2026-10-04',
+        totalAmount: '396.00',
+        priceSource: 'current',
+        reason: null,
+      }),
     }));
+    expect(harness.state.audits.filter((row) =>
+      row.bookingRequestId === REQUEST && row.entityType === 'reservation')).toHaveLength(1);
     expect(harness.state.consequences).toHaveLength(1);
     expect(harness.state.consequences[0]).toMatchObject({
       kind: expect.stringMatching(/^amend:/),
@@ -580,6 +619,8 @@ describe('BookingRequestService accepted stay amendment commit', () => {
       }),
     });
     expect(harness.webhook.dispatchPersisted).toHaveBeenCalledTimes(1);
+    expect(harness.state.audits.filter((row) =>
+      row.bookingRequestId === REQUEST && row.entityType === 'reservation')).toHaveLength(1);
     expect(harness.dispatchTransactionStates).toEqual([false]);
     expect(harness.mailer.queue).not.toHaveBeenCalled();
     expect(result).toMatchObject({
@@ -609,6 +650,8 @@ describe('BookingRequestService accepted stay amendment commit', () => {
     expect(harness.folio.reconcileAcceptedStayAmendment).toHaveBeenCalledTimes(1);
     expect(harness.state.consequences).toHaveLength(1);
     expect(harness.webhook.dispatchPersisted).toHaveBeenCalledTimes(1);
+    expect(harness.state.audits.filter((row) =>
+      row.bookingRequestId === REQUEST && row.entityType === 'reservation')).toHaveLength(1);
 
     await expect(harness.service.amendStay(REQUEST, PROPERTY, {
       ...input,

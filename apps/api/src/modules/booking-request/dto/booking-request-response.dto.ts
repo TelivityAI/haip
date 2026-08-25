@@ -99,8 +99,9 @@ const AUDIT_DETAIL_KEYS: Record<string, readonly string[]> = {
   booking_request_payment_resolution: ['paymentId', 'type', 'amount', 'reason', 'status'],
   booking_request_email_delivery: ['kind', 'status', 'attempts', 'automaticAttempts', 'mode'],
   reservation: [
-    'amendmentId', 'arrivalDate', 'departureDate', 'totalAmount',
-    'priceSource', 'reason',
+    'amendmentId',
+    'previousArrivalDate', 'previousDepartureDate', 'previousTotalAmount', 'previousPriceSource',
+    'arrivalDate', 'departureDate', 'totalAmount', 'priceSource', 'reason',
   ],
 };
 

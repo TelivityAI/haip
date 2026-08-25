@@ -710,6 +710,10 @@ export class BookingRequestService {
         },
         newValue: {
           amendmentId,
+          previousArrivalDate: reservation.arrivalDate,
+          previousDepartureDate: reservation.departureDate,
+          previousTotalAmount: reservation.totalAmount,
+          previousPriceSource: previousPricing.source,
           arrivalDate: amended.reservation.arrivalDate,
           departureDate: amended.reservation.departureDate,
           totalAmount: amended.reservation.totalAmount,
@@ -742,7 +746,7 @@ export class BookingRequestService {
           reason: reason ?? null,
         },
         timestamp: createdAt.toISOString(),
-      });
+      }, { audit: false });
       return {
         result: this.toStayAmendmentResult(amendmentValues),
         replay: false,
@@ -1857,6 +1861,7 @@ export class BookingRequestService {
     requestId: string,
     kind: string,
     payload: WebhookPayload,
+    options: { audit?: boolean } = {},
   ): Promise<void> {
     const persistedPayload = structuredClone(payload) as unknown as Record<
       string,
@@ -1870,15 +1875,17 @@ export class BookingRequestService {
       status: 'pending',
       attempts: 0,
     });
-    await tx.insert(auditLogs).values({
-      propertyId,
-      bookingRequestId: requestId,
-      action: 'create',
-      entityType: payload.entityType,
-      entityId: payload.entityId,
-      description: `Webhook event: ${payload.event}`,
-      newValue: persistedPayload,
-    });
+    if (options.audit !== false) {
+      await tx.insert(auditLogs).values({
+        propertyId,
+        bookingRequestId: requestId,
+        action: 'create',
+        entityType: payload.entityType,
+        entityId: payload.entityId,
+        description: `Webhook event: ${payload.event}`,
+        newValue: persistedPayload,
+      });
+    }
   }
 
   private async findExistingRequest(

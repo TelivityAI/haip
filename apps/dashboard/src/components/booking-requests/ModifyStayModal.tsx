@@ -97,7 +97,7 @@ export default function ModifyStayModal({
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: bookingRequestKeys.root(propertyId) }),
-        queryClient.invalidateQueries({ queryKey: ['reservations', propertyId] }),
+        queryClient.invalidateQueries({ queryKey: ['reservations'] }),
         queryClient.invalidateQueries({ queryKey: ['availability', propertyId] }),
         queryClient.invalidateQueries({ queryKey: bookingRequestKeys.genericFoliosRoot(propertyId) }),
         queryClient.invalidateQueries({

@@ -185,25 +185,7 @@ export class NightAuditService {
           continue;
         }
 
-        // Idempotency: check if room charge already posted for this date
         const serviceDateStart = new Date(businessDate + 'T00:00:00Z');
-        const [existingCharge] = await this.db
-          .select({ id: charges.id })
-          .from(charges)
-          .where(
-            and(
-              eq(charges.folioId, folio.id),
-              eq(charges.propertyId, propertyId),
-              eq(charges.type, 'room' as any),
-              eq(charges.isReversal, false),
-              sql`${charges.serviceDate}::date = ${businessDate}`,
-            ),
-          );
-
-        if (existingCharge) {
-          continue; // Already posted, skip
-        }
-
         const acceptedPricing = reservation.acceptedPricingSnapshot;
         const acceptedNight = acceptedPricing?.nights?.find(
           (night: { date: string }) => night.date === businessDate,
@@ -219,7 +201,7 @@ export class NightAuditService {
                 reason: acceptedPricing.adjustment.reason,
               }
             : undefined;
-          result = await this.folioService.postChargeFromSnapshot(
+          const outcome = await this.folioService.postChargeFromSnapshotWithOutcome(
             folio.id,
             {
               propertyId,
@@ -234,8 +216,28 @@ export class NightAuditService {
             acceptedAdjustment,
             `accepted-pricing:reservation:${reservation.id}:night:${businessDate}`,
           );
+          if (!outcome.wasCreated) continue;
+          result = outcome.charge;
         } else {
           // Existing reservations retain canonical live rate/tax behavior.
+          // Legacy live-rate postings have no stable source key, so retain the
+          // historical date/type preflight only for that path. Accepted-price
+          // groups claim their exact source key atomically in FolioService;
+          // unrelated manual room charges must never suppress that claim.
+          const [existingCharge] = await this.db
+            .select({ id: charges.id })
+            .from(charges)
+            .where(
+              and(
+                eq(charges.folioId, folio.id),
+                eq(charges.propertyId, propertyId),
+                eq(charges.type, 'room' as any),
+                eq(charges.isReversal, false),
+                sql`${charges.serviceDate}::date = ${businessDate}`,
+              ),
+            );
+          if (existingCharge) continue;
+
           const [ratePlan] = await this.db
             .select({ baseAmount: ratePlans.baseAmount })
             .from(ratePlans)

@@ -135,4 +135,23 @@ describe('ModifyStayModal', () => {
     expect(within(dialog).getByRole('textbox', { name: 'Reason for custom total' }))
       .toBeRequired();
   });
+
+  it('invalidates every existing reservation query family after an amendment', async () => {
+    const { queryClient } = renderModal();
+    queryClient.setQueryData(['reservations', { propertyId: 'property-1', page: 1 }], []);
+    queryClient.setQueryData(['reservations', 'arrivals', 'property-1', '2026-10-01'], []);
+    const dialog = screen.getByRole('dialog', { name: 'Modify accepted stay' });
+    await within(dialog).findByText('€240.00');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Apply stay change' }));
+
+    await waitFor(() => {
+      expect(queryClient.getQueryState(
+        ['reservations', { propertyId: 'property-1', page: 1 }],
+      )?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(
+        ['reservations', 'arrivals', 'property-1', '2026-10-01'],
+      )?.isInvalidated).toBe(true);
+    });
+  });
 });

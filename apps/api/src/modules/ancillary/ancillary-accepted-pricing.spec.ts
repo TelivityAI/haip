@@ -109,6 +109,157 @@ function acceptedOnceScenario() {
 }
 
 describe('AncillaryService accepted operational pricing', () => {
+  it('posts a once service from the amended snapshot when the live row is still per-night', async () => {
+    const reservation = {
+      id: 'res-1',
+      propertyId: 'prop-1',
+      guestId: 'guest-1',
+      arrivalDate: '2026-10-01',
+      acceptedPricingSnapshot: {
+        currencyCode: 'EUR',
+        services: [{
+          serviceId: 'svc-1',
+          postingRule: 'once',
+          chargeType: 'fee',
+          lineItems: [{ date: '2026-10-01', amount: '21.00', taxAmount: '3.00' }],
+        }],
+      },
+    };
+    const rs = {
+      id: 'rs-1', serviceId: 'svc-1', unitPrice: '99.00', quantity: 1,
+      chargeType: 'parking', currencyCode: 'EUR', postingRule: 'per_night', status: 'confirmed',
+    };
+    const db = {
+      select: stagedSelect([[reservation], [{ id: 'folio-1' }], [{ rs, serviceName: 'Transfer' }]]),
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({ returning: vi.fn(async () => [{ ...rs, status: 'posted' }]) })),
+        })),
+      })),
+    };
+    const folio = {
+      postCharge: vi.fn(),
+      postChargeFromSnapshotWithOutcome: vi.fn().mockResolvedValue({
+        charge: { id: 'charge-1' }, wasCreated: true,
+      }),
+    };
+    const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
+
+    await service.postOnceForReservation('res-1', 'prop-1');
+
+    expect(folio.postChargeFromSnapshotWithOutcome).toHaveBeenCalledWith(
+      'folio-1',
+      expect.objectContaining({ type: 'fee', amount: '21.00' }),
+      '3.00',
+      undefined,
+      'accepted-pricing:reservation-service:rs-1:once',
+    );
+  });
+
+  it('posts future per-night lines from the amended snapshot after a once service was marked posted', async () => {
+    const reservation = {
+      id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', status: 'checked_in',
+      acceptedPricingSnapshot: {
+        currencyCode: 'EUR',
+        services: [{
+          serviceId: 'svc-1',
+          postingRule: 'per_night',
+          chargeType: 'spa',
+          lineItems: [{ date: '2026-10-03', amount: '30.00', taxAmount: '4.00' }],
+        }],
+      },
+    };
+    const rs = {
+      id: 'rs-1', serviceId: 'svc-1', unitPrice: '15.00', quantity: 1,
+      chargeType: 'parking', currencyCode: 'EUR', postingRule: 'once', status: 'posted',
+    };
+    const db = {
+      select: stagedSelect([[{ rs, serviceName: 'Spa', reservation }], [{ id: 'folio-1' }]]),
+    };
+    const folio = {
+      postCharge: vi.fn(),
+      postChargeFromSnapshotWithOutcome: vi.fn().mockResolvedValue({
+        charge: { id: 'charge-1' }, wasCreated: true,
+      }),
+    };
+    const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
+
+    const result = await service.postPerNightForProperty('prop-1', '2026-10-03');
+
+    expect(folio.postChargeFromSnapshotWithOutcome).toHaveBeenCalledWith(
+      'folio-1',
+      expect.objectContaining({ type: 'spa', amount: '30.00' }),
+      '4.00',
+      undefined,
+      'accepted-pricing:reservation-service:rs-1:night:2026-10-03',
+    );
+    expect(result.count).toBe(1);
+  });
+
+  it('uses the amended snapshot dates instead of the stale live service range', async () => {
+    const reservation = {
+      id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', status: 'checked_in',
+      acceptedPricingSnapshot: {
+        currencyCode: 'EUR',
+        services: [{
+          serviceId: 'svc-1',
+          postingRule: 'per_night',
+          chargeType: 'spa',
+          lineItems: [{ date: '2026-10-04', amount: '30.00', taxAmount: '4.00' }],
+        }],
+      },
+    };
+    const rs = {
+      id: 'rs-1', serviceId: 'svc-1', unitPrice: '15.00', quantity: 1,
+      chargeType: 'parking', currencyCode: 'EUR', postingRule: 'per_night',
+      status: 'confirmed', startDate: '2026-10-01', endDate: '2026-10-02',
+    };
+    const db = {
+      select: stagedSelect([[{ rs, serviceName: 'Spa', reservation }], [{ id: 'folio-1' }]]),
+    };
+    const folio = {
+      postCharge: vi.fn(),
+      postChargeFromSnapshotWithOutcome: vi.fn().mockResolvedValue({
+        charge: { id: 'charge-1' }, wasCreated: true,
+      }),
+    };
+    const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
+
+    const result = await service.postPerNightForProperty('prop-1', '2026-10-04');
+
+    expect(folio.postChargeFromSnapshotWithOutcome).toHaveBeenCalledWith(
+      'folio-1',
+      expect.objectContaining({ type: 'spa', amount: '30.00' }),
+      '4.00',
+      undefined,
+      'accepted-pricing:reservation-service:rs-1:night:2026-10-04',
+    );
+    expect(result.count).toBe(1);
+  });
+
+  it('does not post a live service row removed from the amended snapshot', async () => {
+    const reservation = {
+      id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', arrivalDate: '2026-10-01',
+      acceptedPricingSnapshot: { currencyCode: 'EUR', services: [] },
+    };
+    const rs = {
+      id: 'rs-1', serviceId: 'svc-1', unitPrice: '99.00', quantity: 1,
+      chargeType: 'parking', currencyCode: 'EUR', postingRule: 'once', status: 'confirmed',
+    };
+    const db = {
+      select: stagedSelect([[reservation], [{ id: 'folio-1' }], [{ rs, serviceName: 'Parking' }]]),
+      update: vi.fn(),
+    };
+    const folio = { postCharge: vi.fn(), postChargeFromSnapshotWithOutcome: vi.fn() };
+    const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
+
+    const result = await service.postOnceForReservation('res-1', 'prop-1');
+
+    expect(result.count).toBe(0);
+    expect(folio.postCharge).not.toHaveBeenCalled();
+    expect(folio.postChargeFromSnapshotWithOutcome).not.toHaveBeenCalled();
+  });
+
   it('recovers a confirmed once service when its accepted ledger group already exists', async () => {
     const { createDb, update } = acceptedOnceScenario();
     const { ledgerGroups, folio } = idempotentSnapshotPoster(true);
@@ -301,6 +452,7 @@ describe('AncillaryService accepted operational pricing', () => {
             currencyCode: 'EUR',
             postingRule: 'per_night',
             sourceChannel: 'booking_engine',
+            status: 'confirmed',
           },
           serviceName: 'Parking',
           reservation,

@@ -1,11 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 import { IsMoneyString } from '../../../common/validation/is-money-string.validator';
 import { IsCanonicalCalendarDate } from '../booking-request-date.validator';
 
 const STAY_AMENDMENT_PRICE_SOURCES = ['prior', 'current', 'custom'] as const;
 
-export class PreviewBookingRequestStayAmendmentDto {
+class BookingRequestStayAmendmentDatesDto {
   @ApiProperty({ example: '2026-10-01' })
   @IsCanonicalCalendarDate()
   arrivalDate!: string;
@@ -15,7 +15,13 @@ export class PreviewBookingRequestStayAmendmentDto {
   departureDate!: string;
 }
 
-export class AmendBookingRequestStayDto extends PreviewBookingRequestStayAmendmentDto {
+export class PreviewBookingRequestStayAmendmentDto extends BookingRequestStayAmendmentDatesDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  propertyId!: string;
+}
+
+export class AmendBookingRequestStayDto extends BookingRequestStayAmendmentDatesDto {
   @ApiProperty({ enum: STAY_AMENDMENT_PRICE_SOURCES })
   @IsEnum(STAY_AMENDMENT_PRICE_SOURCES)
   priceSource!: (typeof STAY_AMENDMENT_PRICE_SOURCES)[number];
