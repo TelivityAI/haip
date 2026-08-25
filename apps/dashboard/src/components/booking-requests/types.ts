@@ -103,10 +103,12 @@ export interface BookingRequestPayment {
   method: string;
   status: string;
   amount: string;
+  netCapturedAmount: string;
   allocatedAmount: string;
   reservedResolutionAmount: string;
   availableAmount: string;
   currencyCode: string;
+  source: 'saved_card' | 'external';
   gatewayProvider: string | null;
   reference: string | null;
   cardLastFour: string | null;

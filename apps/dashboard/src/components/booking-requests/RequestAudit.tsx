@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { CheckCircle2, CircleDollarSign, FileCheck2, Mail } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../lib/api';
 import { formatMoney } from '../../lib/money';
@@ -31,16 +31,36 @@ export default function RequestAudit({
     dateStyle: 'medium',
     timeStyle: 'short',
   }), [i18n.language]);
-  const historyQuery = useQuery({
+  const historyQuery = useInfiniteQuery<{
+    data: BookingRequestAuditHistoryItem[];
+    nextOffset: number | null;
+  }>({
     queryKey: bookingRequestKeys.audit(propertyId, request.id),
-    queryFn: () => api.get(
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.get(
       `/v1/booking-requests/${request.id}/audit-history`,
-      { params: { propertyId } },
-    ).then((response) => response.data?.data ?? response.data ?? []),
+      { params: { propertyId, limit: 25, offset: pageParam as number } },
+    ).then((response) => {
+      const envelope = response.data;
+      const payload = envelope?.data ?? envelope;
+      if (Array.isArray(payload)) {
+        return {
+          data: payload,
+          nextOffset: typeof envelope?.nextOffset === 'number'
+            ? envelope.nextOffset
+            : null,
+        };
+      }
+      return {
+        data: payload?.data ?? [],
+        nextOffset: typeof payload?.nextOffset === 'number'
+          ? payload.nextOffset
+          : null,
+      };
+    }),
+    getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
   });
-  const entries = (Array.isArray(historyQuery.data)
-    ? historyQuery.data
-    : []) as BookingRequestAuditHistoryItem[];
+  const entries = historyQuery.data?.pages.flatMap((page) => page.data) ?? [];
 
   const amountFor = (entry: BookingRequestAuditHistoryItem) => {
     const amount = entry.details['acceptedTotal']
@@ -58,7 +78,7 @@ export default function RequestAudit({
 
       {historyQuery.isLoading ? (
         <p className="mt-6 text-sm text-telivity-slate">{t('bookingRequests.common.loading')}</p>
-      ) : historyQuery.isError ? (
+      ) : historyQuery.isError && entries.length === 0 ? (
         <div role="alert" className="mt-6 flex items-center justify-between gap-3 rounded-lg border border-telivity-orange/40 bg-telivity-orange/10 p-3 text-sm text-telivity-navy">
           <span>{t('bookingRequests.audit.loadError')}</span>
           <button type="button" onClick={() => historyQuery.refetch()} className="font-semibold text-telivity-deep-blue underline underline-offset-2">
@@ -68,37 +88,59 @@ export default function RequestAudit({
       ) : entries.length === 0 ? (
         <p className="mt-6 text-sm text-telivity-slate">{t('bookingRequests.audit.empty')}</p>
       ) : (
-        <ol className="mt-6 space-y-0">
-          {entries.map((entry, index) => {
-            const Icon = auditIcon(entry.summary);
-            const amount = amountFor(entry);
-            const label = entry.details['label'];
-            return (
-              <li key={entry.id} className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-3 pb-6 last:pb-0">
-                {index < entries.length - 1 ? <span aria-hidden="true" className="absolute bottom-0 left-[0.9375rem] top-8 w-px bg-slate-200" /> : null}
-                <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full bg-telivity-deep-blue/10 text-telivity-deep-blue">
-                  <Icon size={16} aria-hidden="true" />
-                </span>
-                <div className="min-w-0 pt-1">
-                  <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-baseline">
-                    <h3 className="font-semibold text-telivity-navy">
-                      {t(`bookingRequests.audit.events.${entry.summary.replace('.', '_')}`)}
-                    </h3>
-                    <time className="text-xs text-telivity-slate">{dateFormatter.format(new Date(entry.occurredAt))}</time>
-                  </div>
-                  {amount || typeof label === 'string' ? (
-                    <p className="mt-1 text-sm text-telivity-slate">
-                      {[typeof label === 'string' ? label : null, amount].filter(Boolean).join(' · ')}
+        <>
+          <ol className="mt-6 space-y-0">
+            {entries.map((entry, index) => {
+              const Icon = auditIcon(entry.summary);
+              const amount = amountFor(entry);
+              const label = entry.details['label'];
+              return (
+                <li key={entry.id} className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-3 pb-6 last:pb-0">
+                  {index < entries.length - 1 ? <span aria-hidden="true" className="absolute bottom-0 left-[0.9375rem] top-8 w-px bg-slate-200" /> : null}
+                  <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full bg-telivity-deep-blue/10 text-telivity-deep-blue">
+                    <Icon size={16} aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 pt-1">
+                    <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-baseline">
+                      <h3 className="font-semibold text-telivity-navy">
+                        {t(`bookingRequests.audit.events.${entry.summary.replace('.', '_')}`)}
+                      </h3>
+                      <time className="text-xs text-telivity-slate">{dateFormatter.format(new Date(entry.occurredAt))}</time>
+                    </div>
+                    {amount || typeof label === 'string' ? (
+                      <p className="mt-1 text-sm text-telivity-slate">
+                        {[typeof label === 'string' ? label : null, amount].filter(Boolean).join(' · ')}
+                      </p>
+                    ) : null}
+                    <p className="mt-1 text-xs text-telivity-slate">
+                      {t('bookingRequests.audit.actor', { actor: entry.actorDisplay })}
                     </p>
-                  ) : null}
-                  <p className="mt-1 text-xs text-telivity-slate">
-                    {t('bookingRequests.audit.actor', { actor: entry.actorDisplay })}
-                  </p>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+          {historyQuery.hasNextPage ? (
+            <button
+              type="button"
+              onClick={() => historyQuery.fetchNextPage()}
+              disabled={historyQuery.isFetchingNextPage}
+              className="mt-4 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue disabled:opacity-50"
+            >
+              {historyQuery.isFetchingNextPage
+                ? t('bookingRequests.audit.loadingMore')
+                : t('bookingRequests.audit.loadMore')}
+            </button>
+          ) : null}
+          {historyQuery.isFetchNextPageError ? (
+            <div role="alert" className="mt-3 flex items-center justify-between gap-3 text-sm text-telivity-orange">
+              <span>{t('bookingRequests.audit.loadMoreError')}</span>
+              <button type="button" onClick={() => historyQuery.fetchNextPage()} className="font-semibold underline underline-offset-2">
+                {t('bookingRequests.common.retry')}
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
     </section>
   );

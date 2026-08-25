@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, setPropertyId as setApiPropertyId } from '../lib/api';
-import { joinPropertyRoom, leavePropertyRoom } from '../lib/socket';
+import { getSocket, joinPropertyRoom, leavePropertyRoom } from '../lib/socket';
 import {
   PORTFOLIO_MODE_ID,
   type PropertySummary,
@@ -95,8 +95,14 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
     }
     setApiPropertyId(propertyId);
     if (propertyId) {
+      const socket = getSocket();
+      const rejoinActiveProperty = () => joinPropertyRoom(propertyId);
+      socket.on('connect', rejoinActiveProperty);
       joinPropertyRoom(propertyId);
-      return () => leavePropertyRoom(propertyId);
+      return () => {
+        socket.off('connect', rejoinActiveProperty);
+        leavePropertyRoom(propertyId);
+      };
     }
   }, [propertyId, isPortfolioMode]);
 

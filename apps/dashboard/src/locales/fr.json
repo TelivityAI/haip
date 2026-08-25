@@ -1947,14 +1947,14 @@
       "independence": "Les décisions de réservation et les actions financières sont indépendantes. L'acceptation du paiement n'accepte jamais une demande et l'acceptation ne déclenche jamais le paiement."
     },
     "amounts": {
-      "quoted": "Cité",
+      "quoted": "Devis",
       "submitted": "Soumis",
       "current": "Actuel",
       "accepted": "Accepté",
       "difference": "Différence",
-      "captured": "Capturé",
-      "returned": "Retourné",
-      "retained": "Conservé"
+      "captured": "Encaissé",
+      "returned": "Remboursé",
+      "retained": "Retenu"
     },
     "overview": {
       "stay": "Demande de séjour",
@@ -1973,7 +1973,7 @@
       "card": "Carte au dossier",
       "cardGeneric": "carte",
       "noCard": "Aucune carte enregistrée",
-      "cardSafety": "Seuls la marque de la carte sécurisée et les quatre derniers chiffres sont affichés. Le personnel doit lancer chaque accusation.",
+      "cardSafety": "Seuls le réseau de la carte et les quatre derniers chiffres sont affichés. Le personnel doit déclencher explicitement chaque débit.",
       "decision": "Dossier de décision",
       "priceSource": "Source de prix"
     },
@@ -2022,7 +2022,7 @@
       "maximum": "Saisissez un montant inférieur ou égal au maximum autorisé."
     },
     "payments": {
-      "requestSummary": "Demander un récapitulatif de l'argent",
+      "requestSummary": "Récapitulatif des paiements de la demande",
       "independence": "Les décisions de réservation ne dépendent pas de l'état du paiement.",
       "plan": "Plan de paiement",
       "noAutomatic": "Rien n'est facturé automatiquement. Les jalons sont des rappels des actions initiées par le personnel.",
@@ -2044,7 +2044,7 @@
       "deleteLabel": "Supprimer {{label}}",
       "allocateLabel": "Attribuer le paiement au {{label}}",
       "allocateTo": "Attribuer le paiement au {{label}}",
-      "movement": "Mouvement capturé",
+      "movement": "Paiement encaissé",
       "allocate": "Allouer",
       "allocationError": "Le paiement n'a pas pu être réparti.",
       "availableForAllocation": "{{available}} disponible · {{allocated}} alloué · {{method}}",
@@ -2052,13 +2052,13 @@
       "moveUp": "Monter {{label}}",
       "moveDown": "Descendre {{label}}",
       "reorderError": "L’ordre des échéances n’a pas pu être enregistré. Réessayez.",
-      "movements": "Mouvements d'argent",
-      "noMovements": "Aucun mouvement d'argent pour l'instant.",
+      "movements": "Mouvements de paiement",
+      "noMovements": "Aucun mouvement de paiement pour l'instant.",
       "savedCardProvenance": "Carte enregistrée · {{brand}} •••• {{lastFour}}",
       "externalProvenance": "Externe · {{method}} · {{reference}}",
       "loadError": "Le plan de paiement et l'historique des mouvements n'ont pas pu être chargés.",
       "folioSummary": "Résumé du folio opérationnel",
-      "acceptedDeal": "Accord accepté",
+      "acceptedDeal": "Total accepté",
       "folioCharges": "Frais de folio",
       "folioPayments": "Paiements folio",
       "balanceDue": "Solde dû",
@@ -2087,8 +2087,8 @@
     "paymentStatuses": {
       "pending": "En attente",
       "authorized": "Autorisé",
-      "captured": "Capturé",
-      "settled": "Installé",
+      "captured": "Encaissé",
+      "settled": "Comptabilisé",
       "refunded": "Remboursé",
       "partially_refunded": "Partiellement remboursé",
       "failed": "Échec",
@@ -2105,9 +2105,9 @@
       "error": "L’action financière n’a pas pu être menée à son terme. Vos informations saisies sont toujours ici.",
       "paymentRequired": "Choisissez d'abord un mouvement de paiement.",
       "charge": {
-        "title": "Chargement enregistré sur la carte",
-        "action": "Chargement enregistré sur la carte",
-        "description": "Il s’agit d’une accusation explicite initiée par le personnel. Il n'accepte pas la demande."
+        "title": "Débiter la carte enregistrée",
+        "action": "Débiter la carte enregistrée",
+        "description": "Ce débit est déclenché explicitement par le personnel. Il n’accepte pas la demande."
       },
       "external": {
         "title": "Enregistrer le paiement externe",
@@ -2120,14 +2120,14 @@
         "description": "Renvoyez une partie ou la totalité de ce paiement de passerelle."
       },
       "external_return": {
-        "title": "Enregistrer le retour externe",
-        "action": "Retour record",
+        "title": "Enregistrer le remboursement externe",
+        "action": "Enregistrer le remboursement",
         "description": "Enregistrez que l’argent collecté en externe a été restitué."
       },
       "retain": {
-        "title": "Conserver de l'argent",
-        "action": "Conserver de l'argent",
-        "open": "Conserver avec raison",
+        "title": "Retenir le montant",
+        "action": "Retenir le montant",
+        "open": "Retenir avec un motif",
         "description": "Résolvez ce montant comme retenu avant le refus. Un motif professionnel est obligatoire.",
         "reason": "Raison de la retenue d'argent"
       }
@@ -2148,7 +2148,7 @@
     "messageKinds": {
       "receipt": "Demander un reçu",
       "accepted": "Acceptation",
-      "denied": "Déni",
+      "denied": "Refus",
       "payment": "Paiement",
       "refund": "Remboursement",
       "failure": "Échec de paiement"
@@ -2168,14 +2168,14 @@
       "acceptedDescription": "Accepté au {{amount}} en utilisant le {{source}}.",
       "denied": "Demande refusée",
       "deniedDescription": "La demande a été refusée après que son état monétaire ait été résolu.",
-      "paymentCaptured": "Paiement capturé",
+      "paymentCaptured": "Paiement encaissé",
       "paymentFailed": "Échec du paiement",
       "paymentReturned": "Paiement retourné",
       "paymentDescription": "{{amount}} · {{method}}",
       "resolutionDescription": "{{amount}} résolu",
       "resolutions": {
-        "refund": "Remboursement Gateway enregistré",
-        "external_return": "Retour extérieur enregistré",
+        "refund": "Remboursement par carte enregistré",
+        "external_return": "Remboursement externe enregistré",
         "retained": "Argent retenu"
       },
       "message": "{{kind}} message",
@@ -2183,6 +2183,9 @@
       "actor": "Effectué par : {{actor}}",
       "loadError": "L’historique d’audit n’a pas pu être chargé.",
       "empty": "Aucun événement d’audit n’a été enregistré.",
+      "loadMore": "Charger plus",
+      "loadingMore": "Chargement d’autres événements…",
+      "loadMoreError": "Les autres événements d’audit n’ont pas pu être chargés.",
       "events": {
         "request_pending": "Demande envoyée",
         "request_accepted": "Demande acceptée",

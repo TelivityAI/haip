@@ -23,6 +23,7 @@ import {
   CreateBookingRequestInstallmentDto,
   RecordBookingRequestExternalPaymentDto,
   RecordBookingRequestExternalReturnDto,
+  ReorderBookingRequestInstallmentsDto,
   RefundBookingRequestPaymentDto,
   RetainBookingRequestPaymentDto,
 } from './dto/booking-request-payment.dto';
@@ -218,7 +219,14 @@ function makeDatabase(state: State) {
       where: vi.fn(() => {
         const apply = () => {
           const rows = tableRows(state, table);
-          for (const row of rows) Object.assign(row, structuredClone(changes));
+          const cloneableChanges = { ...changes };
+          if (
+            table === bookingRequestInstallments
+            && typeof cloneableChanges['sortOrder'] === 'object'
+          ) {
+            delete cloneableChanges['sortOrder'];
+          }
+          for (const row of rows) Object.assign(row, structuredClone(cloneableChanges));
           return structuredClone(rows);
         };
         const chain: Record<string, any> & PromiseLike<any> = {
@@ -334,6 +342,7 @@ describe('Booking Request payment HTTP contract', () => {
     for (const method of [
       'createInstallment',
       'updateInstallment',
+      'reorderInstallments',
       'deleteInstallment',
       'allocatePayment',
       'chargeSavedCard',
@@ -357,6 +366,11 @@ describe('Booking Request payment HTTP contract', () => {
       dueMilestone: 'arrival',
     });
     expect(await validate(validInstallment)).toHaveLength(0);
+    expect(await validate(plainToInstance(ReorderBookingRequestInstallmentsDto, {
+      installmentIds: [INSTALLMENT_ID, INSTALLMENT_ID],
+    }))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ property: 'installmentIds' }),
+    ]));
     expect(await validate(plainToInstance(CreateBookingRequestInstallmentDto, {
       label: 'Whole balance',
       percentage: '100.00',
@@ -568,6 +582,42 @@ describe('BookingRequestPaymentService installments', () => {
     )).rejects.toThrow(/movement/i);
   });
 
+  it('reserves pending and legacy completed return resolutions from allocation capacity', async () => {
+    for (const resolution of [
+      { status: 'pending', movementId: null },
+      { status: 'completed', movementId: null },
+    ]) {
+      const harness = makeHarness({
+        installments: [installment({ resolvedAmount: '100.00' })],
+        payments: [capturedPayment({ amount: '100.00' })],
+        resolutions: [{
+          id: `00000000-0000-4000-a000-0000000000${resolution.status === 'pending' ? '51' : '52'}`,
+          propertyId: PROPERTY_ID,
+          bookingRequestId: REQUEST_ID,
+          paymentId: PAYMENT_ID,
+          type: 'refund',
+          amount: '40.00',
+          ...resolution,
+        }],
+      });
+
+      await expect(harness.service.allocatePayment(
+        REQUEST_ID,
+        INSTALLMENT_ID,
+        PROPERTY_ID,
+        { paymentId: PAYMENT_ID, amount: '60.01' },
+        actor,
+      )).rejects.toThrow(/movement/i);
+      await expect(harness.service.allocatePayment(
+        REQUEST_ID,
+        INSTALLMENT_ID,
+        PROPERTY_ID,
+        { paymentId: PAYMENT_ID, amount: '60.00' },
+        actor,
+      )).resolves.toBeDefined();
+    }
+  });
+
   it('blocks editing and deletion after any amount has been allocated', async () => {
     const allocated = installment({ allocatedAmount: '1.00', status: 'partial' });
     const editHarness = makeHarness({ installments: [allocated] });
@@ -605,6 +655,123 @@ describe('BookingRequestPaymentService installments', () => {
       label: allocated.label,
       allocatedAmount: '1.00',
     });
+  });
+
+  it('reorders the exact request installment set atomically and audits once', async () => {
+    const secondId = 'eeeeeeee-0000-4000-a000-000000000002';
+    const harness = makeHarness({
+      installments: [
+        installment({ sortOrder: 0, allocatedAmount: '50.00', status: 'partial' }),
+        installment({ id: secondId, sortOrder: 1, label: 'Balance' }),
+      ],
+    });
+
+    const result = await harness.service.reorderInstallments(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { installmentIds: [secondId, INSTALLMENT_ID] },
+      actor,
+    );
+
+    expect(result.map((row) => [row.id, row.sortOrder])).toEqual([
+      [secondId, 0],
+      [INSTALLMENT_ID, 1],
+    ]);
+    expect(harness.database.db.update).toHaveBeenCalledTimes(1);
+    expect(harness.state.audits).toHaveLength(1);
+    expect(harness.state.audits[0]).toMatchObject({
+      entityType: 'booking_request',
+      entityId: REQUEST_ID,
+      description: 'Booking request installments reordered',
+    });
+    expect(harness.database.lockCalls).toBeGreaterThanOrEqual(2);
+  });
+
+  it('rejects duplicate, missing, and foreign installment IDs without changing persisted order', async () => {
+    const secondId = 'eeeeeeee-0000-4000-a000-000000000002';
+    const otherRequestId = 'bbbbbbbb-0000-4000-a000-000000000002';
+    for (const installmentIds of [
+      [INSTALLMENT_ID, INSTALLMENT_ID],
+      [INSTALLMENT_ID],
+      [INSTALLMENT_ID, 'eeeeeeee-0000-4000-a000-000000000099'],
+    ]) {
+      const harness = makeHarness({
+        installments: [
+          installment({ sortOrder: 0 }),
+          installment({ id: secondId, sortOrder: 1, label: 'Balance' }),
+          installment({
+            id: 'eeeeeeee-0000-4000-a000-000000000099',
+            bookingRequestId: otherRequestId,
+            sortOrder: 0,
+          }),
+        ],
+      });
+      const before = harness.state.installments.map((row) => [row.id, row.sortOrder]);
+
+      await expect(harness.service.reorderInstallments(
+        REQUEST_ID,
+        PROPERTY_ID,
+        { installmentIds },
+        actor,
+      )).rejects.toThrow(/exact|duplicate|belong/i);
+      expect(harness.state.installments.map((row) => [row.id, row.sortOrder])).toEqual(before);
+      expect(harness.state.audits).toHaveLength(0);
+    }
+  });
+
+  it('rolls back the bulk order if its single audit write fails', async () => {
+    const secondId = 'eeeeeeee-0000-4000-a000-000000000002';
+    const harness = makeHarness({
+      installments: [
+        installment({ sortOrder: 0 }),
+        installment({ id: secondId, sortOrder: 1, label: 'Balance' }),
+      ],
+    });
+    vi.mocked(harness.database.db.insert).mockImplementationOnce(() => ({
+      values: vi.fn(() => Promise.reject(new Error('audit unavailable'))),
+    }) as never);
+
+    await expect(harness.service.reorderInstallments(
+      REQUEST_ID,
+      PROPERTY_ID,
+      { installmentIds: [secondId, INSTALLMENT_ID] },
+      actor,
+    )).rejects.toThrow(/audit unavailable/i);
+    expect(harness.state.installments.map((row) => row.sortOrder)).toEqual([0, 1]);
+    expect(harness.state.audits).toHaveLength(0);
+  });
+
+  it('locks the request and complete installment set for each concurrent bulk reorder', async () => {
+    const secondId = 'eeeeeeee-0000-4000-a000-000000000002';
+    const harness = makeHarness({
+      installments: [
+        installment({ sortOrder: 0 }),
+        installment({ id: secondId, sortOrder: 1, label: 'Balance' }),
+      ],
+    });
+
+    const results = await Promise.all([
+      harness.service.reorderInstallments(
+        REQUEST_ID,
+        PROPERTY_ID,
+        { installmentIds: [secondId, INSTALLMENT_ID] },
+        actor,
+      ),
+      harness.service.reorderInstallments(
+        REQUEST_ID,
+        PROPERTY_ID,
+        { installmentIds: [INSTALLMENT_ID, secondId] },
+        actor,
+      ),
+    ]);
+
+    expect(results.map((rows) => rows.map((row) => row.sortOrder))).toEqual([
+      [0, 1],
+      [0, 1],
+    ]);
+    expect(harness.database.lockCalls).toBeGreaterThanOrEqual(4);
+    expect(harness.database.db.update).toHaveBeenCalledTimes(2);
+    expect(harness.state.audits).toHaveLength(2);
   });
 
   it('uses locked allocation rows rather than a stale cached allocated amount', async () => {
@@ -1080,6 +1247,121 @@ describe('BookingRequestPaymentService external movements and denial resolutions
     expect(result.resolutions[0]).not.toHaveProperty('operationFingerprint');
     expect(result.resolutions[0]).not.toHaveProperty('providerTransactionId');
     expect(result.resolutions[0]).not.toHaveProperty('providerStatus');
+  });
+
+  it('derives allocation availability from the canonical ledger without double-counting resolution evidence', async () => {
+    const parent = (id: string, status: string) => capturedPayment({ id, status });
+    const child = (id: string, originalPaymentId: string, amount: string) => capturedPayment({
+      id,
+      amount,
+      originalPaymentId,
+      idempotencyKey: `booking-request-refund:${id}`,
+    });
+    const capturedId = 'dddddddd-0000-4000-a000-000000000011';
+    const settledId = 'dddddddd-0000-4000-a000-000000000012';
+    const partialId = 'dddddddd-0000-4000-a000-000000000013';
+    const fullId = 'dddddddd-0000-4000-a000-000000000014';
+    const legacyId = 'dddddddd-0000-4000-a000-000000000015';
+    const pendingId = 'dddddddd-0000-4000-a000-000000000016';
+    const partialChildId = 'dddddddd-0000-4000-a000-000000000113';
+    const fullChildId = 'dddddddd-0000-4000-a000-000000000114';
+    const harness = makeHarness({
+      payments: [
+        parent(capturedId, 'captured'),
+        parent(settledId, 'settled'),
+        parent(partialId, 'partially_refunded'),
+        child(partialChildId, partialId, '-40.00'),
+        parent(fullId, 'refunded'),
+        child(fullChildId, fullId, '-100.00'),
+        parent(legacyId, 'partially_refunded'),
+        parent(pendingId, 'captured'),
+      ],
+      allocations: [{
+        id: '00000000-0000-4000-a000-000000000021',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        paymentId: partialId,
+        installmentId: INSTALLMENT_ID,
+        amount: '10.00',
+      }],
+      resolutions: [
+        {
+          id: '00000000-0000-4000-a000-000000000031',
+          propertyId: PROPERTY_ID,
+          bookingRequestId: REQUEST_ID,
+          paymentId: partialId,
+          type: 'refund',
+          status: 'completed',
+          amount: '40.00',
+          movementId: partialChildId,
+        },
+        {
+          id: '00000000-0000-4000-a000-000000000032',
+          propertyId: PROPERTY_ID,
+          bookingRequestId: REQUEST_ID,
+          paymentId: legacyId,
+          type: 'refund',
+          status: 'completed',
+          amount: '40.00',
+          movementId: null,
+        },
+        {
+          id: '00000000-0000-4000-a000-000000000033',
+          propertyId: PROPERTY_ID,
+          bookingRequestId: REQUEST_ID,
+          paymentId: pendingId,
+          type: 'external_return',
+          status: 'pending',
+          amount: '25.00',
+          movementId: null,
+        },
+      ],
+    });
+
+    const result = await harness.service.listPayments(REQUEST_ID, PROPERTY_ID);
+    const byId = new Map(result.movements.map((movement) => [movement.id, movement]));
+    expect(byId.get(capturedId)).toMatchObject({ netCapturedAmount: '100.00', availableAmount: '100.00' });
+    expect(byId.get(settledId)).toMatchObject({ netCapturedAmount: '100.00', availableAmount: '100.00' });
+    expect(byId.get(partialId)).toMatchObject({
+      netCapturedAmount: '60.00',
+      allocatedAmount: '10.00',
+      reservedResolutionAmount: '0.00',
+      availableAmount: '50.00',
+    });
+    expect(byId.get(fullId)).toMatchObject({ netCapturedAmount: '0.00', availableAmount: '0.00' });
+    expect(byId.get(legacyId)).toMatchObject({
+      netCapturedAmount: '100.00',
+      reservedResolutionAmount: '40.00',
+      availableAmount: '60.00',
+    });
+    expect(byId.get(pendingId)).toMatchObject({
+      netCapturedAmount: '100.00',
+      reservedResolutionAmount: '25.00',
+      availableAmount: '75.00',
+    });
+  });
+
+  it('returns trusted payment provenance independent of an external provider label', async () => {
+    const saved = capturedPayment({
+      id: 'dddddddd-0000-4000-a000-000000000041',
+      idempotencyKey: 'booking-request-charge:saved',
+      gatewayProvider: 'stripe',
+      method: 'credit_card',
+    });
+    const externalStripe = capturedPayment({
+      id: 'dddddddd-0000-4000-a000-000000000042',
+      idempotencyKey: 'booking-request-external:terminal',
+      gatewayProvider: 'stripe',
+      method: 'credit_card',
+    });
+    const result = await makeHarness({ payments: [saved, externalStripe] })
+      .service.listPayments(REQUEST_ID, PROPERTY_ID);
+
+    expect(result.movements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: saved.id, source: 'saved_card' }),
+      expect.objectContaining({ id: externalStripe.id, source: 'external' }),
+    ]));
+    expect(result.movements.every((movement) => !('idempotencyKey' in movement))).toBe(true);
   });
 
   it('records an exact external payment with processed date/reference and rejects duplicate reference', async () => {

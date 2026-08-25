@@ -120,10 +120,12 @@ const stripePayment = {
   method: 'credit_card',
   status: 'captured',
   amount: '192.00',
+  netCapturedAmount: '192.00',
   allocatedAmount: '50.00',
   reservedResolutionAmount: '0.00',
   availableAmount: '142.00',
   currencyCode: 'EUR',
+  source: 'saved_card',
   gatewayProvider: 'stripe',
   reference: null,
   cardLastFour: '4242',
@@ -140,10 +142,12 @@ const externalPayment = {
   id: EXTERNAL_PAYMENT_ID,
   method: 'bank_transfer',
   amount: '100.00',
+  netCapturedAmount: '100.00',
   allocatedAmount: '0.00',
   reservedResolutionAmount: '0.00',
   availableAmount: '100.00',
-  gatewayProvider: 'bank',
+  source: 'external',
+  gatewayProvider: 'stripe',
   reference: 'BANK-42',
   cardLastFour: null,
   cardBrand: null,
@@ -160,9 +164,9 @@ function mockApi(overrides?: {
   emails?: unknown;
   folio?: unknown;
   preview?: unknown;
-  audit?: unknown;
+  audit?: unknown | ((offset: number) => unknown);
 }) {
-  vi.mocked(api.get).mockImplementation((url: string) => {
+  vi.mocked(api.get).mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
     if (url === '/v1/booking-requests') {
       return Promise.resolve({
         data: overrides?.list ?? {
@@ -188,7 +192,12 @@ function mockApi(overrides?: {
       } } as never);
     }
     if (url === `/v1/booking-requests/${REQUEST_ID}/audit-history`) {
-      return Promise.resolve({ data: overrides?.audit ?? [] } as never);
+      const audit = typeof overrides?.audit === 'function'
+        ? overrides.audit(Number(config?.params?.offset ?? 0))
+        : overrides?.audit ?? [];
+      return Promise.resolve({
+        data: Array.isArray(audit) ? { data: audit, nextOffset: null } : audit,
+      } as never);
     }
     if (url === `/v1/booking-requests/${REQUEST_ID}/payments`) {
       if (overrides?.payments instanceof Error) return Promise.reject(overrides.payments);
@@ -279,6 +288,15 @@ describe('Booking request queue', () => {
     await screen.findByText('Ada Lovelace');
     expect(screen.getByRole('table', { name: 'Booking requests' })).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'amount_desc');
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls
+      .filter(([url]) => url === '/v1/booking-requests')
+      .at(-1)?.[1]).toEqual({
+      params: expect.objectContaining({
+        propertyId: 'property-1',
+        sortBy: 'requestedTotal',
+        sortOrder: 'desc',
+      }),
+    }));
     await userEvent.click(screen.getByRole('link', { name: /Ada Lovelace/i }));
     expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
@@ -526,15 +544,11 @@ describe('Booking request payments, messages, and audit', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Move Final balance up' }));
     await waitFor(() => {
       expect(api.patch).toHaveBeenCalledWith(
-        `/v1/booking-requests/${REQUEST_ID}/installments/installment-2`,
-        { sortOrder: 0 },
+        `/v1/booking-requests/${REQUEST_ID}/installments/reorder`,
+        { installmentIds: ['installment-2', 'installment-1'] },
         { params: { propertyId: 'property-1' } },
       );
-      expect(api.patch).toHaveBeenCalledWith(
-        `/v1/booking-requests/${REQUEST_ID}/installments/installment-1`,
-        { sortOrder: 1 },
-        { params: { propertyId: 'property-1' } },
-      );
+      expect(api.patch).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -705,12 +719,52 @@ describe('Booking request payments, messages, and audit', () => {
     expect(document.body).not.toHaveTextContent('pm_secret_should_not_render');
     expect(api.get).toHaveBeenCalledWith(
       `/v1/booking-requests/${REQUEST_ID}/audit-history`,
-      { params: { propertyId: 'property-1' } },
+      { params: { propertyId: 'property-1', limit: 25, offset: 0 } },
     );
 
     await userEvent.click(screen.getByRole('tab', { name: 'Payments & plan' }));
     expect(await screen.findByText('Operational folio summary')).toBeInTheDocument();
     expect(screen.getByText('€508.00')).toBeInTheDocument();
+  });
+
+  it('loads additional immutable audit pages without replacing the first page', async () => {
+    mockApi({
+      audit: (offset: number) => offset === 0
+        ? {
+          data: [{
+            id: 'audit-new',
+            action: 'update',
+            actorDisplay: 'staff@example.com',
+            occurredAt: '2026-08-25T12:00:00.000Z',
+            summary: 'request.accepted',
+            details: { acceptedTotal: '670.00' },
+          }],
+          nextOffset: 25,
+        }
+        : {
+          data: [{
+            id: 'audit-old',
+            action: 'create',
+            actorDisplay: 'System',
+            occurredAt: '2026-08-24T10:00:00.000Z',
+            summary: 'request.pending',
+            details: {},
+          }],
+          nextOffset: null,
+        },
+    });
+
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Audit' }));
+    expect(await screen.findByText('Request accepted')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(await screen.findByText('Request submitted')).toBeInTheDocument();
+    expect(screen.getByText('Request accepted')).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith(
+      `/v1/booking-requests/${REQUEST_ID}/audit-history`,
+      { params: { propertyId: 'property-1', limit: 25, offset: 25 } },
+    );
   });
 });
 
@@ -734,6 +788,28 @@ describe('Booking request locales', () => {
 
     expect(srLatn.bookingRequests.actions.charge).toBe('Naplati karticu');
     expect(srLatn.bookingRequests.audit.actor).toContain('Izvršio');
+
+    expect(de.bookingRequests.amounts).toMatchObject({ quoted: 'Angebot', captured: 'Eingezogen' });
+    expect(hr.bookingRequests.amounts).toMatchObject({ quoted: 'Ponuda', captured: 'Naplaćeno' });
+    expect(itMessages.bookingRequests.amounts).toMatchObject({ quoted: 'Preventivo', captured: 'Incassato' });
+    expect(srLatn.bookingRequests.amounts).toMatchObject({ quoted: 'Ponuda', captured: 'Naplaćeno' });
+    expect(fr.bookingRequests.amounts).toMatchObject({ quoted: 'Devis', captured: 'Encaissé' });
+    expect(es.bookingRequests.amounts).toMatchObject({ quoted: 'Cotización', captured: 'Cobrado' });
+    expect(ptBR.bookingRequests.amounts).toMatchObject({ quoted: 'Cotação', captured: 'Cobrado' });
+
+    const forbidden: Array<[string, unknown, RegExp]> = [
+      ['de', de.bookingRequests, /Zitiert|Gefangen|aufgeladen|Anklage|Rekordrückkehr|Externe Rendite/],
+      ['hr', hr.bookingRequests, /Citirano|Zarobljen|Trenutni citat|Vratio se|Poricanje/],
+      ['it', itMessages.bookingRequests, /Citato|Catturato|Citazione attuale|Negazione|Mantenuto/],
+      ['sr-Latn', srLatn.bookingRequests, /Citirano|Trenutni citat|Predat citat/],
+      ['fr', fr.bookingRequests, /Cité|Capturé|Déni/],
+      ['es', es.bookingRequests, /\bcitado\b|\bcapturado\b|Negación|Regreso récord|puerta de enlace/],
+      ['pt-BR', ptBR.bookingRequests, /Citado|Capturado|Negação|Carregar cartão|Registro de retorno/],
+    ];
+    for (const [locale, namespace, terms] of forbidden) {
+      expect(JSON.stringify(namespace), `${locale} has machine-literal admin vocabulary`)
+        .not.toMatch(terms);
+    }
   });
 
   it('defines every visible booking-request leaf in all eight locales', () => {

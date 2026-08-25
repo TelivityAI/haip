@@ -27,12 +27,15 @@ import { DenyBookingRequestDto } from './dto/deny-booking-request.dto';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { ListBookingRequestsDto } from './dto/list-booking-requests.dto';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { ListBookingRequestAuditDto } from './dto/list-booking-request-audit.dto';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import {
   AllocateBookingRequestPaymentDto,
   ChargeBookingRequestCardDto,
   CreateBookingRequestInstallmentDto,
   RecordBookingRequestExternalPaymentDto,
   RecordBookingRequestExternalReturnDto,
+  ReorderBookingRequestInstallmentsDto,
   RefundBookingRequestPaymentDto,
   RetainBookingRequestPaymentDto,
   UpdateBookingRequestInstallmentDto,
@@ -73,9 +76,9 @@ export class BookingRequestController {
   @ApiOperation({ summary: 'List immutable sanitized Booking Request audit history' })
   auditHistory(
     @Param('id', ParseUUIDPipe) id: string,
-    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query() query: ListBookingRequestAuditDto,
   ) {
-    return this.service.auditHistory(id, propertyId);
+    return this.service.auditHistory(id, query.propertyId, query);
   }
 
   @Get(':id/acceptance-preview')
@@ -161,6 +164,19 @@ export class BookingRequestController {
     @AuditActorCtx() actor: AuditActor,
   ) {
     return this.paymentService.createInstallment(id, propertyId, dto, actor);
+  }
+
+  @Patch(':id/installments/reorder')
+  @RequirePermissions('reservations.write')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiOperation({ summary: 'Atomically reorder an entire Booking Request payment plan' })
+  reorderInstallments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: ReorderBookingRequestInstallmentsDto,
+    @AuditActorCtx() actor: AuditActor,
+  ) {
+    return this.paymentService.reorderInstallments(id, propertyId, dto, actor);
   }
 
   @Patch(':id/installments/:installmentId')

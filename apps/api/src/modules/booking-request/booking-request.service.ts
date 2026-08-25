@@ -11,6 +11,9 @@ import {
   auditLogs,
   bookingEngineConfig,
   bookingRequestConsequences,
+  bookingRequestEmailDeliveries,
+  bookingRequestInstallments,
+  bookingRequestPaymentAllocations,
   bookingRequestPaymentResolutions,
   bookingRequests,
   payments,
@@ -23,10 +26,12 @@ import type {
 import { createHash } from 'node:crypto';
 import {
   and,
+  asc,
   desc,
   eq,
   gte,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -226,12 +231,27 @@ export class BookingRequestService {
     const limit = dto.limit ?? 20;
     const offset = (page - 1) * limit;
     const where = and(...conditions);
+    const direction = dto.sortOrder === 'asc' ? asc : desc;
+    const requestedTotal = sql<number>`cast(${bookingRequests.submittedQuoteSnapshot}->>'grandTotal' as numeric)`;
+    const orderBy = dto.sortBy === 'requestedTotal'
+      ? [direction(requestedTotal), direction(bookingRequests.id)]
+      : dto.sortBy === 'arrivalDate'
+        ? [direction(bookingRequests.arrivalDate), direction(bookingRequests.id)]
+        : dto.sortBy === 'guestName'
+          ? [
+            direction(bookingRequests.guestLastName),
+            direction(bookingRequests.guestFirstName),
+            direction(bookingRequests.id),
+          ]
+          : dto.sortBy === 'status'
+            ? [direction(bookingRequests.status), direction(bookingRequests.id)]
+            : [direction(bookingRequests.createdAt), direction(bookingRequests.id)];
     const [selected, countRows] = await Promise.all([
       this.db
         .select()
         .from(bookingRequests)
         .where(where)
-        .orderBy(desc(bookingRequests.createdAt))
+        .orderBy(...orderBy)
         .limit(limit)
         .offset(offset),
       this.db
@@ -252,27 +272,82 @@ export class BookingRequestService {
     return toBookingRequestDetail(await this.findRequest(this.db, id, propertyId));
   }
 
-  async auditHistory(id: string, propertyId: string) {
+  async auditHistory(
+    id: string,
+    propertyId: string,
+    pagination: { limit?: number; offset?: number } = {},
+  ) {
     await this.findRequest(this.db, id, propertyId);
+    const [installments, allocations, paymentRows, resolutions, emails] = await Promise.all([
+      this.db.select({ id: bookingRequestInstallments.id })
+        .from(bookingRequestInstallments)
+        .where(and(
+          eq(bookingRequestInstallments.propertyId, propertyId),
+          eq(bookingRequestInstallments.bookingRequestId, id),
+        )),
+      this.db.select({ id: bookingRequestPaymentAllocations.id })
+        .from(bookingRequestPaymentAllocations)
+        .where(and(
+          eq(bookingRequestPaymentAllocations.propertyId, propertyId),
+          eq(bookingRequestPaymentAllocations.bookingRequestId, id),
+        )),
+      this.db.select({ id: payments.id })
+        .from(payments)
+        .where(and(eq(payments.propertyId, propertyId), eq(payments.bookingRequestId, id))),
+      this.db.select({ id: bookingRequestPaymentResolutions.id })
+        .from(bookingRequestPaymentResolutions)
+        .where(and(
+          eq(bookingRequestPaymentResolutions.propertyId, propertyId),
+          eq(bookingRequestPaymentResolutions.bookingRequestId, id),
+        )),
+      this.db.select({ id: bookingRequestEmailDeliveries.id })
+        .from(bookingRequestEmailDeliveries)
+        .where(and(
+          eq(bookingRequestEmailDeliveries.propertyId, propertyId),
+          eq(bookingRequestEmailDeliveries.bookingRequestId, id),
+        )),
+    ]);
+    const entityConditions = [
+      and(eq(auditLogs.entityType, 'booking_request'), eq(auditLogs.entityId, id)),
+      ...(installments.length ? [and(
+        eq(auditLogs.entityType, 'booking_request_installment'),
+        inArray(auditLogs.entityId, installments.map((row) => row.id)),
+      )] : []),
+      ...(allocations.length ? [and(
+        eq(auditLogs.entityType, 'booking_request_payment_allocation'),
+        inArray(auditLogs.entityId, allocations.map((row) => row.id)),
+      )] : []),
+      ...(paymentRows.length ? [and(
+        eq(auditLogs.entityType, 'payment'),
+        inArray(auditLogs.entityId, paymentRows.map((row) => row.id)),
+      )] : []),
+      ...(resolutions.length ? [and(
+        eq(auditLogs.entityType, 'booking_request_payment_resolution'),
+        inArray(auditLogs.entityId, resolutions.map((row) => row.id)),
+      )] : []),
+      ...(emails.length ? [and(
+        eq(auditLogs.entityType, 'booking_request_email_delivery'),
+        inArray(auditLogs.entityId, emails.map((row) => row.id)),
+      )] : []),
+    ].filter((condition): condition is NonNullable<typeof condition> => condition != null);
+    const limit = Math.max(1, Math.min(pagination.limit ?? 50, 100));
+    const offset = Math.max(0, pagination.offset ?? 0);
     const selected = await this.db
       .select()
       .from(auditLogs)
-      .where(eq(auditLogs.propertyId, propertyId))
-      .orderBy(desc(auditLogs.occurredAt));
+      .where(and(eq(auditLogs.propertyId, propertyId), or(...entityConditions)))
+      .orderBy(desc(auditLogs.occurredAt), desc(auditLogs.id))
+      .limit(limit + 1)
+      .offset(offset);
     const rows = selected.filter((row) => row.propertyId === propertyId);
-    const relatedEntities = new Set<string>([`booking_request:${id}`]);
-    const aggregateId = (value: unknown): string | undefined => {
-      if (!value || typeof value !== 'object') return undefined;
-      const record = value as Record<string, unknown>;
-      const candidate = record['requestId'] ?? record['bookingRequestId'];
-      return typeof candidate === 'string' ? candidate : undefined;
-    };
-    for (const row of rows) {
-      if (
-        aggregateId(row.newValue) === id
-        || aggregateId(row.previousValue) === id
-      ) relatedEntities.add(`${row.entityType}:${row.entityId ?? ''}`);
-    }
+    const relatedEntities = new Set<string>([
+      `booking_request:${id}`,
+      ...installments.map((row) => `booking_request_installment:${row.id}`),
+      ...allocations.map((row) => `booking_request_payment_allocation:${row.id}`),
+      ...paymentRows.map((row) => `payment:${row.id}`),
+      ...resolutions.map((row) => `booking_request_payment_resolution:${row.id}`),
+      ...emails.map((row) => `booking_request_email_delivery:${row.id}`),
+    ]);
     const allowedEntityTypes = new Set([
       'booking_request',
       'booking_request_installment',
@@ -281,11 +356,16 @@ export class BookingRequestService {
       'booking_request_payment_resolution',
       'booking_request_email_delivery',
     ]);
-    return rows
+    const data = rows
       .filter((row) => allowedEntityTypes.has(row.entityType)
         && relatedEntities.has(`${row.entityType}:${row.entityId ?? ''}`))
       .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
+      .slice(0, limit)
       .map(toBookingRequestAuditHistoryItem);
+    return {
+      data,
+      nextOffset: selected.length > limit ? offset + limit : null,
+    };
   }
 
   async acceptancePreview(id: string, propertyId: string) {

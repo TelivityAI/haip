@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, jsonb, date, boolean, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, jsonb, date, numeric, pgEnum, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 
 /**
@@ -67,4 +67,7 @@ export const auditLogs = pgTable('audit_logs', {
 
   // Immutable timestamp — this is the audit trail
   occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  propertyEntityTimeline: index('audit_logs_property_entity_timeline_idx')
+    .on(table.propertyId, table.entityType, table.entityId, table.occurredAt, table.id),
+}));

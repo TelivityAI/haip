@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { WEBHOOK_EVENTS } from '@telivityhaip/shared';
 import { getSocket } from '../lib/socket';
 import { useProperty } from '../context/PropertyContext';
+import { bookingRequestKeys } from '../components/booking-requests/queryKeys';
 
 interface PmsEventPayload {
   event: string;
@@ -45,14 +46,20 @@ export function realtimeQueryKeys(
   const folioId = stringValue(data.folioId);
 
   const requestKeys = (): string[][] => [
-    ['booking-requests', propertyId],
+    [...bookingRequestKeys.root(propertyId)],
+    [...bookingRequestKeys.paymentsRoot(propertyId)],
+    [...bookingRequestKeys.installmentsRoot(propertyId)],
+    [...bookingRequestKeys.messagesRoot(propertyId)],
+    [...bookingRequestKeys.auditRoot(propertyId)],
+    [...bookingRequestKeys.foliosRoot(propertyId)],
     ...(requestId ? [
-      ['booking-requests', propertyId, 'detail', requestId],
-      ['booking-request-payments', propertyId, requestId],
-      ['booking-request-installments', propertyId, requestId],
-      ['booking-request-messages', propertyId, requestId],
-      ['booking-request-audit', propertyId, requestId],
+      [...bookingRequestKeys.detail(propertyId, requestId)],
+      [...bookingRequestKeys.payments(propertyId, requestId)],
+      [...bookingRequestKeys.installments(propertyId, requestId)],
+      [...bookingRequestKeys.messages(propertyId, requestId)],
+      [...bookingRequestKeys.audit(propertyId, requestId)],
     ] : []),
+    ...(folioId ? [[...bookingRequestKeys.folio(propertyId, folioId)]] : []),
   ];
 
   if (payload.event.startsWith('booking_request.')) {

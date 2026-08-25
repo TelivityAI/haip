@@ -556,6 +556,8 @@ async function main() {
       description text,
       occurred_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `CREATE INDEX IF NOT EXISTS audit_logs_property_entity_timeline_idx
+      ON audit_logs (property_id, entity_type, entity_id, occurred_at, id)`,
     // channel_connections
     `CREATE TABLE IF NOT EXISTS channel_connections (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

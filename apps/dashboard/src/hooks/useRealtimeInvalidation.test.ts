@@ -32,6 +32,24 @@ describe('booking request realtime invalidation', () => {
     ]);
   });
 
+  it('invalidates every property request prefix for a reservation-only payload', () => {
+    const keys = realtimeQueryKeys('property-1', {
+      event: 'reservation.modified',
+      data: { reservationId: 'reservation-1' },
+      timestamp,
+    });
+
+    expect(keys).toEqual(expect.arrayContaining([
+      ['booking-requests', 'property-1'],
+      ['booking-request-payments', 'property-1'],
+      ['booking-request-installments', 'property-1'],
+      ['booking-request-messages', 'property-1'],
+      ['booking-request-audit', 'property-1'],
+      ['booking-request-folios', 'property-1'],
+    ]));
+    expect(keys.flat()).not.toContain('property-2');
+  });
+
   it('invalidates request money/messages/audit for canonical payment events only', () => {
     const keys = realtimeQueryKeys('property-1', {
       event: 'payment.refunded',

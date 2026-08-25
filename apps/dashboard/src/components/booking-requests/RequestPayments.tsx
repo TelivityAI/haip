@@ -284,11 +284,11 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
       const [moved] = next.splice(from, 1);
       if (!moved) return;
       next.splice(to, 0, moved);
-      await Promise.all(next.map((installment, sortOrder) => api.patch(
-        `/v1/booking-requests/${request.id}/installments/${installment.id}`,
-        { sortOrder },
+      await api.patch(
+        `/v1/booking-requests/${request.id}/installments/reorder`,
+        { installmentIds: next.map((installment) => installment.id) },
         { params: { propertyId } },
-      )));
+      );
     },
     onSuccess: () => queryClient.invalidateQueries({
       queryKey: bookingRequestKeys.installments(propertyId, request.id),
@@ -298,7 +298,7 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
   const milestoneLabel = (installment: BookingRequestInstallment) => installment.dueMilestone === 'date'
     ? t('bookingRequests.milestones.dateValue', { date: installment.dueDate })
     : t(`bookingRequests.milestones.${installment.dueMilestone}`);
-  const provenance = (payment: BookingRequestPayment) => payment.gatewayProvider === 'stripe'
+  const provenance = (payment: BookingRequestPayment) => payment.source === 'saved_card'
     ? t('bookingRequests.payments.savedCardProvenance', {
       brand: payment.cardBrand || t('bookingRequests.overview.cardGeneric'),
       lastFour: payment.cardLastFour || '••••',
@@ -446,8 +446,8 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
                   </div>
                   {canWrite && !payment.originalPaymentId && remaining > 0 && request.status !== 'denied' ? (
                     <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={() => setPaymentAction({ action: payment.gatewayProvider === 'stripe' ? 'refund' : 'external_return', payment, amount: String(remaining) })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
-                        {payment.gatewayProvider === 'stripe' ? t('bookingRequests.paymentActions.refund.action') : t('bookingRequests.paymentActions.external_return.action')}
+                      <button type="button" onClick={() => setPaymentAction({ action: payment.source === 'saved_card' ? 'refund' : 'external_return', payment, amount: String(remaining) })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
+                        {payment.source === 'saved_card' ? t('bookingRequests.paymentActions.refund.action') : t('bookingRequests.paymentActions.external_return.action')}
                       </button>
                       {request.status === 'pending' ? <button type="button" onClick={() => setPaymentAction({ action: 'retain', payment, amount: String(remaining) })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-telivity-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-orange">{t('bookingRequests.paymentActions.retain.open')}</button> : null}
                     </div>

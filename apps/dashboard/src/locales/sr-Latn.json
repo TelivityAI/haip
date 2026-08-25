@@ -1947,7 +1947,7 @@
       "independence": "Odluke o rezervaciji i novčane akcije su nezavisne. Primanje plaćanja nikada ne prihvata zahtev, a prihvatanje nikada ne pokreće plaćanje."
     },
     "amounts": {
-      "quoted": "Citirano",
+      "quoted": "Ponuda",
       "submitted": "Podneto",
       "current": "Trenutno",
       "accepted": "Prihvaćeno",
@@ -1978,16 +1978,16 @@
       "priceSource": "Izvor cene"
     },
     "priceSources": {
-      "submitted": "Predat citat",
-      "current": "Trenutni citat",
+      "submitted": "Podneta ponuda",
+      "current": "Trenutna ponuda",
       "custom": "Prilagođeni total"
     },
     "accept": {
       "title": "Prihvatite zahtev za rezervaciju",
       "priceChoice": "Prihvaćena cena",
-      "submitted": "Predat citat",
+      "submitted": "Podneta ponuda",
       "submittedDescription": "Koristite iznos koji je gost video kada je zahtev poslat.",
-      "current": "Trenutni citat",
+      "current": "Trenutna ponuda",
       "currentDescription": "Ponovo proverite dostupnost i izračunajte merodavnu trenutnu ponudu tokom prihvatanja.",
       "custom": "Prilagođeni total",
       "customDescription": "Postavite eksplicitni zbir i zabeležite zašto se razlikuje.",
@@ -2022,7 +2022,7 @@
       "maximum": "Unesite iznos unutar dozvoljenog maksimuma."
     },
     "payments": {
-      "requestSummary": "Zatražite sažetak novca",
+      "requestSummary": "Sažetak plaćanja za zahtev",
       "independence": "Odluke o rezervaciji ne zavise od stanja plaćanja.",
       "plan": "Plan plaćanja",
       "noAutomatic": "Ništa se ne naplaćuje automatski. Prekretnice su podsetnici za akcije koje je pokrenulo osoblje.",
@@ -2052,13 +2052,13 @@
       "moveUp": "Pomeri {{label}} gore",
       "moveDown": "Pomeri {{label}} dole",
       "reorderError": "Redosled rata nije moguće sačuvati. Pokušajte ponovo.",
-      "movements": "Kretanja novca",
-      "noMovements": "Još nema kretanja novca.",
+      "movements": "Prometi plaćanja",
+      "noMovements": "Još nema prometa plaćanja.",
       "savedCardProvenance": "Sačuvana kartica · {{brand}} •••• {{lastFour}}",
       "externalProvenance": "Eksterno · {{method}} · {{reference}}",
       "loadError": "Plan plaćanja i istorija kretanja nisu mogli da se učitaju.",
       "folioSummary": "Operativni folio sažetak",
-      "acceptedDeal": "Prihvaćen dogovor",
+      "acceptedDeal": "Prihvaćen ukupan iznos",
       "folioCharges": "Stavke folija",
       "folioPayments": "Folio plaćanja",
       "balanceDue": "Dospelo stanje",
@@ -2168,14 +2168,14 @@
       "acceptedDescription": "Prihvaćeno na {{amount}} koristeći {{source}}.",
       "denied": "Zahtev odbijen",
       "deniedDescription": "Zahtev je odbijen nakon što je stanje novca rešeno.",
-      "paymentCaptured": "Plaćanje je uhvaćeno",
+      "paymentCaptured": "Plaćanje je naplaćeno",
       "paymentFailed": "Plaćanje nije uspelo",
       "paymentReturned": "Uplata vraćena",
       "paymentDescription": "{{amount}} · {{method}}",
       "resolutionDescription": "{{amount}} rešeno",
       "resolutions": {
-        "refund": "Povraćaj sredstava za pristupnik je zabeležen",
-        "external_return": "Spoljni povratak zabeležen",
+        "refund": "Povraćaj kartične uplate je zabeležen",
+        "external_return": "Eksterni povraćaj je zabeležen",
         "retained": "Novac zadržan"
       },
       "message": "{{kind}} poruka",
@@ -2183,6 +2183,9 @@
       "actor": "Izvršio/la: {{actor}}",
       "loadError": "Istoriju revizije nije moguće učitati.",
       "empty": "Nema evidentiranih revizijskih događaja.",
+      "loadMore": "Učitaj još",
+      "loadingMore": "Učitavanje dodatnih događaja…",
+      "loadMoreError": "Dodatne revizijske događaje nije moguće učitati.",
       "events": {
         "request_pending": "Zahtev poslat",
         "request_accepted": "Zahtev prihvaćen",

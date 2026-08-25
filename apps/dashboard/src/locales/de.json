@@ -591,7 +591,7 @@
       "overview": "Übersicht",
       "payments": "Zahlungen & Plan",
       "messages": "Nachrichten",
-      "audit": "Prüfung"
+      "audit": "Audit-Protokoll"
     },
     "queue": {
       "title": "Buchungsanfragen",
@@ -599,7 +599,7 @@
       "filters": "Filter für Buchungsanfragen",
       "guest": "Gast",
       "card": "Karte",
-      "stay": "Bleib",
+      "stay": "Aufenthalt",
       "amount": "Angeforderter Betrag",
       "allStatuses": "Alle Status",
       "anyCard": "Beliebiger Kartenstatus",
@@ -614,7 +614,7 @@
         "guest": "Gastname",
         "amountDesc": "Höchster angefragter Betrag"
       },
-      "clear": "Klar",
+      "clear": "Zurücksetzen",
       "loading": "Buchungsanfragen werden geladen…",
       "loadError": "Buchungsanfragen konnten nicht geladen werden. Versuchen Sie es erneut.",
       "empty": "Keine Buchungsanfragen entsprechen diesen Filtern.",
@@ -622,7 +622,7 @@
       "total_other": "{{count}} Anfragen",
       "total": "{{count}} Anfragen",
       "previous": "Zurück",
-      "next": "Als nächstes"
+      "next": "Weiter"
     },
     "detail": {
       "back": "Alle Buchungsanfragen",
@@ -633,14 +633,14 @@
       "independence": "Buchungsentscheidungen und Geldaktionen sind unabhängig voneinander. Mit der Annahme einer Zahlung wird niemals eine Anfrage angenommen, und die Annahme löst niemals eine Zahlung aus."
     },
     "amounts": {
-      "quoted": "Zitiert",
+      "quoted": "Angebot",
       "submitted": "Eingereicht",
       "current": "Aktuell",
       "accepted": "Akzeptiert",
       "difference": "Unterschied",
-      "captured": "Gefangen",
-      "returned": "Zurückgegeben",
-      "retained": "Behalten"
+      "captured": "Eingezogen",
+      "returned": "Zurückgezahlt",
+      "retained": "Einbehalten"
     },
     "overview": {
       "stay": "Aufenthaltsanfrage",
@@ -659,19 +659,19 @@
       "card": "Karte im Archiv",
       "cardGeneric": "Karte",
       "noCard": "Keine gespeicherte Karte",
-      "cardSafety": "Es werden nur die Marke der Safekarte und die letzten vier Ziffern angezeigt. Das Personal muss jede Ladung einleiten.",
+      "cardSafety": "Es werden nur die Kartenmarke und die letzten vier Ziffern angezeigt. Das Personal muss jede Belastung ausdrücklich auslösen.",
       "decision": "Entscheidungsprotokoll",
       "priceSource": "Preisquelle"
     },
     "priceSources": {
-      "submitted": "Angebot abgegeben",
+      "submitted": "Eingereichtes Angebot",
       "current": "Aktuelles Angebot",
       "custom": "Benutzerdefinierte Summe"
     },
     "accept": {
       "title": "Buchungsanfrage annehmen",
       "priceChoice": "Akzeptierter Preis",
-      "submitted": "Angebot abgegeben",
+      "submitted": "Eingereichtes Angebot",
       "submittedDescription": "Verwenden Sie den Betrag, den der Gast beim Absenden der Anfrage gesehen hat.",
       "current": "Aktuelles Angebot",
       "currentDescription": "Überprüfen Sie die Verfügbarkeit erneut und berechnen Sie bei der Annahme das maßgebliche aktuelle Angebot.",
@@ -708,21 +708,21 @@
       "maximum": "Geben Sie einen Betrag innerhalb des zulässigen Höchstwerts ein."
     },
     "payments": {
-      "requestSummary": "Fordern Sie eine Geldübersicht an",
+      "requestSummary": "Zahlungsübersicht zur Anfrage",
       "independence": "Buchungsentscheidungen hängen nicht vom Zahlungsstatus ab.",
       "plan": "Zahlungsplan",
-      "noAutomatic": "Es wird nichts automatisch berechnet. Meilensteine ​​sind Erinnerungen an von Mitarbeitern initiierte Maßnahmen.",
-      "noAutomaticTitle": "Es wird nichts automatisch berechnet.",
+      "noAutomatic": "Es wird nichts automatisch belastet. Meilensteine sind Erinnerungen für ausdrücklich vom Personal ausgelöste Aktionen.",
+      "noAutomaticTitle": "Es wird nichts automatisch belastet.",
       "noAutomaticDescription": "Meilensteine sind Erinnerungen an von Mitarbeitern initiierte Maßnahmen.",
       "addInstallment": "Rate hinzufügen",
       "editInstallment": "Rate bearbeiten",
-      "installmentLabel": "Ratenzahlungsetikett",
+      "installmentLabel": "Ratenbezeichnung",
       "amountType": "Betragstyp",
       "fixedAmount": "Fester Betrag",
       "percentage": "Prozentsatz",
       "milestone": "Fälliger Meilenstein",
       "dueDate": "Fälligkeitsdatum",
-      "saveInstallment": "Rate sparen",
+      "saveInstallment": "Rate speichern",
       "installmentError": "Die Rate konnte nicht gespeichert werden.",
       "noInstallments": "Noch keine Ratenzahlungspläne.",
       "allocated": "{{allocated}} von {{total}} zugewiesen",
@@ -730,7 +730,7 @@
       "deleteLabel": "{{label}} löschen",
       "allocateLabel": "Ordnen Sie die Zahlung der Nummer {{label}} zu",
       "allocateTo": "Ordnen Sie die Zahlung der Nummer {{label}} zu",
-      "movement": "Erfasste Bewegung",
+      "movement": "Eingezogene Zahlung",
       "allocate": "Zuordnen",
       "allocationError": "Die Zahlung konnte nicht zugeordnet werden.",
       "availableForAllocation": "{{available}} verfügbar · {{allocated}} zugeordnet · {{method}}",
@@ -738,14 +738,14 @@
       "moveUp": "{{label}} nach oben verschieben",
       "moveDown": "{{label}} nach unten verschieben",
       "reorderError": "Die Reihenfolge der Raten konnte nicht gespeichert werden. Versuchen Sie es erneut.",
-      "movements": "Geldbewegungen",
-      "noMovements": "Noch keine Geldbewegungen.",
+      "movements": "Zahlungsvorgänge",
+      "noMovements": "Noch keine Zahlungsvorgänge.",
       "savedCardProvenance": "Gespeicherte Karte · {{brand}} •••• {{lastFour}}",
       "externalProvenance": "Extern · {{method}} · {{reference}}",
       "loadError": "Zahlungsplan und Bewegungshistorie konnten nicht geladen werden.",
       "folioSummary": "Zusammenfassung des operativen Folios",
-      "acceptedDeal": "Akzeptierter Deal",
-      "folioCharges": "Foliogebühren",
+      "acceptedDeal": "Akzeptierter Gesamtbetrag",
+      "folioCharges": "Folio-Posten",
       "folioPayments": "Folio-Zahlungen",
       "balanceDue": "Restbetrag fällig",
       "folioError": "Die verknüpfte Foliozusammenfassung konnte nicht geladen werden."
@@ -773,8 +773,8 @@
     "paymentStatuses": {
       "pending": "Ausstehend",
       "authorized": "Autorisiert",
-      "captured": "Gefangen",
-      "settled": "Erledigt",
+      "captured": "Eingezogen",
+      "settled": "Verbucht",
       "refunded": "Erstattet",
       "partially_refunded": "Teilweise erstattet",
       "failed": "Fehlgeschlagen",
@@ -791,9 +791,9 @@
       "error": "Die Geldaktion konnte nicht abgeschlossen werden. Ihre eingegebenen Daten sind noch hier.",
       "paymentRequired": "Wählen Sie zunächst eine Zahlungsbewegung aus.",
       "charge": {
-        "title": "Gespeicherte Karte aufladen",
-        "action": "Gespeicherte Karte aufladen",
-        "description": "Hierbei handelt es sich um eine ausdrücklich vom Personal initiierte Anklage. Die Anfrage wird nicht angenommen."
+        "title": "Gespeicherte Karte belasten",
+        "action": "Gespeicherte Karte belasten",
+        "description": "Diese Belastung wird ausdrücklich vom Personal ausgelöst. Die Anfrage wird dadurch nicht angenommen."
       },
       "external": {
         "title": "Externe Zahlung erfassen",
@@ -806,14 +806,14 @@
         "description": "Geben Sie einen Teil oder die gesamte Gateway-Zahlung zurück."
       },
       "external_return": {
-        "title": "Erfassen Sie die externe Rendite",
-        "action": "Rekordrückkehr",
+        "title": "Externe Rückzahlung erfassen",
+        "action": "Rückzahlung erfassen",
         "description": "Vermerken Sie, dass extern eingenommenes Geld zurückgegeben wurde."
       },
       "retain": {
         "title": "Geld behalten",
         "action": "Geld behalten",
-        "open": "Behalten Sie mit Vernunft bei",
+        "open": "Mit Begründung einbehalten",
         "description": "Lösen Sie diesen Betrag vor der Ablehnung als einbehalten auf. Ein geschäftlicher Grund ist zwingend erforderlich.",
         "reason": "Grund für die Geldeinbehaltung"
       }
@@ -856,12 +856,12 @@
       "deniedDescription": "Der Antrag wurde abgelehnt, nachdem der Geldstatus geklärt war.",
       "paymentCaptured": "Zahlung erfasst",
       "paymentFailed": "Die Zahlung ist fehlgeschlagen",
-      "paymentReturned": "Zahlung zurückerstattet",
+      "paymentReturned": "Zahlung zurückgezahlt",
       "paymentDescription": "{{amount}} · {{method}}",
       "resolutionDescription": "{{amount}} gelöst",
       "resolutions": {
         "refund": "Gateway-Rückerstattung erfasst",
-        "external_return": "Externe Rendite erfasst",
+        "external_return": "Externe Rückzahlung erfasst",
         "retained": "Geld einbehalten"
       },
       "message": "{{kind}} Nachricht",
@@ -869,6 +869,9 @@
       "actor": "Ausgeführt von: {{actor}}",
       "loadError": "Der Prüfverlauf konnte nicht geladen werden.",
       "empty": "Es wurden noch keine Prüfereignisse aufgezeichnet.",
+      "loadMore": "Weitere laden",
+      "loadingMore": "Weitere werden geladen…",
+      "loadMoreError": "Weitere Audit-Ereignisse konnten nicht geladen werden.",
       "events": {
         "request_pending": "Anfrage eingereicht",
         "request_accepted": "Anfrage angenommen",

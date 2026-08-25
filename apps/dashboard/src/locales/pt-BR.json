@@ -1832,12 +1832,12 @@
       "independence": "As decisões de reserva e as ações monetárias são independentes. Receber o pagamento nunca aceita uma solicitação e a aceitação nunca aciona o pagamento."
     },
     "amounts": {
-      "quoted": "Citado",
+      "quoted": "Cotação",
       "submitted": "Enviado",
       "current": "Atual",
       "accepted": "Aceito",
       "difference": "Diferença",
-      "captured": "Capturado",
+      "captured": "Cobrado",
       "returned": "Devolvido",
       "retained": "Retido"
     },
@@ -1907,7 +1907,7 @@
       "maximum": "Insira um valor dentro do máximo permitido."
     },
     "payments": {
-      "requestSummary": "Solicitar resumo de dinheiro",
+      "requestSummary": "Resumo de pagamentos da solicitação",
       "independence": "As decisões de reserva não dependem do estado do pagamento.",
       "plan": "Plano de pagamento",
       "noAutomatic": "Nada é cobrado automaticamente. Marcos são lembretes para ações iniciadas pela equipe.",
@@ -1929,7 +1929,7 @@
       "deleteLabel": "Excluir {{label}}",
       "allocateLabel": "Alocar pagamento para {{label}}",
       "allocateTo": "Alocar pagamento para {{label}}",
-      "movement": "Movimento capturado",
+      "movement": "Pagamento cobrado",
       "allocate": "Alocar",
       "allocationError": "O pagamento não pôde ser alocado.",
       "availableForAllocation": "{{available}} disponível · {{allocated}} alocado · {{method}}",
@@ -1937,13 +1937,13 @@
       "moveUp": "Mover {{label}} para cima",
       "moveDown": "Mover {{label}} para baixo",
       "reorderError": "Não foi possível salvar a ordem das parcelas. Tente novamente.",
-      "movements": "Movimentos de dinheiro",
-      "noMovements": "Ainda não há movimentos de dinheiro.",
+      "movements": "Movimentações de pagamento",
+      "noMovements": "Ainda não há movimentações de pagamento.",
       "savedCardProvenance": "Cartão salvo · {{brand}} •••• {{lastFour}}",
       "externalProvenance": "Externo · {{method}} · {{reference}}",
       "loadError": "Não foi possível carregar o plano de pagamento e o histórico de movimentos.",
       "folioSummary": "Resumo do fólio operacional",
-      "acceptedDeal": "Oferta aceita",
+      "acceptedDeal": "Total aceito",
       "folioCharges": "Cobranças de fólio",
       "folioPayments": "Pagamentos em fólio",
       "balanceDue": "Saldo devido",
@@ -1972,8 +1972,8 @@
     "paymentStatuses": {
       "pending": "Pendente",
       "authorized": "Autorizado",
-      "captured": "Capturado",
-      "settled": "Resolvido",
+      "captured": "Cobrado",
+      "settled": "Contabilizado",
       "refunded": "Reembolsado",
       "partially_refunded": "Parcialmente reembolsado",
       "failed": "Falha",
@@ -1990,8 +1990,8 @@
       "error": "A ação monetária não pôde ser concluída. Os detalhes inseridos ainda estão aqui.",
       "paymentRequired": "Escolha primeiro um movimento de pagamento.",
       "charge": {
-        "title": "Carregar cartão salvo",
-        "action": "Carregar cartão salvo",
+        "title": "Cobrar no cartão salvo",
+        "action": "Cobrar no cartão salvo",
         "description": "Esta é uma cobrança explícita iniciada pela equipe. Não aceita o pedido."
       },
       "external": {
@@ -2005,14 +2005,14 @@
         "description": "Devolva parte ou todo esse pagamento de gateway."
       },
       "external_return": {
-        "title": "Registrar retorno externo",
-        "action": "Registro de retorno",
+        "title": "Registrar devolução externa",
+        "action": "Registrar devolução",
         "description": "Registre que o dinheiro arrecadado externamente foi devolvido."
       },
       "retain": {
         "title": "Reter dinheiro",
         "action": "Reter dinheiro",
-        "open": "Retenha com razão",
+        "open": "Reter com justificativa",
         "description": "Resolva esse valor como retido antes da negação. Um motivo comercial é obrigatório.",
         "reason": "Razão para reter dinheiro"
       }
@@ -2033,7 +2033,7 @@
     "messageKinds": {
       "receipt": "Solicitar recibo",
       "accepted": "Aceitação",
-      "denied": "Negação",
+      "denied": "Recusa",
       "payment": "Pagamento",
       "refund": "Reembolso",
       "failure": "Falha no pagamento"
@@ -2053,14 +2053,14 @@
       "acceptedDescription": "Aceito em {{amount}} usando o {{source}}.",
       "denied": "Solicitação negada",
       "deniedDescription": "O pedido foi negado depois que seu estado monetário foi resolvido.",
-      "paymentCaptured": "Pagamento capturado",
+      "paymentCaptured": "Pagamento cobrado",
       "paymentFailed": "Falha no pagamento",
       "paymentReturned": "Pagamento devolvido",
       "paymentDescription": "{{amount}} · {{method}}",
       "resolutionDescription": "{{amount}} resolvido",
       "resolutions": {
         "refund": "Reembolso de gateway registrado",
-        "external_return": "Retorno externo registrado",
+        "external_return": "Devolução externa registrada",
         "retained": "Dinheiro retido"
       },
       "message": "mensagem {{kind}}",
@@ -2068,6 +2068,9 @@
       "actor": "Executado por: {{actor}}",
       "loadError": "Não foi possível carregar o histórico de auditoria.",
       "empty": "Nenhum evento de auditoria foi registrado.",
+      "loadMore": "Carregar mais",
+      "loadingMore": "Carregando mais eventos…",
+      "loadMoreError": "Não foi possível carregar mais eventos de auditoria.",
       "events": {
         "request_pending": "Solicitação enviada",
         "request_accepted": "Solicitação aceita",

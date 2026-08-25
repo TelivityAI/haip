@@ -1947,12 +1947,12 @@
       "independence": "Las decisiones de reserva y las acciones monetarias son independientes. Al aceptar el pago nunca se acepta una solicitud y la aceptación nunca activa el pago."
     },
     "amounts": {
-      "quoted": "citado",
+      "quoted": "Cotización",
       "submitted": "Enviado",
       "current": "Actual",
       "accepted": "Aceptado",
-      "difference": "diferencia",
-      "captured": "capturado",
+      "difference": "Diferencia",
+      "captured": "Cobrado",
       "returned": "Devuelto",
       "retained": "Retenido"
     },
@@ -2022,7 +2022,7 @@
       "maximum": "Introduzca un importe dentro del máximo permitido."
     },
     "payments": {
-      "requestSummary": "Solicitar resumen de dinero",
+      "requestSummary": "Resumen de pagos de la solicitud",
       "independence": "Las decisiones de reserva no dependen del estado de pago.",
       "plan": "plan de pago",
       "noAutomatic": "No se cobra nada automáticamente. Los hitos son recordatorios de las acciones iniciadas por el personal.",
@@ -2044,7 +2044,7 @@
       "deleteLabel": "Eliminar {{label}}",
       "allocateLabel": "Asignar pago al {{label}}",
       "allocateTo": "Asignar pago al {{label}}",
-      "movement": "Movimiento capturado",
+      "movement": "Pago cobrado",
       "allocate": "Asignar",
       "allocationError": "No se pudo asignar el pago.",
       "availableForAllocation": "{{available}} disponible · {{allocated}} asignado · {{method}}",
@@ -2052,20 +2052,20 @@
       "moveUp": "Subir {{label}}",
       "moveDown": "Bajar {{label}}",
       "reorderError": "No se pudo guardar el orden de las cuotas. Inténtelo de nuevo.",
-      "movements": "Movimientos de dinero",
-      "noMovements": "Aún no hay movimientos de dinero.",
+      "movements": "Movimientos de pago",
+      "noMovements": "Aún no hay movimientos de pago.",
       "savedCardProvenance": "Tarjeta guardada · {{brand}} •••• {{lastFour}}",
       "externalProvenance": "Externo · {{method}} · {{reference}}",
       "loadError": "No se pudo cargar el plan de pagos ni el historial de movimientos.",
       "folioSummary": "Resumen del folio operativo",
-      "acceptedDeal": "trato aceptado",
+      "acceptedDeal": "Total aceptado",
       "folioCharges": "Cargos en folio",
       "folioPayments": "Pagos en folio",
       "balanceDue": "Saldo adeudado",
-      "folioError": "No se pudo cargar el resumen de la publicación vinculada."
+      "folioError": "No se pudo cargar el resumen del folio vinculado."
     },
     "installmentStatuses": {
-      "unpaid": "No remunerado",
+      "unpaid": "Pendiente de pago",
       "partial": "Parcial",
       "paid": "Pagado"
     },
@@ -2081,14 +2081,14 @@
       "debit_card": "tarjeta de débito",
       "cash": "efectivo",
       "bank_transfer": "transferencia bancaria",
-      "pix": "FOTO",
+      "pix": "PIX",
       "other": "otro"
     },
     "paymentStatuses": {
       "pending": "Pendiente",
       "authorized": "Autorizado",
-      "captured": "capturado",
-      "settled": "Resuelto",
+      "captured": "Cobrado",
+      "settled": "Contabilizado",
       "refunded": "Reembolsado",
       "partially_refunded": "Reembolsado parcialmente",
       "failed": "Fallido",
@@ -2105,8 +2105,8 @@
       "error": "La acción monetaria no se pudo completar. Los datos ingresados ​​todavía están aquí.",
       "paymentRequired": "Elija primero un movimiento de pago.",
       "charge": {
-        "title": "Cargar tarjeta guardada",
-        "action": "Cargar tarjeta guardada",
+        "title": "Cobrar a la tarjeta guardada",
+        "action": "Cobrar a la tarjeta guardada",
         "description": "Este es un cargo explícito iniciado por el personal. No acepta la solicitud."
       },
       "external": {
@@ -2117,17 +2117,17 @@
       "refund": {
         "title": "Reembolso de pago con tarjeta guardada",
         "action": "Reembolso",
-        "description": "Devolver parte o la totalidad de este pago de pasarela."
+        "description": "Devuelva una parte o la totalidad de este pago con tarjeta."
       },
       "external_return": {
-        "title": "Registrar retorno externo",
-        "action": "Regreso récord",
+        "title": "Registrar devolución externa",
+        "action": "Registrar devolución",
         "description": "Registre que el dinero recaudado externamente ha sido devuelto."
       },
       "retain": {
-        "title": "retener dinero",
-        "action": "retener dinero",
-        "open": "retener con razon",
+        "title": "Retener el importe",
+        "action": "Retener el importe",
+        "open": "Retener con motivo",
         "description": "Resuelva esta cantidad como retenida antes de la denegación. Un motivo comercial es obligatorio.",
         "reason": "Razón para retener dinero"
       }
@@ -2148,7 +2148,7 @@
     "messageKinds": {
       "receipt": "Solicitar recibo",
       "accepted": "Aceptación",
-      "denied": "Negación",
+      "denied": "Rechazo",
       "payment": "Pago",
       "refund": "Reembolso",
       "failure": "Fallo de pago"
@@ -2168,14 +2168,14 @@
       "acceptedDescription": "Aceptado al {{amount}} utilizando el {{source}}.",
       "denied": "Solicitud denegada",
       "deniedDescription": "La solicitud fue denegada después de que se resolvió su estado monetario.",
-      "paymentCaptured": "Pago capturado",
+      "paymentCaptured": "Pago cobrado",
       "paymentFailed": "Pago fallido",
       "paymentReturned": "Pago devuelto",
       "paymentDescription": "{{amount}} · {{method}}",
       "resolutionDescription": "{{amount}} resuelto",
       "resolutions": {
-        "refund": "Reembolso de puerta de enlace registrado",
-        "external_return": "Retorno externo registrado",
+        "refund": "Reembolso de tarjeta registrado",
+        "external_return": "Devolución externa registrada",
         "retained": "Dinero retenido"
       },
       "message": "{{kind}} mensaje",
@@ -2183,6 +2183,9 @@
       "actor": "Realizado por: {{actor}}",
       "loadError": "No se pudo cargar el historial de auditoría.",
       "empty": "No se han registrado eventos de auditoría.",
+      "loadMore": "Cargar más",
+      "loadingMore": "Cargando más eventos…",
+      "loadMoreError": "No se pudieron cargar más eventos de auditoría.",
       "events": {
         "request_pending": "Solicitud enviada",
         "request_accepted": "Solicitud aceptada",

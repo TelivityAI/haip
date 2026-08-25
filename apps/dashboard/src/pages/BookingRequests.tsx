@@ -41,6 +41,13 @@ import {
 
 type DetailTab = 'overview' | 'payments' | 'messages' | 'audit';
 
+function queueSortParams(sort: string) {
+  if (sort === 'amount_desc') return { sortBy: 'requestedTotal', sortOrder: 'desc' };
+  if (sort === 'arrival') return { sortBy: 'arrivalDate', sortOrder: 'asc' };
+  if (sort === 'guest') return { sortBy: 'guestName', sortOrder: 'asc' };
+  return { sortBy: 'createdAt', sortOrder: 'desc' };
+}
+
 function GuardMessage({
   icon: Icon,
   title,
@@ -72,24 +79,26 @@ function BookingRequestQueue({ propertyId }: { propertyId: string }) {
   const [arrivalTo, setArrivalTo] = useState('');
   const [sort, setSort] = useState('newest');
   const [page, setPage] = useState(1);
-  const filters = useMemo(() => ({ status, guest, card, arrivalFrom, arrivalTo, page }), [
+  const filters = useMemo(() => ({ status, guest, card, arrivalFrom, arrivalTo, sort, page }), [
     arrivalFrom,
     arrivalTo,
     card,
     guest,
     page,
+    sort,
     status,
   ]);
   const params = useMemo(() => ({
     propertyId,
     page,
     limit: 20,
+    ...queueSortParams(sort),
     ...(status ? { status } : {}),
     ...(guest.trim() ? { guest: guest.trim() } : {}),
     ...(card ? { hasCard: card === 'true' } : {}),
     ...(arrivalFrom ? { arrivalDateFrom: arrivalFrom } : {}),
     ...(arrivalTo ? { arrivalDateTo: arrivalTo } : {}),
-  }), [arrivalFrom, arrivalTo, card, guest, page, propertyId, status]);
+  }), [arrivalFrom, arrivalTo, card, guest, page, propertyId, sort, status]);
 
   const listQuery = useQuery({
     queryKey: bookingRequestKeys.list(propertyId, filters),
@@ -98,16 +107,6 @@ function BookingRequestQueue({ propertyId }: { propertyId: string }) {
   const payload = listQuery.data?.data ?? listQuery.data ?? {};
   const listed = (Array.isArray(payload) ? payload : payload.data ?? []) as BookingRequestListItem[];
   const rows = listed.filter((row) => row.propertyId === propertyId);
-  const sortedRows = [...rows].sort((a, b) => {
-    if (sort === 'guest') return `${a.guestLastName} ${a.guestFirstName}`.localeCompare(`${b.guestLastName} ${b.guestFirstName}`);
-    if (sort === 'arrival') return a.arrivalDate.localeCompare(b.arrivalDate);
-    if (sort === 'amount_desc') {
-      const amountA = Number(a.submittedTotal);
-      const amountB = Number(b.submittedTotal);
-      return amountB - amountA;
-    }
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
   const total = Array.isArray(payload) ? payload.length : Number(payload.total ?? rows.length);
   const hasMore = !Array.isArray(payload) && Boolean(payload.hasMore);
 
@@ -160,7 +159,7 @@ function BookingRequestQueue({ propertyId }: { propertyId: string }) {
           </label>
           <label className="text-xs font-semibold uppercase tracking-wide text-telivity-slate">
             {t('bookingRequests.queue.sort')}
-            <select value={sort} onChange={(event) => setSort(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal text-telivity-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
+            <select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal text-telivity-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
               <option value="newest">{t('bookingRequests.queue.sortOptions.newest')}</option>
               <option value="arrival">{t('bookingRequests.queue.sortOptions.arrival')}</option>
               <option value="guest">{t('bookingRequests.queue.sortOptions.guest')}</option>
@@ -191,7 +190,7 @@ function BookingRequestQueue({ propertyId }: { propertyId: string }) {
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map((request) => {
+              {rows.map((request) => {
                 return (
                   <tr key={request.id} className="border-b border-slate-100 last:border-0 hover:bg-telivity-light-grey/40 focus-within:bg-telivity-light-grey/40">
                     <td className="px-4 py-3">
@@ -208,7 +207,7 @@ function BookingRequestQueue({ propertyId }: { propertyId: string }) {
                   </tr>
                 );
               })}
-              {!sortedRows.length ? <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-telivity-slate">{t('bookingRequests.queue.empty')}</td></tr> : null}
+              {!rows.length ? <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-telivity-slate">{t('bookingRequests.queue.empty')}</td></tr> : null}
             </tbody>
           </table>
         </div>

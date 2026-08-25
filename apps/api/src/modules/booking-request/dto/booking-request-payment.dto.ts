@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsDateString,
   IsEnum,
   IsInt,
@@ -64,6 +67,15 @@ export class CreateBookingRequestInstallmentDto {
 export class UpdateBookingRequestInstallmentDto extends PartialType(
   CreateBookingRequestInstallmentDto,
 ) {}
+
+export class ReorderBookingRequestInstallmentsDto {
+  @ApiProperty({ type: [String], description: 'Every request installment ID in target order' })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  installmentIds!: string[];
+}
 
 export class AllocateBookingRequestPaymentDto {
   @ApiProperty()

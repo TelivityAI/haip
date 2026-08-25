@@ -9,6 +9,9 @@ import { validate } from 'class-validator';
 import {
   auditLogs,
   bookingRequestConsequences,
+  bookingRequestEmailDeliveries,
+  bookingRequestInstallments,
+  bookingRequestPaymentAllocations,
   bookingRequestPaymentResolutions,
   bookingRequests,
   bookings,
@@ -167,7 +170,10 @@ type State = {
   reservations: Array<Record<string, unknown>>;
   folios: Array<Record<string, unknown>>;
   payments: Array<Record<string, unknown>>;
+  installments: Array<Record<string, unknown>>;
+  allocations: Array<Record<string, unknown>>;
   resolutions: Array<Record<string, unknown>>;
+  emailDeliveries: Array<Record<string, unknown>>;
   audits: Array<Record<string, unknown>>;
   consequences: Array<Record<string, unknown>>;
 };
@@ -192,7 +198,10 @@ function makeDatabase(state: State) {
     if (table === reservations) return state.reservations;
     if (table === folios) return state.folios;
     if (table === payments) return state.payments;
+    if (table === bookingRequestInstallments) return state.installments;
+    if (table === bookingRequestPaymentAllocations) return state.allocations;
     if (table === bookingRequestPaymentResolutions) return state.resolutions;
+    if (table === bookingRequestEmailDeliveries) return state.emailDeliveries;
     if (table === auditLogs) return state.audits;
     if (table === bookingRequestConsequences) return state.consequences;
     return [];
@@ -327,7 +336,10 @@ function makeHarness(requests: RequestRow[] = [pendingRequest()]) {
     reservations: [],
     folios: [],
     payments: [],
+    installments: [],
+    allocations: [],
     resolutions: [],
+    emailDeliveries: [],
     audits: [],
     consequences: [],
   };
@@ -542,14 +554,50 @@ describe('Booking Request staff HTTP contract', () => {
       denyDtoModule.DenyBookingRequestDto,
       { reason: '' },
     ));
+    const invalidSort = await validate(plainToInstance(
+      listDtoModule.ListBookingRequestsDto,
+      { propertyId: PROPERTY_ID, sortBy: 'privateField', sortOrder: 'sideways' },
+    ));
     expect(missingScope.some((error) => error.property === 'propertyId')).toBe(true);
     expect(invalidSource.some((error) => error.property === 'priceSource')).toBe(true);
     expect(missingPreview.some((error) => error.property === 'previewToken')).toBe(true);
     expect(blankDenial.some((error) => error.property === 'reason')).toBe(true);
+    expect(invalidSort.map((error) => error.property)).toEqual(expect.arrayContaining([
+      'sortBy',
+      'sortOrder',
+    ]));
   });
 });
 
 describe('BookingRequestService staff reads', () => {
+  it('applies requested-total numeric ordering in SQL before page boundaries', async () => {
+    const harness = makeHarness(Array.from({ length: 25 }, (_, index) => pendingRequest({
+      id: `bbbbbbbb-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
+      submittedQuoteSnapshot: { grandTotal: String(index === 0 ? 9 : index * 10) },
+    })));
+
+    await call(harness.service, 'list', [{
+      propertyId: PROPERTY_ID,
+      page: 2,
+      limit: 20,
+      sortBy: 'requestedTotal',
+      sortOrder: 'desc',
+    }]);
+
+    const listSelect = vi.mocked((harness.database.db as any).select).mock.results[0]?.value;
+    expect(listSelect.orderBy).toHaveBeenCalledTimes(1);
+    expect(listSelect.orderBy.mock.invocationCallOrder[0]).toBeLessThan(
+      listSelect.limit.mock.invocationCallOrder[0],
+    );
+    const directionSql = listSelect.orderBy.mock.calls[0]?.[0];
+    const requestedTotalSql = directionSql.queryChunks.find((chunk: any) => chunk.queryChunks);
+    expect(requestedTotalSql.queryChunks[0]?.value).toEqual(['cast(']);
+    expect(requestedTotalSql.queryChunks.at(-1)?.value)
+      .toEqual(["->>'grandTotal' as numeric)"]);
+    expect(listSelect.limit).toHaveBeenCalledWith(20);
+    expect(listSelect.offset).toHaveBeenCalledWith(20);
+  });
+
   it('lists only the requested property and never leaks cross-property rows', async () => {
     const harness = makeHarness([
       pendingRequest(),
@@ -641,8 +689,93 @@ describe('BookingRequestService staff reads', () => {
     )).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('returns a bounded stable page of request-owned audit rows', async () => {
+    const harness = makeHarness();
+    harness.state.audits.push(
+      ...[1, 2, 3].map((sequence) => ({
+        id: `10000000-0000-4000-a000-00000000000${sequence}`,
+        propertyId: PROPERTY_ID,
+        action: 'update',
+        entityType: 'booking_request',
+        entityId: REQUEST_ID,
+        newValue: { status: sequence === 1 ? 'accepted' : 'pending' },
+        occurredAt: new Date(`2026-08-25T10:0${sequence}:00.000Z`),
+      })),
+      {
+        id: '10000000-0000-4000-a000-000000000099',
+        propertyId: PROPERTY_ID,
+        action: 'update',
+        entityType: 'booking_request',
+        entityId: 'bbbbbbbb-0000-4000-a000-000000000099',
+        newValue: { status: 'accepted' },
+        occurredAt: new Date('2026-08-25T10:09:00.000Z'),
+      },
+    );
+
+    const result = await call(harness.service, 'auditHistory', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { limit: 2, offset: 0 },
+    ]);
+
+    expect(result.data).toHaveLength(2);
+    expect(result.data.every((row: { id: string }) => row.id !== '10000000-0000-4000-a000-000000000099'))
+      .toBe(true);
+    expect(result.nextOffset).toBe(2);
+    const selectCalls = (harness.database.db['select'] as ReturnType<typeof vi.fn>).mock.results;
+    const auditQuery = selectCalls.at(-1)?.value as {
+      limit: ReturnType<typeof vi.fn>;
+      offset: ReturnType<typeof vi.fn>;
+    };
+    expect(auditQuery.limit).toHaveBeenCalledWith(3);
+    expect(auditQuery.offset).toHaveBeenCalledWith(0);
+  });
+
+  it('includes request-owned audit rows even when a legacy payload omits the request id', async () => {
+    const harness = makeHarness();
+    harness.state.payments.push({
+      id: PAYMENT_ID,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+    });
+    harness.state.audits.push({
+      id: '10000000-0000-4000-a000-000000000010',
+      propertyId: PROPERTY_ID,
+      action: 'update',
+      entityType: 'payment',
+      entityId: PAYMENT_ID,
+      newValue: { status: 'settled', amount: '80.00', currencyCode: 'EUR' },
+      description: 'Legacy payment settled',
+      occurredAt: new Date('2026-08-25T10:10:00.000Z'),
+    });
+
+    const page = await call(harness.service, 'auditHistory', [REQUEST_ID, PROPERTY_ID]);
+
+    expect(page.data).toEqual([
+      expect.objectContaining({
+        id: '10000000-0000-4000-a000-000000000010',
+        summary: 'payment.updated',
+      }),
+    ]);
+  });
+
   it('returns immutable related audit rows through an explicit sanitized DTO', async () => {
     const harness = makeHarness();
+    harness.state.installments.push({
+      id: '20000000-0000-4000-a000-000000000001',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+    });
+    harness.state.payments.push({
+      id: PAYMENT_ID,
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+    });
+    harness.state.emailDeliveries.push({
+      id: '30000000-0000-4000-a000-000000000001',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+    });
     harness.state.audits.push(
       {
         id: '10000000-0000-4000-a000-000000000001',
@@ -737,9 +870,11 @@ describe('BookingRequestService staff reads', () => {
       },
     );
 
-    const result = await call(harness.service, 'auditHistory', [REQUEST_ID, PROPERTY_ID]);
+    const page = await call(harness.service, 'auditHistory', [REQUEST_ID, PROPERTY_ID]);
+    const result = page.data;
 
     expect(result).toHaveLength(6);
+    expect(page.nextOffset).toBeNull();
     expect(result.find((entry: { summary: string }) => entry.summary === 'request.accepted')).toMatchObject({
       action: 'update',
       actorDisplay: actor.userEmail,

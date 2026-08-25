@@ -16,7 +16,7 @@ import {
 } from '@telivityhaip/database';
 import { createHash } from 'node:crypto';
 import Decimal from 'decimal.js';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { AuditActor } from '../../common/audit/audit-actor';
 import { actorFields } from '../../common/audit/audit-actor';
 import { DRIZZLE } from '../../database/database.module';
@@ -41,6 +41,7 @@ import type {
   CreateBookingRequestInstallmentDto,
   RecordBookingRequestExternalPaymentDto,
   RecordBookingRequestExternalReturnDto,
+  ReorderBookingRequestInstallmentsDto,
   RefundBookingRequestPaymentDto,
   RetainBookingRequestPaymentDto,
   UpdateBookingRequestInstallmentDto,
@@ -62,6 +63,20 @@ const EXTERNAL_PAYMENT_METHODS = new Set([
   'pix',
   'other',
 ]);
+
+const ALLOCATABLE_PARENT_STATUSES = new Set([
+  'captured',
+  'settled',
+  'partially_refunded',
+  'refunded',
+]);
+
+type PaymentAllocationSummary = {
+  netCaptured: Decimal;
+  allocated: Decimal;
+  reservedResolution: Decimal;
+  available: Decimal;
+};
 
 @Injectable()
 export class BookingRequestPaymentService {
@@ -122,22 +137,18 @@ export class BookingRequestPaymentService {
       row.propertyId === propertyId && row.bookingRequestId === bookingRequestId);
     return {
       movements: scopedMovements.map((row: PaymentRow) => {
-        const allocated = scopedAllocations
-          .filter((allocation: AllocationRow) => allocation.paymentId === row.id)
-          .reduce((sum: Decimal, allocation: AllocationRow) => sum.plus(allocation.amount), new Decimal(0));
-        const reservedResolution = scopedResolutions
-          .filter((resolution: ResolutionRow) =>
-            resolution.paymentId === row.id
-            && (resolution.status === 'pending' || resolution.status === 'completed'))
-          .reduce((sum: Decimal, resolution: ResolutionRow) => sum.plus(resolution.amount), new Decimal(0));
-        const available = row.originalPaymentId == null && row.status === 'captured'
-          ? Decimal.max(new Decimal(row.amount).minus(allocated).minus(reservedResolution), 0)
-          : new Decimal(0);
+        const summary = this.paymentAllocationSummary(
+          row,
+          scopedMovements,
+          scopedAllocations,
+          scopedResolutions,
+        );
         return {
           ...this.paymentResponse(row),
-          allocatedAmount: allocated.toFixed(2),
-          reservedResolutionAmount: reservedResolution.toFixed(2),
-          availableAmount: available.toFixed(2),
+          netCapturedAmount: summary.netCaptured.toFixed(2),
+          allocatedAmount: summary.allocated.toFixed(2),
+          reservedResolutionAmount: summary.reservedResolution.toFixed(2),
+          availableAmount: summary.available.toFixed(2),
         };
       }),
       allocations: scopedAllocations,
@@ -306,6 +317,72 @@ export class BookingRequestPaymentService {
     });
   }
 
+  async reorderInstallments(
+    bookingRequestId: string,
+    propertyId: string,
+    input: ReorderBookingRequestInstallmentsDto,
+    actor?: AuditActor,
+  ): Promise<InstallmentRow[]> {
+    return this.db.transaction(async (tx: any) => {
+      const request = await this.findRequest(tx, bookingRequestId, propertyId, true);
+      this.assertNotDenied(request);
+      const selected = await tx
+        .select()
+        .from(bookingRequestInstallments)
+        .where(and(
+          eq(bookingRequestInstallments.propertyId, propertyId),
+          eq(bookingRequestInstallments.bookingRequestId, bookingRequestId),
+        ))
+        .for('update');
+      const installments: InstallmentRow[] = selected.filter((row: InstallmentRow) =>
+        row.propertyId === propertyId && row.bookingRequestId === bookingRequestId);
+      const uniqueIds = new Set(input.installmentIds);
+      const existingIds = new Set(installments.map((row) => row.id));
+      if (
+        uniqueIds.size !== input.installmentIds.length
+        || input.installmentIds.length !== installments.length
+        || input.installmentIds.some((id) => !existingIds.has(id))
+      ) {
+        throw new BadRequestException(
+          'Installment reorder must contain the exact unique set belonging to the request',
+        );
+      }
+
+      const previousOrder = [...installments]
+        .sort((left, right) => left.sortOrder - right.sortOrder)
+        .map((row) => row.id);
+      const orderCases = input.installmentIds.map((id, index) => sql`when ${id} then ${index}`);
+      const updatedAt = new Date();
+      await tx
+        .update(bookingRequestInstallments)
+        .set({
+          sortOrder: sql<number>`case ${bookingRequestInstallments.id} ${sql.join(orderCases, sql.raw(' '))} end`,
+          updatedAt,
+        })
+        .where(and(
+          eq(bookingRequestInstallments.propertyId, propertyId),
+          eq(bookingRequestInstallments.bookingRequestId, bookingRequestId),
+          inArray(bookingRequestInstallments.id, input.installmentIds),
+        ));
+      await this.audit(tx, {
+        propertyId,
+        action: 'update',
+        entityType: 'booking_request',
+        entityId: bookingRequestId,
+        actor,
+        previousValue: { requestId: bookingRequestId, order: previousOrder },
+        newValue: { requestId: bookingRequestId, order: input.installmentIds },
+        description: 'Booking request installments reordered',
+      });
+      const byId = new Map(installments.map((row) => [row.id, row]));
+      return input.installmentIds.map((id, sortOrder) => ({
+        ...byId.get(id)!,
+        sortOrder,
+        updatedAt,
+      }));
+    });
+  }
+
   async allocatePayment(
     bookingRequestId: string,
     installmentId: string,
@@ -338,13 +415,17 @@ export class BookingRequestPaymentService {
       }
       const amount = this.positiveMoney(input.amount, request.currencyCode, 'Allocation amount');
       const installmentAmount = this.resolvedInstallmentAmount(installment);
-      const netCaptured = await this.netCapturedAmount(
+      const summary = await this.paymentAllocationSummaryFromDatabase(
         tx,
         bookingRequestId,
         propertyId,
         payment,
       );
-      if (netCaptured.lte(0)) {
+      const allocatableNet = Decimal.max(
+        summary.netCaptured.minus(summary.reservedResolution),
+        0,
+      );
+      if (allocatableNet.lte(0)) {
         throw new ConflictException('Fully returned payment movement cannot be allocated');
       }
       const allocations = await this.scopedAllocations(tx, bookingRequestId, propertyId);
@@ -356,7 +437,7 @@ export class BookingRequestPaymentService {
         .reduce((sum, row) => sum.plus(row.amount), new Decimal(0));
       assertAllocationAmount({
         amount,
-        movementAmount: netCaptured,
+        movementAmount: allocatableNet,
         installmentAmount,
         alreadyAllocatedMovementAmount: paymentAllocated,
         alreadyAllocatedInstallmentAmount: installmentAllocated,
@@ -1940,27 +2021,83 @@ export class BookingRequestPaymentService {
       row.bookingRequestId === bookingRequestId && row.propertyId === propertyId);
   }
 
-  private async netCapturedAmount(
+  private async paymentAllocationSummaryFromDatabase(
     db: any,
     bookingRequestId: string,
     propertyId: string,
     payment: PaymentRow,
-  ): Promise<Decimal> {
-    const rows = await db
-      .select()
-      .from(payments)
-      .where(and(
-        eq(payments.originalPaymentId, payment.id),
-        eq(payments.bookingRequestId, bookingRequestId),
-        eq(payments.propertyId, propertyId),
-        eq(payments.status, 'captured'),
-      ));
-    const children = rows.filter((row: PaymentRow) =>
+  ): Promise<PaymentAllocationSummary> {
+    const [movementRows, allocationRows, resolutionRows] = await Promise.all([
+      db
+        .select()
+        .from(payments)
+        .where(and(
+          eq(payments.bookingRequestId, bookingRequestId),
+          eq(payments.propertyId, propertyId),
+        )),
+      db
+        .select()
+        .from(bookingRequestPaymentAllocations)
+        .where(and(
+          eq(bookingRequestPaymentAllocations.bookingRequestId, bookingRequestId),
+          eq(bookingRequestPaymentAllocations.propertyId, propertyId),
+        )),
+      db
+        .select()
+        .from(bookingRequestPaymentResolutions)
+        .where(and(
+          eq(bookingRequestPaymentResolutions.bookingRequestId, bookingRequestId),
+          eq(bookingRequestPaymentResolutions.propertyId, propertyId),
+        )),
+    ]);
+    const movements = movementRows.filter((row: PaymentRow) =>
+      row.bookingRequestId === bookingRequestId && row.propertyId === propertyId);
+    const allocations = allocationRows.filter((row: AllocationRow) =>
+      row.bookingRequestId === bookingRequestId && row.propertyId === propertyId);
+    const resolutions = resolutionRows.filter((row: ResolutionRow) =>
+      row.bookingRequestId === bookingRequestId && row.propertyId === propertyId);
+    return this.paymentAllocationSummary(payment, movements, allocations, resolutions);
+  }
+
+  private paymentAllocationSummary(
+    payment: PaymentRow,
+    movements: PaymentRow[],
+    allocations: AllocationRow[],
+    resolutions: ResolutionRow[],
+  ): PaymentAllocationSummary {
+    if (
+      payment.originalPaymentId != null
+      || !ALLOCATABLE_PARENT_STATUSES.has(payment.status)
+      || new Decimal(payment.amount).lte(0)
+    ) {
+      return {
+        netCaptured: new Decimal(0),
+        allocated: new Decimal(0),
+        reservedResolution: new Decimal(0),
+        available: new Decimal(0),
+      };
+    }
+    const children = movements.filter((row: PaymentRow) =>
       row.originalPaymentId === payment.id
-      && row.bookingRequestId === bookingRequestId
-      && row.propertyId === propertyId
       && row.status === 'captured');
-    return remainingCapturedAmount(payment.amount, children);
+    const capturedChildIds = new Set(children.map((row) => row.id));
+    const netCaptured = Decimal.max(remainingCapturedAmount(payment.amount, children), 0);
+    const allocated = allocations
+      .filter((allocation) => allocation.paymentId === payment.id)
+      .reduce((sum, allocation) => sum.plus(allocation.amount), new Decimal(0));
+    const reservedResolution = resolutions
+      .filter((resolution) => resolution.paymentId === payment.id)
+      .filter((resolution) => resolution.status === 'pending'
+        || (
+          resolution.status === 'completed'
+          && (!resolution.movementId || !capturedChildIds.has(resolution.movementId))
+        ))
+      .reduce((sum, resolution) => sum.plus(resolution.amount), new Decimal(0));
+    const available = Decimal.max(
+      netCaptured.minus(reservedResolution).minus(allocated),
+      0,
+    );
+    return { netCaptured, allocated, reservedResolution, available };
   }
 
   private async reconcileAllocationsForPayment(
@@ -2159,6 +2296,10 @@ export class BookingRequestPaymentService {
   }
 
   private paymentResponse(row: PaymentRow) {
+    const source = row.idempotencyKey?.startsWith('booking-request-charge:')
+      || row.idempotencyKey?.startsWith('booking-request-refund:')
+      ? 'saved_card' as const
+      : 'external' as const;
     return {
       id: row.id,
       propertyId: row.propertyId,
@@ -2168,8 +2309,9 @@ export class BookingRequestPaymentService {
       status: row.status,
       amount: row.amount,
       currencyCode: row.currencyCode,
+      source,
       gatewayProvider: row.gatewayProvider,
-      reference: row.gatewayProvider && row.gatewayProvider !== 'stripe'
+      reference: source === 'external'
         ? row.gatewayTransactionId
         : null,
       cardLastFour: row.cardLastFour,

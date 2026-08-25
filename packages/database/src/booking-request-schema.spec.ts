@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import {
   bookingEngineConfig,
+  auditLogs,
   bookingRequestConsequences,
   bookingRequestEmailDeliveries,
   bookingRequests,
@@ -52,6 +53,9 @@ describe('booking request schema', () => {
     expect(charges.sourceKey).toBeDefined();
     expect(webhookDeliveries.logicalEventId).toBeDefined();
     expect(reservations.acceptedPricingSnapshot).toBeDefined();
+    expect(getTableConfig(auditLogs).indexes.map((index) => index.config.name)).toContain(
+      'audit_logs_property_entity_timeline_idx',
+    );
 
     const indexNames = getTableConfig(bookingRequests).indexes.map((index) => index.config.name);
     expect(indexNames).toContain('booking_requests_property_submission_key_unique');

@@ -33,7 +33,10 @@ export function reconnectSocket() {
 
 export function joinPropertyRoom(propertyId: string) {
   const s = getSocket();
-  if (!s.connected) s.connect();
+  if (!s.connected) {
+    s.connect();
+    return;
+  }
   s.emit('joinProperty', { propertyId });
 }
 

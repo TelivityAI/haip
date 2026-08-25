@@ -1947,14 +1947,14 @@
       "independence": "Le decisioni di prenotazione e le azioni di denaro sono indipendenti. L'accettazione del pagamento non accetta mai una richiesta e l'accettazione non attiva mai il pagamento."
     },
     "amounts": {
-      "quoted": "Citato",
+      "quoted": "Preventivo",
       "submitted": "Inviato",
-      "current": "Corrente",
+      "current": "Attuale",
       "accepted": "Accettato",
       "difference": "Differenza",
-      "captured": "Catturato",
+      "captured": "Incassato",
       "returned": "Restituito",
-      "retained": "Mantenuto"
+      "retained": "Trattenuto"
     },
     "overview": {
       "stay": "Richiesta di soggiorno",
@@ -1973,13 +1973,13 @@
       "card": "Scheda in archivio",
       "cardGeneric": "carta",
       "noCard": "Nessuna carta salvata",
-      "cardSafety": "Vengono visualizzati solo il marchio della tessera sicura e le ultime quattro cifre. Il personale deve avviare ogni carica.",
+      "cardSafety": "Vengono visualizzati solo il circuito della carta e le ultime quattro cifre. Il personale deve avviare esplicitamente ogni addebito.",
       "decision": "Registro delle decisioni",
       "priceSource": "Fonte del prezzo"
     },
     "priceSources": {
       "submitted": "Preventivo inviato",
-      "current": "Citazione attuale",
+      "current": "Preventivo attuale",
       "custom": "Totale personalizzato"
     },
     "accept": {
@@ -1987,7 +1987,7 @@
       "priceChoice": "Prezzo accettato",
       "submitted": "Preventivo inviato",
       "submittedDescription": "Utilizza l'importo che l'ospite ha visto quando è stata inviata la richiesta.",
-      "current": "Citazione attuale",
+      "current": "Preventivo attuale",
       "currentDescription": "Ricontrolla la disponibilità e calcola il preventivo attuale autorevole in fase di accettazione.",
       "custom": "Totale personalizzato",
       "customDescription": "Imposta un totale esplicito e registra il motivo della differenza.",
@@ -2022,14 +2022,14 @@
       "maximum": "Inserisci un importo entro il massimo consentito."
     },
     "payments": {
-      "requestSummary": "Richiedi riepilogo denaro",
+      "requestSummary": "Riepilogo pagamenti della richiesta",
       "independence": "Le decisioni relative alla prenotazione non dipendono dallo stato del pagamento.",
       "plan": "Piano di pagamento",
       "noAutomatic": "Niente viene addebitato automaticamente. Le pietre miliari sono promemoria per le azioni avviate dallo staff.",
       "noAutomaticTitle": "Niente viene addebitato automaticamente.",
       "noAutomaticDescription": "Le pietre miliari sono promemoria per le azioni avviate dallo staff.",
       "addInstallment": "Aggiungi rata",
-      "editInstallment": "Modifica puntata",
+      "editInstallment": "Modifica rata",
       "installmentLabel": "Etichetta di rata",
       "amountType": "Tipo di importo",
       "fixedAmount": "Importo fisso",
@@ -2044,7 +2044,7 @@
       "deleteLabel": "Elimina {{label}}",
       "allocateLabel": "Assegna il pagamento a {{label}}",
       "allocateTo": "Assegna il pagamento a {{label}}",
-      "movement": "Movimento catturato",
+      "movement": "Pagamento incassato",
       "allocate": "Assegnare",
       "allocationError": "Non è stato possibile assegnare il pagamento.",
       "availableForAllocation": "{{available}} disponibile · {{allocated}} assegnato · {{method}}",
@@ -2052,14 +2052,14 @@
       "moveUp": "Sposta {{label}} in alto",
       "moveDown": "Sposta {{label}} in basso",
       "reorderError": "Non è stato possibile salvare l’ordine delle rate. Riprova.",
-      "movements": "Movimenti di denaro",
-      "noMovements": "Nessun movimento di denaro ancora.",
-      "savedCardProvenance": "Scheda salvata · {{brand}} •••• {{lastFour}}",
+      "movements": "Movimenti di pagamento",
+      "noMovements": "Nessun movimento di pagamento.",
+      "savedCardProvenance": "Carta salvata · {{brand}} •••• {{lastFour}}",
       "externalProvenance": "Esterno · {{method}} · {{reference}}",
       "loadError": "Impossibile caricare il piano di pagamento e la cronologia dei movimenti.",
       "folioSummary": "Riepilogo del foglio operativo",
-      "acceptedDeal": "Affare accettato",
-      "folioCharges": "Spese in foglio",
+      "acceptedDeal": "Totale accettato",
+      "folioCharges": "Addebiti del folio",
       "folioPayments": "Pagamenti in folio",
       "balanceDue": "Saldo dovuto",
       "folioError": "Impossibile caricare il riepilogo del folio collegato."
@@ -2087,8 +2087,8 @@
     "paymentStatuses": {
       "pending": "In sospeso",
       "authorized": "Autorizzato",
-      "captured": "Catturato",
-      "settled": "Sistemato",
+      "captured": "Incassato",
+      "settled": "Contabilizzato",
       "refunded": "Rimborsato",
       "partially_refunded": "Parzialmente rimborsato",
       "failed": "Fallito",
@@ -2120,14 +2120,14 @@
         "description": "Restituisci parte o tutto il pagamento del gateway."
       },
       "external_return": {
-        "title": "Registra il ritorno esterno",
-        "action": "Reso registrato",
+        "title": "Registra il rimborso esterno",
+        "action": "Registra rimborso",
         "description": "Registrare che il denaro raccolto esternamente è stato restituito."
       },
       "retain": {
-        "title": "Conserva i soldi",
-        "action": "Conserva i soldi",
-        "open": "Trattenere con ragione",
+        "title": "Trattieni l'importo",
+        "action": "Trattieni l'importo",
+        "open": "Trattieni con motivazione",
         "description": "Risolvi questo importo come trattenuto prima del rifiuto. Un motivo commerciale è obbligatorio.",
         "reason": "Motivo per trattenere il denaro"
       }
@@ -2148,7 +2148,7 @@
     "messageKinds": {
       "receipt": "Richiedi ricevuta",
       "accepted": "Accettazione",
-      "denied": "Negazione",
+      "denied": "Rifiuto",
       "payment": "Pagamento",
       "refund": "Rimborso",
       "failure": "Mancato pagamento"
@@ -2168,14 +2168,14 @@
       "acceptedDescription": "Accettato al {{amount}} utilizzando il {{source}}.",
       "denied": "Richiesta respinta",
       "deniedDescription": "La richiesta è stata respinta dopo che il suo stato monetario è stato risolto.",
-      "paymentCaptured": "Pagamento catturato",
+      "paymentCaptured": "Pagamento incassato",
       "paymentFailed": "Pagamento non riuscito",
       "paymentReturned": "Pagamento restituito",
       "paymentDescription": "{{amount}} · {{method}}",
       "resolutionDescription": "{{amount}} risolto",
       "resolutions": {
         "refund": "Rimborso gateway registrato",
-        "external_return": "Rendimento esterno registrato",
+        "external_return": "Rimborso esterno registrato",
         "retained": "Soldi trattenuti"
       },
       "message": "Messaggio {{kind}}",
@@ -2183,6 +2183,9 @@
       "actor": "Eseguito da: {{actor}}",
       "loadError": "Non è stato possibile caricare la cronologia di audit.",
       "empty": "Non è stato registrato alcun evento di audit.",
+      "loadMore": "Carica altri eventi",
+      "loadingMore": "Caricamento di altri eventi…",
+      "loadMoreError": "Non è stato possibile caricare altri eventi di audit.",
       "events": {
         "request_pending": "Richiesta inviata",
         "request_accepted": "Richiesta accettata",

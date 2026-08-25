@@ -14,6 +14,14 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 const BOOKING_REQUEST_STATUSES = ['pending', 'accepted', 'denied'] as const;
+export const BOOKING_REQUEST_SORT_FIELDS = [
+  'createdAt',
+  'requestedTotal',
+  'arrivalDate',
+  'guestName',
+  'status',
+] as const;
+export const BOOKING_REQUEST_SORT_ORDERS = ['asc', 'desc'] as const;
 
 export class ListBookingRequestsDto {
   @ApiProperty({ description: 'Property ID (required for tenant scoping)' })
@@ -56,6 +64,16 @@ export class ListBookingRequestsDto {
   @Transform(({ value }) => value === 'true' ? true : value === 'false' ? false : value)
   @IsBoolean()
   hasCard?: boolean;
+
+  @ApiPropertyOptional({ enum: BOOKING_REQUEST_SORT_FIELDS, default: 'createdAt' })
+  @IsOptional()
+  @IsEnum(BOOKING_REQUEST_SORT_FIELDS)
+  sortBy?: (typeof BOOKING_REQUEST_SORT_FIELDS)[number] = 'createdAt';
+
+  @ApiPropertyOptional({ enum: BOOKING_REQUEST_SORT_ORDERS, default: 'desc' })
+  @IsOptional()
+  @IsEnum(BOOKING_REQUEST_SORT_ORDERS)
+  sortOrder?: (typeof BOOKING_REQUEST_SORT_ORDERS)[number] = 'desc';
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
