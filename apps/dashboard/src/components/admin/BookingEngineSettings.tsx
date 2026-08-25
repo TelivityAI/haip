@@ -70,8 +70,11 @@ interface BookingEngineFormState {
   formQuestions: BookingFormQuestionDefinition[];
 }
 
+type UpdateBookingEngineForm = (
+  update: (current: BookingEngineFormState) => BookingEngineFormState,
+) => void;
+
 interface BookingEngineUpdatePayload {
-  expectedUpdatedAt: string;
   isEnabled?: boolean;
   displayName?: string | null;
   logoMediaId?: string | null;
@@ -149,9 +152,8 @@ function normalizeQuestionOrder(questions: BookingFormQuestionDefinition[]) {
 function payloadFromChanges(
   form: BookingEngineFormState,
   baseline: BookingEngineFormState,
-  expectedUpdatedAt: string,
 ): BookingEngineUpdatePayload {
-  const payload: BookingEngineUpdatePayload = { expectedUpdatedAt };
+  const payload: BookingEngineUpdatePayload = {};
   if (form.isEnabled !== baseline.isEnabled) payload.isEnabled = form.isEnabled;
   if (form.displayName !== baseline.displayName) payload.displayName = form.displayName || null;
   if (form.logoMediaId !== baseline.logoMediaId) payload.logoMediaId = form.logoMediaId;
@@ -189,6 +191,10 @@ function toggleId(list: string[], id: string) {
 }
 
 export default function BookingEngineSettings({ propertyId }: { propertyId: string }) {
+  return <BookingEngineSettingsForProperty key={propertyId} propertyId={propertyId} />;
+}
+
+function BookingEngineSettingsForProperty({ propertyId }: { propertyId: string }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -275,8 +281,17 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
     onError: () => toast('error', t('bookingEngine.toasts.keyRevocationFailed')),
   });
   const saveConfig = useMutation({
-    mutationFn: ({ payload }: { payload: BookingEngineUpdatePayload; savedForm: BookingEngineFormState }) => api.patch(
-      '/v1/admin/booking-engine/config', payload, { params: { propertyId } },
+    mutationFn: ({ payload, expectedUpdatedAt }: {
+      payload: BookingEngineUpdatePayload;
+      savedForm: BookingEngineFormState;
+      expectedUpdatedAt: string;
+    }) => api.patch(
+      '/v1/admin/booking-engine/config',
+      payload,
+      {
+        params: { propertyId },
+        headers: { 'If-Match': `"${expectedUpdatedAt}"` },
+      },
     ),
     onSuccess: (result, variables) => {
       const responseBody = result.data?.data ?? result.data;
@@ -325,8 +340,9 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
     if (!formDirty || isQuestionEditorOpen || !baselineRef.current || !configVersionRef.current || hasConflict || missingRequiredCardKey || !questionsValid || questionsPublishBlocked || saveConfig.isPending) return;
     const savedForm = cloneForm(formRef.current);
     saveConfig.mutate({
-      payload: payloadFromChanges(savedForm, baselineRef.current, configVersionRef.current),
+      payload: payloadFromChanges(savedForm, baselineRef.current),
       savedForm,
+      expectedUpdatedAt: configVersionRef.current,
     });
   };
 
@@ -337,6 +353,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
     if (result.isSuccess && latest) {
       setQuestionBuilderKey((key) => key + 1);
       setIsQuestionEditorOpen(false);
+      saveConfig.reset();
       syncForm(formFromConfig(latest), latest.updatedAt);
     }
   };
@@ -345,6 +362,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
     if (!baseline) return;
     setQuestionBuilderKey((key) => key + 1);
     setIsQuestionEditorOpen(false);
+    saveConfig.reset();
     syncForm(baseline, configVersionRef.current);
   };
 
@@ -398,7 +416,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
             </div>
             <label className="inline-flex items-center gap-2 cursor-pointer shrink-0">
               <span className="text-xs font-medium text-telivity-slate">{form.isEnabled ? t('bookingEngine.enabled') : t('bookingEngine.disabled')}</span>
-              <button type="button" role="switch" aria-checked={form.isEnabled} aria-label={t('bookingEngine.requestSettings.engineToggle')} onClick={() => updateForm((current) => ({ ...current, isEnabled: !current.isEnabled }))} className={`relative w-11 h-6 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2 motion-reduce:transition-none ${form.isEnabled ? 'bg-telivity-deep-blue' : 'bg-gray-400'}`}>
+              <button type="button" role="switch" aria-checked={form.isEnabled} aria-label={t('bookingEngine.requestSettings.engineToggle')} onClick={() => updateForm((current) => ({ ...current, isEnabled: !current.isEnabled }))} className={`relative w-11 h-6 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2 motion-reduce:transition-none ${form.isEnabled ? 'bg-telivity-deep-blue' : 'bg-telivity-slate'}`}>
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform motion-reduce:transition-none ${form.isEnabled ? 'translate-x-5' : ''}`} />
               </button>
             </label>
@@ -410,7 +428,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 max-w-3xl">
               <div>
                 <label htmlFor="booking-mode" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.requestSettings.bookingMode')}</label>
-                <select id="booking-mode" value={form.bookingMode} onChange={(event) => updateForm((current) => ({ ...current, bookingMode: event.target.value as BookingMode }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
+                <select id="booking-mode" value={form.bookingMode} onChange={(event) => updateForm((current) => ({ ...current, bookingMode: event.target.value as BookingMode }))} className="w-full border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
                   <option value="instant">{t('bookingEngine.requestSettings.modes.instant')}</option>
                   <option value="request">{t('bookingEngine.requestSettings.modes.request')}</option>
                 </select>
@@ -418,7 +436,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
               </div>
               <div>
                 <label htmlFor="card-collection" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.requestSettings.cardCollection')}</label>
-                <select id="card-collection" value={form.paymentMethodCollection} onChange={(event) => updateForm((current) => ({ ...current, paymentMethodCollection: event.target.value as PaymentMethodCollection }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
+                <select id="card-collection" value={form.paymentMethodCollection} onChange={(event) => updateForm((current) => ({ ...current, paymentMethodCollection: event.target.value as PaymentMethodCollection }))} className="w-full border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
                   <option value="disabled">{t('bookingEngine.requestSettings.cardPolicies.disabled')}</option>
                   <option value="optional">{t('bookingEngine.requestSettings.cardPolicies.optional')}</option>
                   <option value="required">{t('bookingEngine.requestSettings.cardPolicies.required')}</option>
@@ -427,7 +445,7 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
               </div>
               <div className="md:col-span-2">
                 <label htmlFor="stripe-publishable-key" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.requestSettings.stripeKey')}</label>
-                <input id="stripe-publishable-key" type="text" value={form.stripePublishableKey} onChange={(event) => updateForm((current) => ({ ...current, stripePublishableKey: event.target.value }))} placeholder={t('bookingEngine.requestSettings.stripeKeyPlaceholder')} autoComplete="off" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
+                <input id="stripe-publishable-key" type="text" value={form.stripePublishableKey} onChange={(event) => updateForm((current) => ({ ...current, stripePublishableKey: event.target.value }))} placeholder={t('bookingEngine.requestSettings.stripeKeyPlaceholder')} autoComplete="off" className="w-full border border-telivity-slate rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
                 <p className="text-[11px] text-telivity-slate mt-1">{t('bookingEngine.requestSettings.stripeKeyDescription')}</p>
               </div>
             </div>
@@ -440,62 +458,18 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
           </div>
         </div>
 
-        <BookingQuestionBuilder key={questionBuilderKey} questions={form.formQuestions} onChange={(formQuestions) => updateForm((current) => ({ ...current, formQuestions }))} onEditorOpenChange={setIsQuestionEditorOpen} disabled={saveConfig.isPending} />
+        <BookingQuestionBuilder key={`${propertyId}:${configVersion ?? 'loading'}:${questionBuilderKey}`} questions={form.formQuestions} onChange={(formQuestions) => updateForm((current) => ({ ...current, formQuestions }))} onEditorOpenChange={setIsQuestionEditorOpen} disabled={saveConfig.isPending} />
         {!questionsValid && <p role="alert" className="text-xs text-red-600 px-1">{t('bookingEngine.requestSettings.invalidQuestions')}</p>}
         {questionsPublishBlocked && <p role="alert" className="text-xs font-medium text-red-700 px-1">{t('bookingEngine.requestSettings.unsupportedPublishBlocked')}</p>}
 
-        <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
-          <h2 className="text-sm font-semibold text-telivity-navy mb-1">{t('bookingEngine.sellableInventory')}</h2>
-          <p className="text-xs text-telivity-slate mb-4">{t('bookingEngine.sellableInventoryDescription')}</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InventoryList title={t('bookingEngine.roomTypes')} empty={t('bookingEngine.noRoomTypes')} items={roomTypes} selected={form.sellableRoomTypeIds} onToggle={(id) => updateForm((current) => ({ ...current, sellableRoomTypeIds: toggleId(current.sellableRoomTypeIds, id) }))} />
-            <InventoryList title={t('bookingEngine.ratePlans')} empty={t('bookingEngine.noRatePlans')} items={ratePlans} selected={form.sellableRatePlanIds} onToggle={(id) => updateForm((current) => ({ ...current, sellableRatePlanIds: toggleId(current.sellableRatePlanIds, id) }))} />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
-          <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('bookingEngine.branding')}</h2>
-          <div className="space-y-4 max-w-xl">
-            <div>
-              <label htmlFor="booking-display-name" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.displayName')}</label>
-              <input id="booking-display-name" type="text" value={form.displayName} onChange={(event) => updateForm((current) => ({ ...current, displayName: event.target.value }))} placeholder={t('bookingEngine.displayNamePlaceholder')} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <ColorControl id="booking-primary-color" label={t('bookingEngine.primaryColor')} value={form.primaryColor} onChange={(primaryColor) => updateForm((current) => ({ ...current, primaryColor }))} />
-              <ColorControl id="booking-accent-color" label={t('bookingEngine.accentColor')} value={form.accentColor} onChange={(accentColor) => updateForm((current) => ({ ...current, accentColor }))} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-2"><ImageIcon size={16} className="text-telivity-deep-blue" aria-hidden="true" /><p className="text-xs font-medium text-telivity-slate">{t('bookingEngine.logo')}</p></div>
-              <MediaGallery propertyId={propertyId} ownerType="property" ownerId={propertyId} />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
-          <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('bookingEngine.depositPolicy')}</h2>
-          <div className="space-y-4 max-w-xl">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="deposit-policy-type" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.type')}</label>
-                <select id="deposit-policy-type" value={form.depositPolicy.type} onChange={(event) => updateForm((current) => ({ ...current, depositPolicy: { ...current.depositPolicy, type: event.target.value as DepositType } }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
-                  <option value="none">{t('bookingEngine.depositTypes.none')}</option>
-                  <option value="first_night">{t('bookingEngine.depositTypes.first_night')}</option>
-                  <option value="percentage">{t('bookingEngine.depositTypes.percentage')}</option>
-                  <option value="full">{t('bookingEngine.depositTypes.full')}</option>
-                </select>
-              </div>
-              {form.depositPolicy.type === 'percentage' && (
-                <div>
-                  <label htmlFor="deposit-percentage" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.percentageLabel')}</label>
-                  <input id="deposit-percentage" type="number" min={0} max={100} value={form.depositPolicy.percentage ?? 0} onChange={(event) => updateForm((current) => ({ ...current, depositPolicy: { ...current.depositPolicy, percentage: Number(event.target.value) } }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
-                </div>
-              )}
-            </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={form.depositPolicy.refundable} onChange={(event) => updateForm((current) => ({ ...current, depositPolicy: { ...current.depositPolicy, refundable: event.target.checked } }))} className="accent-telivity-deep-blue" /><span className="text-telivity-navy">{t('bookingEngine.refundableDeposit')}</span></label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={form.autoConfirm} onChange={(event) => updateForm((current) => ({ ...current, autoConfirm: event.target.checked }))} className="accent-telivity-deep-blue" /><span className="text-telivity-navy">{t('bookingEngine.autoConfirm')}</span></label>
-            <p className="text-[11px] text-telivity-slate">{t('bookingEngine.requestSettings.autoConfirmDescription')}</p>
-          </div>
-        </div>
+        <SellableInventory
+          roomTypes={roomTypes}
+          ratePlans={ratePlans}
+          form={form}
+          updateForm={updateForm}
+        />
+        <BrandingSettings propertyId={propertyId} form={form} updateForm={updateForm} />
+        <DepositSettings form={form} updateForm={updateForm} />
 
         <div className="bg-white rounded-xl shadow-sm px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
           <button type="button" onClick={save} disabled={!formDirty || isQuestionEditorOpen || !configVersion || hasConflict || missingRequiredCardKey || !questionsValid || questionsPublishBlocked || saveConfig.isPending} className="bg-telivity-deep-blue text-white rounded-lg px-6 py-2 text-sm font-semibold disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2">{saveConfig.isPending ? t('bookingEngine.requestSettings.saving') : t('bookingEngine.requestSettings.save')}</button>
@@ -505,32 +479,161 @@ export default function BookingEngineSettings({ propertyId }: { propertyId: stri
         </div>
       </fieldset>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-4 sm:px-5 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <h2 className="text-sm font-semibold text-telivity-navy">{t('bookingEngine.publishableKeys')}</h2>
-          <button type="button" onClick={generateKey} disabled={createKey.isPending} className="inline-flex items-center justify-center gap-2 bg-telivity-deep-blue text-white rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2"><KeyRound size={15} aria-hidden="true" /> {t('bookingEngine.generateKey')}</button>
+      <PublishableKeysPanel
+        keys={keys}
+        newKey={newKey}
+        copied={copied}
+        generating={createKey.isPending}
+        revoking={revokeKey.isPending}
+        onGenerate={generateKey}
+        onCopy={copyKey}
+        onDismiss={() => setNewKey(null)}
+        onRevoke={(id) => revokeKey.mutate(id)}
+      />
+    </div>
+  );
+}
+
+function SellableInventory({
+  roomTypes,
+  ratePlans,
+  form,
+  updateForm,
+}: {
+  roomTypes: RoomType[];
+  ratePlans: RatePlan[];
+  form: BookingEngineFormState;
+  updateForm: UpdateBookingEngineForm;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+      <h2 className="text-sm font-semibold text-telivity-navy mb-1">{t('bookingEngine.sellableInventory')}</h2>
+      <p className="text-xs text-telivity-slate mb-4">{t('bookingEngine.sellableInventoryDescription')}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <InventoryList title={t('bookingEngine.roomTypes')} empty={t('bookingEngine.noRoomTypes')} items={roomTypes} selected={form.sellableRoomTypeIds} onToggle={(id) => updateForm((current) => ({ ...current, sellableRoomTypeIds: toggleId(current.sellableRoomTypeIds, id) }))} />
+        <InventoryList title={t('bookingEngine.ratePlans')} empty={t('bookingEngine.noRatePlans')} items={ratePlans} selected={form.sellableRatePlanIds} onToggle={(id) => updateForm((current) => ({ ...current, sellableRatePlanIds: toggleId(current.sellableRatePlanIds, id) }))} />
+      </div>
+    </div>
+  );
+}
+
+function BrandingSettings({
+  propertyId,
+  form,
+  updateForm,
+}: {
+  propertyId: string;
+  form: BookingEngineFormState;
+  updateForm: UpdateBookingEngineForm;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+      <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('bookingEngine.branding')}</h2>
+      <div className="space-y-4 max-w-xl">
+        <div>
+          <label htmlFor="booking-display-name" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.displayName')}</label>
+          <input id="booking-display-name" type="text" value={form.displayName} onChange={(event) => updateForm((current) => ({ ...current, displayName: event.target.value }))} placeholder={t('bookingEngine.displayNamePlaceholder')} className="w-full border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
         </div>
-        {newKey && (
-          <div className="m-4 border-l-4 border-telivity-orange bg-telivity-orange/5 rounded-xl p-4">
-            <p className="text-xs font-semibold text-telivity-navy mb-2">{t('bookingEngine.copyKeyWarning')}</p>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <code className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-telivity-navy break-all">{newKey}</code>
-              <button type="button" onClick={copyKey} className="inline-flex items-center justify-center gap-1.5 bg-telivity-deep-blue text-white rounded-lg px-3 py-2 text-sm font-semibold shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2">{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? t('bookingEngine.copied') : t('bookingEngine.copy')}</button>
-              <button type="button" onClick={() => setNewKey(null)} className="text-xs text-telivity-slate hover:text-telivity-navy shrink-0">{t('bookingEngine.dismiss')}</button>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <ColorControl id="booking-primary-color" label={t('bookingEngine.primaryColor')} value={form.primaryColor} onChange={(primaryColor) => updateForm((current) => ({ ...current, primaryColor }))} />
+          <ColorControl id="booking-accent-color" label={t('bookingEngine.accentColor')} value={form.accentColor} onChange={(accentColor) => updateForm((current) => ({ ...current, accentColor }))} />
+        </div>
+        <div>
+          <div className="flex items-center gap-2 mb-2"><ImageIcon size={16} className="text-telivity-deep-blue" aria-hidden="true" /><p className="text-xs font-medium text-telivity-slate">{t('bookingEngine.logo')}</p></div>
+          <MediaGallery propertyId={propertyId} ownerType="property" ownerId={propertyId} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DepositSettings({
+  form,
+  updateForm,
+}: {
+  form: BookingEngineFormState;
+  updateForm: UpdateBookingEngineForm;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+      <h2 className="text-sm font-semibold text-telivity-navy mb-4">{t('bookingEngine.depositPolicy')}</h2>
+      <div className="space-y-4 max-w-xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="deposit-policy-type" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.type')}</label>
+            <select id="deposit-policy-type" value={form.depositPolicy.type} onChange={(event) => updateForm((current) => ({ ...current, depositPolicy: { ...current.depositPolicy, type: event.target.value as DepositType } }))} className="w-full border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
+              <option value="none">{t('bookingEngine.depositTypes.none')}</option>
+              <option value="first_night">{t('bookingEngine.depositTypes.first_night')}</option>
+              <option value="percentage">{t('bookingEngine.depositTypes.percentage')}</option>
+              <option value="full">{t('bookingEngine.depositTypes.full')}</option>
+            </select>
           </div>
-        )}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[42rem]">
-            <thead><tr className="bg-telivity-teal/5 border-b border-gray-100"><th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('bookingEngine.label')}</th><th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('bookingEngine.key')}</th><th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th><th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('bookingEngine.created')}</th><th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('common.actions')}</th></tr></thead>
-            <tbody>
-              {keys.map((key, index) => (
-                <tr key={key.id} className={`border-b border-gray-50 ${index % 2 === 1 ? 'bg-gray-50/50' : ''}`}><td className="px-4 py-3 text-sm font-medium text-telivity-navy">{key.label}</td><td className="px-4 py-3 text-sm text-telivity-slate font-mono">{key.keyPrefix}••••</td><td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${key.isActive ? 'bg-telivity-deep-blue/10 text-telivity-deep-blue' : 'bg-gray-100 text-telivity-slate'}`}>{key.isActive ? t('bookingEngine.active') : t('bookingEngine.revoked')}</span></td><td className="px-4 py-3 text-sm text-telivity-slate">{key.createdAt ? new Date(key.createdAt).toLocaleDateString() : '—'}</td><td className="px-4 py-3 text-right">{key.isActive && <button type="button" onClick={() => revokeKey.mutate(key.id)} disabled={revokeKey.isPending} className="inline-flex items-center gap-1 text-red-700 hover:text-red-800 text-sm font-medium disabled:opacity-50"><Trash2 size={14} aria-hidden="true" /> {t('bookingEngine.revoke')}</button>}</td></tr>
-              ))}
-              {keys.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-slate">{t('bookingEngine.noKeysYet')}</td></tr>}
-            </tbody>
-          </table>
+          {form.depositPolicy.type === 'percentage' && (
+            <div>
+              <label htmlFor="deposit-percentage" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.percentageLabel')}</label>
+              <input id="deposit-percentage" type="number" min={0} max={100} value={form.depositPolicy.percentage ?? 0} onChange={(event) => updateForm((current) => ({ ...current, depositPolicy: { ...current.depositPolicy, percentage: Number(event.target.value) } }))} className="w-full border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
+            </div>
+          )}
         </div>
+        <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={form.depositPolicy.refundable} onChange={(event) => updateForm((current) => ({ ...current, depositPolicy: { ...current.depositPolicy, refundable: event.target.checked } }))} className="accent-telivity-deep-blue" /><span className="text-telivity-navy">{t('bookingEngine.refundableDeposit')}</span></label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={form.autoConfirm} onChange={(event) => updateForm((current) => ({ ...current, autoConfirm: event.target.checked }))} className="accent-telivity-deep-blue" /><span className="text-telivity-navy">{t('bookingEngine.autoConfirm')}</span></label>
+        <p className="text-[11px] text-telivity-slate">{t('bookingEngine.requestSettings.autoConfirmDescription')}</p>
+      </div>
+    </div>
+  );
+}
+
+function PublishableKeysPanel({
+  keys,
+  newKey,
+  copied,
+  generating,
+  revoking,
+  onGenerate,
+  onCopy,
+  onDismiss,
+  onRevoke,
+}: {
+  keys: PublishableKey[];
+  newKey: string | null;
+  copied: boolean;
+  generating: boolean;
+  revoking: boolean;
+  onGenerate: () => void;
+  onCopy: () => void;
+  onDismiss: () => void;
+  onRevoke: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="px-4 sm:px-5 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h2 className="text-sm font-semibold text-telivity-navy">{t('bookingEngine.publishableKeys')}</h2>
+        <button type="button" onClick={onGenerate} disabled={generating} className="inline-flex items-center justify-center gap-2 bg-telivity-deep-blue text-white rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2"><KeyRound size={15} aria-hidden="true" /> {t('bookingEngine.generateKey')}</button>
+      </div>
+      {newKey && (
+        <div className="m-4 border-l-4 border-telivity-orange bg-telivity-orange/5 rounded-xl p-4">
+          <p className="text-xs font-semibold text-telivity-navy mb-2">{t('bookingEngine.copyKeyWarning')}</p>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <code className="flex-1 bg-white border border-telivity-slate rounded-lg px-3 py-2 text-sm font-mono text-telivity-navy break-all">{newKey}</code>
+            <button type="button" onClick={onCopy} className="inline-flex items-center justify-center gap-1.5 bg-telivity-deep-blue text-white rounded-lg px-3 py-2 text-sm font-semibold shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2">{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? t('bookingEngine.copied') : t('bookingEngine.copy')}</button>
+            <button type="button" onClick={onDismiss} className="text-xs text-telivity-slate hover:text-telivity-navy shrink-0">{t('bookingEngine.dismiss')}</button>
+          </div>
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[42rem]">
+          <thead><tr className="bg-telivity-teal/5 border-b border-gray-100"><th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('bookingEngine.label')}</th><th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('bookingEngine.key')}</th><th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('common.status')}</th><th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('bookingEngine.created')}</th><th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase">{t('common.actions')}</th></tr></thead>
+          <tbody>
+            {keys.map((key, index) => (
+              <tr key={key.id} className={`border-b border-gray-50 ${index % 2 === 1 ? 'bg-gray-50/50' : ''}`}><td className="px-4 py-3 text-sm font-medium text-telivity-navy">{key.label}</td><td className="px-4 py-3 text-sm text-telivity-slate font-mono">{key.keyPrefix}••••</td><td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${key.isActive ? 'bg-telivity-deep-blue/10 text-telivity-deep-blue' : 'bg-gray-100 text-telivity-slate'}`}>{key.isActive ? t('bookingEngine.active') : t('bookingEngine.revoked')}</span></td><td className="px-4 py-3 text-sm text-telivity-slate">{key.createdAt ? new Date(key.createdAt).toLocaleDateString() : '—'}</td><td className="px-4 py-3 text-right">{key.isActive && <button type="button" onClick={() => onRevoke(key.id)} disabled={revoking} className="inline-flex items-center gap-1 text-red-700 hover:text-red-800 text-sm font-medium disabled:opacity-50"><Trash2 size={14} aria-hidden="true" /> {t('bookingEngine.revoke')}</button>}</td></tr>
+            ))}
+            {keys.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-slate">{t('bookingEngine.noKeysYet')}</td></tr>}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -554,8 +657,8 @@ function ColorControl({ id, label, value, onChange }: { id: string; label: strin
     <div>
       <label htmlFor={id} className="block text-xs font-medium text-telivity-slate mb-1">{label}</label>
       <div className="flex items-center gap-2">
-        <input aria-label={label} type="color" value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-12 border border-gray-200 rounded-lg cursor-pointer" />
-        <input id={id} type="text" value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
+        <input aria-label={label} type="color" value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-12 border border-telivity-slate rounded-lg cursor-pointer" />
+        <input id={id} type="text" value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 border border-telivity-slate rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
       </div>
     </div>
   );

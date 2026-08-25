@@ -22,6 +22,25 @@ export type BookingFormQuestion = {
 };
 
 /**
+ * A question written by a newer server that this deployment cannot interpret.
+ * It is retained for rolling compatibility. Admin updates reject it while
+ * active and public config never publishes it; extra fields remain opaque.
+ */
+export type UnsupportedBookingFormQuestion = {
+  id: string;
+  label: string;
+  type: string;
+  order: number;
+  isActive: boolean;
+  isRequired: boolean;
+  [key: string]: unknown;
+};
+
+export type BookingFormQuestionDefinition =
+  | BookingFormQuestion
+  | UnsupportedBookingFormQuestion;
+
+/**
  * Booking Engine — guest-facing direct (commission-free) booking.
  *
  * The public booking API (`/api/v1/booking-engine/*`) lets a hotel sell rooms
@@ -81,7 +100,10 @@ export const bookingEngineConfig = pgTable('booking_engine_config', {
     .$type<PaymentMethodCollection>()
     .notNull()
     .default('disabled'),
-  formQuestions: jsonb('form_questions').$type<BookingFormQuestion[]>().notNull().default([]),
+  formQuestions: jsonb('form_questions')
+    .$type<BookingFormQuestionDefinition[]>()
+    .notNull()
+    .default([]),
   // Allow-lists: only these room types / rate plans are publicly sellable. Empty
   // = nothing is sold (fail-closed) until the operator opts inventory in.
   sellableRoomTypeIds: jsonb('sellable_room_type_ids').$type<string[]>().notNull().default([]),

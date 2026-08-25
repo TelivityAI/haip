@@ -304,8 +304,33 @@ describe('BookingQuestionBuilder', () => {
     const section = container.querySelector('section[aria-labelledby="guest-form-blueprint-title"]');
 
     expect(section?.querySelectorAll('.text-telivity-mid-grey')).toHaveLength(0);
+    expect(section?.querySelectorAll('.border-gray-300')).toHaveLength(0);
     expect(screen.getByRole('button', { name: 'Add question' })).toHaveClass('bg-telivity-deep-blue');
     expect(screen.getByRole('button', { name: 'Add question' })).toHaveClass('focus-visible:ring-telivity-deep-blue');
+  });
+
+  it('restores focus to the newly added row when the fiftieth question disables Add', async () => {
+    const questions = Array.from({ length: 49 }, (_, index): BookingFormQuestion => ({
+      id: `10000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      label: `Question ${index + 1}`,
+      type: 'short_text',
+      order: index,
+      isActive: true,
+      isRequired: false,
+    }));
+    render(<BuilderHarness
+      initial={questions}
+      idFactory={() => '10000000-0000-4000-8000-000000000999'}
+    />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add question' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Question label' }), 'Final question');
+    await userEvent.click(screen.getByRole('button', { name: 'Save question' }));
+
+    expect(screen.getByRole('button', { name: 'Add question' })).toBeDisabled();
+    await waitFor(() => expect(
+      screen.getByRole('button', { name: 'Edit Final question' }),
+    ).toHaveFocus());
   });
 
   it('offers exactly the six approved question types and blocks a 51st question', async () => {
@@ -366,21 +391,25 @@ function mockQueries(config: Record<string, unknown> = baseConfig) {
   });
 }
 
-function renderSettings() {
-  const queryClient = new QueryClient({
+function renderSettings(propertyId = 'property-1', providedClient?: QueryClient) {
+  const queryClient = providedClient ?? new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
       mutations: { retry: false },
     },
   });
-  const view = render(
+  const settings = (nextPropertyId: string) => (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <BookingEngineSettings propertyId="property-1" />
+        <BookingEngineSettings propertyId={nextPropertyId} />
       </ToastProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return Object.assign(view, { queryClient });
+  const view = render(settings(propertyId));
+  return Object.assign(view, {
+    queryClient,
+    switchProperty: (nextPropertyId: string) => view.rerender(settings(nextPropertyId)),
+  });
 }
 
 describe('BookingEngineSettings request configuration', () => {
@@ -419,7 +448,7 @@ describe('BookingEngineSettings request configuration', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
   });
 
-  it('resets dirty request changes and saves only changed fields with the expected version', async () => {
+  it('resets dirty request changes and sends only changed fields with the version header', async () => {
     renderSettings();
     const mode = await screen.findByRole('combobox', { name: 'Booking mode' });
     const cardPolicy = screen.getByRole('combobox', { name: 'Card collection' });
@@ -439,14 +468,16 @@ describe('BookingEngineSettings request configuration', () => {
     expect(vi.mocked(api.patch).mock.calls[0]).toEqual([
       '/v1/admin/booking-engine/config',
       {
-        expectedUpdatedAt: '2026-08-25T00:00:00.000Z',
         paymentMethodCollection: 'required',
         formQuestions: [
           { ...arrivalQuestion, order: 0, isActive: false },
           { ...breakfastQuestion, order: 1 },
         ],
       },
-      { params: { propertyId: 'property-1' } },
+      {
+        params: { propertyId: 'property-1' },
+        headers: { 'If-Match': '"2026-08-25T00:00:00.000Z"' },
+      },
     ]);
   });
 
@@ -469,8 +500,11 @@ describe('BookingEngineSettings request configuration', () => {
     await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(2));
 
     expect(vi.mocked(api.patch).mock.calls[1]?.[1]).toEqual({
-      expectedUpdatedAt: '2026-08-25T00:00:01.000Z',
       paymentMethodCollection: 'disabled',
+    });
+    expect(vi.mocked(api.patch).mock.calls[1]?.[2]).toEqual({
+      params: { propertyId: 'property-1' },
+      headers: { 'If-Match': '"2026-08-25T00:00:01.000Z"' },
     });
   });
 
@@ -504,6 +538,7 @@ describe('BookingEngineSettings request configuration', () => {
     await waitFor(() => expect(mode).toHaveValue('request'));
     expect(screen.getByRole('combobox', { name: 'Card collection' })).toHaveValue('disabled');
     expect(screen.queryByRole('alert', { name: 'Settings conflict' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Could not save booking engine settings.')).not.toBeInTheDocument();
   });
 
   it('keeps the conflict draft when reloading the latest settings fails', async () => {
@@ -540,7 +575,6 @@ describe('BookingEngineSettings request configuration', () => {
 
     await waitFor(() => expect(api.patch).toHaveBeenCalledOnce());
     expect(vi.mocked(api.patch).mock.calls[0]?.[1]).toEqual({
-      expectedUpdatedAt: baseConfig.updatedAt,
       bookingMode: 'instant',
     });
   });
@@ -598,7 +632,6 @@ describe('BookingEngineSettings request configuration', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(api.patch).toHaveBeenCalledOnce());
     expect(vi.mocked(api.patch).mock.calls[0]?.[1]).toEqual({
-      expectedUpdatedAt: baseConfig.updatedAt,
       bookingMode: 'instant',
     });
 
@@ -636,6 +669,74 @@ describe('BookingEngineSettings request configuration', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByText('Could not save booking engine settings.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Reset changes' }));
+    expect(screen.queryByText('Could not save booking engine settings.')).not.toBeInTheDocument();
+  });
+
+  it('discards an open Add draft when switching to an uncached property', async () => {
+    const secondConfig = {
+      ...baseConfig,
+      id: 'config-2',
+      propertyId: 'property-2',
+      displayName: 'Second hotel',
+      formQuestions: [],
+      updatedAt: '2026-08-25T01:00:00.000Z',
+    };
+    let resolveSecond: ((value: unknown) => void) | undefined;
+    vi.mocked(api.get).mockImplementation((url: string, options?: { params?: { propertyId?: string } }) => {
+      if (url === '/v1/admin/booking-engine/config') {
+        if (options?.params?.propertyId === 'property-2') {
+          return new Promise((resolve) => { resolveSecond = resolve; }) as never;
+        }
+        return Promise.resolve({ data: { data: baseConfig } } as never);
+      }
+      return Promise.resolve({ data: { data: [] } } as never);
+    });
+    const view = renderSettings();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add question' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Question label' }), 'Phantom draft');
+
+    view.switchProperty('property-2');
+    expect(screen.getByRole('status')).toHaveTextContent('Loading booking engine settings');
+    await act(async () => resolveSecond?.({ data: { data: secondConfig } }));
+
+    expect(await screen.findByRole('textbox', { name: 'Display Name' })).toHaveValue('Second hotel');
+    expect(screen.queryByDisplayValue('Phantom draft')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+  });
+
+  it('discards an open Edit draft and mutation state when switching to a cached property', async () => {
+    const secondConfig = {
+      ...baseConfig,
+      id: 'config-2',
+      propertyId: 'property-2',
+      displayName: 'Cached hotel',
+      formQuestions: [],
+      updatedAt: '2026-08-25T02:00:00.000Z',
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(['booking-engine', 'config', 'property-2'], { data: secondConfig });
+    vi.mocked(api.get).mockImplementation((url: string, options?: { params?: { propertyId?: string } }) => {
+      if (url === '/v1/admin/booking-engine/config') {
+        return Promise.resolve({
+          data: { data: options?.params?.propertyId === 'property-2' ? secondConfig : baseConfig },
+        } as never);
+      }
+      return Promise.resolve({ data: { data: [] } } as never);
+    });
+    const view = renderSettings('property-1', queryClient);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Arrival time' }));
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Question label' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Question label' }), 'Phantom edit');
+
+    view.switchProperty('property-2');
+
+    expect(await screen.findByRole('textbox', { name: 'Display Name' })).toHaveValue('Cached hotel');
+    expect(screen.queryByDisplayValue('Phantom edit')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Edit question' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
   });
 
   it('allows only one save mutation at a time', async () => {

@@ -9,14 +9,14 @@ import { eq, and, desc } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { bookingEngineConfig, bookingEngineCredentials } from '@telivityhaip/database';
 import type {
-  BookingFormQuestion,
+  BookingFormQuestionDefinition,
   BookingMode,
   DepositPolicy,
   PaymentMethodCollection,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { hashBookingKey } from '../auth/booking-key.guard';
-import { validateQuestionDefinitions } from './booking-form-questions';
+import { isSupportedQuestion, validateQuestionDefinitions } from './booking-form-questions';
 
 // Crockford base32 (no I/L/O/U) — unambiguous when copied by a human.
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -32,7 +32,6 @@ function randomToken(bytes: number): string {
 }
 
 export interface UpdateConfigInput {
-  expectedUpdatedAt: string;
   isEnabled?: boolean;
   displayName?: string | null;
   logoMediaId?: string | null;
@@ -45,7 +44,7 @@ export interface UpdateConfigInput {
   stripePublishableKey?: string | null;
   bookingMode?: BookingMode;
   paymentMethodCollection?: PaymentMethodCollection;
-  formQuestions?: BookingFormQuestion[];
+  formQuestions?: BookingFormQuestionDefinition[];
 }
 
 @Injectable()
@@ -76,8 +75,10 @@ export class BookingEngineConfigService {
   async getPublicConfig(propertyId: string, db?: any, lockForUpdate = false) {
     const cfg = await this.getConfig(propertyId, db, lockForUpdate);
     const formQuestions = validateQuestionDefinitions(
-      (cfg.formQuestions ?? []) as BookingFormQuestion[],
+      cfg.formQuestions ?? [],
+      { allowActiveUnsupported: true },
     )
+      .filter(isSupportedQuestion)
       .filter((question) => question.isActive)
       .sort((a, b) => a.order - b.order);
     return {
@@ -97,7 +98,7 @@ export class BookingEngineConfigService {
     };
   }
 
-  async updateConfig(propertyId: string, input: UpdateConfigInput) {
+  async updateConfig(propertyId: string, input: UpdateConfigInput, expectedVersion?: string) {
     await this.getConfig(propertyId); // ensure a row exists before locking it
 
     return this.db.transaction(async (tx: any) => {
@@ -110,11 +111,16 @@ export class BookingEngineConfigService {
         throw new NotFoundException(`Booking engine config for property ${propertyId} not found`);
       }
 
-      const { expectedUpdatedAt: expectedVersion, ...patch } = input;
+      const patch = input;
       const currentUpdatedAt = new Date(current.updatedAt);
-      const expectedUpdatedAt = new Date(expectedVersion);
-      if (Number.isNaN(expectedUpdatedAt.valueOf())
-        || expectedUpdatedAt.valueOf() !== currentUpdatedAt.valueOf()) {
+      const expectedUpdatedAt = expectedVersion === undefined ? undefined : new Date(expectedVersion);
+      // If-Match is optional for one rolling-deployment window so legacy
+      // dashboards can still save. Such requests intentionally have reduced
+      // lost-update protection until all clients send the header.
+      if (expectedUpdatedAt !== undefined && (
+        Number.isNaN(expectedUpdatedAt.valueOf())
+        || expectedUpdatedAt.valueOf() !== currentUpdatedAt.valueOf()
+      )) {
         throw new ConflictException(
           'Booking engine settings changed since they were loaded',
         );

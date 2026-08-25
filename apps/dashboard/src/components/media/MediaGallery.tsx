@@ -110,14 +110,14 @@ export default function MediaGallery({ propertyId, ownerType, ownerId, canManage
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder={t('media.urlPlaceholder')}
-              className="w-full min-w-0 sm:flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"
+              className="w-full min-w-0 sm:flex-1 border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"
             />
             <input
               type="text"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
               placeholder={t('media.captionPlaceholder')}
-              className="w-full sm:w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"
+              className="w-full sm:w-40 border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"
             />
             <button
               onClick={submitUrl}
@@ -144,13 +144,13 @@ export default function MediaGallery({ propertyId, ownerType, ownerId, canManage
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={upload.isPending}
-                className="flex items-center gap-2 text-sm text-telivity-slate hover:text-telivity-teal disabled:opacity-50"
+                className="flex items-center gap-2 rounded text-sm text-telivity-slate hover:text-telivity-navy disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"
               >
                 <Upload size={14} /> {upload.isPending ? t('media.uploading') : t('media.uploadFile')}
               </button>
             </div>
           )}
-          {addByUrl.isError && <p className="text-xs text-red-500">{t('media.couldNotAddImage')}</p>}
+          {addByUrl.isError && <p className="text-xs text-red-700">{t('media.couldNotAddImage')}</p>}
         </div>
       )}
     </div>

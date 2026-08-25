@@ -185,6 +185,9 @@ export default function BookingQuestionBuilder({
     onChange(normalizedQuestions(editingId
       ? questions.map((question) => question.id === editingId ? saved : question)
       : [...questions, saved]));
+    if (!editingId && questions.length + 1 >= MAX_QUESTIONS) {
+      returnFocusRef.current = saved.id;
+    }
     closeEditor();
   };
 
@@ -405,7 +408,7 @@ function QuestionList({
                     : t('bookingEngine.questions.enable', { label: question.label })}
                   onClick={() => onToggle(question)}
                   disabled={disabled || !supported}
-                  className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2 disabled:opacity-50 motion-reduce:transition-none ${question.isActive ? 'bg-telivity-deep-blue' : 'bg-gray-400'}`}
+                  className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue focus-visible:ring-offset-2 disabled:opacity-50 motion-reduce:transition-none ${question.isActive ? 'bg-telivity-deep-blue' : 'bg-telivity-slate'}`}
                 >
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform motion-reduce:transition-none ${question.isActive ? 'translate-x-4' : ''}`} />
                 </button>
@@ -496,13 +499,13 @@ function QuestionEditor({
             aria-invalid={labelInvalid}
             aria-describedby={labelInvalid ? 'booking-question-label-error' : undefined}
             onChange={(event) => setDraft((current) => current ? { ...current, label: event.target.value } : current)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"
+            className="w-full border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"
           />
           {labelInvalid && <p id="booking-question-label-error" className="text-xs text-red-600 mt-1">{t('bookingEngine.questions.labelRequired')}</p>}
         </div>
         <div>
           <label htmlFor="booking-question-type" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.questions.type')}</label>
-          <select id="booking-question-type" value={draft.type} onChange={(event) => onTypeChange(event.target.value as BookingFormQuestionType)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
+          <select id="booking-question-type" value={draft.type} onChange={(event) => onTypeChange(event.target.value as BookingFormQuestionType)} className="w-full border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
             {QUESTION_TYPES.map((type) => <option key={type} value={type}>{t(`bookingEngine.questions.types.${type}`)}</option>)}
           </select>
         </div>
@@ -530,7 +533,7 @@ function QuestionEditor({
           <div className="space-y-2">
             {optionValues.map((option, index) => (
               <div key={optionKeys[index]} className="flex items-center gap-2">
-                <input type="text" maxLength={200} aria-label={t('bookingEngine.questions.optionLabel', { number: index + 1 })} aria-invalid={!!optionErrorId} aria-describedby={optionErrorId} value={option} onChange={(event) => onUpdateOption(index, event.target.value)} className="min-w-0 flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
+                <input type="text" maxLength={200} aria-label={t('bookingEngine.questions.optionLabel', { number: index + 1 })} aria-invalid={!!optionErrorId} aria-describedby={optionErrorId} value={option} onChange={(event) => onUpdateOption(index, event.target.value)} className="min-w-0 flex-1 border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue" />
                 <IconButton label={t('bookingEngine.questions.moveOptionUp', { number: index + 1 })} onClick={() => onMoveOption(index, -1)} disabled={index === 0}><ArrowUp size={14} /></IconButton>
                 <IconButton label={t('bookingEngine.questions.moveOptionDown', { number: index + 1 })} onClick={() => onMoveOption(index, 1)} disabled={index === optionValues.length - 1}><ArrowDown size={14} /></IconButton>
                 <IconButton label={t('bookingEngine.questions.removeOption', { number: index + 1 })} onClick={() => onRemoveOption(index)} danger><Trash2 size={14} /></IconButton>

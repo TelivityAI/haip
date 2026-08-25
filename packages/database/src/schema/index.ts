@@ -244,10 +244,12 @@ export {
 } from './booking-engine.js';
 export type {
   BookingFormQuestion,
+  BookingFormQuestionDefinition,
   BookingFormQuestionType,
   BookingMode,
   DepositPolicy,
   PaymentMethodCollection,
+  UnsupportedBookingFormQuestion,
 } from './booking-engine.js';
 
 // Booking Requests — request-first direct booking persistence

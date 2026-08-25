@@ -1,5 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
-import type { BookingFormQuestion, BookingFormQuestionType } from '@telivityhaip/database';
+import type {
+  BookingFormQuestion,
+  BookingFormQuestionDefinition,
+  BookingFormQuestionType,
+} from '@telivityhaip/database';
 
 const QUESTION_TYPES: readonly BookingFormQuestionType[] = [
   'short_text',
@@ -12,6 +16,19 @@ const QUESTION_TYPES: readonly BookingFormQuestionType[] = [
 
 const SELECT_TYPES = new Set<BookingFormQuestionType>(['single_select', 'multi_select']);
 const MAX_QUESTIONS = 50;
+const MAX_LABEL_LENGTH = 200;
+const MAX_OPTIONS = 50;
+
+type RawQuestion = {
+  id?: unknown;
+  label?: unknown;
+  type?: unknown;
+  options?: unknown;
+  order?: unknown;
+  isActive?: unknown;
+  isRequired?: unknown;
+  [key: string]: unknown;
+};
 
 function invalid(message: string): never {
   throw new BadRequestException(message);
@@ -32,7 +49,16 @@ function isIsoDate(value: string): boolean {
  * UUID validation remains at the HTTP boundary because imported historical form
  * snapshots may be read through this pure function too.
  */
-export function validateQuestionDefinitions(questions: BookingFormQuestion[]): BookingFormQuestion[] {
+export function isSupportedQuestion(
+  question: BookingFormQuestionDefinition,
+): question is BookingFormQuestion {
+  return QUESTION_TYPES.includes(question.type as BookingFormQuestionType);
+}
+
+export function validateQuestionDefinitions(
+  questions: unknown,
+  { allowActiveUnsupported = false }: { allowActiveUnsupported?: boolean } = {},
+): BookingFormQuestionDefinition[] {
   if (!Array.isArray(questions)) {
     invalid('Form questions must be an array');
   }
@@ -41,8 +67,12 @@ export function validateQuestionDefinitions(questions: BookingFormQuestion[]): B
   }
 
   const ids = new Set<string>();
-  return questions.map((question) => {
-    if (!question || typeof question.id !== 'string' || question.id.trim().length === 0) {
+  return questions.map((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      invalid('Each booking form question must be an object');
+    }
+    const question = value as RawQuestion;
+    if (typeof question.id !== 'string' || question.id.trim().length === 0) {
       invalid('Each booking form question requires an id');
     }
     if (ids.has(question.id)) {
@@ -53,24 +83,40 @@ export function validateQuestionDefinitions(questions: BookingFormQuestion[]): B
     if (typeof question.label !== 'string' || question.label.trim().length === 0) {
       invalid(`Question '${question.id}' requires a label`);
     }
-    if (!QUESTION_TYPES.includes(question.type)) {
-      invalid(`Question '${question.label}' has an unsupported type`);
+    if (question.label.length > MAX_LABEL_LENGTH) {
+      invalid(`Question '${question.id}' label is too long`);
     }
-    if (!Number.isInteger(question.order) || question.order < 0) {
+    if (typeof question.type !== 'string' || question.type.trim().length === 0) {
+      invalid(`Question '${question.label}' requires a type`);
+    }
+    if (typeof question.order !== 'number'
+      || !Number.isInteger(question.order)
+      || question.order < 0) {
       invalid(`Question '${question.label}' requires a non-negative integer order`);
     }
     if (typeof question.isActive !== 'boolean' || typeof question.isRequired !== 'boolean') {
       invalid(`Question '${question.label}' requires active and required flags`);
     }
 
+    if (!QUESTION_TYPES.includes(question.type as BookingFormQuestionType)) {
+      if (question.isActive && !allowActiveUnsupported) {
+        invalid(`Question '${question.label}' has an unsupported active type`);
+      }
+      return { ...question } as BookingFormQuestionDefinition;
+    }
+
     const options = question.options;
-    if (SELECT_TYPES.has(question.type)) {
+    const type = question.type as BookingFormQuestionType;
+    if (SELECT_TYPES.has(type)) {
       if (!Array.isArray(options) || options.length === 0) {
         invalid(`Select question '${question.label}' requires at least one option`);
       }
+      if (options.length > MAX_OPTIONS) {
+        invalid(`Select question '${question.label}' can contain at most ${MAX_OPTIONS} options`);
+      }
       const normalizedOptions = new Set<string>();
       for (const option of options) {
-        if (typeof option !== 'string' || option.trim().length === 0) {
+        if (typeof option !== 'string' || option.trim().length === 0 || option.length > 200) {
           invalid(`Select question '${question.label}' has an invalid option`);
         }
         const key = normalized(option);
@@ -83,7 +129,15 @@ export function validateQuestionDefinitions(questions: BookingFormQuestion[]): B
       invalid(`Question '${question.label}' does not support options`);
     }
 
-    return { ...question, ...(options ? { options: [...options] } : {}) };
+    return {
+      id: question.id,
+      label: question.label.trim(),
+      type,
+      ...(options ? { options: options.map((option) => (option as string).trim()) } : {}),
+      order: question.order,
+      isActive: question.isActive,
+      isRequired: question.isRequired,
+    } as BookingFormQuestion;
   });
 }
 
@@ -92,7 +146,7 @@ export function validateApplicationAnswers(
   questions: BookingFormQuestion[],
   answers: Record<string, unknown>,
 ): Record<string, unknown> {
-  const definitions = validateQuestionDefinitions(questions);
+  const definitions = validateQuestionDefinitions(questions).filter(isSupportedQuestion);
   if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
     invalid('Application answers must be an object');
   }

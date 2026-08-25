@@ -4,19 +4,27 @@ import {
   IsHexColor,
   IsIn,
   IsInt,
-  IsISO8601,
   IsOptional,
   IsString,
   IsUUID,
   Max,
   MaxLength,
   Min,
+  Validate,
   ValidateNested,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
   ArrayMaxSize,
+  isUUID,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type { BookingFormQuestion, BookingFormQuestionType } from '@telivityhaip/database';
+import type {
+  BookingFormQuestion,
+  BookingFormQuestionDefinition,
+  BookingFormQuestionType,
+} from '@telivityhaip/database';
+import { validateQuestionDefinitions } from '../booking-form-questions';
 
 const BOOKING_FORM_QUESTION_TYPES: BookingFormQuestionType[] = [
   'short_text',
@@ -88,13 +96,23 @@ export class BookingFormQuestionDto implements BookingFormQuestion {
   isRequired!: boolean;
 }
 
+@ValidatorConstraint({ name: 'adminBookingFormQuestions', async: false })
+export class AdminBookingFormQuestionsConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    try {
+      return validateQuestionDefinitions(value).every((question) => isUUID(question.id));
+    } catch {
+      return false;
+    }
+  }
+
+  defaultMessage(): string {
+    return 'formQuestions contains an invalid or unsupported active question';
+  }
+}
+
 /** Admin: update per-property booking engine config. */
 export class UpdateBookingEngineConfigDto {
-  @ApiProperty({ description: 'updatedAt value returned by the last admin config read' })
-  @IsString()
-  @IsISO8601({ strict: true })
-  expectedUpdatedAt!: string;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
@@ -158,9 +176,8 @@ export class UpdateBookingEngineConfigDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
-  @ValidateNested({ each: true })
-  @Type(() => BookingFormQuestionDto)
-  formQuestions?: BookingFormQuestionDto[];
+  @Validate(AdminBookingFormQuestionsConstraint)
+  formQuestions?: BookingFormQuestionDefinition[];
 
   @ApiPropertyOptional({ description: 'Stripe PUBLISHABLE key (safe to expose)' })
   @IsOptional()

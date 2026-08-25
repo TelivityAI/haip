@@ -1,9 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
-import { plainToInstance } from 'class-transformer';
-import { validate } from 'class-validator';
+import { BadRequestException, ConflictException, ValidationPipe } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import type { BookingFormQuestion } from '@telivityhaip/database';
 import { UpdateBookingEngineConfigDto } from './dto/be-admin.dto';
+import { BookingEngineAdminController } from './booking-engine-admin.controller';
 import { BookingEngineConfigService } from './booking-engine-config.service';
 import {
   validateApplicationAnswers,
@@ -28,6 +27,29 @@ const breakfastQuestion: BookingFormQuestion = {
   isActive: true,
   isRequired: false,
 };
+
+const futureInactiveQuestion = {
+  id: '30000000-0000-4000-8000-000000000003',
+  label: 'Legacy satisfaction score',
+  type: 'rating_scale',
+  order: 2,
+  isActive: false,
+  isRequired: false,
+  futureConfig: { maximum: 5, icon: 'star' },
+};
+
+const adminValidationPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+});
+
+function validateAdminBody(value: unknown) {
+  return adminValidationPipe.transform(value, {
+    type: 'body',
+    metatype: UpdateBookingEngineConfigDto,
+  });
+}
 
 describe('validateQuestionDefinitions', () => {
   it('rejects duplicate question ids and missing select options', () => {
@@ -128,8 +150,7 @@ describe('validateApplicationAnswers', () => {
 
 describe('booking form DTO validation', () => {
   it('validates nested question ids and limits the form to fifty definitions', async () => {
-    const malformed = plainToInstance(UpdateBookingEngineConfigDto, {
-      expectedUpdatedAt: '2026-08-25T00:00:00.000Z',
+    const malformed = {
       formQuestions: [{
         id: 'not-a-uuid',
         label: 'Purpose',
@@ -139,9 +160,8 @@ describe('booking form DTO validation', () => {
         isActive: true,
         isRequired: true,
       }],
-    });
-    const oversized = plainToInstance(UpdateBookingEngineConfigDto, {
-      expectedUpdatedAt: '2026-08-25T00:00:00.000Z',
+    };
+    const oversized = {
       formQuestions: Array.from({ length: 51 }, (_, order) => ({
         id: `00000000-0000-4000-8000-${String(order).padStart(12, '0')}`,
         label: `Question ${order}`,
@@ -150,23 +170,29 @@ describe('booking form DTO validation', () => {
         isActive: true,
         isRequired: false,
       })),
-    });
+    };
 
-    expect(await validate(malformed)).not.toEqual([]);
-    expect(await validate(oversized)).not.toEqual([]);
+    await expect(validateAdminBody(malformed)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(validateAdminBody(oversized)).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('requires a valid config version for every admin update', async () => {
-    const missingVersion = plainToInstance(UpdateBookingEngineConfigDto, {
-      displayName: 'Renamed hotel',
-    });
-    const malformedVersion = plainToInstance(UpdateBookingEngineConfigDto, {
-      displayName: 'Renamed hotel',
-      expectedUpdatedAt: 'yesterday',
-    });
+  it('accepts legacy update bodies without a version and rejects the removed body token', async () => {
+    const legacy = await validateAdminBody({ displayName: 'Renamed hotel' });
 
-    expect(await validate(missingVersion)).not.toEqual([]);
-    expect(await validate(malformedVersion)).not.toEqual([]);
+    expect(legacy).toMatchObject({ displayName: 'Renamed hotel' });
+    await expect(validateAdminBody({
+      displayName: 'Renamed hotel',
+      expectedUpdatedAt: '2026-08-25T00:00:00.000Z',
+    })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('preserves opaque inactive future questions but rejects active unknown types', async () => {
+    const validated = await validateAdminBody({ formQuestions: [futureInactiveQuestion] });
+
+    expect(validated.formQuestions).toEqual([futureInactiveQuestion]);
+    await expect(validateAdminBody({
+      formQuestions: [{ ...futureInactiveQuestion, isActive: true }],
+    })).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 
@@ -214,6 +240,7 @@ describe('BookingEngineConfigService request settings', () => {
     formQuestions: [
       { ...arrivalQuestion, order: 2 },
       { ...breakfastQuestion, order: 1, isActive: false },
+      { ...futureInactiveQuestion, isActive: true },
       { id: 'notes', label: 'Notes', type: 'long_text' as const, order: 3, isActive: true, isRequired: false },
     ],
   };
@@ -233,29 +260,34 @@ describe('BookingEngineConfigService request settings', () => {
     expect(publicConfig).not.toHaveProperty('updatedAt');
   });
 
-  it('rejects a stale admin save under the row lock before writing', async () => {
+  it('accepts a legacy admin save without a version during the compatibility window', async () => {
+    const { service, set } = makeConfigService(configRow);
+
+    await service.updateConfig(configRow.propertyId, { displayName: 'Legacy admin name' });
+
+    expect(set.mock.calls[0][0]).toMatchObject({ displayName: 'Legacy admin name' });
+  });
+
+  it('rejects a stale If-Match version under the row lock before writing', async () => {
     const { service, update, lock } = makeConfigService(configRow);
 
     await expect(service.updateConfig(configRow.propertyId, {
-      expectedUpdatedAt: '2026-08-24T23:59:59.000Z',
       displayName: 'Stale admin name',
-    } as never)).rejects.toBeInstanceOf(ConflictException);
+    }, '2026-08-24T23:59:59.000Z')).rejects.toBeInstanceOf(ConflictException);
 
     expect(lock).toHaveBeenCalledWith('update');
     expect(update).not.toHaveBeenCalled();
   });
 
-  it('writes only the fresh partial patch and never persists its concurrency token', async () => {
+  it('writes only a partial patch when the If-Match version is current', async () => {
     const { service, set } = makeConfigService(configRow);
 
     await service.updateConfig(configRow.propertyId, {
-      expectedUpdatedAt: configRow.updatedAt.toISOString(),
       displayName: 'Renamed Hotel',
-    } as never);
+    }, configRow.updatedAt.toISOString());
 
     const written = set.mock.calls[0][0];
     expect(written).toMatchObject({ displayName: 'Renamed Hotel' });
-    expect(written).not.toHaveProperty('expectedUpdatedAt');
     expect(written).not.toHaveProperty('bookingMode');
     expect(written).not.toHaveProperty('paymentMethodCollection');
     expect(written).not.toHaveProperty('formQuestions');
@@ -265,9 +297,8 @@ describe('BookingEngineConfigService request settings', () => {
     const { service, update } = makeConfigService({ ...configRow, stripePublishableKey: null });
 
     await expect(service.updateConfig(configRow.propertyId, {
-      expectedUpdatedAt: configRow.updatedAt.toISOString(),
       paymentMethodCollection: 'required',
-    })).rejects.toThrow(/publishable/i);
+    }, configRow.updatedAt.toISOString())).rejects.toThrow(/publishable/i);
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -275,12 +306,11 @@ describe('BookingEngineConfigService request settings', () => {
     const { service, set } = makeConfigService(configRow);
 
     await service.updateConfig(configRow.propertyId, {
-      expectedUpdatedAt: configRow.updatedAt.toISOString(),
       displayName: 'Renamed Hotel',
       bookingMode: undefined,
       paymentMethodCollection: undefined,
       formQuestions: undefined,
-    });
+    }, configRow.updatedAt.toISOString());
 
     const written = set.mock.calls[0][0];
     expect(written).toMatchObject({ displayName: 'Renamed Hotel' });
@@ -293,11 +323,66 @@ describe('BookingEngineConfigService request settings', () => {
     const { service, transaction, lock } = makeConfigService(configRow);
 
     await service.updateConfig(configRow.propertyId, {
-      expectedUpdatedAt: configRow.updatedAt.toISOString(),
       bookingMode: 'request',
-    });
+    }, configRow.updatedAt.toISOString());
 
     expect(transaction).toHaveBeenCalledOnce();
     expect(lock).toHaveBeenCalledWith('update');
+  });
+
+  it('parses a strong If-Match header and rejects malformed values at the controller', async () => {
+    const { service, set } = makeConfigService(configRow);
+    const controller = new BookingEngineAdminController(service);
+
+    await controller.updateConfig(
+      configRow.propertyId,
+      { displayName: 'Header admin name' },
+      `"${configRow.updatedAt.toISOString()}"`,
+    );
+    expect(set.mock.calls[0][0]).toMatchObject({ displayName: 'Header admin name' });
+    expect(() => controller.updateConfig(
+      configRow.propertyId,
+      { displayName: 'Malformed header' },
+      'not-an-etag',
+    )).toThrow(BadRequestException);
+  });
+
+  it('validates and preserves an opaque inactive definition through DTO, controller, and service', async () => {
+    const { service, set } = makeConfigService(configRow);
+    const controller = new BookingEngineAdminController(service);
+    const knownQuestion = {
+      id: '20000000-0000-4000-8000-000000000002',
+      label: '  Travel purpose  ',
+      type: 'single_select',
+      options: [' Leisure ', 'Business'],
+      order: 0,
+      isActive: true,
+      isRequired: true,
+    };
+    const dto = await validateAdminBody({
+      formQuestions: [knownQuestion, futureInactiveQuestion],
+    });
+
+    await controller.updateConfig(
+      configRow.propertyId,
+      dto,
+      `"${configRow.updatedAt.toISOString()}"`,
+    );
+
+    expect(set.mock.calls[0][0].formQuestions).toEqual([
+      { ...knownQuestion, label: 'Travel purpose', options: ['Leisure', 'Business'] },
+      futureInactiveQuestion,
+    ]);
+  });
+
+  it('accepts a legacy unrelated partial through DTO and controller without resending opaque data', async () => {
+    const { service, set } = makeConfigService(configRow);
+    const controller = new BookingEngineAdminController(service);
+    const dto = await validateAdminBody({ displayName: 'Legacy partial' });
+
+    await controller.updateConfig(configRow.propertyId, dto);
+
+    expect(set.mock.calls[0][0]).toMatchObject({ displayName: 'Legacy partial' });
+    expect(set.mock.calls[0][0]).not.toHaveProperty('formQuestions');
   });
 });
