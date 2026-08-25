@@ -62,6 +62,11 @@ jobs:
       - name: Type Check
         run: pnpm typecheck
 
+      - name: Push database schema
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_test
+
       - name: Run tests
         run: pnpm test
         env:

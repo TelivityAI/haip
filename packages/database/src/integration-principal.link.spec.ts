@@ -1,6 +1,6 @@
 /**
  * DB integration tests for multi-property integration:link.
- * Requires Postgres (CI sets DATABASE_URL to haip_test).
+ * Requires Postgres with schema pushed (CI: db:migrate before pnpm test).
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -18,7 +18,21 @@ const PROP_B = 'f3440002-0000-4000-a000-000000000002';
 const KEYCLOAK_SUB = 'f3440003-0000-4000-a000-000000000003';
 const LABEL = 'multi-prop-test';
 
-describe('linkIntegrationPrincipal multi-property', () => {
+async function databaseSchemaReady(): Promise<boolean> {
+  const client = postgres(DATABASE_URL, postgresOptionsFromEnv());
+  try {
+    await client`SELECT 1 FROM properties LIMIT 1`;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await client.end();
+  }
+}
+
+const schemaReady = await databaseSchemaReady();
+
+describe.skipIf(!schemaReady)('linkIntegrationPrincipal multi-property', () => {
   const client = postgres(DATABASE_URL, postgresOptionsFromEnv());
   const db = drizzle(client, { schema });
 
