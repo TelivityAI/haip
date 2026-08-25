@@ -470,7 +470,12 @@ describe('BookingRequestService stay amendment preview', () => {
     harness.state.requests[0]!.serviceIds = ['parking'];
     harness.state.reservationServices.push({
       id: 'rs-parking', propertyId: PROPERTY, reservationId: RESERVATION,
-      serviceId: 'parking', status: 'cancelled',
+      serviceId: 'parking', status: 'cancelled', sourceChannel: 'booking_engine',
+      createdAt: new Date('2026-08-24T10:05:00.000Z'),
+    }, {
+      id: 'rs-parking-frontdesk', propertyId: PROPERTY, reservationId: RESERVATION,
+      serviceId: 'parking', status: 'confirmed', sourceChannel: 'front_desk',
+      createdAt: new Date('2026-08-25T10:05:00.000Z'),
     });
 
     const preview = await harness.service.stayAmendmentPreview(REQUEST, PROPERTY, dates);

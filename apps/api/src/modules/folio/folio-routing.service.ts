@@ -216,6 +216,37 @@ export class FolioRoutingService {
       if (matching.some((c: any) => c.isLocked)) {
         throw new BadRequestException('Cannot move locked (night-audited) charges');
       }
+      if (matching.some((c: any) => c.adjustsChargeId)) {
+        throw new BadRequestException(
+          'Cannot move an internal accepted-pricing correction',
+        );
+      }
+      if (matching.some((c: any) =>
+        typeof c.sourceKey === 'string' && c.sourceKey.startsWith('accepted-pricing:'))) {
+        throw new BadRequestException(
+          'Cannot move an accepted-pricing group individually',
+        );
+      }
+      const parentIds = [...new Set(
+        matching.map((charge: any) => charge.parentChargeId).filter(Boolean),
+      )] as string[];
+      if (parentIds.length > 0) {
+        const parents = await tx
+          .select()
+          .from(charges)
+          .where(and(
+            eq(charges.propertyId, propertyId),
+            eq(charges.folioId, fromFolioId),
+            inArray(charges.id, parentIds),
+          ));
+        if (parents.some((parent: any) =>
+          typeof parent.sourceKey === 'string'
+          && parent.sourceKey.startsWith('accepted-pricing:'))) {
+          throw new BadRequestException(
+            'Cannot move a child of an accepted-pricing group individually',
+          );
+        }
+      }
 
       const ids = matching.map((c: any) => c.id);
       await tx

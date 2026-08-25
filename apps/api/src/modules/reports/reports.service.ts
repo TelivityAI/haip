@@ -41,10 +41,12 @@ export class ReportsService {
       )
       .groupBy(charges.type);
 
-    // Adjustments (reversals)
+    // Net reversal impact. Signed child reversals are essential here: an
+    // accepted group with 100 and a -20 correction reverses as -100 and +20,
+    // so its adjustment is 80 and net revenue is exactly zero.
     const [adjResult] = await this.db
       .select({
-        total: sql<string>`coalesce(sum(abs(${charges.amount}::numeric)), 0)`,
+        total: sql<string>`coalesce(-sum(${charges.amount}::numeric), 0)`,
       })
       .from(charges)
       .where(

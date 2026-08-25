@@ -17,6 +17,7 @@ import {
   ratePlans,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { matchAcceptedReservationServiceRows } from '../../common/accepted-pricing/accepted-reservation-service';
 import { withAcceptedPricingLock } from '../../common/database/accepted-pricing-lock';
 import { FolioService } from '../folio/folio.service';
 import { WebhookService } from '../webhook/webhook.service';
@@ -520,6 +521,10 @@ export class AncillaryService {
         }> = [];
         const folioOutcomes: Array<{ charge: any; wasCreated: boolean }> = [];
         const serviceDate = reservation.arrivalDate ?? new Date().toISOString().slice(0, 10);
+        const acceptedRows = matchAcceptedReservationServiceRows(
+          reservation.acceptedPricingSnapshot,
+          rows.map(({ rs }: any) => rs),
+        );
 
         for (const { rs, serviceName } of rows) {
           if (rs.status === 'cancelled') continue;
@@ -530,6 +535,7 @@ export class AncillaryService {
             true,
           );
           const hasAcceptedPricing = reservation.acceptedPricingSnapshot != null;
+          if (hasAcceptedPricing && acceptedRows.get(rs.serviceId)?.id !== rs.id) continue;
           const effectivePostingRule = acceptedLine?.postingRule ?? rs.postingRule;
           const effectiveChargeType = acceptedLine?.chargeType ?? rs.chargeType;
           if (hasAcceptedPricing) {
@@ -695,7 +701,7 @@ export class AncillaryService {
             propertyId,
             reservation.id,
             async (tx) => {
-              const [current] = await tx
+              const currentRows = await tx
                 .select({
                   rs: reservationServices,
                   serviceName: services.name,
@@ -717,11 +723,16 @@ export class AncillaryService {
                   ),
                 )
                 .where(and(
-                  eq(reservationServices.id, rs.id),
                   eq(reservationServices.propertyId, propertyId),
                   eq(reservationServices.reservationId, reservation.id),
                 ));
+              const current = currentRows.find(({ rs: candidate }: any) => candidate.id === rs.id);
               if (!current || current.rs.status === 'cancelled') return null;
+              const acceptedRows = matchAcceptedReservationServiceRows(
+                current.reservation.acceptedPricingSnapshot,
+                currentRows.map(({ rs: candidate }: any) => candidate),
+              );
+              if (acceptedRows.get(current.rs.serviceId)?.id !== current.rs.id) return null;
               const acceptedLine = this.acceptedServiceLine(
                 current.reservation,
                 current.rs.serviceId,

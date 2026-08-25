@@ -216,8 +216,14 @@ describe('booking request amendment ledger migration safety', () => {
   it('adds immutable correction provenance in both migration paths', () => {
     for (const source of [amendmentLedgerMigration, pushSchema]) {
       expect(source).toContain('ADD COLUMN IF NOT EXISTS adjusts_charge_id');
-      expect(source).toContain('charges_adjusts_charge_fkey');
-      expect(source).toMatch(/FOREIGN KEY \(adjusts_charge_id\) REFERENCES charges\(id\)/i);
+      expect(source).toContain('charges_property_id_unique');
+      expect(source).toContain('charges_adjusts_charge_property_fkey');
+      expect(source).toMatch(
+        /FOREIGN KEY \(property_id, adjusts_charge_id\)\s+REFERENCES charges\(property_id, id\)/i,
+      );
+      expect(source).not.toMatch(
+        /FOREIGN KEY \(adjusts_charge_id\) REFERENCES charges\(id\)/i,
+      );
     }
   });
 

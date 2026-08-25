@@ -302,8 +302,9 @@ describe('FolioRoutingService', () => {
   });
 
   describe('moveTransactions (KB 14.2)', () => {
-    function moveDb(matchingCharges: any[]) {
+    function moveDb(matchingCharges: any[], parentCharges: any[] = []) {
       let call = 0;
+      let thenCall = 0;
       const db: any = {
         select: vi.fn().mockImplementation(() => ({
           from: vi.fn().mockReturnValue({
@@ -315,7 +316,7 @@ describe('FolioRoutingService', () => {
                   { ...mockFolio, id: idx === 0 ? 'folio-001' : 'folio-002', status: 'open' },
                 ]);
               }),
-              then: (resolve: any) => resolve(matchingCharges),
+              then: (resolve: any) => resolve(thenCall++ === 0 ? matchingCharges : parentCharges),
             }),
           }),
         })),
@@ -375,6 +376,57 @@ describe('FolioRoutingService', () => {
       await expect(
         svc.moveTransactions('prop-001', 'folio-001', 'folio-002', { chargeType: 'room' }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects moving an internal accepted-pricing correction', async () => {
+      const db = moveDb([{
+        id: 'correction-1',
+        type: 'room',
+        amount: '-20.00',
+        isLocked: false,
+        adjustsChargeId: 'accepted-base-1',
+      }]);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioRoutingService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<FolioRoutingService>(FolioRoutingService);
+
+      await expect(
+        svc.moveTransactions('prop-001', 'folio-001', 'folio-002', {
+          chargeId: 'correction-1',
+        }),
+      ).rejects.toThrow(/accepted-pricing correction/i);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects moving a child of an accepted-pricing group', async () => {
+      const db = moveDb([{
+        id: 'accepted-tax', type: 'tax', isLocked: false, parentChargeId: 'accepted-base',
+      }], [{
+        id: 'accepted-base',
+        sourceKey: 'accepted-pricing:reservation:res-1:night:2026-04-04',
+      }]);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioRoutingService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<FolioRoutingService>(FolioRoutingService);
+
+      await expect(
+        svc.moveTransactions('prop-001', 'folio-001', 'folio-002', {
+          chargeId: 'accepted-tax',
+        }),
+      ).rejects.toThrow(/accepted-pricing group/i);
+      expect(db.update).not.toHaveBeenCalled();
     });
   });
 

@@ -16,6 +16,7 @@
 - Use one property+reservation lock order and perform no webhook or other external I/O while it is held.
 - `is_reversal` is reserved for exact reversals created by the canonical reversal flow.
 - Never mutate or backdate into a completed audit day; amendment deltas for closed groups post on the current open business date.
+- Approved narrow raw-SQL exception to `CLAUDE.md`: PostgreSQL transaction advisory locks have no Drizzle query-builder primitive. The sole exception is the parameterized `pg_advisory_xact_lock(hashtextextended(...))` statement in `accepted-pricing-lock.ts`; all business reads and writes remain Drizzle queries.
 - Execute inline without subagents, Task 13, push, or pull request.
 
 ---

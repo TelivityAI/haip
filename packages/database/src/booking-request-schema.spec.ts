@@ -171,5 +171,9 @@ describe('booking request schema', () => {
 
     const chargeIndexNames = getTableConfig(charges).indexes.map((index) => index.config.name);
     expect(chargeIndexNames).toContain('charges_property_folio_source_key_unique');
+    expect(chargeIndexNames).toContain('charges_property_id_unique');
+    expect(getTableConfig(charges).foreignKeys.map((key) => key.getName())).toContain(
+      'charges_adjusts_charge_property_fkey',
+    );
   });
 });

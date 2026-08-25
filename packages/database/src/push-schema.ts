@@ -1675,10 +1675,26 @@ async function main() {
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS parent_charge_id uuid`,
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS adjusts_charge_id uuid`,
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS source_key varchar(255)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS charges_property_id_unique ON charges (property_id, id)`,
     `DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'charges_adjusts_charge_fkey') THEN
-        ALTER TABLE charges ADD CONSTRAINT charges_adjusts_charge_fkey
-          FOREIGN KEY (adjusts_charge_id) REFERENCES charges(id);
+      IF EXISTS (
+        SELECT 1
+        FROM charges correction
+        JOIN charges adjusted ON adjusted.id = correction.adjusts_charge_id
+        WHERE correction.property_id <> adjusted.property_id
+      ) THEN
+        RAISE EXCEPTION 'charges.adjusts_charge_id must reference a charge in the same property';
+      END IF;
+
+      ALTER TABLE charges DROP CONSTRAINT IF EXISTS charges_adjusts_charge_fkey;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'charges_adjusts_charge_property_fkey'
+      ) THEN
+        ALTER TABLE charges ADD CONSTRAINT charges_adjusts_charge_property_fkey
+          FOREIGN KEY (property_id, adjusts_charge_id)
+          REFERENCES charges(property_id, id);
       END IF;
     END $$`,
     `UPDATE charges current_charge

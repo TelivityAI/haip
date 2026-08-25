@@ -15,9 +15,12 @@ import {
   bookings,
   reservationServices,
   auditRuns,
+  properties,
 } from '@telivityhaip/database';
 import type { AcceptedPricingSnapshot } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { matchAcceptedReservationServiceRows } from '../../common/accepted-pricing/accepted-reservation-service';
+import { calendarDateInTimeZone } from '../../common/date/property-business-date';
 import { folioPaymentSumWhere } from '../payment/payment-ledger';
 import { WebhookService } from '../webhook/webhook.service';
 import { TaxService } from '../tax/tax.service';
@@ -268,6 +271,33 @@ export class FolioService {
       if (charge.isLocked) {
         throw new BadRequestException('Cannot transfer a locked charge');
       }
+      if (charge.adjustsChargeId) {
+        throw new BadRequestException(
+          'Cannot transfer an internal accepted-pricing correction',
+        );
+      }
+      if (typeof charge.sourceKey === 'string'
+        && charge.sourceKey.startsWith('accepted-pricing:')) {
+        throw new BadRequestException(
+          'Cannot transfer an accepted-pricing group individually',
+        );
+      }
+      if (charge.parentChargeId) {
+        const [parent] = await tx
+          .select()
+          .from(charges)
+          .where(and(
+            eq(charges.id, charge.parentChargeId),
+            eq(charges.folioId, folioId),
+            eq(charges.propertyId, propertyId),
+          ));
+        if (typeof parent?.sourceKey === 'string'
+          && parent.sourceKey.startsWith('accepted-pricing:')) {
+          throw new BadRequestException(
+            'Cannot transfer a child of an accepted-pricing group individually',
+          );
+        }
+      }
 
       await tx
         .update(charges)
@@ -351,10 +381,15 @@ export class FolioService {
         eq(reservationServices.propertyId, propertyId),
         eq(reservationServices.reservationId, reservationId),
       ));
-    const servicesByRowId = new Map(
-      serviceRows
-        .filter((row: any) =>
-          row.propertyId === propertyId && row.reservationId === reservationId)
+    const scopedServiceRows = serviceRows.filter((row: any) =>
+      row.propertyId === propertyId && row.reservationId === reservationId);
+    const previousServiceRows = matchAcceptedReservationServiceRows(
+      previousPricing,
+      scopedServiceRows,
+    );
+    const newServiceRows = matchAcceptedReservationServiceRows(newPricing, scopedServiceRows);
+    const acceptedServiceRowsById = new Map(
+      [...previousServiceRows.values(), ...newServiceRows.values()]
         .map((row: any) => [row.id as string, row.serviceId as string]),
     );
     const chargeQuery = tx
@@ -365,6 +400,11 @@ export class FolioService {
       ? await chargeQuery.for('update')
       : await chargeQuery)
       .filter((row: any) => row.propertyId === propertyId && row.folioId === folioId);
+    const [property] = await tx
+      .select({ id: properties.id, timezone: properties.timezone })
+      .from(properties)
+      .where(eq(properties.id, propertyId));
+    if (!property) throw new ConflictException(`Property ${propertyId} not found`);
     const completedAudits = await tx
       .select({ businessDate: auditRuns.businessDate })
       .from(auditRuns)
@@ -391,7 +431,7 @@ export class FolioService {
       value.setUTCDate(value.getUTCDate() + 1);
       return value.toISOString().slice(0, 10);
     };
-    const today = new Date().toISOString().slice(0, 10);
+    const today = calendarDateInTimeZone(new Date(), property.timezone);
     const currentOpenDate = latestClosedDate == null
       ? today
       : [today, addCalendarDay(latestClosedDate)].sort().at(-1)!;
@@ -424,16 +464,11 @@ export class FolioService {
           : undefined,
       });
     }
-    const serviceRowsByServiceId = new Map<string, any[]>();
-    for (const row of serviceRows) {
-      const current = serviceRowsByServiceId.get(row.serviceId) ?? [];
-      current.push(row);
-      serviceRowsByServiceId.set(row.serviceId, current);
-    }
     for (const pricedService of [...previousPricing.services, ...newPricing.services]) {
       if (
         pricedService.postingRule !== 'on_consumption'
-        && !serviceRowsByServiceId.has(pricedService.serviceId)
+        && !previousServiceRows.has(pricedService.serviceId)
+        && !newServiceRows.has(pricedService.serviceId)
       ) {
         throw new ConflictException(
           `Accepted service ${pricedService.code} has no linked reservation service`,
@@ -442,26 +477,25 @@ export class FolioService {
     }
     for (const pricedService of newPricing.services) {
       if (pricedService.postingRule === 'on_consumption') continue;
-      const linkedRows = serviceRowsByServiceId.get(pricedService.serviceId) ?? [];
-      for (const row of linkedRows) {
-        const lines = pricedService.postingRule === 'per_night'
-          ? pricedService.lineItems
-          : pricedService.lineItems.slice(0, 1);
-        for (const line of lines) {
-          const suffix = pricedService.postingRule === 'per_night'
-            ? `night:${line.date}`
-            : `once:${line.date}`;
-          const sourceKey = `accepted-pricing:reservation-service:${row.id}:${suffix}`;
-          desiredGroups.set(sourceKey, {
-            sourceKey,
-            serviceDate: line.date,
-            description: `${pricedService.name} [svc:${row.id}]`.slice(0, 255),
-            baseType: pricedService.chargeType,
-            baseAmount: line.amount,
-            taxAmount: line.taxAmount,
-            reservationServiceId: row.id,
-          });
-        }
+      const row = newServiceRows.get(pricedService.serviceId);
+      if (!row || row.status === 'cancelled') continue;
+      const lines = pricedService.postingRule === 'per_night'
+        ? pricedService.lineItems
+        : pricedService.lineItems.slice(0, 1);
+      for (const line of lines) {
+        const suffix = pricedService.postingRule === 'per_night'
+          ? `night:${line.date}`
+          : `once:${line.date}`;
+        const sourceKey = `accepted-pricing:reservation-service:${row.id}:${suffix}`;
+        desiredGroups.set(sourceKey, {
+          sourceKey,
+          serviceDate: line.date,
+          description: `${pricedService.name} [svc:${row.id}]`.slice(0, 255),
+          baseType: pricedService.chargeType,
+          baseAmount: line.amount,
+          taxAmount: line.taxAmount,
+          reservationServiceId: row.id,
+        });
       }
     }
     const acceptedBases = ledger.filter((row: any) =>
@@ -472,7 +506,7 @@ export class FolioService {
         row.sourceKey.startsWith(`accepted-pricing:reservation:${reservationId}:night:`)
         || (() => {
           const match = /^accepted-pricing:reservation-service:([^:]+):/.exec(row.sourceKey);
-          return match != null && servicesByRowId.has(match[1]!);
+          return match != null && acceptedServiceRowsById.has(match[1]!);
         })()
       ));
 
@@ -556,20 +590,21 @@ export class FolioService {
       const component = all.find((row: any) =>
         !row.isReversal
         && componentKey(row, base) === key
-        && new Decimal(row.amount ?? 0).greaterThan(0));
+        && !row.adjustsChargeId)
+        ?? all.find((row: any) => !row.isReversal && componentKey(row, base) === key);
       const affectedServiceDate = desired?.serviceDate ?? calendarDate(base.serviceDate) ?? today;
       const mustPostOnOpenDate = groupLocked
         || (latestClosedDate != null && affectedServiceDate <= latestClosedDate);
       const postingDate = mustPostOnOpenDate ? currentOpenDate : affectedServiceDate;
+      const description = key === 'custom'
+        ? `${component?.description
+          ?? `Accepted price adjustment: ${desired?.customAdjustment?.reason ?? 'stay amendment'}`} correction (affected ${affectedServiceDate})`
+        : `Accepted stay amendment ${key === 'tax' ? 'tax' : type} correction (affected ${affectedServiceDate})`;
       await insert({
         propertyId,
         folioId,
         type,
-        description: (
-          key === 'custom'
-            ? `Accepted price adjustment: ${desired?.customAdjustment?.reason ?? 'stay amendment'}`
-            : `Accepted stay amendment ${key === 'tax' ? 'tax' : type} correction (affected ${affectedServiceDate})`
-        ).slice(0, 255),
+        description: description.slice(0, 255),
         amount: delta.toFixed(2),
         currencyCode: newPricing.currencyCode,
         taxAmount: '0.00',
@@ -976,6 +1011,27 @@ export class FolioService {
       // mistaken reversal by re-posting the original charge.
       if (original.isReversal) {
         throw new BadRequestException('Cannot reverse a reversal transaction');
+      }
+      if (original.adjustsChargeId) {
+        throw new BadRequestException(
+          'Cannot reverse an internal accepted-pricing correction',
+        );
+      }
+      if (original.parentChargeId) {
+        const [parent] = await db
+          .select()
+          .from(charges)
+          .where(and(
+            eq(charges.id, original.parentChargeId),
+            eq(charges.folioId, folioId),
+            eq(charges.propertyId, propertyId),
+          ));
+        if (typeof parent?.sourceKey === 'string'
+          && parent.sourceKey.startsWith('accepted-pricing:')) {
+          throw new BadRequestException(
+            'Reverse the accepted-pricing group from its base charge',
+          );
+        }
       }
 
       // The original row lock serializes competing whole-group reversals.

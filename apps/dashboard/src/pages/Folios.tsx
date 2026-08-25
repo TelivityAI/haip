@@ -34,6 +34,14 @@ interface RoutingRule {
   priority: number;
 }
 
+function acceptedPricingBaseIds(charges: Charge[]): Set<string> {
+  const ids = new Set<string>();
+  for (const charge of charges) {
+    if (charge.sourceKey?.startsWith('accepted-pricing:')) ids.add(charge.id);
+  }
+  return ids;
+}
+
 /** Charge types accepted by the folio charge / routing-rule / move-transaction DTOs. */
 const CHARGE_TYPES = [
   'room',
@@ -59,6 +67,9 @@ interface Charge {
   isLocked?: boolean;
   isReversal?: boolean;
   originalChargeId?: string;
+  parentChargeId?: string;
+  adjustsChargeId?: string;
+  sourceKey?: string;
   createdAt: string;
 }
 
@@ -205,7 +216,14 @@ function SplitFolioPanel({
       ? folio.folioNumber
       : siblings.find((f) => f.id === folioId)?.folioNumber ?? folioId.slice(0, 8);
 
-  const movableCharges = charges.filter((c) => !c.isLocked && !c.isReversal);
+  const acceptedBaseIds = acceptedPricingBaseIds(charges);
+  const isAcceptedInternal = (charge: Charge) => Boolean(
+    charge.adjustsChargeId
+    || charge.sourceKey?.startsWith('accepted-pricing:')
+    || (charge.parentChargeId && acceptedBaseIds.has(charge.parentChargeId)),
+  );
+  const movableCharges = charges.filter((c) =>
+    !c.isLocked && !c.isReversal && !isAcceptedInternal(c));
 
   const createRule = useMutation({
     mutationFn: () =>
@@ -505,6 +523,7 @@ function FolioDetail() {
   const reversedIds = new Set(
     charges.filter((c) => c.isReversal && c.originalChargeId).map((c) => c.originalChargeId!),
   );
+  const acceptedBaseIds = acceptedPricingBaseIds(charges);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['folios'] });
@@ -688,7 +707,12 @@ function FolioDetail() {
                   <td className="py-2 text-sm text-telivity-slate">{t(`folios.chargeTypes.${c.type}`, { defaultValue: c.type })}</td>
                   <td className="py-2 text-sm text-right font-medium">{formatMoney(c.amount, folio.currencyCode)}</td>
                   <td className="py-2 text-right">
-                    {!c.isReversal && !reversedIds.has(c.id) && !c.isLocked && folio.status === 'open' && (
+                    {!c.isReversal
+                      && !reversedIds.has(c.id)
+                      && !c.isLocked
+                      && !c.adjustsChargeId
+                      && !(c.parentChargeId && acceptedBaseIds.has(c.parentChargeId))
+                      && folio.status === 'open' && (
                       <button onClick={() => { if (confirm('Reverse this charge?')) reverseMutation.mutate(c.id); }} className="text-telivity-orange text-xs hover:underline">
                         <RotateCcw size={12} className="inline" /> {t('folios.reverse')}
                       </button>

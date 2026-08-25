@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -139,6 +139,48 @@ describe('Folios — split folios', () => {
         chargeType: 'food_beverage',
       }),
     );
+  });
+
+  it('keeps accepted-pricing corrections out of individual reverse and move controls', async () => {
+    const acceptedBase = {
+      ...CHARGE,
+      id: 'accepted-base',
+      description: 'Accepted room',
+      sourceKey: 'accepted-pricing:reservation:res-1:night:2026-06-02',
+    };
+    const correction = {
+      ...CHARGE,
+      id: 'accepted-correction',
+      description: 'Accepted amendment correction',
+      amount: -20,
+      parentChargeId: acceptedBase.id,
+      adjustsChargeId: acceptedBase.id,
+    };
+    const taxChild = {
+      ...CHARGE,
+      id: 'accepted-tax',
+      description: 'Accepted room tax',
+      type: 'tax',
+      parentChargeId: acceptedBase.id,
+    };
+    mockGet({
+      '/v1/folios/folio-1/charges': [acceptedBase, taxChild, correction, CHARGE],
+    });
+    renderDetail();
+
+    const correctionRow = (await screen.findByText(correction.description)).closest('tr')!;
+    expect(within(correctionRow).queryByText('Reverse')).not.toBeInTheDocument();
+    const taxRow = screen.getByText(taxChild.description).closest('tr')!;
+    expect(within(taxRow).queryByText('Reverse')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Move Transactions'));
+    const chargeSelect = screen.getByLabelText('Charge');
+    expect(within(chargeSelect).queryByRole('option', { name: /Accepted room/ })).not.toBeInTheDocument();
+    expect(within(chargeSelect).queryByRole('option', { name: /Accepted amendment correction/ }))
+      .not.toBeInTheDocument();
+    expect(within(chargeSelect).queryByRole('option', { name: /Accepted room tax/ }))
+      .not.toBeInTheDocument();
+    expect(within(chargeSelect).getByRole('option', { name: /Minibar/ })).toBeInTheDocument();
   });
 });
 

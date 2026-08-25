@@ -135,6 +135,84 @@ function acceptedOnceScenario() {
 }
 
 describe('AncillaryService accepted operational pricing', () => {
+  it('does not let an active duplicate resurrect a cancelled accepted once row', async () => {
+    const reservation = {
+      id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', arrivalDate: '2026-10-01',
+      acceptedPricingSnapshot: {
+        currencyCode: 'EUR',
+        services: [{
+          serviceId: 'svc-1', postingRule: 'once', chargeType: 'parking',
+          lineItems: [{ date: '2026-10-01', amount: '15.00', taxAmount: '2.00' }],
+        }],
+      },
+    };
+    const cancelled = {
+      id: 'rs-accepted', serviceId: 'svc-1', status: 'cancelled', postingRule: 'once',
+      chargeType: 'parking', unitPrice: '15.00', quantity: 1, currencyCode: 'EUR',
+      sourceChannel: 'booking_engine', createdAt: new Date('2026-08-24T10:00:00Z'),
+    };
+    const active = {
+      ...cancelled, id: 'rs-frontdesk', status: 'confirmed', sourceChannel: 'front_desk',
+      createdAt: new Date('2026-08-25T10:00:00Z'),
+    };
+    const db = transactionalDb({
+      select: stagedSelect([
+        [reservation], [{ id: 'folio-1' }],
+        [{ rs: cancelled, serviceName: 'Parking' }, { rs: active, serviceName: 'Parking' }],
+      ]),
+      update: vi.fn(),
+    });
+    const folio = {
+      postCharge: vi.fn(), postChargeFromSnapshotWithOutcome: vi.fn(),
+      emitSnapshotChargeWebhooks: vi.fn(),
+    };
+    const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
+
+    await expect(service.postOnceForReservation('res-1', 'prop-1'))
+      .resolves.toEqual({ posted: [], count: 0 });
+    expect(folio.postChargeFromSnapshotWithOutcome).not.toHaveBeenCalled();
+  });
+
+  it('does not let an active duplicate resurrect a cancelled accepted per-night row', async () => {
+    const reservation = {
+      id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', status: 'checked_in',
+      acceptedPricingSnapshot: {
+        currencyCode: 'EUR',
+        services: [{
+          serviceId: 'svc-1', postingRule: 'per_night', chargeType: 'parking',
+          lineItems: [{ date: '2026-10-02', amount: '15.00', taxAmount: '2.00' }],
+        }],
+      },
+    };
+    const cancelled = {
+      id: 'rs-accepted', propertyId: 'prop-1', reservationId: 'res-1', serviceId: 'svc-1',
+      status: 'cancelled', postingRule: 'per_night', chargeType: 'parking',
+      unitPrice: '15.00', quantity: 1, currencyCode: 'EUR', sourceChannel: 'booking_engine',
+      createdAt: new Date('2026-08-24T10:00:00Z'),
+    };
+    const active = {
+      ...cancelled, id: 'rs-frontdesk', status: 'confirmed', sourceChannel: 'front_desk',
+      createdAt: new Date('2026-08-25T10:00:00Z'),
+    };
+    const candidates = [
+      { rs: cancelled, serviceName: 'Parking', reservation },
+      { rs: active, serviceName: 'Parking', reservation },
+    ];
+    const db = transactionalDb({
+      select: stagedSelect([candidates, candidates]),
+    });
+    const folio = {
+      postCharge: vi.fn(), postChargeFromSnapshotWithOutcome: vi.fn(),
+      emitSnapshotChargeWebhooks: vi.fn(),
+    };
+    const service = new AncillaryService(db as any, folio as any, { emit: vi.fn() } as any);
+
+    const result = await service.postPerNightForProperty('prop-1', '2026-10-02');
+
+    expect(result.count).toBe(0);
+    expect(folio.postChargeFromSnapshotWithOutcome).not.toHaveBeenCalled();
+  });
+
   it('never resurrects a cancelled accepted once service', async () => {
     const reservation = {
       id: 'res-1', propertyId: 'prop-1', guestId: 'guest-1', arrivalDate: '2026-10-01',

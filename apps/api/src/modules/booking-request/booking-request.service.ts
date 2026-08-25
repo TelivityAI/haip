@@ -53,6 +53,7 @@ import {
   actorFields,
   type AuditActor,
 } from '../../common/audit/audit-actor';
+import { matchAcceptedReservationServiceRows } from '../../common/accepted-pricing/accepted-reservation-service';
 import { withAcceptedPricingLock } from '../../common/database/accepted-pricing-lock';
 import { DRIZZLE } from '../../database/database.module';
 import { AncillaryService } from '../ancillary/ancillary.service';
@@ -1593,6 +1594,8 @@ export class BookingRequestService {
         id: reservationServices.id,
         serviceId: reservationServices.serviceId,
         status: reservationServices.status,
+        sourceChannel: reservationServices.sourceChannel,
+        createdAt: reservationServices.createdAt,
       })
       .from(reservationServices)
       .where(and(
@@ -1602,25 +1605,23 @@ export class BookingRequestService {
     const serviceRows = lockForUpdate && typeof serviceQuery.for === 'function'
       ? await serviceQuery.for('update')
       : await serviceQuery;
-    const linkedServiceIds = new Set(serviceRows.map((row: any) => row.serviceId as string));
+    const matchedServiceRows = matchAcceptedReservationServiceRows(previousPricing, serviceRows);
     const missingOperationalService = previousPricing.services.find(
       (service) => service.postingRule !== 'on_consumption'
-        && !linkedServiceIds.has(service.serviceId),
+        && !matchedServiceRows.has(service.serviceId),
     );
     if (missingOperationalService) {
       throw new ConflictException(
         `Accepted service ${missingOperationalService.code} has no linked reservation service`,
       );
     }
-    const activeServiceIds = new Set(
-      serviceRows
-        .filter((row: any) => row.status !== 'cancelled')
-        .map((row: any) => row.serviceId as string),
-    );
     const cancelledServiceIds = new Set(
       previousPricing.services
         .map((service) => service.serviceId)
-        .filter((serviceId) => !activeServiceIds.has(serviceId)),
+        .filter((serviceId) => {
+          const row = matchedServiceRows.get(serviceId);
+          return !row || row.status === 'cancelled';
+        }),
     );
     const operationalPreviousPricing = withoutCancelledAcceptedServices(
       previousPricing,

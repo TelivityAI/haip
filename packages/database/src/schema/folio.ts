@@ -111,7 +111,7 @@ export const charges = pgTable('charges', {
   parentChargeId: uuid('parent_charge_id').references((): any => charges.id), // FK to self — tax charges linked to their parent charge
   // Immutable provenance for signed amendment corrections. Unlike
   // originalChargeId, this does not make the row a canonical reversal.
-  adjustsChargeId: uuid('adjusts_charge_id').references((): any => charges.id),
+  adjustsChargeId: uuid('adjusts_charge_id'),
   // Stable, namespaced identity for conflict-safe system posting. Legacy and
   // manually entered rows remain NULL and cannot collide with these keys.
   sourceKey: varchar('source_key', { length: 255 }),
@@ -126,8 +126,15 @@ export const charges = pgTable('charges', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
+  propertyIdUnique: uniqueIndex('charges_property_id_unique')
+    .on(table.propertyId, table.id),
   propertyFolioSourceKeyUnique: uniqueIndex('charges_property_folio_source_key_unique')
     .on(table.propertyId, table.folioId, table.sourceKey),
+  adjustsChargeOwnership: foreignKey({
+    name: 'charges_adjusts_charge_property_fkey',
+    columns: [table.propertyId, table.adjustsChargeId],
+    foreignColumns: [table.propertyId, table.id],
+  }),
 }));
 
 /**

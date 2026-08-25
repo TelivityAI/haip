@@ -113,6 +113,31 @@ describe('ReportsService', () => {
     expect(result.netRevenue).toBe(3750);
   });
 
+  it('nets a fully reversed signed accepted-pricing group to zero revenue', async () => {
+    const db = createMockDb([
+      // Original 100 plus a -20 amendment correction remain immutable revenue.
+      [{ type: 'room', total: '80.00' }],
+      // Reversing the whole group creates -100 and +20 reversal components.
+      [{ total: '80.00' }],
+      [],
+    ]);
+    const module = await Test.createTestingModule({
+      providers: [
+        ReportsService,
+        { provide: DRIZZLE, useValue: db },
+      ],
+    }).compile();
+
+    const result = await module.get(ReportsService)
+      .getDailyRevenue('prop-001', '2026-04-06');
+
+    expect(result.revenue.room).toBe(80);
+    expect(result.adjustments).toBe(80);
+    expect(result.netRevenue).toBe(0);
+    const reversalProjection = (db.select as any).mock.calls[1]![0];
+    expect(reversalProjection.total.queryChunks[0].value[0]).toBe('coalesce(-sum(');
+  });
+
   it('should sum payments by method', async () => {
     const db = createMockDb([
       [],               // no charges

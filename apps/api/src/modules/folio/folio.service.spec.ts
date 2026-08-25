@@ -263,6 +263,79 @@ describe('FolioService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('rejects transferring an internal accepted-pricing correction', async () => {
+      let selectCallCount = 0;
+      const targetFolio = { ...mockFolio, id: 'folio-002' };
+      const correction = {
+        ...mockCharge,
+        id: 'correction-1',
+        amount: '-20.00',
+        adjustsChargeId: mockCharge.id,
+        parentChargeId: mockCharge.id,
+      };
+      const resolveRows = () => {
+        selectCallCount++;
+        if (selectCallCount === 1) return [mockFolio];
+        if (selectCallCount === 2) return [targetFolio];
+        return [correction];
+      };
+      const db: any = {
+        transaction: vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db)),
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => ({
+              for: vi.fn(async () => resolveRows()),
+              then: (resolve: (rows: unknown[]) => unknown) => resolve(resolveRows()),
+            })),
+          })),
+        })),
+        update: vi.fn(),
+      };
+      const svc = new FolioService(db, mockWebhookService as any, mockTaxService as any);
+
+      await expect(svc.transferCharge('folio-001', 'prop-001', {
+        chargeId: correction.id,
+        targetFolioId: targetFolio.id,
+      })).rejects.toThrow(/accepted-pricing correction/i);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects transferring a child of an accepted-pricing group', async () => {
+      const targetFolio = { ...mockFolio, id: 'folio-002' };
+      const base = {
+        ...mockCharge,
+        id: 'accepted-base',
+        sourceKey: 'accepted-pricing:reservation:res-1:night:2026-04-04',
+      };
+      const taxChild = {
+        ...mockCharge,
+        id: 'accepted-tax',
+        type: 'tax',
+        parentChargeId: base.id,
+      };
+      const rows = [[mockFolio], [targetFolio], [taxChild], [base]];
+      let call = 0;
+      const db: any = {
+        transaction: vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db)),
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => ({
+              for: vi.fn(async () => rows[call++] ?? []),
+              then: (resolve: (value: unknown[]) => unknown) => resolve(rows[call++] ?? []),
+            })),
+          })),
+        })),
+        update: vi.fn(),
+      };
+      const svc = new FolioService(db, mockWebhookService as any, mockTaxService as any);
+
+      await expect(svc.transferCharge('folio-001', 'prop-001', {
+        chargeId: taxChild.id,
+        targetFolioId: targetFolio.id,
+      })).rejects.toThrow(/accepted-pricing group/i);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
     it('should transfer charge between folios', async () => {
       let selectCallCount = 0;
       const targetFolio = { ...mockFolio, id: 'folio-002' };
@@ -541,6 +614,71 @@ describe('FolioService', () => {
   });
 
   describe('reverseCharge', () => {
+    it('rejects reversing an internal accepted-pricing correction', async () => {
+      const correction = {
+        ...mockCharge,
+        id: 'correction-1',
+        amount: '-20.00',
+        adjustsChargeId: mockCharge.id,
+        parentChargeId: mockCharge.id,
+      };
+      const db: any = {
+        transaction: vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db)),
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => ({
+              for: vi.fn(async () => [correction]),
+              then: (resolve: (rows: unknown[]) => unknown) => resolve([correction]),
+            })),
+          })),
+        })),
+        insert: vi.fn(),
+      };
+      const svc = new FolioService(db, mockWebhookService as any, mockTaxService as any);
+
+      await expect(
+        svc.reverseCharge('folio-001', correction.id, 'prop-001'),
+      ).rejects.toThrow(/accepted-pricing correction/i);
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it('requires an accepted-pricing group reversal to start from its canonical base', async () => {
+      const base = {
+        ...mockCharge,
+        id: 'accepted-base',
+        sourceKey: 'accepted-pricing:reservation:res-1:night:2026-04-04',
+      };
+      const taxChild = {
+        ...mockCharge,
+        id: 'accepted-tax',
+        type: 'tax',
+        amount: '10.00',
+        parentChargeId: base.id,
+      };
+      let selectCount = 0;
+      const db: any = {
+        transaction: vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db)),
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => {
+              const rows = selectCount++ === 0 ? [taxChild] : [base];
+              return {
+                for: vi.fn(async () => rows),
+                then: (resolve: (value: unknown[]) => unknown) => resolve(rows),
+              };
+            }),
+          })),
+        })),
+        insert: vi.fn(),
+      };
+      const svc = new FolioService(db, mockWebhookService as any, mockTaxService as any);
+
+      await expect(
+        svc.reverseCharge('folio-001', taxChild.id, 'prop-001'),
+      ).rejects.toThrow(/reverse the accepted-pricing group from its base/i);
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
     it('should create a negated charge for reversal', async () => {
       const reversalCharge = {
         ...mockCharge,
@@ -638,6 +776,7 @@ describe('FolioService', () => {
         id: 'base-charge',
         taxAmount: '0.00',
         serviceDate: new Date('2026-04-04T00:00:00.000Z'),
+        sourceKey: 'accepted-pricing:reservation:res-1:night:2026-04-04',
       };
       const taxChild = {
         ...base,
@@ -652,6 +791,7 @@ describe('FolioService', () => {
         type: 'adjustment',
         amount: '-15.00',
         parentChargeId: base.id,
+        adjustsChargeId: base.id,
       };
       const inserted: Array<Record<string, any>> = [];
       const chargeLookupPredicates: Array<{ columns: string[]; params: unknown[] }> = [];
@@ -727,6 +867,9 @@ describe('FolioService', () => {
         svc.reverseCharge('folio-001', base.id, 'prop-001'),
       ).rejects.toThrow(/already been reversed/i);
       expect(inserted).toHaveLength(3);
+      const signedGroupTotal = [base, taxChild, adjustmentChild, ...inserted]
+        .reduce((total, row) => total + Number(row.amount), 0);
+      expect(signedGroupTotal).toBe(0);
       expect(chargeLookupPredicates.length).toBeGreaterThan(0);
       expect(chargeLookupPredicates.every((predicate) =>
         predicate.columns.includes('property_id')
