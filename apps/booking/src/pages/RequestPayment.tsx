@@ -70,6 +70,10 @@ interface SetupRequestState {
 function useRequestPaymentSetup() {
   const [state, setState] = useState<SetupRequestState>({ status: 'idle' });
   const generation = useRef(0);
+  const inFlight = useRef<{
+    key: string;
+    promise: Promise<RequestPaymentMethodSetupResponse>;
+  }>();
 
   useEffect(
     () => () => {
@@ -81,13 +85,23 @@ function useRequestPaymentSetup() {
   const mutate = useCallback((request: RequestPaymentMethodSetupRequest) => {
     const requestGeneration = ++generation.current;
     setState({ status: 'pending' });
-    void bookingApi.createRequestPaymentMethodSetup(request).then(
+    const promise =
+      inFlight.current?.key === request.idempotencyKey
+        ? inFlight.current.promise
+        : bookingApi.createRequestPaymentMethodSetup(request);
+    inFlight.current = { key: request.idempotencyKey, promise };
+    const clearSettledRequest = () => {
+      if (inFlight.current?.promise === promise) inFlight.current = undefined;
+    };
+    void promise.then(
       (data) => {
+        clearSettledRequest();
         if (generation.current === requestGeneration) {
           setState({ status: 'success', data });
         }
       },
       (error: unknown) => {
+        clearSettledRequest();
         if (generation.current === requestGeneration) {
           setState({ status: 'error', error });
         }
@@ -115,10 +129,9 @@ export function RequestPayment() {
   const navigate = useNavigate();
   const { config, isLoading } = useConfig();
   const flow = useBookingFlow();
-  const [collectCard, setCollectCard] = useState(
-    config?.paymentMethodCollection === 'required',
-  );
-  const requestedSetupKey = useRef<string>();
+  const [optionalCardSelected, setOptionalCardSelected] = useState(false);
+  const collectCard =
+    config?.paymentMethodCollection === 'required' || optionalCardSelected;
 
   useEffect(() => {
     if (
@@ -152,10 +165,6 @@ export function RequestPayment() {
     navigate,
   ]);
 
-  useEffect(() => {
-    if (config?.paymentMethodCollection === 'required') setCollectCard(true);
-  }, [config?.paymentMethodCollection]);
-
   const setupMutation = useRequestPaymentSetup();
 
   const idempotencyKey = flow.requestIdempotencyKey;
@@ -170,11 +179,10 @@ export function RequestPayment() {
       !flow.guest?.email ||
       setupMutation.isPending ||
       setupMutation.isSuccess ||
-      requestedSetupKey.current === idempotencyKey
+      setupMutation.isError
     ) {
       return;
     }
-    requestedSetupKey.current = idempotencyKey;
     setupMutation.mutate({
       guestEmail: flow.guest.email,
       idempotencyKey,
@@ -242,13 +250,12 @@ export function RequestPayment() {
   const isSubmitting = flow.requestSubmissionStatus === 'pending';
   const skipCard = () => {
     setupMutation.reset();
-    setCollectCard(false);
+    setOptionalCardSelected(false);
     submitRequest();
   };
   const retrySetup = () => {
     if (!idempotencyKey || !flow.guest?.email) return;
     setupMutation.reset();
-    requestedSetupKey.current = idempotencyKey;
     setupMutation.mutate({
       guestEmail: flow.guest.email,
       idempotencyKey,
@@ -287,7 +294,7 @@ export function RequestPayment() {
               <Button
                 variant="secondary"
                 className="flex-1"
-                onClick={() => setCollectCard(true)}
+                onClick={() => setOptionalCardSelected(true)}
                 disabled={isSubmitting}
               >
                 Add a card

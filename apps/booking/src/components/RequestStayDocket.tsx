@@ -1,5 +1,5 @@
 import { useBookingFlow } from '../context/BookingFlowContext';
-import { money } from '../lib/format';
+import { calendarDate, money } from '../lib/format';
 
 const REQUEST_STEPS = ['Stay', 'Your details', 'Payment details'];
 
@@ -51,7 +51,8 @@ export function RequestStayDocket() {
           {money(quote.grandTotal, quote.currencyCode)}
         </p>
         <p className="col-span-2 text-xs text-[#667085] lg:mt-1">
-          {criteria.checkIn}–{criteria.checkOut} · {quote.nights} night
+          {calendarDate(criteria.checkIn)}–{calendarDate(criteria.checkOut)} ·{' '}
+          {quote.nights} night
           {quote.nights === 1 ? '' : 's'}
         </p>
       </div>

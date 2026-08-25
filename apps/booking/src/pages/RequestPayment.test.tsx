@@ -90,7 +90,7 @@ function config(policy: BookingConfig['paymentMethodCollection']): BookingConfig
   };
 }
 
-function SeedPayment() {
+function SeedPayment({ prepareRequestKey = false }: { prepareRequestKey?: boolean }) {
   const flow = useBookingFlow();
   const navigate = useNavigate();
 
@@ -111,6 +111,7 @@ function SeedPayment() {
           email: 'ada@example.com',
         });
         flow.setApplicationAnswers({ [QUESTION_ID]: '18:00' });
+        if (prepareRequestKey) flow.ensureRequestIdempotencyKey();
         navigate('/request/payment');
       }}
     >
@@ -122,19 +123,23 @@ function SeedPayment() {
 function renderPayment(
   policy: BookingConfig['paymentMethodCollection'],
   widgetStyle?: CSSProperties,
+  options: { strict?: boolean; prepareRequestKey?: boolean } = {},
 ) {
   mocks.config.mockResolvedValue(config(policy));
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
+  const application = (
     <div className="haip-booking" style={widgetStyle}>
       <MemoryRouter initialEntries={['/']}>
         <QueryClientProvider client={queryClient}>
           <ConfigProvider>
             <BookingFlowProvider>
               <Routes>
-                <Route path="/" element={<SeedPayment />} />
+                <Route
+                  path="/"
+                  element={<SeedPayment prepareRequestKey={options.prepareRequestKey} />}
+                />
                 <Route path="/request/payment" element={<RequestPayment />} />
                 <Route path="/request/application" element={<p>Application page</p>} />
                 <Route path="/request/received" element={<RequestReceived />} />
@@ -143,8 +148,9 @@ function renderPayment(
           </ConfigProvider>
         </QueryClientProvider>
       </MemoryRouter>
-    </div>,
+    </div>
   );
+  return render(options.strict ? <StrictMode>{application}</StrictMode> : application);
 }
 
 async function begin() {
@@ -210,6 +216,69 @@ describe('RequestPayment', () => {
     await waitFor(() => expect(mocks.createSetup).toHaveBeenCalledOnce());
     expect(mocks.loadStripe).toHaveBeenCalledWith('pk_test_public');
     expect(await screen.findByLabelText('Secure card entry')).toBeVisible();
+  });
+
+  it.each([
+    { policy: 'required' as const, chooseCard: false },
+    { policy: 'optional' as const, chooseCard: true },
+  ])(
+    'finishes a deferred $policy setup when the routed payment tree replays in StrictMode',
+    async ({ policy, chooseCard }) => {
+      let resolveSetup!: (value: {
+        setupIntentId: string;
+        clientSecret: string;
+      }) => void;
+      mocks.createSetup.mockReturnValue(
+        new Promise((resolve) => {
+          resolveSetup = resolve;
+        }),
+      );
+      renderPayment(policy, undefined, {
+        strict: true,
+        prepareRequestKey: true,
+      });
+      await begin();
+      if (chooseCard) {
+        await userEvent.click(screen.getByRole('button', { name: 'Add a card' }));
+      }
+
+      await waitFor(() => expect(mocks.createSetup).toHaveBeenCalledOnce());
+      expect(screen.getByText('Preparing secure card entry…')).toBeVisible();
+      const setupKey = mocks.createSetup.mock.calls[0]![0].idempotencyKey;
+
+      resolveSetup({
+        setupIntentId: 'seti_deferred',
+        clientSecret: 'seti_deferred_secret_value',
+      });
+
+      expect(await screen.findByLabelText('Secure card entry')).toBeVisible();
+      expect(screen.queryByText('Preparing secure card entry…')).not.toBeInTheDocument();
+      expect(mocks.createSetup).toHaveBeenCalledOnce();
+      expect(mocks.createSetup.mock.calls[0]![0].idempotencyKey).toBe(setupKey);
+    },
+  );
+
+  it('surfaces a deferred setup error after the routed tree replays in StrictMode', async () => {
+    let rejectSetup!: (error: Error) => void;
+    mocks.createSetup.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectSetup = reject;
+      }),
+    );
+    renderPayment('required', undefined, {
+      strict: true,
+      prepareRequestKey: true,
+    });
+    await begin();
+    await waitFor(() => expect(mocks.createSetup).toHaveBeenCalledOnce());
+
+    rejectSetup(new Error('Secure card entry is unavailable.'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Secure card entry is unavailable.',
+    );
+    expect(screen.queryByText('Preparing secure card entry…')).not.toBeInTheDocument();
+    expect(mocks.createSetup).toHaveBeenCalledOnce();
   });
 
   it('requires consent and a successful SetupIntent before required submission', async () => {

@@ -316,6 +316,14 @@ async function fillCoreGuest() {
   await userEvent.type(screen.getByLabelText(/^Email/), 'ada@example.com');
 }
 
+async function submitDisabledRequest() {
+  await begin();
+  await fillCoreGuest();
+  await userEvent.type(screen.getByLabelText(/Expected arrival time/), '18:00');
+  await userEvent.click(screen.getByRole('button', { name: 'Submit booking request' }));
+  await screen.findByText('Request received · Pending review');
+}
+
 describe('RequestApplication', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -342,6 +350,24 @@ describe('RequestApplication', () => {
     expect(screen.getByRole('radio', { name: 'Yes' })).toBeVisible();
     expect(screen.getByRole('radio', { name: 'No' })).toBeVisible();
     expect(screen.getByLabelText(/Celebration date/)).toHaveAttribute('type', 'date');
+  });
+
+  it('shows human-readable stay dates without shifting calendar days', async () => {
+    renderRequestApplication();
+    await begin();
+
+    const formatDate = (value: string) =>
+      new Intl.DateTimeFormat(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }).format(new Date(`${value}T00:00:00.000Z`));
+    const docket = screen.getByLabelText('Your request');
+    expect(docket).toHaveTextContent(formatDate('2026-09-10'));
+    expect(docket).toHaveTextContent(formatDate('2026-09-12'));
+    expect(docket).not.toHaveTextContent('2026-09-10');
+    expect(docket).not.toHaveTextContent('2026-09-12');
   });
 
   it('reports configured required questions before advancing', async () => {
@@ -478,6 +504,30 @@ describe('RequestApplication', () => {
     expect(screen.queryByText(/booking confirmed/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /manage/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /cancel/i })).not.toBeInTheDocument();
+  });
+
+  it('lets the receipt header return home without redirecting back to the receipt', async () => {
+    const onlyQuestion = [{ ...questions[0]!, isRequired: true }];
+    renderRequestApplication(requestConfig('disabled', onlyQuestion), {
+      receiptInLayout: true,
+    });
+    await submitDisabledRequest();
+
+    await userEvent.click(screen.getByRole('link', { name: 'Hotel Mirador' }));
+
+    expect(await screen.findByRole('button', { name: 'Begin test flow' })).toBeVisible();
+    expect(screen.queryByText('Request received · Pending review')).not.toBeInTheDocument();
+  });
+
+  it('still lets the receipt action reset the flow and start a new search', async () => {
+    const onlyQuestion = [{ ...questions[0]!, isRequired: true }];
+    renderRequestApplication(requestConfig('disabled', onlyQuestion));
+    await submitDisabledRequest();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start a new search' }));
+
+    expect(await screen.findByRole('button', { name: 'Begin test flow' })).toBeVisible();
+    expect(screen.queryByText('Request received · Pending review')).not.toBeInTheDocument();
   });
 
   it('shows a server failure and allows a safe retry with the same submission key', async () => {

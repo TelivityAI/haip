@@ -257,6 +257,7 @@ function RequestSubmissionEffects() {
   const { pathname } = useLocation();
   const dataRouterContext = useContext(UNSAFE_DataRouterContext);
   const isPending = requestSubmissionStatus === 'pending';
+  const redirectedRequestId = useRef<string>();
 
   useEffect(() => {
     if (!isPending) return;
@@ -269,11 +270,19 @@ function RequestSubmissionEffects() {
   }, [isPending]);
 
   useEffect(() => {
+    if (requestSubmissionStatus === 'idle') {
+      redirectedRequestId.current = undefined;
+      return;
+    }
     if (
-      requestSubmissionStatus === 'success' &&
-      requestAcknowledgement &&
-      pathname !== '/request/received'
+      requestSubmissionStatus !== 'success' ||
+      !requestAcknowledgement ||
+      redirectedRequestId.current === requestAcknowledgement.requestId
     ) {
+      return;
+    }
+    redirectedRequestId.current = requestAcknowledgement.requestId;
+    if (pathname !== '/request/received') {
       navigate('/request/received', { replace: true });
     }
   }, [
