@@ -42,6 +42,7 @@ const futureInactiveQuestion = {
     signingMaterial: 'opaque-signing-material',
     clientCertificate: 'opaque-client-certificate',
   },
+  options: [{ authorization: 'Bearer option-secret' }],
 };
 
 const adminValidationPipe = new ValidationPipe({
@@ -273,10 +274,14 @@ describe('BookingEngineConfigService request settings', () => {
     logoMediaId: null,
     primaryColor: '#000000',
     accentColor: '#ffffff',
-    depositPolicy: { type: 'first_night' as const, refundable: true },
+    depositPolicy: {
+      type: 'first_night' as const,
+      refundable: true,
+      authorization: 'Bearer deposit-secret',
+    },
     stripePublishableKey: 'pk_test_123',
-    sellableRoomTypeIds: [],
-    sellableRatePlanIds: [],
+    sellableRoomTypeIds: ['room-type-1', { authorization: 'Bearer room-list-secret' }],
+    sellableRatePlanIds: ['rate-plan-1', { authorization: 'Bearer rate-list-secret' }],
     autoConfirm: false,
     bookingMode: 'request' as const,
     paymentMethodCollection: 'optional' as const,
@@ -353,6 +358,8 @@ describe('BookingEngineConfigService request settings', () => {
       previousValue: expect.objectContaining({
         bookingMode: 'request',
         paymentMethodCollection: 'optional',
+        sellableRoomTypeIds: ['room-type-1'],
+        sellableRatePlanIds: ['rate-plan-1'],
         formQuestions: [
           { ...arrivalQuestion, order: 2 },
           { ...breakfastQuestion, order: 1, isActive: false },
@@ -381,6 +388,12 @@ describe('BookingEngineConfigService request settings', () => {
     expect(JSON.stringify(storedAudits[0])).not.toContain('opaque-card-number');
     expect(JSON.stringify(storedAudits[0])).not.toContain('opaque-signing-material');
     expect(JSON.stringify(storedAudits[0])).not.toContain('opaque-client-certificate');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('option-secret');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('deposit-secret');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('room-list-secret');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('rate-list-secret');
+    expect((storedAudits[0]?.['previousValue'] as Record<string, unknown>)['depositPolicy'])
+      .toEqual({ type: 'first_night', refundable: true });
   });
 
   it('returns the locked configuration without updating or auditing an empty patch', async () => {
@@ -438,6 +451,28 @@ describe('BookingEngineConfigService request settings', () => {
         options: [' Leisure ', 'Business'],
       }],
     }, normalizedRow.updatedAt.toISOString(), auditActor)).resolves.toEqual(normalizedRow);
+
+    expect(update).not.toHaveBeenCalled();
+    expect(storedAudits).toEqual([]);
+  });
+
+  it('treats a transformed deposit-policy DTO equal to the persisted JSON as a no-op', async () => {
+    const persistedConfig = {
+      ...configRow,
+      depositPolicy: { type: 'percentage' as const, percentage: 25, refundable: true },
+    };
+    const { service, update, storedAudits } = makeConfigService(persistedConfig);
+    const controller = new BookingEngineAdminController(service);
+    const dto = await validateAdminBody({
+      depositPolicy: { type: 'percentage', percentage: 25, refundable: true },
+    });
+
+    await expect(controller.updateConfig(
+      persistedConfig.propertyId,
+      dto,
+      auditActor,
+      `"${persistedConfig.updatedAt.toISOString()}"`,
+    )).resolves.toEqual(persistedConfig);
 
     expect(update).not.toHaveBeenCalled();
     expect(storedAudits).toEqual([]);

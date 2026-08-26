@@ -51,19 +51,53 @@ export interface UpdateConfigInput {
   formQuestions?: BookingFormQuestionDefinition[];
 }
 
-function sanitizeBookingFormDefinition(
-  question: BookingFormQuestionDefinition,
-): Record<string, unknown> {
-  const options = (question as { options?: unknown }).options;
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function sanitizeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function sanitizeBookingFormDefinition(value: unknown): Record<string, unknown> {
+  const question = asRecord(value);
+  const options = question['options'];
   return {
-    id: question.id,
-    label: question.label,
-    type: question.type,
-    ...(Array.isArray(options) ? { options: [...options] } : {}),
-    order: question.order,
-    isActive: question.isActive,
-    isRequired: question.isRequired,
+    ...(typeof question['id'] === 'string' ? { id: question['id'] } : {}),
+    ...(typeof question['label'] === 'string' ? { label: question['label'] } : {}),
+    ...(typeof question['type'] === 'string' ? { type: question['type'] } : {}),
+    ...(Array.isArray(options) && options.every((option) => typeof option === 'string')
+      ? { options: [...options] }
+      : {}),
+    ...(typeof question['order'] === 'number' && Number.isFinite(question['order'])
+      ? { order: question['order'] }
+      : {}),
+    ...(typeof question['isActive'] === 'boolean' ? { isActive: question['isActive'] } : {}),
+    ...(typeof question['isRequired'] === 'boolean' ? { isRequired: question['isRequired'] } : {}),
   };
+}
+
+function sanitizeDepositPolicy(value: unknown): Record<string, unknown> {
+  const policy = asRecord(value);
+  return {
+    ...(typeof policy['type'] === 'string' ? { type: policy['type'] } : {}),
+    ...(typeof policy['percentage'] === 'number' && Number.isFinite(policy['percentage'])
+      ? { percentage: policy['percentage'] }
+      : {}),
+    ...(typeof policy['refundable'] === 'boolean' ? { refundable: policy['refundable'] } : {}),
+  };
+}
+
+function normalizeJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeJsonValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, nestedValue]) => nestedValue !== undefined)
+      .map(([key, nestedValue]) => [key, normalizeJsonValue(nestedValue)]),
+  );
 }
 
 /**
@@ -79,9 +113,9 @@ export function sanitizeBookingEngineConfig(
     logoMediaId: config.logoMediaId,
     primaryColor: config.primaryColor,
     accentColor: config.accentColor,
-    sellableRoomTypeIds: config.sellableRoomTypeIds,
-    sellableRatePlanIds: config.sellableRatePlanIds,
-    depositPolicy: config.depositPolicy,
+    sellableRoomTypeIds: sanitizeStringArray(config.sellableRoomTypeIds),
+    sellableRatePlanIds: sanitizeStringArray(config.sellableRatePlanIds),
+    depositPolicy: sanitizeDepositPolicy(config.depositPolicy),
     autoConfirm: config.autoConfirm,
     bookingMode: config.bookingMode,
     paymentMethodCollection: config.paymentMethodCollection,
@@ -204,15 +238,18 @@ export class BookingEngineConfigService {
       const formQuestions = patch.formQuestions === undefined
         ? undefined
         : validateQuestionDefinitions(patch.formQuestions);
-      const normalizedPatch = {
+      const requestedPatch = {
         ...Object.fromEntries(
           Object.entries(patch).filter(([, value]) => value !== undefined),
         ),
         ...(formQuestions === undefined ? {} : { formQuestions }),
       };
+      const normalizedPatch = Object.fromEntries(
+        Object.entries(requestedPatch).map(([field, value]) => [field, normalizeJsonValue(value)]),
+      );
 
       if (Object.entries(normalizedPatch).every(([field, value]) =>
-        isDeepStrictEqual(current[field], value))) {
+        isDeepStrictEqual(normalizeJsonValue(current[field]), value))) {
         return current;
       }
 
