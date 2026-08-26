@@ -17,6 +17,7 @@ import { RoomDiscrepancyService } from './room-discrepancy.service';
 import { CreateRoomTypeDto } from './dto/create-room-type.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
+import { UpdateRoomTypeDto } from './dto/update-room-type.dto';
 import { UpdateRoomStatusDto } from './dto/update-room-status.dto';
 import { HkObservationDto } from './dto/hk-observation.dto';
 import {
@@ -76,6 +77,25 @@ export class RoomController {
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
   ) {
     return this.roomService.findRoomTypeById(id, propertyId);
+  }
+
+  // Placed with the other types/ routes and above @Patch(':id'): the two-segment
+  // path cannot be shadowed by the single-segment room route, but keeping the
+  // room-type block contiguous is what stops the next reader assuming, as I did,
+  // that no update exists.
+  @Patch('types/:id')
+  @RequirePermissions('ops.manage')
+  @ApiOperation({ summary: 'Update a room type (capacity, physical detail, or retire it)' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 200, description: 'Room type updated' })
+  @ApiResponse({ status: 400, description: 'Occupancy conflict, or still in use by a room' })
+  @ApiResponse({ status: 404, description: 'Room type not found' })
+  updateRoomType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: UpdateRoomTypeDto,
+  ) {
+    return this.roomService.updateRoomType(id, propertyId, dto);
   }
 
   // --- Room status routes (before :id to avoid conflicts) ---
