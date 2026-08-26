@@ -212,7 +212,7 @@ export class BookingRequestController {
   @Patch(':id/installments/:installmentId')
   @RequirePermissions('reservations.write')
   @ApiQuery({ name: 'propertyId', required: true })
-  @ApiOperation({ summary: 'Edit an unallocated payment-plan installment' })
+  @ApiOperation({ summary: 'Edit an installment without reducing it below durable allocations' })
   updateInstallment(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('installmentId', ParseUUIDPipe) installmentId: string,
@@ -232,7 +232,7 @@ export class BookingRequestController {
   @Delete(':id/installments/:installmentId')
   @RequirePermissions('reservations.write')
   @ApiQuery({ name: 'propertyId', required: true })
-  @ApiOperation({ summary: 'Delete an unallocated payment-plan installment' })
+  @ApiOperation({ summary: 'Delete an unallocated installment or trim a partial installment remainder' })
   deleteInstallment(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('installmentId', ParseUUIDPipe) installmentId: string,

@@ -232,7 +232,7 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
   const paymentsQuery = useQuery({
     queryKey: bookingRequestKeys.payments(propertyId, request.id),
     queryFn: () => api.get(`/v1/booking-requests/${request.id}/payments`, { params: { propertyId } })
-      .then((response) => response.data?.data ?? response.data ?? { movements: [], allocations: [], resolutions: [] }),
+      .then((response) => response.data?.data ?? response.data),
   });
   const folioQuery = useQuery({
     queryKey: request.acceptedFolioId
@@ -258,6 +258,16 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
     allocations: (rawPayments?.allocations ?? []).filter((item) => item.propertyId === propertyId && item.bookingRequestId === request.id),
     resolutions: (rawPayments?.resolutions ?? []).filter((item) => item.propertyId === propertyId && item.bookingRequestId === request.id),
   };
+  const allocationsKnown = paymentsQuery.isSuccess && Array.isArray(rawPayments?.allocations);
+  const durableAllocationByInstallment = new Map<string, number>();
+  if (allocationsKnown) {
+    for (const allocation of payments.allocations) {
+      durableAllocationByInstallment.set(
+        allocation.installmentId,
+        (durableAllocationByInstallment.get(allocation.installmentId) ?? 0) + Number(allocation.amount),
+      );
+    }
+  }
   const folio = folioQuery.data as FolioSummary | undefined;
   const originalCaptured = payments.movements.filter((movement) =>
     !movement.originalPaymentId
@@ -391,11 +401,17 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
 
         <div className="mt-4 space-y-3">
           {installments.map((installment, index) => {
-            const allocated = Number(installment.allocatedAmount);
             const resolved = Number(installment.resolvedAmount);
-            const isPartial = allocated > 0 && allocated < resolved;
-            const canEditOrRemove = allocated < resolved;
-            const remainingPaid = formatMoney(installment.allocatedAmount, request.currencyCode);
+            const durableAllocation = allocationsKnown
+              ? durableAllocationByInstallment.get(installment.id) ?? 0
+              : null;
+            const isPartial = durableAllocation != null
+              && durableAllocation > 0
+              && durableAllocation < resolved;
+            const canRemove = durableAllocation != null && durableAllocation < resolved;
+            const remainingPaid = durableAllocation == null
+              ? null
+              : formatMoney(durableAllocation.toFixed(2), request.currencyCode);
             return (
             <article key={installment.id} className="rounded-xl border border-slate-200 p-4">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -417,10 +433,10 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
                     {allocatablePayments.length && Number(installment.allocatedAmount) < Number(installment.resolvedAmount) ? <button type="button" aria-label={t('bookingRequests.payments.allocateLabel', { label: installment.label })} onClick={() => setAllocating(installment)} className="rounded-lg border border-slate-300 p-2 text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"><ArrowDownToLine size={16} aria-hidden="true" /></button> : null}
                     <button type="button" aria-label={t('bookingRequests.payments.moveUp', { label: installment.label })} onClick={() => reorder.mutate({ from: index, to: index - 1 })} disabled={index === 0 || reorder.isPending} className="rounded-lg border border-slate-300 p-2 text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue disabled:opacity-40"><ChevronUp size={16} aria-hidden="true" /></button>
                     <button type="button" aria-label={t('bookingRequests.payments.moveDown', { label: installment.label })} onClick={() => reorder.mutate({ from: index, to: index + 1 })} disabled={index === installments.length - 1 || reorder.isPending} className="rounded-lg border border-slate-300 p-2 text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue disabled:opacity-40"><ChevronDown size={16} aria-hidden="true" /></button>
-                    <button type="button" aria-label={t('bookingRequests.payments.editLabel', { label: installment.label })} onClick={() => setEditing(installment)} disabled={!canEditOrRemove} className="rounded-lg border border-slate-300 p-2 text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue disabled:opacity-40"><Pencil size={16} aria-hidden="true" /></button>
+                    <button type="button" aria-label={t('bookingRequests.payments.editLabel', { label: installment.label })} onClick={() => setEditing(installment)} className="rounded-lg border border-slate-300 p-2 text-telivity-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue"><Pencil size={16} aria-hidden="true" /></button>
                     <button type="button" aria-label={isPartial
-                      ? t('bookingRequests.payments.removeRemainingAmount', { amount: remainingPaid })
-                      : t('bookingRequests.payments.deleteLabel', { label: installment.label })} onClick={() => remove.mutate(installment.id)} disabled={!canEditOrRemove || remove.isPending} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 p-2 text-telivity-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-orange disabled:opacity-40"><Trash2 size={16} aria-hidden="true" />{isPartial ? <span className="text-sm font-semibold">{t('bookingRequests.payments.removeRemainingAmount', { amount: remainingPaid })}</span> : null}</button>
+                      ? t('bookingRequests.payments.removeRemainingAmount', { amount: remainingPaid! })
+                      : t('bookingRequests.payments.deleteLabel', { label: installment.label })} onClick={() => remove.mutate(installment.id)} disabled={!canRemove || remove.isPending} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 p-2 text-telivity-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-orange disabled:opacity-40"><Trash2 size={16} aria-hidden="true" />{isPartial ? <span className="text-sm font-semibold">{t('bookingRequests.payments.removeRemainingAmount', { amount: remainingPaid! })}</span> : null}</button>
                   </div>
                 ) : null}
               </div>

@@ -55,6 +55,9 @@ type InstallmentRow = typeof bookingRequestInstallments.$inferSelect;
 type PaymentRow = typeof payments.$inferSelect;
 type ResolutionRow = typeof bookingRequestPaymentResolutions.$inferSelect;
 type AllocationRow = typeof bookingRequestPaymentAllocations.$inferSelect;
+type DeleteInstallmentResult =
+  | { outcome: 'deleted'; installmentId: string }
+  | { outcome: 'trimmed'; installmentId: string; installment: InstallmentRow };
 
 type InstallmentMilestone = InstallmentRow['dueMilestone'];
 
@@ -269,7 +272,7 @@ export class BookingRequestPaymentService {
     installmentId: string,
     propertyId: string,
     actor?: AuditActor,
-  ): Promise<{ deleted: true; installmentId: string }> {
+  ): Promise<DeleteInstallmentResult> {
     return this.db.transaction(async (tx: any) => {
       const request = await this.findRequest(tx, bookingRequestId, propertyId, true);
       this.assertNotDenied(request);
@@ -304,7 +307,7 @@ export class BookingRequestPaymentService {
           previousValue: this.installmentAuditValue(existing),
           description: 'Booking request installment deleted',
         });
-        return { deleted: true, installmentId };
+        return { outcome: 'deleted', installmentId };
       }
       if (persistedAllocation.gte(this.resolvedInstallmentAmount(existing))) {
         throw new ConflictException('A fully allocated installment has no removable remainder');
@@ -342,7 +345,7 @@ export class BookingRequestPaymentService {
         newValue: this.installmentAuditValue(updated),
         description: 'Booking request unallocated installment remainder removed',
       });
-      return { deleted: true, installmentId };
+      return { outcome: 'trimmed', installmentId, installment: updated };
     });
   }
 

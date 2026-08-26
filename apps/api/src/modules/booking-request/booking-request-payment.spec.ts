@@ -732,7 +732,7 @@ describe('BookingRequestPaymentService installments', () => {
       INSTALLMENT_ID,
       PROPERTY_ID,
       actor,
-    )).resolves.toEqual({ deleted: true, installmentId: INSTALLMENT_ID });
+    )).resolves.toEqual({ outcome: 'deleted', installmentId: INSTALLMENT_ID });
     expect(harness.state.installments).toEqual([]);
     expect(harness.state.allocations).toEqual([]);
   });
@@ -756,7 +756,17 @@ describe('BookingRequestPaymentService installments', () => {
       INSTALLMENT_ID,
       PROPERTY_ID,
       actor,
-    )).resolves.toEqual({ deleted: true, installmentId: INSTALLMENT_ID });
+    )).resolves.toMatchObject({
+      outcome: 'trimmed',
+      installmentId: INSTALLMENT_ID,
+      installment: {
+        fixedAmount: '40.00',
+        percentage: null,
+        resolvedAmount: '40.00',
+        allocatedAmount: '40.00',
+        status: 'paid',
+      },
+    });
     expect(harness.state.installments).toEqual([expect.objectContaining({
       id: INSTALLMENT_ID,
       fixedAmount: '40.00',

@@ -704,7 +704,26 @@ describe('Booking request payments, messages, and audit', () => {
     mockApi({
       payments: {
         movements: [stripePayment, externalPayment],
-        allocations: [],
+        allocations: [
+          {
+            id: 'allocation-1',
+            propertyId: 'property-1',
+            bookingRequestId: REQUEST_ID,
+            paymentId: PAYMENT_ID,
+            installmentId: 'installment-1',
+            amount: '60.00',
+            createdAt: '2026-08-24T10:00:00.000Z',
+          },
+          {
+            id: 'allocation-2',
+            propertyId: 'property-1',
+            bookingRequestId: REQUEST_ID,
+            paymentId: PAYMENT_ID,
+            installmentId: 'installment-3',
+            amount: '100.00',
+            createdAt: '2026-08-24T10:00:00.000Z',
+          },
+        ],
         resolutions: [],
       },
       installments: [
@@ -735,6 +754,20 @@ describe('Booking request payments, messages, and audit', () => {
           dueDate: null,
           allocatedAmount: '0.00',
           status: 'unpaid',
+        },
+        {
+          id: 'installment-3',
+          propertyId: 'property-1',
+          bookingRequestId: REQUEST_ID,
+          label: 'Paid in full',
+          sortOrder: 2,
+          fixedAmount: '100.00',
+          percentage: null,
+          resolvedAmount: '100.00',
+          dueMilestone: 'manual',
+          dueDate: null,
+          allocatedAmount: '100.00',
+          status: 'paid',
         },
       ],
       emails: [
@@ -770,8 +803,10 @@ describe('Booking request payments, messages, and audit', () => {
     const partialEdit = screen.getByRole('button', { name: 'Edit 30% deposit' });
     expect(partialEdit).toBeEnabled();
     expect(screen.getByRole('button', {
-      name: 'Remove remaining amount — €50.00 will remain paid',
+      name: 'Remove remaining amount — €60.00 will remain paid',
     })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Edit Paid in full' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Delete Paid in full' })).toBeDisabled();
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit Final balance' }));
     const label = screen.getByRole('textbox', { name: 'Installment label' });
@@ -797,7 +832,7 @@ describe('Booking request payments, messages, and audit', () => {
     await waitFor(() => {
       expect(api.patch).toHaveBeenCalledWith(
         `/v1/booking-requests/${REQUEST_ID}/installments/reorder`,
-        { installmentIds: ['installment-2', 'installment-1'] },
+        { installmentIds: ['installment-2', 'installment-1', 'installment-3'] },
         { params: { propertyId: 'property-1' } },
       );
       expect(api.patch).toHaveBeenCalledTimes(1);
