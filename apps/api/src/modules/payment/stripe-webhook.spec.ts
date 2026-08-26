@@ -723,22 +723,144 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.state.audits[0]!.description).toMatch(/reconciliation signal/i);
   });
 
-  it('preserves a legacy payment when charge.refunded includes uncorrelated refund objects', async () => {
-    const legacy = payment({ bookingRequestId: null, folioId: FOLIO_ID });
-    const h = await harness({ requests: [], payments: [legacy] });
-    await h.controller.handleChargeRefunded({
-      id: 'ch_legacy',
-      payment_intent: 'pi_request_1',
-      amount_refunded: 2500,
-      currency: 'usd',
-      refunds: {
-        data: [{
-          id: 're_legacy', status: 'succeeded', amount: 2500, currency: 'usd', metadata: {},
-        }],
-      },
+  it('posts the missing negative movement for a partial instant-booking refund', async () => {
+    const legacy = payment({
+      bookingRequestId: null, folioId: FOLIO_ID, amount: '100.00', status: 'captured',
     });
+    const h = await harness({ requests: [], payments: [legacy] });
+
+    await h.controller.handleChargeRefunded({
+      id: 'ch_legacy', payment_intent: 'pi_request_1', amount_refunded: 2500,
+      currency: 'usd', refunds: { data: [] },
+    });
+
+    expect(h.state.payments).toContainEqual(expect.objectContaining({
+      propertyId: PROPERTY_ID,
+      folioId: FOLIO_ID,
+      originalPaymentId: PAYMENT_ID,
+      amount: '-25.00',
+      status: 'captured',
+      gatewayProvider: 'stripe',
+      idempotencyKey: 'stripe-charge-refund:ch_legacy:2500',
+    }));
+    expect(h.folioService.recalculateBalance)
+      .toHaveBeenCalledWith(FOLIO_ID, PROPERTY_ID, h.db);
+    expect(h.webhookService.emit).toHaveBeenCalledWith(
+      'payment.refunded',
+      'payment',
+      expect.any(String),
+      expect.objectContaining({ folioId: FOLIO_ID, originalPaymentId: PAYMENT_ID, refundAmount: '25.00' }),
+      PROPERTY_ID,
+    );
+  });
+
+  it('posts the complete captured amount for a full instant-booking refund', async () => {
+    const legacy = payment({
+      bookingRequestId: null, folioId: FOLIO_ID, amount: '100.00', status: 'captured',
+    });
+    const h = await harness({ requests: [], payments: [legacy] });
+
+    await h.controller.handleChargeRefunded({
+      id: 'ch_legacy_full', payment_intent: 'pi_request_1', amount_refunded: 10000,
+      currency: 'usd', refunds: { data: [] },
+    });
+
+    expect(h.state.payments.filter((row) => row.originalPaymentId === PAYMENT_ID)).toEqual([
+      expect.objectContaining({ amount: '-100.00', status: 'captured' }),
+    ]);
+  });
+
+  it('rejects an instant-booking refund whose currency differs from the captured payment', async () => {
+    const legacy = payment({
+      bookingRequestId: null, folioId: FOLIO_ID, amount: '100.00', status: 'captured',
+    });
+    const h = await harness({ requests: [], payments: [legacy] });
+
+    await expect(h.controller.handleChargeRefunded({
+      id: 'ch_legacy_currency', payment_intent: 'pi_request_1', amount_refunded: 2500,
+      currency: 'eur', refunds: { data: [] },
+    })).rejects.toThrow(/currency/i);
+
     expect(h.state.payments).toEqual([legacy]);
-    expect(h.folioService.recalculateBalance).toHaveBeenCalledWith(FOLIO_ID, PROPERTY_ID, h.db);
+    expect(h.folioService.recalculateBalance).not.toHaveBeenCalled();
+  });
+
+  it('rejects an instant-booking cumulative refund above the captured amount', async () => {
+    const legacy = payment({
+      bookingRequestId: null, folioId: FOLIO_ID, amount: '100.00', status: 'captured',
+    });
+    const h = await harness({ requests: [], payments: [legacy] });
+
+    await expect(h.controller.handleChargeRefunded({
+      id: 'ch_legacy_excess', payment_intent: 'pi_request_1', amount_refunded: 10001,
+      currency: 'usd', refunds: { data: [] },
+    })).rejects.toThrow(/exceed/i);
+
+    expect(h.state.payments).toEqual([legacy]);
+    expect(h.folioService.recalculateBalance).not.toHaveBeenCalled();
+  });
+
+  it('ignores a replay of the same cumulative instant-booking refund', async () => {
+    const legacy = payment({
+      bookingRequestId: null, folioId: FOLIO_ID, amount: '100.00', status: 'captured',
+    });
+    const h = await harness({ requests: [], payments: [legacy] });
+    const charge = {
+      id: 'ch_legacy_replay', payment_intent: 'pi_request_1', amount_refunded: 2500,
+      currency: 'usd', refunds: { data: [] },
+    };
+
+    await h.controller.handleChargeRefunded(charge);
+    await h.controller.handleChargeRefunded(charge);
+
+    expect(h.state.payments.filter((row) => row.originalPaymentId === PAYMENT_ID)).toEqual([
+      expect.objectContaining({ amount: '-25.00', status: 'captured' }),
+    ]);
+    expect(h.folioService.recalculateBalance).toHaveBeenCalledTimes(1);
+    expect(h.webhookService.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it('posts only the newly refunded portion when a cumulative instant-booking refund advances', async () => {
+    const legacy = payment({
+      bookingRequestId: null, folioId: FOLIO_ID, amount: '100.00', status: 'captured',
+    });
+    const h = await harness({ requests: [], payments: [legacy] });
+
+    await h.controller.handleChargeRefunded({
+      id: 'ch_legacy_progression', payment_intent: 'pi_request_1', amount_refunded: 2500,
+      currency: 'usd', refunds: { data: [] },
+    });
+    await h.controller.handleChargeRefunded({
+      id: 'ch_legacy_progression', payment_intent: 'pi_request_1', amount_refunded: 5000,
+      currency: 'usd', refunds: { data: [] },
+    });
+
+    expect(h.state.payments.filter((row) => row.originalPaymentId === PAYMENT_ID)).toEqual([
+      expect.objectContaining({ amount: '-25.00', status: 'captured' }),
+      expect.objectContaining({ amount: '-25.00', status: 'captured' }),
+    ]);
+  });
+
+  it('does not over-refund when an older cumulative instant-booking refund arrives late', async () => {
+    const legacy = payment({
+      bookingRequestId: null, folioId: FOLIO_ID, amount: '100.00', status: 'captured',
+    });
+    const h = await harness({ requests: [], payments: [legacy] });
+
+    await h.controller.handleChargeRefunded({
+      id: 'ch_legacy_out_of_order', payment_intent: 'pi_request_1', amount_refunded: 5000,
+      currency: 'usd', refunds: { data: [] },
+    });
+    await h.controller.handleChargeRefunded({
+      id: 'ch_legacy_out_of_order', payment_intent: 'pi_request_1', amount_refunded: 2500,
+      currency: 'usd', refunds: { data: [] },
+    });
+
+    expect(h.state.payments.filter((row) => row.originalPaymentId === PAYMENT_ID)).toEqual([
+      expect.objectContaining({ amount: '-50.00', status: 'captured' }),
+    ]);
+    expect(h.folioService.recalculateBalance).toHaveBeenCalledTimes(1);
+    expect(h.webhookService.emit).toHaveBeenCalledTimes(1);
   });
 
   it('uses fresh acceptance folio for exact refund finalization and repairs allocation state', async () => {

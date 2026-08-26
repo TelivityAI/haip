@@ -435,7 +435,7 @@ export class StripeWebhookController {
     const payment = await this.findPaymentByGatewayTransactionId(piId);
     if (!payment) return;
 
-    await this.db.transaction(async (tx: any) => {
+    const outcome = await this.db.transaction(async (tx: any) => {
       if (payment.bookingRequestId) {
         await tx
           .select({ id: bookingRequests.id })
@@ -479,18 +479,76 @@ export class StripeWebhookController {
           propertyId: parent.propertyId,
           payment: parent,
         });
-      }
-      const requestFolio = parent.bookingRequestId
-        ? (await tx.select().from(bookingRequests).where(and(
+        const requestFolio = (await tx.select().from(bookingRequests).where(and(
           eq(bookingRequests.id, parent.bookingRequestId),
           eq(bookingRequests.propertyId, parent.propertyId),
-        )))[0]?.acceptedFolioId
-        : null;
-      const folioId = requestFolio ?? parent.folioId;
+        )))[0]?.acceptedFolioId;
+        const folioId = requestFolio ?? parent.folioId;
+        if (folioId) {
+          await this.folioService.recalculateBalance(folioId, parent.propertyId, tx);
+        }
+        return { movement: undefined };
+      }
+
+      if (charge.currency.trim().toUpperCase() !== parent.currencyCode.trim().toUpperCase()) {
+        throw new ConflictException('Stripe charge refund currency does not match payment');
+      }
+      const children = await tx
+        .select()
+        .from(payments)
+        .where(and(
+          eq(payments.propertyId, parent.propertyId),
+          eq(payments.originalPaymentId, parent.id),
+          eq(payments.status, 'captured'),
+      ));
+      const cumulative = this.fromStripeMinorUnits(charge.amount_refunded, charge.currency);
+      if (cumulative.gt(new Decimal(parent.amount))) {
+        throw new ConflictException('Stripe charge refund exceeds captured payment amount');
+      }
+      const alreadyPosted = children.reduce(
+        (total: Decimal, child: typeof payments.$inferSelect) =>
+          total.plus(new Decimal(child.amount).abs()),
+        new Decimal(0),
+      );
+      const delta = cumulative.minus(alreadyPosted);
+      if (delta.lte(0)) return { movement: undefined };
+
+      const [movement] = await tx.insert(payments).values({
+        propertyId: parent.propertyId,
+        folioId: parent.folioId,
+        bookingRequestId: null,
+        idempotencyKey: `stripe-charge-refund:${charge.id}:${charge.amount_refunded}`,
+        method: parent.method,
+        status: 'captured',
+        amount: delta.negated().toFixed(2),
+        currencyCode: parent.currencyCode,
+        gatewayProvider: 'stripe',
+        gatewayTransactionId: `stripe_refund:${charge.id}:${charge.amount_refunded}`,
+        originalPaymentId: parent.id,
+        notes: `Stripe charge refund ${charge.id} reconciled at ${charge.amount_refunded}`,
+        processedAt: new Date(),
+      }).returning();
+      if (!movement) throw new ConflictException('Stripe charge refund movement could not be persisted');
+
+      const folioId = parent.folioId;
       if (folioId) {
         await this.folioService.recalculateBalance(folioId, parent.propertyId, tx);
       }
+      return { movement };
     });
+    if (outcome.movement) {
+      await this.webhookService.emit(
+        'payment.refunded',
+        'payment',
+        outcome.movement.id,
+        {
+          folioId: outcome.movement.folioId,
+          originalPaymentId: outcome.movement.originalPaymentId,
+          refundAmount: new Decimal(outcome.movement.amount).abs().toFixed(2),
+        },
+        outcome.movement.propertyId,
+      );
+    }
   }
 
   private async handleRefundUpdated(refund: Stripe.Refund) {
