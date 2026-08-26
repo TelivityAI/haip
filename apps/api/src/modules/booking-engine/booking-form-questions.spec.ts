@@ -35,7 +35,13 @@ const futureInactiveQuestion = {
   order: 2,
   isActive: false,
   isRequired: false,
-  futureConfig: { maximum: 5, icon: 'star', accessKey: 'form-definition-secret' },
+  futureConfig: {
+    authorization: 'Bearer opaque-form-secret',
+    cardNumber: 'opaque-card-number',
+    cvv: '123',
+    signingMaterial: 'opaque-signing-material',
+    clientCertificate: 'opaque-client-certificate',
+  },
 };
 
 const adminValidationPipe = new ValidationPipe({
@@ -199,29 +205,45 @@ describe('booking form DTO validation', () => {
 function makeConfigService(
   row: Record<string, unknown>,
   paymentGateway: 'mock' | 'stripe' | 'adyen' = 'stripe',
+  options: { auditInsertError?: Error } = {},
 ) {
-  let updatedRow = row;
-  const returning = vi.fn().mockImplementation(async () => [updatedRow]);
+  let persistedRow = row;
+  let stagedRow: Record<string, unknown> | undefined;
+  let stagedAudits: Record<string, unknown>[] = [];
+  const returning = vi.fn().mockImplementation(async () => [stagedRow]);
   const where = vi.fn().mockReturnValue({ returning });
   const set = vi.fn().mockImplementation((values) => {
-    updatedRow = { ...row, ...values };
+    stagedRow = { ...persistedRow, ...values };
     return { where };
   });
   const update = vi.fn().mockReturnValue({ set });
-  const selectWhere = vi.fn().mockResolvedValue([row]);
+  const selectWhere = vi.fn().mockImplementation(async () => [persistedRow]);
   const from = vi.fn().mockReturnValue({ where: selectWhere });
   const select = vi.fn().mockReturnValue({ from });
-  const lock = vi.fn().mockResolvedValue([row]);
+  const lock = vi.fn().mockImplementation(async () => [persistedRow]);
   const lockedWhere = vi.fn().mockReturnValue({ for: lock });
   const lockedFrom = vi.fn().mockReturnValue({ where: lockedWhere });
   const lockedSelect = vi.fn().mockReturnValue({ from: lockedFrom });
   const storedAudits: Record<string, unknown>[] = [];
   const insertValues = vi.fn().mockImplementation(async (values) => {
-    storedAudits.push(values);
+    if (options.auditInsertError) throw options.auditInsertError;
+    stagedAudits.push(values);
   });
   const insert = vi.fn().mockReturnValue({ values: insertValues });
   const tx = { select: lockedSelect, update, insert };
-  const transaction = vi.fn(async (callback: (transaction: typeof tx) => unknown) => callback(tx));
+  const transaction = vi.fn(async (callback: (transaction: typeof tx) => Promise<unknown>) => {
+    stagedRow = undefined;
+    stagedAudits = [];
+    try {
+      const result = await callback(tx);
+      if (stagedRow) persistedRow = stagedRow;
+      storedAudits.push(...stagedAudits);
+      return result;
+    } finally {
+      stagedRow = undefined;
+      stagedAudits = [];
+    }
+  });
   const db = { select, update, transaction };
   const runtimeConfig = {
     get: (key: string, fallback?: string) => {
@@ -238,6 +260,7 @@ function makeConfigService(
     transaction,
     lock,
     storedAudits,
+    persistedConfig: () => persistedRow,
   };
 }
 
@@ -264,6 +287,11 @@ describe('BookingEngineConfigService request settings', () => {
       { ...futureInactiveQuestion, isActive: true },
       { id: 'notes', label: 'Notes', type: 'long_text' as const, order: 3, isActive: true, isRequired: false },
     ],
+  };
+  const auditActor = {
+    userId: 'cccccccc-0000-4000-c000-000000000001',
+    userEmail: 'operator@example.com',
+    ipAddress: '203.0.113.10',
   };
 
   it('returns public request settings with only active questions in display order', async () => {
@@ -297,11 +325,6 @@ describe('BookingEngineConfigService request settings', () => {
 
   it('records one sanitized actor-attributed audit entry for a successful request configuration update', async () => {
     const { service, storedAudits } = makeConfigService(configRow);
-    const actor = {
-      userId: 'cccccccc-0000-4000-c000-000000000001',
-      userEmail: 'operator@example.com',
-      ipAddress: '203.0.113.10',
-    };
     const updatedQuestions = [{
       id: '20000000-0000-4000-8000-000000000002',
       label: 'Arrival time',
@@ -316,26 +339,33 @@ describe('BookingEngineConfigService request settings', () => {
       paymentMethodCollection: 'required',
       formQuestions: updatedQuestions,
       stripePublishableKey: 'pk_test_replacement',
-    }, configRow.updatedAt.toISOString(), actor);
+    }, configRow.updatedAt.toISOString(), auditActor);
 
     expect(storedAudits).toEqual([expect.objectContaining({
       propertyId: configRow.propertyId,
       action: 'update',
       entityType: 'booking_engine_config',
       entityId: configRow.id,
-      userId: actor.userId,
-      userEmail: actor.userEmail,
-      ipAddress: actor.ipAddress,
+      userId: auditActor.userId,
+      userEmail: auditActor.userEmail,
+      ipAddress: auditActor.ipAddress,
       description: 'Booking engine configuration updated',
       previousValue: expect.objectContaining({
         bookingMode: 'request',
         paymentMethodCollection: 'optional',
-        formQuestions: expect.arrayContaining([
-          expect.objectContaining({
+        formQuestions: [
+          { ...arrivalQuestion, order: 2 },
+          { ...breakfastQuestion, order: 1, isActive: false },
+          {
             id: futureInactiveQuestion.id,
-            futureConfig: expect.objectContaining({ maximum: 5, icon: 'star' }),
-          }),
-        ]),
+            label: futureInactiveQuestion.label,
+            type: futureInactiveQuestion.type,
+            order: futureInactiveQuestion.order,
+            isActive: true,
+            isRequired: futureInactiveQuestion.isRequired,
+          },
+          { id: 'notes', label: 'Notes', type: 'long_text', order: 3, isActive: true, isRequired: false },
+        ],
       }),
       newValue: expect.objectContaining({
         bookingMode: 'request',
@@ -347,13 +377,100 @@ describe('BookingEngineConfigService request settings', () => {
     expect(storedAudits[0]?.['newValue']).not.toHaveProperty('stripePublishableKey');
     expect(JSON.stringify(storedAudits[0])).not.toContain('pk_test_123');
     expect(JSON.stringify(storedAudits[0])).not.toContain('pk_test_replacement');
-    expect(JSON.stringify(storedAudits[0])).not.toContain('form-definition-secret');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('opaque-form-secret');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('opaque-card-number');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('opaque-signing-material');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('opaque-client-certificate');
+  });
+
+  it('returns the locked configuration without updating or auditing an empty patch', async () => {
+    const { service, update, storedAudits } = makeConfigService(configRow);
+
+    await expect(service.updateConfig(
+      configRow.propertyId,
+      {},
+      configRow.updatedAt.toISOString(),
+      auditActor,
+    )).resolves.toEqual(configRow);
+
+    expect(update).not.toHaveBeenCalled();
+    expect(storedAudits).toEqual([]);
+  });
+
+  it('returns a legacy unsupported configuration unchanged for an empty patch', async () => {
+    const legacyConfig = {
+      ...configRow,
+      paymentMethodCollection: 'required' as const,
+      stripePublishableKey: null,
+    };
+    const { service, update, storedAudits } = makeConfigService(legacyConfig, 'adyen');
+
+    await expect(service.updateConfig(
+      legacyConfig.propertyId,
+      {},
+      legacyConfig.updatedAt.toISOString(),
+      auditActor,
+    )).resolves.toEqual(legacyConfig);
+
+    expect(update).not.toHaveBeenCalled();
+    expect(storedAudits).toEqual([]);
+  });
+
+  it('returns the locked configuration without updating normalized values already persisted', async () => {
+    const normalizedRow = {
+      ...configRow,
+      formQuestions: [{
+        id: '20000000-0000-4000-8000-000000000002',
+        label: 'Travel purpose',
+        type: 'single_select' as const,
+        options: ['Leisure', 'Business'],
+        order: 0,
+        isActive: true,
+        isRequired: true,
+      }],
+    };
+    const { service, update, storedAudits } = makeConfigService(normalizedRow);
+
+    await expect(service.updateConfig(normalizedRow.propertyId, {
+      formQuestions: [{
+        ...normalizedRow.formQuestions[0],
+        label: '  Travel purpose  ',
+        options: [' Leisure ', 'Business'],
+      }],
+    }, normalizedRow.updatedAt.toISOString(), auditActor)).resolves.toEqual(normalizedRow);
+
+    expect(update).not.toHaveBeenCalled();
+    expect(storedAudits).toEqual([]);
+  });
+
+  it('rolls back the configuration mutation when its audit insert fails', async () => {
+    const auditFailure = new Error('audit storage unavailable');
+    const { service, persistedConfig, storedAudits } = makeConfigService(
+      configRow,
+      'stripe',
+      { auditInsertError: auditFailure },
+    );
+
+    await expect(service.updateConfig(
+      configRow.propertyId,
+      { displayName: 'Uncommitted rename' },
+      configRow.updatedAt.toISOString(),
+      auditActor,
+    )).rejects.toThrow(auditFailure);
+
+    expect(persistedConfig()).toEqual(configRow);
+    expect(storedAudits).toEqual([]);
   });
 
   it('accepts a legacy admin save without a version during the compatibility window', async () => {
     const { service, set } = makeConfigService(configRow);
 
-    await service.updateConfig(configRow.propertyId, { displayName: 'Legacy admin name' });
+    await service.updateConfig(
+      configRow.propertyId,
+      { displayName: 'Legacy admin name' },
+      undefined,
+      auditActor,
+    );
 
     expect(set.mock.calls[0][0]).toMatchObject({ displayName: 'Legacy admin name' });
   });
@@ -363,7 +480,7 @@ describe('BookingEngineConfigService request settings', () => {
 
     await expect(service.updateConfig(configRow.propertyId, {
       displayName: 'Stale admin name',
-    }, '2026-08-24T23:59:59.000Z')).rejects.toBeInstanceOf(ConflictException);
+    }, '2026-08-24T23:59:59.000Z', auditActor)).rejects.toBeInstanceOf(ConflictException);
 
     expect(lock).toHaveBeenCalledWith('update');
     expect(update).not.toHaveBeenCalled();
@@ -375,7 +492,7 @@ describe('BookingEngineConfigService request settings', () => {
 
     await service.updateConfig(configRow.propertyId, {
       displayName: 'Renamed Hotel',
-    }, configRow.updatedAt.toISOString());
+    }, configRow.updatedAt.toISOString(), auditActor);
 
     const written = set.mock.calls[0][0];
     expect(written).toMatchObject({ displayName: 'Renamed Hotel' });
@@ -387,11 +504,15 @@ describe('BookingEngineConfigService request settings', () => {
   it.each(['required', 'optional'] as const)(
     'rejects %s Stripe card collection without a publishable card key',
     async (paymentMethodCollection) => {
-    const { service, update, storedAudits } = makeConfigService({ ...configRow, stripePublishableKey: null });
+    const { service, update, storedAudits } = makeConfigService({
+      ...configRow,
+      paymentMethodCollection: 'disabled',
+      stripePublishableKey: null,
+    });
 
     await expect(service.updateConfig(configRow.propertyId, {
       paymentMethodCollection,
-    }, configRow.updatedAt.toISOString())).rejects.toThrow(/publishable/i);
+    }, configRow.updatedAt.toISOString(), auditActor)).rejects.toThrow(/publishable/i);
     expect(update).not.toHaveBeenCalled();
     expect(storedAudits).toEqual([]);
     },
@@ -405,7 +526,7 @@ describe('BookingEngineConfigService request settings', () => {
 
     await service.updateConfig(configRow.propertyId, {
       paymentMethodCollection: 'required',
-    }, configRow.updatedAt.toISOString());
+    }, configRow.updatedAt.toISOString(), auditActor);
 
     expect(set.mock.calls[0][0]).toMatchObject({ paymentMethodCollection: 'required' });
   });
@@ -413,11 +534,14 @@ describe('BookingEngineConfigService request settings', () => {
   it.each(['required', 'optional'] as const)(
     'rejects %s card collection when the configured provider does not support saved cards',
     async (paymentMethodCollection) => {
-      const { service, update, storedAudits } = makeConfigService(configRow, 'adyen');
+      const { service, update, storedAudits } = makeConfigService({
+        ...configRow,
+        paymentMethodCollection: 'disabled',
+      }, 'adyen');
 
       await expect(service.updateConfig(configRow.propertyId, {
         paymentMethodCollection,
-      }, configRow.updatedAt.toISOString())).rejects.toThrow(/not supported/i);
+      }, configRow.updatedAt.toISOString(), auditActor)).rejects.toThrow(/not supported/i);
       expect(update).not.toHaveBeenCalled();
       expect(storedAudits).toEqual([]);
     },
@@ -428,7 +552,7 @@ describe('BookingEngineConfigService request settings', () => {
 
     await service.updateConfig(configRow.propertyId, {
       paymentMethodCollection: 'disabled',
-    }, configRow.updatedAt.toISOString());
+    }, configRow.updatedAt.toISOString(), auditActor);
 
     expect(set.mock.calls[0][0]).toMatchObject({ paymentMethodCollection: 'disabled' });
   });
@@ -441,7 +565,7 @@ describe('BookingEngineConfigService request settings', () => {
       bookingMode: undefined,
       paymentMethodCollection: undefined,
       formQuestions: undefined,
-    }, configRow.updatedAt.toISOString());
+    }, configRow.updatedAt.toISOString(), auditActor);
 
     const written = set.mock.calls[0][0];
     expect(written).toMatchObject({ displayName: 'Renamed Hotel' });
@@ -455,7 +579,7 @@ describe('BookingEngineConfigService request settings', () => {
 
     await service.updateConfig(configRow.propertyId, {
       bookingMode: 'request',
-    }, configRow.updatedAt.toISOString());
+    }, configRow.updatedAt.toISOString(), auditActor);
 
     expect(transaction).toHaveBeenCalledOnce();
     expect(lock).toHaveBeenCalledWith('update');
@@ -520,7 +644,7 @@ describe('BookingEngineConfigService request settings', () => {
     const controller = new BookingEngineAdminController(service);
     const dto = await validateAdminBody({ displayName: 'Legacy partial' });
 
-    await controller.updateConfig(configRow.propertyId, dto);
+    await controller.updateConfig(configRow.propertyId, dto, auditActor);
 
     expect(set.mock.calls[0][0]).toMatchObject({ displayName: 'Legacy partial' });
     expect(set.mock.calls[0][0]).not.toHaveProperty('formQuestions');

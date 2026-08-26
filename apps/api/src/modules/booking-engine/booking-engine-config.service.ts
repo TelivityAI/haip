@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { eq, and, desc } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { auditLogs, bookingEngineConfig, bookingEngineCredentials } from '@telivityhaip/database';
 import type {
   BookingFormQuestionDefinition,
@@ -50,19 +51,19 @@ export interface UpdateConfigInput {
   formQuestions?: BookingFormQuestionDefinition[];
 }
 
-const SENSITIVE_AUDIT_FIELD = /secret|credential|password|token|(?:private|publishable|api|access).*key|key.*hash|ciphertext/i;
-
-function sanitizeOperationalValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sanitizeOperationalValue);
-  if (!value || typeof value !== 'object') return value;
-
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([key, nestedValue]) => (
-      key === 'key' || SENSITIVE_AUDIT_FIELD.test(key)
-        ? []
-        : [[key, sanitizeOperationalValue(nestedValue)]]
-    )),
-  );
+function sanitizeBookingFormDefinition(
+  question: BookingFormQuestionDefinition,
+): Record<string, unknown> {
+  const options = (question as { options?: unknown }).options;
+  return {
+    id: question.id,
+    label: question.label,
+    type: question.type,
+    ...(Array.isArray(options) ? { options: [...options] } : {}),
+    order: question.order,
+    isActive: question.isActive,
+    isRequired: question.isRequired,
+  };
 }
 
 /**
@@ -72,7 +73,7 @@ function sanitizeOperationalValue(value: unknown): unknown {
 export function sanitizeBookingEngineConfig(
   config: typeof bookingEngineConfig.$inferSelect,
 ): Record<string, unknown> {
-  return sanitizeOperationalValue({
+  return {
     isEnabled: config.isEnabled,
     displayName: config.displayName,
     logoMediaId: config.logoMediaId,
@@ -84,8 +85,8 @@ export function sanitizeBookingEngineConfig(
     autoConfirm: config.autoConfirm,
     bookingMode: config.bookingMode,
     paymentMethodCollection: config.paymentMethodCollection,
-    formQuestions: config.formQuestions,
-  }) as Record<string, unknown>;
+    formQuestions: config.formQuestions.map(sanitizeBookingFormDefinition),
+  };
 }
 
 @Injectable()
@@ -164,8 +165,8 @@ export class BookingEngineConfigService {
   async updateConfig(
     propertyId: string,
     input: UpdateConfigInput,
-    expectedVersion?: string,
-    actor?: AuditActor,
+    expectedVersion: string | undefined,
+    actor: AuditActor,
   ) {
     await this.getConfig(propertyId); // ensure a row exists before locking it
 
@@ -203,6 +204,18 @@ export class BookingEngineConfigService {
       const formQuestions = patch.formQuestions === undefined
         ? undefined
         : validateQuestionDefinitions(patch.formQuestions);
+      const normalizedPatch = {
+        ...Object.fromEntries(
+          Object.entries(patch).filter(([, value]) => value !== undefined),
+        ),
+        ...(formQuestions === undefined ? {} : { formQuestions }),
+      };
+
+      if (Object.entries(normalizedPatch).every(([field, value]) =>
+        isDeepStrictEqual(current[field], value))) {
+        return current;
+      }
+
       const paymentMethodClientMode = this.paymentMethodClientMode();
 
       if (bookingMode === 'request'
@@ -229,10 +242,7 @@ export class BookingEngineConfigService {
       const [updated] = await tx
         .update(bookingEngineConfig)
         .set({
-          ...Object.fromEntries(
-            Object.entries(patch).filter(([, value]) => value !== undefined),
-          ),
-          ...(patch.formQuestions === undefined ? {} : { formQuestions }),
+          ...normalizedPatch,
           updatedAt: nextUpdatedAt,
         })
         .where(eq(bookingEngineConfig.propertyId, propertyId))
