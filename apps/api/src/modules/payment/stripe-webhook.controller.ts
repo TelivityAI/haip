@@ -560,6 +560,7 @@ export class StripeWebhookController {
     const ownership = classifyHaipMetadata(refund.metadata, refundCorrelation);
     if (ownership.ownership === 'external') {
       if (!linkedPayment) return;
+      if (!linkedPayment.bookingRequestId) return;
       throw new ConflictException(
         'Stripe refund is linked to a payment but missing exact HAIP correlation metadata',
       );

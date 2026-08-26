@@ -375,7 +375,28 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.db.transaction).not.toHaveBeenCalled();
   });
 
-  it('rejects a directly linked refund that omits HAIP correlation metadata', async () => {
+  it('acknowledges a directly linked legacy refund that omits HAIP correlation metadata', async () => {
+    const legacy = payment({
+      bookingRequestId: null,
+      gatewayTransactionId: 're_legacy_without_metadata',
+      originalPaymentId: PAYMENT_ID,
+      amount: '-25.00',
+      status: 'captured',
+    });
+    const h = await harness({ requests: [], payments: [legacy] });
+
+    await expect(h.controller.handleRefundUpdated({
+      id: 're_legacy_without_metadata', metadata: {},
+    })).resolves.toBeUndefined();
+
+    expect(h.state).toEqual({
+      requests: [], payments: [legacy], resolutions: [], consequences: [], audits: [], emails: [],
+    });
+    expect(h.db.transaction).not.toHaveBeenCalled();
+    expect(h.webhookService.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects a directly linked booking-request refund that omits HAIP correlation metadata', async () => {
     const h = await harness({
       payments: [payment({ gatewayTransactionId: 're_linked_without_metadata' })],
     });
