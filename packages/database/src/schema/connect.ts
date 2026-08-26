@@ -1,4 +1,15 @@
-import { pgTable, uuid, varchar, boolean, timestamp, jsonb, integer, text, pgEnum } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  varchar,
+  boolean,
+  timestamp,
+  jsonb,
+  integer,
+  text,
+  pgEnum,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 
 /**
@@ -46,6 +57,7 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   id: uuid('id').primaryKey().defaultRandom(),
   propertyId: uuid('property_id').notNull().references(() => properties.id),
   subscriptionId: uuid('subscription_id').notNull().references(() => agentWebhookSubscriptions.id),
+  logicalEventId: uuid('logical_event_id'),
 
   eventType: varchar('event_type', { length: 100 }).notNull(),
   payload: jsonb('payload').notNull(),
@@ -59,7 +71,11 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
-});
+}, (table) => ({
+  propertySubscriptionLogicalEventUnique:
+    uniqueIndex('webhook_deliveries_property_subscription_logical_event_unique')
+      .on(table.propertyId, table.subscriptionId, table.logicalEventId),
+}));
 
 /**
  * Connect API credentials — tenant-bound API keys for the /api/v1/connect/* surface.
