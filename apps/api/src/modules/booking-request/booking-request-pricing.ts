@@ -31,15 +31,26 @@ function string(value: unknown, label: string): string {
   return value;
 }
 
-function money(value: unknown, label: string): Decimal {
+function money(
+  value: unknown,
+  label: string,
+  currencyCode: string,
+  currencyExponent: number,
+): Decimal {
   const raw = string(value, label);
+  let parsed: Decimal;
   try {
-    const parsed = new Decimal(raw);
+    parsed = new Decimal(raw);
     if (!parsed.isFinite() || parsed.isNegative()) throw new Error('invalid');
-    return parsed.toDecimalPlaces(2);
   } catch {
     throw new ConflictException(`${label} is not valid money`);
   }
+  if (parsed.decimalPlaces() > currencyExponent) {
+    throw new ConflictException(
+      `${label} has fractional minor units for ${currencyCode}`,
+    );
+  }
+  return parsed;
 }
 
 function integer(value: unknown, label: string): number {
@@ -66,6 +77,7 @@ function normalizeQuote(
   quote: QuoteRecord,
   source: BookingRequestPriceSource,
   requestCurrencyCode: string,
+  currencyExponent: number,
 ): Omit<
   AcceptedPricingSnapshot,
   'version' | 'source' | 'customReason' | 'adjustment'
@@ -84,8 +96,8 @@ function normalizeQuote(
     seenDates.add(date);
     return {
       date,
-      roomAmount: money(row['rate'], `Night ${date} room amount`).toFixed(2),
-      taxAmount: money(row['tax'], `Night ${date} tax amount`).toFixed(2),
+      roomAmount: money(row['rate'], `Night ${date} room amount`, requestCurrencyCode, currencyExponent).toFixed(2),
+      taxAmount: money(row['tax'], `Night ${date} tax amount`, requestCurrencyCode, currencyExponent).toFixed(2),
     };
   });
 
@@ -112,26 +124,26 @@ function normalizeQuote(
       postingRule: string(row['postingRule'], `Service ${index + 1} posting rule`),
       chargeType: string(row['chargeType'], `Service ${index + 1} charge type`),
       currencyCode,
-      unitPrice: money(row['unitPrice'], `Service ${index + 1} unit price`).toFixed(2),
+      unitPrice: money(row['unitPrice'], `Service ${index + 1} unit price`, requestCurrencyCode, currencyExponent).toFixed(2),
       quantity: integer(row['quantity'], `Service ${index + 1} quantity`),
-      lineTotal: money(row['lineTotal'], `Service ${index + 1} total`).toFixed(2),
-      taxTotal: money(row['taxTotal'], `Service ${index + 1} tax`).toFixed(2),
+      lineTotal: money(row['lineTotal'], `Service ${index + 1} total`, requestCurrencyCode, currencyExponent).toFixed(2),
+      taxTotal: money(row['taxTotal'], `Service ${index + 1} tax`, requestCurrencyCode, currencyExponent).toFixed(2),
       lineItems: rawLineItems.map((rawLine, lineIndex) => {
         const line = object(rawLine, `Service ${index + 1} line ${lineIndex + 1}`);
         return {
           date: string(line['date'], `Service ${index + 1} line date`),
-          amount: money(line['amount'], `Service ${index + 1} line amount`).toFixed(2),
-          taxAmount: money(line['tax'], `Service ${index + 1} line tax`).toFixed(2),
+          amount: money(line['amount'], `Service ${index + 1} line amount`, requestCurrencyCode, currencyExponent).toFixed(2),
+          taxAmount: money(line['tax'], `Service ${index + 1} line tax`, requestCurrencyCode, currencyExponent).toFixed(2),
         };
       }),
     };
   });
 
-  const roomTotal = money(quote['roomTotal'], 'Room total');
-  const taxTotal = money(quote['taxTotal'], 'Room tax total');
-  const servicesTotal = money(quote['servicesTotal'], 'Services total');
-  const servicesTaxTotal = money(quote['servicesTaxTotal'], 'Services tax total');
-  const grandTotal = money(quote['grandTotal'], 'Grand total');
+  const roomTotal = money(quote['roomTotal'], 'Room total', requestCurrencyCode, currencyExponent);
+  const taxTotal = money(quote['taxTotal'], 'Room tax total', requestCurrencyCode, currencyExponent);
+  const servicesTotal = money(quote['servicesTotal'], 'Services total', requestCurrencyCode, currencyExponent);
+  const servicesTaxTotal = money(quote['servicesTaxTotal'], 'Services tax total', requestCurrencyCode, currencyExponent);
+  const grandTotal = money(quote['grandTotal'], 'Grand total', requestCurrencyCode, currencyExponent);
   const nightlyRoomTotal = nights.reduce(
     (sum, night) => sum.plus(night.roomAmount),
     new Decimal(0),
@@ -202,14 +214,22 @@ function normalizeQuote(
 export function buildAcceptedPricingSnapshot(
   input: BuildAcceptedPricingInput,
 ): AcceptedPricingSnapshot {
-  const exponent = assertLedgerCurrencySupported(input.requestCurrencyCode);
+  const exponent = assertLedgerCurrencySupported(
+    input.requestCurrencyCode,
+    (message) => new ConflictException(message),
+  );
   const submitted = object(input.submittedQuote, 'Submitted quote');
   const current = object(input.currentQuote, 'Current quote');
   assertCurrency(submitted, input.requestCurrencyCode, 'Submitted quote');
   assertCurrency(current, input.requestCurrencyCode, 'Current quote');
 
   const basis = input.source === 'submitted' ? submitted : current;
-  const normalized = normalizeQuote(basis, input.source, input.requestCurrencyCode);
+  const normalized = normalizeQuote(
+    basis,
+    input.source,
+    input.requestCurrencyCode,
+    exponent,
+  );
   if (input.source !== 'custom') {
     return {
       version: 1,

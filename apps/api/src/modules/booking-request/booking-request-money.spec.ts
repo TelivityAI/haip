@@ -9,10 +9,14 @@ import {
 } from './booking-request-money';
 
 describe('booking request money', () => {
-  it('returns supported ISO currency exponents and rejects scales beyond the ledger', () => {
+  it('returns supported ISO currency exponents and rejects unknown or scale-three ISO currencies', () => {
     expect(assertLedgerCurrencySupported(' usd ')).toBe(2);
     expect(assertLedgerCurrencySupported('JPY')).toBe(0);
-    expect(() => assertLedgerCurrencySupported('BHD')).toThrow(/BHD.*scale-two payment ledger/i);
+    for (const currencyCode of ['BHD', 'IQD', 'KWD', 'LYD', 'OMR', 'TND']) {
+      expect(() => assertLedgerCurrencySupported(currencyCode))
+        .toThrow(new RegExp(`${currencyCode}.*scale-two payment ledger`, 'i'));
+    }
+    expect(() => assertLedgerCurrencySupported('ZZZ')).toThrow(/unsupported ISO-4217 currency/i);
   });
 
   it('requires a reason for a custom accepted price', () => {

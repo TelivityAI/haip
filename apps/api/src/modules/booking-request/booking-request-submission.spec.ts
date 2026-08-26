@@ -647,7 +647,15 @@ describe('BookingRequestService.submit', () => {
     });
   });
 
-  it('rejects a scale-three authoritative quote before resolving a card or creating a request obligation', async () => {
+  it.each([
+    ['BHD', '220.000', /BHD.*scale-two payment ledger/i],
+    ['IQD', '220.000', /IQD.*scale-two payment ledger/i],
+    ['ZZZ', '220.00', /unsupported ISO-4217 currency/i],
+  ])('rejects a %s authoritative quote before resolving a card or creating a request obligation', async (
+    currencyCode,
+    grandTotal,
+    expectedError,
+  ) => {
     harness.config.getPublicConfig.mockResolvedValue({
       ...structuredClone(publicConfig),
       paymentMethodCollection: 'required',
@@ -655,8 +663,8 @@ describe('BookingRequestService.submit', () => {
     harness.lockedConfig.paymentMethodCollection = 'required';
     harness.bookingEngine.quote.mockResolvedValue({
       ...structuredClone(quote),
-      currencyCode: 'BHD',
-      grandTotal: '220.000',
+      currencyCode,
+      grandTotal,
     });
 
     await expect(harness.service.submit(PROPERTY_ID, {
@@ -665,7 +673,7 @@ describe('BookingRequestService.submit', () => {
       consentAccepted: true,
       consentText: 'Save this card for later staff-initiated payments; no charge is made now.',
       consentVersion: 'request-card-v1',
-    })).rejects.toThrow(/BHD.*scale-two payment ledger/i);
+    })).rejects.toThrow(expectedError);
 
     expect(harness.savedPaymentMethod.resolveSetup).not.toHaveBeenCalled();
     expect(harness.storedRequests).toHaveLength(0);

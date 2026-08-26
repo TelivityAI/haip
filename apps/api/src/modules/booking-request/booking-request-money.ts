@@ -62,25 +62,43 @@ export type DenialResolution = {
   reason?: string | null;
 };
 
+type Iso4217MinorUnit = 0 | 2 | 3 | 4 | null;
+type CurrencyErrorFactory = (message: string) => Error;
+
+function iso4217Currencies(
+  minorUnit: Iso4217MinorUnit,
+  currencyCodes: string,
+): Array<[string, Iso4217MinorUnit]> {
+  return currencyCodes.split(' ').map((currencyCode) => [currencyCode, minorUnit]);
+}
+
+/**
+ * ISO 4217 List One, published 2026-01-01. `null` represents ISO's N.A.
+ * minor-unit entry, which cannot be represented by this numeric ledger.
+ */
+const ISO_4217_MINOR_UNITS = new Map<string, Iso4217MinorUnit>([
+  ...iso4217Currencies(0, 'BIF CLP DJF GNF ISK JPY KMF KRW PYG RWF UGX UYI VND VUV XAF XOF XPF'),
+  ...iso4217Currencies(2, 'AED AFN ALL AMD AOA ARS AUD AWG AZN BAM BBD BDT BMD BND BOB BOV BRL BSD BTN BWP BYN BZD CAD CDF CHE CHF CHW CNY COP COU CRC CUP CVE CZK DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD GTQ GYD HKD HNL HTG HUF IDR ILS INR IRR JMD KES KGS KHR KPW KYD KZT LAK LBP LKR LRD LSL MAD MDL MGA MKD MMK MNT MOP MRU MUR MVR MWK MXN MXV MYR MZN NAD NGN NIO NOK NPR NZD PAB PEN PGK PHP PKR PLN QAR RON RSD RUB SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN SVC SYP SZL THB TJS TMT TOP TRY TTD TWD TZS UAH USD USN UYU UZS VED VES WST XAD XCD XCG YER ZAR ZMW ZWG'),
+  ...iso4217Currencies(3, 'BHD IQD JOD KWD LYD OMR TND'),
+  ...iso4217Currencies(4, 'CLF UYW'),
+  ...iso4217Currencies(null, 'XAG XAU XBA XBB XBC XBD XDR XPD XPT XSU XTS XUA XXX'),
+]);
+
 /**
  * The payment ledger is stored as numeric(12,2), so only ISO currencies
  * whose minor units fit that scale can enter booking-request money flows.
  */
-export function assertLedgerCurrencySupported(currencyCode: string): number {
+export function assertLedgerCurrencySupported(
+  currencyCode: string,
+  errorFactory: CurrencyErrorFactory = (message) => new BadRequestException(message),
+): number {
   const normalized = currencyCode.trim().toUpperCase();
-  let exponent: number;
-  try {
-    const resolvedExponent = new Intl.NumberFormat('en', {
-      style: 'currency',
-      currency: normalized,
-    }).resolvedOptions().maximumFractionDigits;
-    if (resolvedExponent == null) throw new Error('missing exponent');
-    exponent = resolvedExponent;
-  } catch {
-    throw new BadRequestException(`Unsupported currency '${currencyCode}'`);
+  const exponent = ISO_4217_MINOR_UNITS.get(normalized);
+  if (exponent == null) {
+    throw errorFactory(`Unsupported ISO-4217 currency code '${currencyCode}'`);
   }
   if (exponent > 2) {
-    throw new BadRequestException(
+    throw errorFactory(
       `${normalized} is not supported by the scale-two payment ledger`,
     );
   }

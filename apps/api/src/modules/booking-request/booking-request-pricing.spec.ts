@@ -156,4 +156,27 @@ describe('buildAcceptedPricingSnapshot', () => {
       currentQuote: incoherent,
     })).toThrow(/nightly room/i);
   });
+
+  it.each([
+    ['JPY', '120.5'],
+    ['USD', '120.001'],
+  ])('rejects a %s authoritative quote amount with fractional minor units', (
+    currencyCode,
+    rate,
+  ) => {
+    const submittedQuote = structuredClone(submitted);
+    submittedQuote.currencyCode = currencyCode;
+    submittedQuote.services[0]!.currencyCode = currencyCode;
+    const currentQuote = structuredClone(current);
+    currentQuote.currencyCode = currencyCode;
+    currentQuote.services[0]!.currencyCode = currencyCode;
+    currentQuote.lineItems[0]!.rate = rate;
+
+    expect(() => buildAcceptedPricingSnapshot({
+      source: 'current',
+      requestCurrencyCode: currencyCode,
+      submittedQuote,
+      currentQuote,
+    })).toThrow(new RegExp(`fractional minor units.*${currencyCode}`, 'i'));
+  });
 });

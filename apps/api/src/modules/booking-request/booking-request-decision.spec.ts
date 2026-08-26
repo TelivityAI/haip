@@ -1291,12 +1291,14 @@ describe('BookingRequestService acceptance', () => {
     })]);
     harness.bookingEngine.quote.mockResolvedValue(bhdQuote);
 
-    await expect(call(harness.service, 'accept', [
+    const acceptance = call(harness.service, 'accept', [
       REQUEST_ID,
       PROPERTY_ID,
       { priceSource: 'submitted', previewToken: previewToken(bhdQuote, harness.state.requests[0]!) },
       actor,
-    ])).rejects.toThrow(/BHD.*scale-two payment ledger/i);
+    ]);
+    await expect(acceptance).rejects.toBeInstanceOf(ConflictException);
+    await expect(acceptance).rejects.toThrow(/BHD.*scale-two payment ledger/i);
     expect(harness.state.requests[0]?.status).toBe('pending');
     expect(harness.state.reservations).toHaveLength(0);
     expect(harness.state.folios).toHaveLength(0);
