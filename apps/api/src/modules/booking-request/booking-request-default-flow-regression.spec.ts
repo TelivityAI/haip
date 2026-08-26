@@ -202,7 +202,7 @@ function sanitizeDiagnostic(value: string, secret: string): string {
   const structurallySanitized = value
     .replace(/\b(postgres(?:ql)?:\/\/)[^\s/?#@]*@/gi, '$1')
     .replace(
-      /\b(password\s*=\s*)(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|(?:\\.|[^\s])+)/gi,
+      /\b(password\s*=\s*)(?:'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|(?:\\[\s\S]|[^\s])+)/gi,
       '$1[redacted]',
     );
   const sensitiveValues = [
@@ -255,6 +255,27 @@ describe('default-flow release-gate diagnostic sanitization', () => {
     );
     expect(metadataOnly.message).not.toContain('u:p%27word');
     expect(metadataOnly.message).not.toContain('foo\\ bar');
+
+    const mixedLineEndings = [
+      `password=unquoted\\${'\n'}linefeed host=lf`,
+      `password='single\\${'\r'}carriage' host=cr`,
+      `password="double\\${'\r\n'}pair" host=crlf`,
+      `password=unicode\\${'\u2028'}separator host=unicode`,
+    ].join('; ');
+    const multiline = sanitizedChildError('PostgreSQL dropdb', {
+      status: 1,
+      stderr: Buffer.from(mixedLineEndings),
+    }, 'unrelated-secret');
+    expect(multiline.message).toContain([
+      'password=[redacted] host=lf',
+      'password=[redacted] host=cr',
+      'password=[redacted] host=crlf',
+      'password=[redacted] host=unicode',
+    ].join('; '));
+    expect(multiline.message).not.toContain('linefeed');
+    expect(multiline.message).not.toContain('carriage');
+    expect(multiline.message).not.toContain('pair');
+    expect(multiline.message).not.toContain('separator');
   });
 });
 
