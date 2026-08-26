@@ -2,10 +2,11 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { json, raw } from 'express';
-import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { securityHeaders } from './common/http/security-headers';
 import { assertSecureConfig } from './common/config/assert-secure-config';
+import { preloadBookingRequestsModules } from './booking-requests.bootstrap';
+import { AppModule } from './app.module';
 
 function corsOrigins(): boolean | string[] {
   const raw = process.env['CORS_ORIGINS'];
@@ -20,6 +21,7 @@ function corsOrigins(): boolean | string[] {
 
 async function bootstrap() {
   assertSecureConfig();
+  await preloadBookingRequestsModules();
 
   const app = await NestFactory.create(AppModule);
 

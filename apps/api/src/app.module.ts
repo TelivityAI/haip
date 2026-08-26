@@ -53,22 +53,7 @@ import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { IcalModule } from './modules/ical/ical.module';
 import { FiscalModule } from './modules/fiscal/fiscal.module';
-import { BookingRequestModule } from './modules/booking-request/booking-request.module';
-import { BOOKING_REQUEST_STRIPE_HANDLER } from './modules/payment/booking-request-stripe-handler.interface';
-
-function bookingRequestsModules(): any[] {
-  if (process.env['HAIP_BOOKING_REQUESTS'] !== 'true') return [];
-  // Lazy-load optional package so default demo/docker (flag off) does not
-  // require @telivityhaip/booking-requests NestJS factory at startup.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { createBookingRequestsRootModule } = require('@telivityhaip/booking-requests');
-  return [
-    createBookingRequestsRootModule({
-      bookingRequestModule: BookingRequestModule,
-      stripeHandlerToken: BOOKING_REQUEST_STRIPE_HANDLER,
-    }),
-  ];
-}
+import { bookingRequestsModules } from './booking-requests.bootstrap';
 
 const imports: any[] = [
   ConfigModule.forRoot({

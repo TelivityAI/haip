@@ -334,7 +334,9 @@ describeDatabase('Booking Request default-flow release gate', () => {
     instant = await createFixture('instant-default', 60);
     optedIn = await createFixture('request-opt-in', 90, 'request');
 
-    const { AppModule } = await import('../../app.module');
+    const { preloadBookingRequestsModules } = await import('../../booking-requests.bootstrap.js');
+    await preloadBookingRequestsModules();
+    const { AppModule } = await import('../../app.module.js');
     moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(DRIZZLE)
       .useValue(db)
