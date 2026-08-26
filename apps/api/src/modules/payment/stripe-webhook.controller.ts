@@ -726,7 +726,7 @@ export class StripeWebhookController {
         return { blocked: false };
       }
 
-      if (request.status === 'denied') {
+      if (request.status === 'denied' && decision.action === 'transition') {
         await this.auditUnexpectedRefundState(tx, claim, refund.id, providerStatus);
         return { blocked: true };
       }

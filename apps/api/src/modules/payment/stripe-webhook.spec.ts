@@ -795,6 +795,24 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.state.consequences.filter((row) => row.kind.startsWith('payment_refunded:'))).toHaveLength(2);
   });
 
+  it('accepts an exact completed refund replay after the request is denied', async () => {
+    const claim = resolution('11111111-0000-4000-a000-000000000001');
+    const h = await harness({ resolutions: [claim] });
+    const refund = refundEvent(claim.id, 're_completed_before_denial');
+
+    await h.controller.handleRefundUpdated(refund);
+    h.state.requests[0]!.status = 'denied';
+    await expect(h.controller.handleRefundUpdated(refund)).resolves.toBeUndefined();
+
+    expect(h.state.resolutions[0]).toMatchObject({
+      status: 'completed',
+      providerTransactionId: 're_completed_before_denial',
+    });
+    expect(h.state.payments.filter((row) => row.originalPaymentId === PAYMENT_ID)).toHaveLength(1);
+    expect(h.state.consequences.filter((row) => row.kind.startsWith('payment_refunded:')))
+      .toHaveLength(1);
+  });
+
   it('records pending refund identity, then completes the same claim/provider refund', async () => {
     const claim = resolution('11111111-0000-4000-a000-000000000001');
     const h = await harness({ resolutions: [claim] });
