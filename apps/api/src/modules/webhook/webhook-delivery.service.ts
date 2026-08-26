@@ -56,7 +56,6 @@ interface WebhookDeliveryJob {
 }
 
 type DeliveryAttemptOutcome = 'delivered' | 'retry' | 'failed' | 'skipped';
-type WebhookDeliveryRow = typeof webhookDeliveries.$inferSelect;
 
 interface WebhookDeliveryQueue {
   add(name: string, data: WebhookDeliveryJob, options?: JobsOptions): Promise<unknown>;
@@ -112,48 +111,21 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Enqueue one delivery per subscription and persisted logical event, then
-   * add its durable BullMQ job. Re-adding an existing row recovers a crash
-   * between the database insert and queue write; BullMQ deduplicates the UUID
-   * delivery job ID while an existing job remains present.
+   * Enqueue deliveries for an event — one row per matching subscription,
+   * then add a durable BullMQ job for the worker.
    */
-  async enqueue(
-    payload: DeliveryPayload,
-    subscriptionId: string,
-    logicalEventId?: string,
-  ) {
-    const [inserted] = await this.db
+  async enqueue(payload: DeliveryPayload, subscriptionId: string) {
+    const [delivery] = await this.db
       .insert(webhookDeliveries)
       .values({
         propertyId: payload.propertyId,
         subscriptionId,
-        logicalEventId: logicalEventId ?? null,
         eventType: payload.eventType,
         payload,
         status: 'pending',
         attempts: 0,
       })
-      .onConflictDoNothing()
       .returning();
-
-    let delivery = inserted as WebhookDeliveryRow | undefined;
-    if (!delivery && logicalEventId) {
-      const candidates = await this.db
-        .select()
-        .from(webhookDeliveries)
-        .where(and(
-          eq(webhookDeliveries.propertyId, payload.propertyId),
-          eq(webhookDeliveries.subscriptionId, subscriptionId),
-          eq(webhookDeliveries.logicalEventId, logicalEventId),
-        ));
-      delivery = candidates.find((candidate: WebhookDeliveryRow) =>
-        candidate.propertyId === payload.propertyId
-        && candidate.subscriptionId === subscriptionId
-        && candidate.logicalEventId === logicalEventId);
-    }
-    if (!delivery) {
-      throw new Error('Webhook delivery could not be created or recovered');
-    }
 
     await this.enqueueDeliveryJob(delivery.id, payload.propertyId);
 
@@ -237,7 +209,7 @@ export class WebhookDeliveryService implements OnModuleInit, OnModuleDestroy {
           headers: {
             'Content-Type': 'application/json',
             'X-HAIP-Signature': signature,
-            'X-HAIP-Event-Id': delivery.logicalEventId ?? delivery.id,
+            'X-HAIP-Event-Id': delivery.id,
             'X-HAIP-Event-Type': delivery.eventType,
           },
           body,

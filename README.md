@@ -608,6 +608,19 @@ pnpm --filter @telivityhaip/booking dev             # booking widget dev server 
 | Booking widget (dev) | `http://localhost:5174` |
 | Keycloak (`--profile auth`) | `http://localhost:8080` |
 
+### Optional packages
+
+`@telivityhaip/booking-requests` adds request-first direct booking (guest submits a request; property accepts or denies before confirming). It is disabled by default so core instant booking stays unchanged.
+
+To enable:
+
+1. `pnpm db:migrate:booking-requests` (after core `pnpm db:migrate`)
+2. `HAIP_BOOKING_REQUESTS=true` in `apps/api/.env`
+3. `VITE_HAIP_BOOKING_REQUESTS=true` for dashboard/booking UI
+4. Set property `bookingMode=request` in booking engine admin settings
+
+See [`packages/booking-requests/README.md`](./packages/booking-requests/README.md) for details.
+
 > **Local dev dashboard is `:5173`, not `:3000`.** The API at `:3000` serves Swagger
 > and the REST API only unless you set `SERVE_DASHBOARD=true` on the API process.
 
@@ -742,9 +755,10 @@ haip/
 │       ├── tailwind.config.ts
 │       └── vite.config.ts
 ├── packages/
-│   ├── database/                   # Drizzle ORM schema + migrations
+│   ├── database/                   # Core Drizzle schema + migrations (instant booking)
 │   │   └── src/schema/             # Table files (property, room, guest, agent, etc.)
-│   └── shared/                     # Shared types, enums, webhook events
+│   ├── shared/                     # Shared types, enums, webhook events
+│   └── booking-requests/           # Optional request-first booking (HAIP_BOOKING_REQUESTS=true)
 ├── tools/
 │   └── haip-connect-gpt/           # ChatGPT Custom GPT gateway over the Connect API (Vercel)
 ├── docker-compose.yml              # PostgreSQL + Redis + Keycloak + API

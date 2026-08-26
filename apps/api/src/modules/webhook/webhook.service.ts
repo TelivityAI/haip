@@ -1,17 +1,16 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { auditLogs } from '@telivityhaip/database';
-import { WEBHOOK_EVENTS, type WebhookEvent } from '@telivityhaip/shared';
+import { type WebhookEvent } from '@telivityhaip/shared';
 import { DRIZZLE } from '../../database/database.module';
 
 export interface WebhookPayload {
-  event: WebhookEvent;
+  event: string;
   entityType: string;
   entityId: string;
   propertyId?: string;
   data: Record<string, unknown>;
   timestamp: string;
-  logicalEventId?: string;
 }
 
 @Injectable()
@@ -20,24 +19,6 @@ export class WebhookService {
     @Inject(DRIZZLE) private readonly db: any,
     private readonly eventEmitter: EventEmitter2,
   ) {}
-
-  /**
-   * Dispatch a payload whose audit/outbox records were already committed by
-   * the domain transaction. Async listeners are awaited so a durable caller
-   * can retain and retry its pending consequence on delivery failure.
-   */
-  async dispatchPersisted(
-    payload: WebhookPayload,
-    logicalEventId: string,
-  ): Promise<void> {
-    if (!Object.hasOwn(WEBHOOK_EVENTS, payload.event)) {
-      throw new Error(`Unknown persisted webhook event: ${String(payload.event)}`);
-    }
-    await this.eventEmitter.emitAsync(payload.event, {
-      ...payload,
-      logicalEventId,
-    } satisfies WebhookPayload);
-  }
 
   /**
    * Emit a webhook event and log it to the audit trail.

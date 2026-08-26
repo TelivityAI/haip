@@ -11,8 +11,6 @@ export interface MoneyStringOptions {
   allowZero?: boolean;
   /** Allow negative amounts (default false). Use for credit/adjustment fields. */
   allowNegative?: boolean;
-  /** Inclusive upper bound, expressed as a decimal string. */
-  maximum?: string;
 }
 
 @ValidatorConstraint({ name: 'isMoneyString', async: false })
@@ -29,7 +27,6 @@ class MoneyStringConstraint implements ValidatorConstraintInterface {
     const opts: MoneyStringOptions = args?.constraints?.[0] ?? {};
     if (!opts.allowNegative && d.isNegative()) return false;
     if (!opts.allowZero && !opts.allowNegative && d.isZero()) return false;
-    if (opts.maximum != null && d.gt(new Decimal(opts.maximum))) return false;
     return true;
   }
 
@@ -40,9 +37,7 @@ class MoneyStringConstraint implements ValidatorConstraintInterface {
       : opts.allowZero
         ? 'a non-negative numeric decimal string'
         : 'a positive numeric decimal string';
-    return opts.maximum == null
-      ? `${args?.property} must be ${bound}`
-      : `${args?.property} must be ${bound} no greater than ${opts.maximum}`;
+    return `${args?.property} must be ${bound}`;
   }
 }
 
