@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -109,13 +109,55 @@ function startPushSchema(url: string) {
   let output = '';
   child.stdout.on('data', (chunk) => { output += String(chunk); });
   child.stderr.on('data', (chunk) => { output += String(chunk); });
-  return new Promise<void>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`push-schema exited ${code}\n${output}`));
-    });
+  let finished = false;
+  let failure: Error | undefined;
+  let finish!: () => void;
+  const settled = new Promise<void>((resolve) => { finish = resolve; });
+  child.once('error', (error) => {
+    if (finished) return;
+    finished = true;
+    failure = error;
+    finish();
   });
+  child.once('exit', (code) => {
+    if (finished) return;
+    finished = true;
+    if (code !== 0) failure = new Error(`push-schema exited ${code}\n${output}`);
+    finish();
+  });
+
+  async function settlesWithin(milliseconds: number) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        settled.then(() => true),
+        new Promise<false>((resolve) => {
+          timer = setTimeout(() => resolve(false), milliseconds);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  return {
+    child,
+    async wait(milliseconds = 20_000) {
+      if (!await settlesWithin(milliseconds)) {
+        throw new Error(`push-schema process ${child.pid ?? 'unknown'} timed out`);
+      }
+      if (failure) throw failure;
+    },
+    async stop() {
+      if (finished) return;
+      child.kill('SIGTERM');
+      if (await settlesWithin(2_000)) return;
+      child.kill('SIGKILL');
+      if (!await settlesWithin(2_000)) {
+        throw new Error(`push-schema process ${child.pid ?? 'unknown'} did not terminate`);
+      }
+    },
+  };
 }
 
 async function waitForSleep(client: ReturnType<typeof postgres>) {
@@ -135,13 +177,25 @@ async function waitForSleep(client: ReturnType<typeof postgres>) {
 
 suite('booking request remediation against PostgreSQL', () => {
   const databases: string[] = [];
+  const clients = new Set<ReturnType<typeof postgres>>();
+  const pushes = new Set<ReturnType<typeof startPushSchema>>();
   const adminUrl = (() => {
     const url = new URL(databaseUrl ?? 'postgres://localhost/postgres');
     url.pathname = '/postgres';
     url.search = '';
     return url.toString();
   })();
-  const admin = postgres(adminUrl, { max: 1 });
+  const admin = postgres(adminUrl, {
+    max: 1,
+    connect_timeout: 5,
+    connection: { lock_timeout: 5_000, statement_timeout: 5_000 },
+  });
+
+  function launchPushSchema(url: string) {
+    const push = startPushSchema(url);
+    pushes.add(push);
+    return push;
+  }
 
   async function createDatabase(label: string) {
     const suffix = randomBytes(10).toString('hex');
@@ -149,15 +203,42 @@ suite('booking request remediation against PostgreSQL', () => {
     await admin.unsafe(`CREATE DATABASE "${name}"`);
     databases.push(name);
     const url = databaseUrlFor(name);
-    await startPushSchema(url);
-    return { url, client: postgres(url, { max: 8 }) };
+    const push = launchPushSchema(url);
+    await push.wait();
+    const client = postgres(url, { max: 8 });
+    clients.add(client);
+    return { url, client };
   }
 
+  afterEach(async () => {
+    const runningPushes = [...pushes];
+    const openClients = [...clients];
+    pushes.clear();
+    clients.clear();
+    const results = await Promise.allSettled([
+      ...runningPushes.map((push) => push.stop()),
+      ...openClients.map((client) => client.end({ timeout: 2 })),
+    ]);
+    const failures = results
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => result.reason);
+    if (failures.length > 0) throw new AggregateError(failures, 'live test cleanup failed');
+  });
+
   afterAll(async () => {
-    await Promise.all(databases.map(async (name) => {
-      await admin.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
-    }));
-    await admin.end();
+    const failures: unknown[] = [];
+    const drops = await Promise.allSettled(databases.map((name) =>
+      admin.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`),
+    ));
+    for (const result of drops) {
+      if (result.status === 'rejected') failures.push(result.reason);
+    }
+    try {
+      await admin.end({ timeout: 2 });
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length > 0) throw new AggregateError(failures, 'database teardown failed');
   });
 
   it('push-schema blocks old audit writers until timeline backfill/default/not-null are atomic', async () => {
@@ -184,21 +265,20 @@ suite('booking request remediation against PostgreSQL', () => {
         EXECUTE FUNCTION task7_pause_audit_backfill();
     `);
 
-    const push = startPushSchema(url);
+    const push = launchPushSchema(url);
     await waitForSleep(client);
     const oldWriter = client`
       INSERT INTO audit_logs (action, entity_type, occurred_at)
       VALUES ('create', 'legacy_writer', '2026-08-26T10:00:00Z')
       RETURNING timeline_sequence
     `;
-    await Promise.all([push, oldWriter]);
+    await Promise.all([push.wait(), oldWriter]);
 
     const [row] = await client<{ timelineSequence: string }[]>`
       SELECT timeline_sequence::text AS "timelineSequence"
       FROM audit_logs WHERE entity_type = 'legacy_writer'
     `;
     expect(row?.timelineSequence).toMatch(/^[1-9]\d*$/);
-    await client.end();
   }, 30_000);
 
   it('push-schema keeps old booking-request inserts valid during the submitted-total transition', async () => {
@@ -239,7 +319,7 @@ suite('booking request remediation against PostgreSQL', () => {
         EXECUTE FUNCTION task7_pause_request_backfill();
     `);
 
-    const push = startPushSchema(url);
+    const push = launchPushSchema(url);
     await waitForSleep(client);
     const oldWriter = client.unsafe(`
       INSERT INTO booking_requests
@@ -266,14 +346,13 @@ suite('booking request remediation against PostgreSQL', () => {
           }'::jsonb, 'EUR')
       RETURNING submitted_total
     `);
-    await Promise.all([push, oldWriter]);
+    await Promise.all([push.wait(), oldWriter]);
 
     const [row] = await client<{ submittedTotal: string }[]>`
       SELECT submitted_total::text AS "submittedTotal"
       FROM booking_requests WHERE submission_idempotency_key = 'legacy-race'
     `;
     expect(row?.submittedTotal).toBe('123.45');
-    await client.end();
   }, 30_000);
 
   it('migration replay never reuses a sequence value reserved before its table lock', async () => {
@@ -305,7 +384,6 @@ suite('booking request remediation against PostgreSQL', () => {
       SELECT pg_get_serial_sequence('audit_logs', 'timeline_sequence') AS "ownedSequence"
     `;
     expect(ownership?.ownedSequence).toBe('public.audit_logs_timeline_sequence_seq');
-    await client.end();
   }, 30_000);
 
   it('preserves an unissued sequence value ahead of a nonempty table maximum', async () => {
@@ -333,6 +411,35 @@ suite('booking request remediation against PostgreSQL', () => {
       RETURNING timeline_sequence::text AS "timelineSequence"
     `;
     expect(inserted?.timelineSequence).toBe('10');
-    await client.end();
+  }, 30_000);
+
+  it.each([
+    { caseLabel: 'equal to', sequenceValue: 5 },
+    { caseLabel: 'behind', sequenceValue: 3 },
+  ])('marks an uncalled sequence $caseLabel the populated table maximum as called', async ({ sequenceValue }) => {
+    const { client } = await createDatabase(`uncalled_${sequenceValue}`);
+    await client.unsafe(`
+      TRUNCATE audit_logs RESTART IDENTITY;
+      INSERT INTO audit_logs
+        (action, entity_type, occurred_at, timeline_sequence)
+      VALUES ('create', 'committed', '2026-08-26T10:00:00Z', 5);
+      SELECT setval('audit_logs_timeline_sequence_seq'::regclass, ${sequenceValue}, false);
+    `);
+
+    for (const statement of splitSqlStatements(migrationSql)) {
+      await client.unsafe(statement);
+    }
+
+    const [state] = await client<{ lastValue: string; isCalled: boolean }[]>`
+      SELECT last_value::text AS "lastValue", is_called AS "isCalled"
+      FROM audit_logs_timeline_sequence_seq
+    `;
+    expect(state).toEqual({ lastValue: '5', isCalled: true });
+    const [inserted] = await client<{ timelineSequence: string }[]>`
+      INSERT INTO audit_logs (action, entity_type, occurred_at)
+      VALUES ('create', 'after_replay', '2026-08-26T10:00:01Z')
+      RETURNING timeline_sequence::text AS "timelineSequence"
+    `;
+    expect(inserted?.timelineSequence).toBe('6');
   }, 30_000);
 });
