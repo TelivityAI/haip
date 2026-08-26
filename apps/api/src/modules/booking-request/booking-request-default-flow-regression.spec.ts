@@ -190,6 +190,12 @@ function sanitizedChildError(label: string, error: unknown, secret: string): Err
 }
 
 function sanitizeDiagnostic(value: string, secret: string): string {
+  const structurallySanitized = value
+    .replace(/\b(postgres(?:ql)?:\/\/)[^\s/?#@]*@/gi, '$1')
+    .replace(
+      /\b(password\s*=\s*)(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|[^\s]+)/gi,
+      '$1[redacted]',
+    );
   const sensitiveValues = [
     secret,
     encodeURIComponent(secret),
@@ -198,9 +204,30 @@ function sanitizeDiagnostic(value: string, secret: string): string {
   ].filter(Boolean);
   return sensitiveValues.reduce(
     (sanitized, sensitive) => sanitized.replaceAll(sensitive, '[redacted]'),
-    value,
+    structurallySanitized,
   ).slice(-2_000);
 }
+
+describe('default-flow release-gate diagnostic sanitization', () => {
+  it('removes URL userinfo and conninfo passwords while retaining useful context', () => {
+    const leakedUrl = 'postgresql://u:p%27word@host/task8_x?sslmode=require';
+    const error = sanitizedChildError('database schema installation', {
+      status: 1,
+      stderr: Buffer.from(
+        `createdb: ${leakedUrl} failed; password='p\\'word' authentication rejected`,
+      ),
+    }, "p'word");
+
+    expect(error.message).toContain(
+      'createdb: postgresql://host/task8_x?sslmode=require failed',
+    );
+    expect(error.message).toContain('password=[redacted] authentication rejected');
+    expect(error.message).not.toContain('u:');
+    expect(error.message).not.toContain('p%27word');
+    expect(error.message).not.toContain("p'word");
+    expect(error.message).not.toContain("p\\'word");
+  });
+});
 
 describeDatabase('Booking Request default-flow release gate', () => {
   const databaseName = `task8_default_flow_${randomBytes(10).toString('hex')}`;
