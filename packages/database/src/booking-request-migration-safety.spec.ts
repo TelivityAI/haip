@@ -318,7 +318,7 @@ describe('booking request query support migration safety', () => {
     );
     const timelineBackfill = remediationMigration.indexOf('row_number() OVER');
     const timelineDefault = remediationMigration.indexOf(
-      'ALTER COLUMN timeline_sequence SET DEFAULT',
+      'SET DEFAULT nextval',
     );
     const timelineNotNull = remediationMigration.indexOf(
       'ALTER COLUMN timeline_sequence SET NOT NULL',

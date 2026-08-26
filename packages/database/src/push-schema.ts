@@ -597,36 +597,56 @@ async function main() {
         AND target.property_id = relationship.property_id
         AND target.entity_type = relationship.entity_type
         AND target.entity_id = relationship.entity_id`,
-    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timeline_sequence bigint`,
-    `WITH current_max AS (
-        SELECT COALESCE(max(timeline_sequence), 0) AS value
-        FROM audit_logs
-      ), ordered AS (
-        SELECT id,
-          current_max.value + row_number() OVER (ORDER BY occurred_at, id) AS timeline_sequence
-        FROM audit_logs
-        CROSS JOIN current_max
-        WHERE audit_logs.timeline_sequence IS NULL
-      )
-      UPDATE audit_logs AS target
-      SET timeline_sequence = ordered.timeline_sequence
-      FROM ordered
-      WHERE target.id = ordered.id`,
-    `SELECT setval(
-        'audit_logs_timeline_sequence_seq'::regclass,
-        COALESCE((SELECT max(timeline_sequence) FROM audit_logs), 1),
-        EXISTS (SELECT 1 FROM audit_logs)
-      )`,
-    `ALTER TABLE audit_logs
-      ALTER COLUMN timeline_sequence SET DEFAULT nextval('audit_logs_timeline_sequence_seq'::regclass),
-      ALTER COLUMN timeline_sequence SET NOT NULL`,
-    `CREATE INDEX IF NOT EXISTS audit_logs_property_entity_timeline_idx
-      ON audit_logs (property_id, entity_type, entity_id, occurred_at, id)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_timeline_sequence_unique
-      ON audit_logs (timeline_sequence)`,
-    `DROP INDEX IF EXISTS audit_logs_booking_request_timeline_idx`,
-    `CREATE INDEX audit_logs_booking_request_timeline_idx
-      ON audit_logs (property_id, booking_request_id, timeline_sequence DESC)`,
+    `DO $audit_logs_timeline_sequence_transition$
+      DECLARE
+        sequence_last_value bigint;
+        sequence_is_called boolean;
+        timeline_max bigint;
+      BEGIN
+        EXECUTE 'LOCK TABLE audit_logs IN ACCESS EXCLUSIVE MODE';
+        EXECUTE 'ALTER TABLE audit_logs
+          ADD COLUMN IF NOT EXISTS timeline_sequence bigint';
+
+        WITH current_max AS (
+          SELECT COALESCE(max(timeline_sequence), 0) AS value
+          FROM audit_logs
+        ), ordered AS (
+          SELECT id,
+            current_max.value + row_number() OVER (ORDER BY occurred_at, id) AS timeline_sequence
+          FROM audit_logs
+          CROSS JOIN current_max
+          WHERE audit_logs.timeline_sequence IS NULL
+        )
+        UPDATE audit_logs AS target
+        SET timeline_sequence = ordered.timeline_sequence
+        FROM ordered
+        WHERE target.id = ordered.id;
+
+        SELECT last_value, is_called
+        INTO sequence_last_value, sequence_is_called
+        FROM audit_logs_timeline_sequence_seq;
+        SELECT max(timeline_sequence) INTO timeline_max FROM audit_logs;
+        PERFORM setval(
+          'audit_logs_timeline_sequence_seq'::regclass,
+          GREATEST(sequence_last_value, COALESCE(timeline_max, 1)),
+          sequence_is_called OR timeline_max IS NOT NULL
+        );
+
+        EXECUTE 'ALTER TABLE audit_logs
+          ALTER COLUMN timeline_sequence
+            SET DEFAULT nextval(''audit_logs_timeline_sequence_seq''::regclass),
+          ALTER COLUMN timeline_sequence SET NOT NULL';
+        EXECUTE 'ALTER SEQUENCE audit_logs_timeline_sequence_seq
+          OWNED BY audit_logs.timeline_sequence';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS audit_logs_property_entity_timeline_idx
+          ON audit_logs (property_id, entity_type, entity_id, occurred_at, id)';
+        EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_timeline_sequence_unique
+          ON audit_logs (timeline_sequence)';
+        EXECUTE 'DROP INDEX IF EXISTS audit_logs_booking_request_timeline_idx';
+        EXECUTE 'CREATE INDEX audit_logs_booking_request_timeline_idx
+          ON audit_logs (property_id, booking_request_id, timeline_sequence DESC)';
+      END
+      $audit_logs_timeline_sequence_transition$`,
     // channel_connections
     `CREATE TABLE IF NOT EXISTS channel_connections (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1759,9 +1779,37 @@ async function main() {
     `ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS submission_idempotency_key varchar(200)`,
     `ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS submission_fingerprint varchar(64)`,
     `ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS setup_intent_id varchar(255)`,
-    `ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS submitted_total numeric(12,2)`,
-    `DO $booking_request_submitted_total_precondition$
+    `CREATE OR REPLACE FUNCTION booking_requests_fill_submitted_total()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $booking_requests_fill_submitted_total$
       BEGIN
+        IF NEW.submitted_total IS NULL THEN
+          IF jsonb_typeof(NEW.submitted_quote_snapshot -> 'grandTotal') IS DISTINCT FROM 'string'
+            OR NEW.submitted_quote_snapshot->>'grandTotal' !~ '^[0-9]{1,10}(\\.[0-9]{1,2})?$'
+          THEN
+            RAISE EXCEPTION 'Cannot derive booking_requests.submitted_total from an invalid submitted quote total';
+          END IF;
+          IF (NEW.submitted_quote_snapshot->>'grandTotal')::numeric > 9999999999.99 THEN
+            RAISE EXCEPTION 'Cannot derive booking_requests.submitted_total from an invalid submitted quote total';
+          END IF;
+          NEW.submitted_total :=
+            (NEW.submitted_quote_snapshot->>'grandTotal')::numeric(12,2);
+        END IF;
+        RETURN NEW;
+      END
+      $booking_requests_fill_submitted_total$`,
+    `DO $booking_request_submitted_total_transition$
+      BEGIN
+        EXECUTE 'LOCK TABLE booking_requests IN ACCESS EXCLUSIVE MODE';
+        EXECUTE 'ALTER TABLE booking_requests
+          ADD COLUMN IF NOT EXISTS submitted_total numeric(12,2)';
+        EXECUTE 'DROP TRIGGER IF EXISTS booking_requests_submitted_total_compat
+          ON booking_requests';
+        EXECUTE 'CREATE TRIGGER booking_requests_submitted_total_compat
+          BEFORE INSERT OR UPDATE ON booking_requests
+          FOR EACH ROW EXECUTE FUNCTION booking_requests_fill_submitted_total()';
+
         IF EXISTS (
           SELECT 1
           FROM booking_requests
@@ -1778,18 +1826,22 @@ async function main() {
         ) THEN
           RAISE EXCEPTION 'Cannot backfill booking_requests.submitted_total from an invalid submitted quote total';
         END IF;
+
+        UPDATE booking_requests
+        SET submitted_total = (submitted_quote_snapshot->>'grandTotal')::numeric(12,2)
+        WHERE submitted_total IS NULL;
+
+        EXECUTE 'ALTER TABLE booking_requests
+          ALTER COLUMN submitted_total SET NOT NULL';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS booking_requests_property_submitted_total_idx
+          ON booking_requests (property_id, submitted_total, id)';
       END
-      $booking_request_submitted_total_precondition$`,
-    `UPDATE booking_requests
-      SET submitted_total = (submitted_quote_snapshot->>'grandTotal')::numeric(12,2)
-      WHERE submitted_total IS NULL`,
+      $booking_request_submitted_total_transition$`,
     `UPDATE booking_requests SET submission_idempotency_key = COALESCE(submission_idempotency_key, 'legacy-' || id::text), submission_fingerprint = COALESCE(submission_fingerprint, md5(id::text) || md5('booking-request:' || id::text))`,
     `ALTER TABLE booking_requests ALTER COLUMN submission_idempotency_key SET NOT NULL`,
     `ALTER TABLE booking_requests ALTER COLUMN submission_fingerprint SET NOT NULL`,
-    `ALTER TABLE booking_requests ALTER COLUMN submitted_total SET NOT NULL`,
     `CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_property_submission_key_unique ON booking_requests (property_id, submission_idempotency_key)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_setup_intent_unique ON booking_requests (setup_intent_id)`,
-    `CREATE INDEX IF NOT EXISTS booking_requests_property_submitted_total_idx ON booking_requests (property_id, submitted_total, id)`,
     `ALTER TABLE booking_request_payment_resolutions ADD COLUMN IF NOT EXISTS status varchar(20) NOT NULL DEFAULT 'completed'`,
     `ALTER TABLE booking_request_payment_resolutions ADD COLUMN IF NOT EXISTS idempotency_key varchar(255)`,
     `ALTER TABLE booking_request_payment_resolutions ADD COLUMN IF NOT EXISTS operation_fingerprint varchar(64)`,
