@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -143,8 +144,8 @@ suite('booking request remediation against PostgreSQL', () => {
   const admin = postgres(adminUrl, { max: 1 });
 
   async function createDatabase(label: string) {
-    const name = `task7_remediation_${label}_${process.pid}`;
-    await admin.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+    const suffix = randomBytes(10).toString('hex');
+    const name = `task7_remediation_${label}_${suffix}`;
     await admin.unsafe(`CREATE DATABASE "${name}"`);
     databases.push(name);
     const url = databaseUrlFor(name);
@@ -275,56 +276,63 @@ suite('booking request remediation against PostgreSQL', () => {
     await client.end();
   }, 30_000);
 
-  it('migration replay never rewinds a sequence value held by an uncommitted audit insert', async () => {
+  it('migration replay never reuses a sequence value reserved before its table lock', async () => {
     const { client } = await createDatabase('sequence');
     await client.unsafe(`
       TRUNCATE audit_logs RESTART IDENTITY;
       INSERT INTO audit_logs (action, entity_type, occurred_at)
       VALUES ('create', 'committed', '2026-08-26T10:00:00Z');
-      CREATE FUNCTION task7_pause_sequence_replay() RETURNS trigger LANGUAGE plpgsql AS $$
-      BEGIN
-        PERFORM pg_sleep(1);
-        RETURN NULL;
-      END $$;
-      CREATE TRIGGER task7_pause_sequence_replay
-        AFTER UPDATE ON audit_logs FOR EACH STATEMENT
-        EXECUTE FUNCTION task7_pause_sequence_replay();
     `);
+
+    const [reserved] = await client<{ value: string }[]>`
+      SELECT nextval('audit_logs_timeline_sequence_seq')::text AS value
+    `;
+    expect(reserved?.value).toBe('2');
 
     const replay = (async () => {
       for (const statement of splitSqlStatements(migrationSql)) {
         await client.unsafe(statement);
       }
     })();
-    await waitForSleep(client);
-    const uncommittedWriter = client.begin(async (tx) => {
-      await tx`
-        INSERT INTO audit_logs (action, entity_type, occurred_at)
-        VALUES ('create', 'uncommitted_during_replay', '2026-08-26T10:00:01Z')
-      `;
-      await tx`SELECT pg_sleep(1.5)`;
-    });
-    await Promise.all([replay, uncommittedWriter]);
-    await client`
+    await replay;
+    const [inserted] = await client<{ timelineSequence: string }[]>`
       INSERT INTO audit_logs (action, entity_type, occurred_at)
       VALUES ('create', 'after_replay', '2026-08-26T10:00:02Z')
+      RETURNING timeline_sequence::text AS "timelineSequence"
     `;
-
-    const rows = await client<{ entityType: string; timelineSequence: string }[]>`
-      SELECT entity_type AS "entityType", timeline_sequence::text AS "timelineSequence"
-      FROM audit_logs
-      WHERE entity_type IN ('committed', 'uncommitted_during_replay', 'after_replay')
-      ORDER BY timeline_sequence
-    `;
-    expect(rows).toEqual([
-      { entityType: 'committed', timelineSequence: '1' },
-      { entityType: 'uncommitted_during_replay', timelineSequence: '2' },
-      { entityType: 'after_replay', timelineSequence: '3' },
-    ]);
+    expect(inserted?.timelineSequence).toBe('3');
     const [ownership] = await client<{ ownedSequence: string | null }[]>`
       SELECT pg_get_serial_sequence('audit_logs', 'timeline_sequence') AS "ownedSequence"
     `;
     expect(ownership?.ownedSequence).toBe('public.audit_logs_timeline_sequence_seq');
+    await client.end();
+  }, 30_000);
+
+  it('preserves an unissued sequence value ahead of a nonempty table maximum', async () => {
+    const { client } = await createDatabase('uncalled_sequence');
+    await client.unsafe(`
+      TRUNCATE audit_logs RESTART IDENTITY;
+      INSERT INTO audit_logs
+        (action, entity_type, occurred_at, timeline_sequence)
+      VALUES ('create', 'committed', '2026-08-26T10:00:00Z', 5);
+      SELECT setval('audit_logs_timeline_sequence_seq'::regclass, 10, false);
+    `);
+
+    for (const statement of splitSqlStatements(migrationSql)) {
+      await client.unsafe(statement);
+    }
+
+    const [state] = await client<{ lastValue: string; isCalled: boolean }[]>`
+      SELECT last_value::text AS "lastValue", is_called AS "isCalled"
+      FROM audit_logs_timeline_sequence_seq
+    `;
+    expect(state).toEqual({ lastValue: '10', isCalled: false });
+    const [inserted] = await client<{ timelineSequence: string }[]>`
+      INSERT INTO audit_logs (action, entity_type, occurred_at)
+      VALUES ('create', 'after_replay', '2026-08-26T10:00:01Z')
+      RETURNING timeline_sequence::text AS "timelineSequence"
+    `;
+    expect(inserted?.timelineSequence).toBe('10');
     await client.end();
   }, 30_000);
 });

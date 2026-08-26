@@ -629,7 +629,9 @@ async function main() {
         PERFORM setval(
           'audit_logs_timeline_sequence_seq'::regclass,
           GREATEST(sequence_last_value, COALESCE(timeline_max, 1)),
-          sequence_is_called OR timeline_max IS NOT NULL
+          sequence_is_called OR (
+            timeline_max IS NOT NULL AND timeline_max >= sequence_last_value
+          )
         );
 
         EXECUTE 'ALTER TABLE audit_logs
