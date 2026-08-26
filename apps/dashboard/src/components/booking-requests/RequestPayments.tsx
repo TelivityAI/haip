@@ -16,6 +16,7 @@ import { api } from '../../lib/api';
 import { formatMoney } from '../../lib/money';
 import StatusBadge from '../ui/StatusBadge';
 import PaymentActionModal, { type PaymentAction } from './PaymentActionModal';
+import { fetchBookingRequestPayments } from './bookingRequestPaymentsQuery';
 import { bookingRequestKeys } from './queryKeys';
 import { validateMoneyInput, validatePercentageInput } from './moneyInput';
 import {
@@ -231,8 +232,7 @@ export default function RequestPayments({ request, propertyId, canWrite }: Reque
   });
   const paymentsQuery = useQuery({
     queryKey: bookingRequestKeys.payments(propertyId, request.id),
-    queryFn: () => api.get(`/v1/booking-requests/${request.id}/payments`, { params: { propertyId } })
-      .then((response) => response.data?.data ?? response.data),
+    queryFn: () => fetchBookingRequestPayments(request.id, propertyId),
   });
   const folioQuery = useQuery({
     queryKey: request.acceptedFolioId

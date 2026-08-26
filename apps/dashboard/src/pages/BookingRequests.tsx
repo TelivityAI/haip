@@ -26,6 +26,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import AcceptRequestModal from '../components/booking-requests/AcceptRequestModal';
 import DenyRequestModal from '../components/booking-requests/DenyRequestModal';
 import PaymentActionModal, { type PaymentAction } from '../components/booking-requests/PaymentActionModal';
+import { fetchBookingRequestPayments } from '../components/booking-requests/bookingRequestPaymentsQuery';
 import RequestAudit from '../components/booking-requests/RequestAudit';
 import RequestMessages from '../components/booking-requests/RequestMessages';
 import RequestOverview from '../components/booking-requests/RequestOverview';
@@ -245,8 +246,7 @@ function BookingRequestDetailPage({ propertyId, canWrite }: { propertyId: string
   });
   const paymentsQuery = useQuery({
     queryKey: bookingRequestKeys.payments(propertyId, id),
-    queryFn: () => api.get(`/v1/booking-requests/${id}/payments`, { params: { propertyId } })
-      .then((response) => response.data?.data ?? response.data ?? { movements: [], allocations: [], resolutions: [] }),
+    queryFn: () => fetchBookingRequestPayments(id, propertyId),
     enabled: Boolean(id),
   });
   const request = detailQuery.data as BookingRequestDetail | undefined;

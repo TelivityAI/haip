@@ -820,6 +820,62 @@ describe('Booking request payments, messages, and audit', () => {
     ));
   });
 
+  it('fails closed when an empty payment response is shared from the request page cache', async () => {
+    mockApi({
+      payments: {},
+      installments: [{
+        id: 'installment-empty-payments',
+        propertyId: 'property-1',
+        bookingRequestId: REQUEST_ID,
+        label: 'Unverified balance',
+        sortOrder: 0,
+        fixedAmount: '100.00',
+        percentage: null,
+        resolvedAmount: '100.00',
+        dueMilestone: 'manual',
+        dueDate: null,
+        allocatedAmount: '0.00',
+        status: 'unpaid',
+      }],
+    });
+
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+
+    expect(await screen.findByText(
+      'Payment-plan and movement history could not be loaded.',
+    )).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete Unverified balance' })).not.toBeInTheDocument();
+  });
+
+  it('fails closed when the shared payment response omits allocations', async () => {
+    mockApi({
+      payments: { movements: [], resolutions: [] },
+      installments: [{
+        id: 'installment-malformed-payments',
+        propertyId: 'property-1',
+        bookingRequestId: REQUEST_ID,
+        label: 'Unverified deposit',
+        sortOrder: 0,
+        fixedAmount: '100.00',
+        percentage: null,
+        resolvedAmount: '100.00',
+        dueMilestone: 'manual',
+        dueDate: null,
+        allocatedAmount: '0.00',
+        status: 'unpaid',
+      }],
+    });
+
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+
+    expect(await screen.findByText(
+      'Payment-plan and movement history could not be loaded.',
+    )).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete Unverified deposit' })).not.toBeInTheDocument();
+  });
+
   it('shows net allocation availability and reorders installments with buttons', async () => {
     renderAt(`/booking-requests/${REQUEST_ID}`);
     await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
