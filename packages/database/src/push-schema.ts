@@ -715,6 +715,7 @@ async function main() {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id uuid NOT NULL REFERENCES properties(id),
       subscription_id uuid NOT NULL REFERENCES agent_webhook_subscriptions(id),
+      logical_event_id uuid,
       event_type varchar(100) NOT NULL,
       payload jsonb NOT NULL,
       status webhook_delivery_status NOT NULL DEFAULT 'pending',
@@ -1454,6 +1455,12 @@ async function main() {
     // circular FK at table-create time (group_profiles references nothing of
     // reservations, but reservations is created before group_profiles).
     `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS group_profile_id uuid`,
+    `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS accepted_pricing_snapshot jsonb`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS booking_request_id uuid`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS idempotency_key varchar(255)`,
+    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS booking_request_id uuid`,
+    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timeline_sequence bigserial`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_timeline_sequence_unique ON audit_logs (timeline_sequence)`,
     // Commercial profile billing fields + links (KB 14.3 standing accounts)
     `ALTER TABLE group_profiles ADD COLUMN IF NOT EXISTS billing_address text`,
     `ALTER TABLE group_profiles ADD COLUMN IF NOT EXISTS payment_terms_days varchar(10)`,
@@ -1475,6 +1482,8 @@ async function main() {
     `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS provider_channel_id varchar(255)`,
     `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS last_synced_at timestamptz`,
     `CREATE UNIQUE INDEX IF NOT EXISTS guest_reviews_property_source_external_unique ON guest_reviews (property_id, source, external_id)`,
+    `ALTER TABLE webhook_deliveries ADD COLUMN IF NOT EXISTS logical_event_id uuid`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS webhook_deliveries_property_subscription_logical_event_unique ON webhook_deliveries (property_id, subscription_id, logical_event_id)`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));

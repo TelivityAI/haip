@@ -11,6 +11,6 @@ Optional request-first direct booking for HAIP (STR / coliving workflows).
 
 When disabled (default), core HAIP instant booking is unchanged.
 
-## Co-authored-by
+## Credit
 
-Agus <agustin.jch@gmail.com>
+Original implementation by [@agustinjch](https://github.com/agustinjch).

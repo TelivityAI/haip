@@ -11,6 +11,7 @@ COPY apps/dashboard/package.json ./apps/dashboard/
 COPY apps/booking/package.json ./apps/booking/
 COPY packages/database/package.json ./packages/database/
 COPY packages/shared/package.json* ./packages/shared/
+COPY packages/booking-requests/package.json ./packages/booking-requests/
 
 RUN pnpm install --frozen-lockfile || pnpm install
 
@@ -24,6 +25,7 @@ COPY apps/booking/ ./apps/booking/
 # Build workspace packages
 RUN pnpm --filter @telivityhaip/shared run build
 RUN pnpm --filter @telivityhaip/database run build
+RUN pnpm --filter @telivityhaip/booking-requests run build
 
 # Dashboard SPA — auth/Keycloak settings are baked at build time (Vite env).
 ARG VITE_AUTH_ENABLED=false
@@ -65,6 +67,8 @@ COPY --from=base /app/packages/database/package.json ./packages/database/
 COPY --from=base /app/packages/database/node_modules ./packages/database/node_modules
 COPY --from=base /app/packages/shared/dist ./packages/shared/dist
 COPY --from=base /app/packages/shared/package.json ./packages/shared/
+COPY --from=base /app/packages/booking-requests/dist ./packages/booking-requests/dist
+COPY --from=base /app/packages/booking-requests/package.json ./packages/booking-requests/
 
 ENV NODE_ENV=production
 

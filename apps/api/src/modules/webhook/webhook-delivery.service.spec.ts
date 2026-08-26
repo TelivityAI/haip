@@ -51,14 +51,27 @@ function createStatefulMockDb(subscription: any) {
       };
     }),
     insert: vi.fn((_tbl: any) => ({
-      values: vi.fn((vals: any) => ({
-        returning: vi.fn(() => {
+      values: vi.fn((vals: any) => {
+        const insertOnce = () => {
+          const existing = vals.logicalEventId
+            ? Array.from(deliveries.values()).find((row) =>
+              row.propertyId === vals.propertyId
+              && row.subscriptionId === vals.subscriptionId
+              && row.logicalEventId === vals.logicalEventId)
+            : undefined;
+          if (existing) return Promise.resolve([]);
           const id = `del-${idCounter++}`;
           const row = { id, ...vals };
           deliveries.set(id, row);
           return Promise.resolve([row]);
-        }),
-      })),
+        };
+        return {
+          returning: vi.fn(insertOnce),
+          onConflictDoNothing: vi.fn(() => ({
+            returning: vi.fn(insertOnce),
+          })),
+        };
+      }),
     })),
     update: vi.fn((_tbl: any) => ({
       set: vi.fn((vals: any) => ({
@@ -136,7 +149,7 @@ describe('WebhookDeliveryService', () => {
     expect(stored.attempts).toBe(0);
   });
 
-  it('worker POSTs with HMAC signature + event headers', async () => {
+  it('uses the delivery row ID as the event header for legacy events', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200 });
     const db = createStatefulMockDb(subscription);
     const queue = createMockQueue();
@@ -164,6 +177,124 @@ describe('WebhookDeliveryService', () => {
     const stored = db._deliveries.get(delivery.id);
     expect(stored.status).toBe('delivered');
     expect(stored.attempts).toBe(1);
+  });
+
+  it('reuses one persisted delivery and stable header across event replay', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    const db = createStatefulMockDb(subscription);
+    const queue = createMockQueue();
+    const service = new WebhookDeliveryService(
+      db as unknown as ConstructorParameters<typeof WebhookDeliveryService>[0],
+      undefined,
+      queue as unknown as ConstructorParameters<typeof WebhookDeliveryService>[2],
+    );
+    const logicalEventId = 'bbbbbbbb-0000-4000-a000-000000000002';
+
+    const first = await service.enqueue(payload, subscription.id, logicalEventId);
+    const replay = await service.enqueue(payload, subscription.id, logicalEventId);
+
+    expect(replay.id).toBe(first.id);
+    expect(db._deliveries.size).toBe(1);
+    expect(db._deliveries.get(first.id).logicalEventId).toBe(logicalEventId);
+    expect(queue.add).toHaveBeenCalledTimes(2);
+    expect(queue.add.mock.calls.map((call) => call[2]?.jobId)).toEqual([
+      first.id,
+      first.id,
+    ]);
+
+    await expect(
+      service.processDeliveryJob({ deliveryId: first.id, propertyId: 'prop-1' }),
+    ).rejects.toThrow('scheduled for retry');
+    await service.processDeliveryJob({ deliveryId: first.id, propertyId: 'prop-1' });
+    await service.processDeliveryJob({ deliveryId: replay.id, propertyId: 'prop-1' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map((call) =>
+      call[1].headers['X-HAIP-Event-Id'])).toEqual([
+      logicalEventId,
+      logicalEventId,
+    ]);
+  });
+
+  it('creates separate deliveries for different persisted logical events', async () => {
+    const db = createStatefulMockDb(subscription);
+    const queue = createMockQueue();
+    const service = new WebhookDeliveryService(
+      db as unknown as ConstructorParameters<typeof WebhookDeliveryService>[0],
+      undefined,
+      queue as unknown as ConstructorParameters<typeof WebhookDeliveryService>[2],
+    );
+
+    const first = await service.enqueue(
+      payload,
+      subscription.id,
+      'bbbbbbbb-0000-4000-a000-000000000002',
+    );
+    const second = await service.enqueue(
+      payload,
+      subscription.id,
+      'bbbbbbbb-0000-4000-a000-000000000003',
+    );
+
+    expect(second.id).not.toBe(first.id);
+    expect(db._deliveries.size).toBe(2);
+    expect(Array.from(db._deliveries.values()).map((row) => row.logicalEventId)).toEqual([
+      'bbbbbbbb-0000-4000-a000-000000000002',
+      'bbbbbbbb-0000-4000-a000-000000000003',
+    ]);
+  });
+
+  it('returns the same delivery from concurrent persisted event creation', async () => {
+    const db = createStatefulMockDb(subscription);
+    const queue = createMockQueue();
+    const service = new WebhookDeliveryService(
+      db as unknown as ConstructorParameters<typeof WebhookDeliveryService>[0],
+      undefined,
+      queue as unknown as ConstructorParameters<typeof WebhookDeliveryService>[2],
+    );
+    const logicalEventId = 'bbbbbbbb-0000-4000-a000-000000000002';
+
+    const [first, replay] = await Promise.all([
+      service.enqueue(payload, subscription.id, logicalEventId),
+      service.enqueue(payload, subscription.id, logicalEventId),
+    ]);
+
+    expect(replay.id).toBe(first.id);
+    expect(db._deliveries.size).toBe(1);
+    expect(queue.add.mock.calls.map((call) => call[2]?.jobId)).toEqual([
+      first.id,
+      first.id,
+    ]);
+  });
+
+  it('requeues the existing delivery when the first queue write is lost', async () => {
+    const db = createStatefulMockDb(subscription);
+    const queue = createMockQueue();
+    queue.add
+      .mockRejectedValueOnce(new Error('Redis unavailable'))
+      .mockResolvedValueOnce({ id: 'job-recovered' });
+    const service = new WebhookDeliveryService(
+      db as unknown as ConstructorParameters<typeof WebhookDeliveryService>[0],
+      undefined,
+      queue as unknown as ConstructorParameters<typeof WebhookDeliveryService>[2],
+    );
+    const logicalEventId = 'bbbbbbbb-0000-4000-a000-000000000002';
+
+    await expect(
+      service.enqueue(payload, subscription.id, logicalEventId),
+    ).rejects.toThrow('Redis unavailable');
+    const [stored] = Array.from(db._deliveries.values());
+
+    const recovered = await service.enqueue(payload, subscription.id, logicalEventId);
+
+    expect(recovered.id).toBe(stored.id);
+    expect(db._deliveries.size).toBe(1);
+    expect(queue.add.mock.calls.map((call) => call[2]?.jobId)).toEqual([
+      stored.id,
+      stored.id,
+    ]);
   });
 
   it('updates the row and throws so BullMQ retries on non-2xx response', async () => {

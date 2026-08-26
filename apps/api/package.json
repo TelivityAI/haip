@@ -43,6 +43,7 @@
     "fast-xml-parser": "^5.5.10",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.0.1",
+    "nodemailer": "^9.0.5",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "postgres": "^3.4.5",
