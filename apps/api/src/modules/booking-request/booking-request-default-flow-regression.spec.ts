@@ -6,6 +6,11 @@ import {
   auditLogs,
   bookingEngineConfig,
   bookingRequestConsequences,
+  bookingRequestEmailDeliveries,
+  bookingRequestInstallments,
+  bookingRequestPaymentAllocations,
+  bookingRequestPaymentResolutions,
+  bookingRequestStayAmendments,
   bookingRequests,
   charges,
   depositLedgerEntries,
@@ -16,6 +21,7 @@ import {
   reservations,
   rooms,
   roomTypes,
+  webhookDeliveries,
 } from '@telivityhaip/database';
 import * as schema from '@telivityhaip/database';
 import { and, eq } from 'drizzle-orm';
@@ -23,6 +29,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DRIZZLE } from '../../database/database.module';
+import { EmailService } from '../agent/guest-comms/email.service';
 import { BookingEngineConfigService } from '../booking-engine/booking-engine-config.service';
 import { BookingEngineService } from '../booking-engine/booking-engine.service';
 import { FolioService } from '../folio/folio.service';
@@ -60,25 +67,87 @@ function dateFromNow(days: number): string {
 function databaseUrlFor(databaseName: string): string {
   const url = new URL(connectionTemplate);
   url.pathname = `/${databaseName}`;
-  url.search = '';
   return url.toString();
+}
+
+function runDatabaseUtility(
+  command: 'createdb' | 'dropdb',
+  databaseName: string,
+): void {
+  const maintenanceUrl = new URL(connectionTemplate);
+  maintenanceUrl.pathname = '/postgres';
+  const utilityArgs = [
+    `--maintenance-db=${maintenanceUrl.toString()}`,
+    '--no-password',
+    ...(command === 'dropdb' ? ['--if-exists', '--force'] : []),
+    databaseName,
+  ];
+  const options = { stdio: 'pipe' as const, timeout: 30_000 };
+  try {
+    execFileSync(command, utilityArgs, options);
+    return;
+  } catch (error: unknown) {
+    if (!isMissingExecutable(error)) throw error;
+  }
+
+  const host = maintenanceUrl.hostname;
+  if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
+    throw new Error(
+      `${command} is required to provision the remote PostgreSQL test database`,
+    );
+  }
+  const publishedPort = maintenanceUrl.port || '5432';
+  const containers = execFileSync('docker', [
+    'ps',
+    '--filter',
+    `publish=${publishedPort}`,
+    '--format',
+    '{{.Names}}',
+  ], options).toString().trim().split('\n').filter(Boolean);
+  if (containers.length !== 1) {
+    throw new Error(
+      `${command} is unavailable and PostgreSQL container lookup for port ${publishedPort} `
+      + `returned ${containers.length} matches`,
+    );
+  }
+  execFileSync('docker', [
+    'exec',
+    '--env',
+    `PGPASSWORD=${decodeURIComponent(maintenanceUrl.password)}`,
+    containers[0]!,
+    command,
+    '--username',
+    decodeURIComponent(maintenanceUrl.username),
+    '--maintenance-db',
+    'postgres',
+    '--no-password',
+    ...(command === 'dropdb' ? ['--if-exists', '--force'] : []),
+    databaseName,
+  ], options);
+}
+
+function isMissingExecutable(error: unknown): boolean {
+  return error instanceof Error
+    && 'code' in error
+    && (error as NodeJS.ErrnoException).code === 'ENOENT';
 }
 
 describeDatabase('Booking Request default-flow release gate', () => {
   const databaseName = `task8_default_flow_${randomBytes(10).toString('hex')}`;
-  const adminUrl = (() => {
-    const url = new URL(connectionTemplate);
-    url.pathname = '/postgres';
-    url.search = '';
-    return url.toString();
-  })();
   const scratchDatabaseUrl = databaseUrlFor(databaseName);
-  const admin = postgres(adminUrl, { max: 1 });
   const client = postgres(scratchDatabaseUrl, { max: 8 });
   const db = drizzle(client, { schema });
   const webhookService = {
     emit: vi.fn(async () => undefined),
     dispatchPersisted: vi.fn(async () => undefined),
+  };
+  const emailService = {
+    isConfigured: vi.fn(() => true),
+    send: vi.fn(async () => ({
+      sent: true,
+      provider: 'task8-memory',
+      messageId: 'task8-receipt-message',
+    })),
   };
   const gateway: PaymentGateway = {
     authorize: vi.fn(async () => ({ success: true, transactionId: `pi_${randomUUID()}` })),
@@ -98,7 +167,7 @@ describeDatabase('Booking Request default-flow release gate', () => {
     vi.stubEnv('DATABASE_URL', scratchDatabaseUrl);
     vi.stubEnv('REDIS_URL', process.env['REDIS_URL'] ?? 'redis://localhost:6379');
 
-    await admin.unsafe(`CREATE DATABASE "${databaseName}"`);
+    runDatabaseUtility('createdb', databaseName);
     execFileSync('node', ['packages/database/dist/push-schema.js'], {
       cwd: join(__dirname, '../../../../..'),
       env: { ...process.env, DATABASE_URL: scratchDatabaseUrl },
@@ -114,6 +183,8 @@ describeDatabase('Booking Request default-flow release gate', () => {
       .useValue(db)
       .overrideProvider(PAYMENT_GATEWAY)
       .useValue(gateway)
+      .overrideProvider(EmailService)
+      .useValue(emailService)
       .overrideProvider(WebhookService)
       .useValue(webhookService)
       .compile();
@@ -133,12 +204,7 @@ describeDatabase('Booking Request default-flow release gate', () => {
       failures.push(error);
     }
     try {
-      await admin.unsafe(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
-    } catch (error) {
-      failures.push(error);
-    }
-    try {
-      await admin.end({ timeout: 2 });
+      runDatabaseUtility('dropdb', databaseName);
     } catch (error) {
       failures.push(error);
     }
@@ -148,7 +214,7 @@ describeDatabase('Booking Request default-flow release gate', () => {
     }
   });
 
-  it('keeps migrated instant booking, deposit, Stripe refund, and folio behavior shared', async () => {
+  it('keeps final-schema database-default instant booking and shared financial behavior', async () => {
     const bookingEngine = moduleRef.get(BookingEngineService);
     const config = moduleRef.get(BookingEngineConfigService);
     const stay = {
@@ -269,7 +335,11 @@ describeDatabase('Booking Request default-flow release gate', () => {
     expect(refundChildren.map((row) => row.amount).sort()).toEqual(['-25.00', '-75.00']);
     await expectFolioTotals(folio!.id, instant.propertyId, '200.00', '0.00', '200.00');
 
-    const beforeUnrelated = await financialWriteSnapshot();
+    const beforeUnrelated = await financialWriteSnapshot(instant.propertyId);
+    const beforeWebhookCalls = {
+      emit: webhookService.emit.mock.calls.length,
+      dispatchPersisted: webhookService.dispatchPersisted.mock.calls.length,
+    };
     for (const event of [
       {
         id: `evt_external_payment_${randomUUID()}`,
@@ -302,7 +372,11 @@ describeDatabase('Booking Request default-flow release gate', () => {
     ]) {
       await expectStripeWebhookAccepted(stripeWebhook, stripeDriver, event);
     }
-    expect(await financialWriteSnapshot()).toEqual(beforeUnrelated);
+    expect(await financialWriteSnapshot(instant.propertyId)).toEqual(beforeUnrelated);
+    expect({
+      emit: webhookService.emit.mock.calls.length,
+      dispatchPersisted: webhookService.dispatchPersisted.mock.calls.length,
+    }).toEqual(beforeWebhookCalls);
   }, 120_000);
 
   it('activates request persistence only for a property explicitly configured for request mode', async () => {
@@ -340,7 +414,13 @@ describeDatabase('Booking Request default-flow release gate', () => {
     });
     expect(submitted).toMatchObject({ status: 'pending' });
 
-    const [requestRow, reservationRows, paymentRows] = await Promise.all([
+    const [
+      requestRow,
+      reservationRows,
+      paymentRows,
+      consequenceRows,
+      emailRows,
+    ] = await Promise.all([
       db.select().from(bookingRequests).where(and(
         eq(bookingRequests.id, submitted.requestId),
         eq(bookingRequests.propertyId, optedIn.propertyId),
@@ -349,6 +429,10 @@ describeDatabase('Booking Request default-flow release gate', () => {
         .where(eq(reservations.propertyId, optedIn.propertyId)),
       db.select({ id: payments.id }).from(payments)
         .where(eq(payments.propertyId, optedIn.propertyId)),
+      db.select().from(bookingRequestConsequences)
+        .where(eq(bookingRequestConsequences.propertyId, optedIn.propertyId)),
+      db.select().from(bookingRequestEmailDeliveries)
+        .where(eq(bookingRequestEmailDeliveries.propertyId, optedIn.propertyId)),
     ]);
     expect(requestRow).toEqual([
       expect.objectContaining({
@@ -360,6 +444,25 @@ describeDatabase('Booking Request default-flow release gate', () => {
     ]);
     expect(reservationRows).toEqual([]);
     expect(paymentRows).toEqual([]);
+    expect(consequenceRows).toEqual([
+      expect.objectContaining({
+        bookingRequestId: submitted.requestId,
+        kind: 'created_event',
+        status: 'completed',
+        attempts: 1,
+      }),
+    ]);
+    expect(emailRows).toEqual([
+      expect.objectContaining({
+        bookingRequestId: submitted.requestId,
+        kind: 'receipt',
+        status: 'sent',
+        attempts: 1,
+        automaticAttempts: 1,
+        providerMessageId: 'task8-receipt-message',
+      }),
+    ]);
+    expect(emailService.send).toHaveBeenCalledOnce();
   }, 120_000);
 
   async function createFixture(
@@ -432,15 +535,64 @@ describeDatabase('Booking Request default-flow release gate', () => {
     expect(folio).toMatchObject({ totalCharges, totalPayments, balance });
   }
 
-  async function financialWriteSnapshot() {
-    const [paymentRows, auditRows, consequenceRows, requestRows, chargeRows] = await Promise.all([
-      db.select().from(payments),
+  async function financialWriteSnapshot(propertyId: string) {
+    const [
+      paymentRows,
+      chargeRows,
+      folioRows,
+      depositRows,
+      reservationRows,
+      requestRows,
+      installmentRows,
+      allocationRows,
+      resolutionRows,
+      amendmentRows,
+      consequenceRows,
+      emailRows,
+      webhookRows,
+      auditRows,
+    ] = await Promise.all([
+      db.select().from(payments).where(eq(payments.propertyId, propertyId)),
+      db.select().from(charges).where(eq(charges.propertyId, propertyId)),
+      db.select().from(folios).where(eq(folios.propertyId, propertyId)),
+      db.select().from(depositLedgerEntries)
+        .where(eq(depositLedgerEntries.propertyId, propertyId)),
+      db.select().from(reservations).where(eq(reservations.propertyId, propertyId)),
+      db.select().from(bookingRequests).where(eq(bookingRequests.propertyId, propertyId)),
+      db.select().from(bookingRequestInstallments)
+        .where(eq(bookingRequestInstallments.propertyId, propertyId)),
+      db.select().from(bookingRequestPaymentAllocations)
+        .where(eq(bookingRequestPaymentAllocations.propertyId, propertyId)),
+      db.select().from(bookingRequestPaymentResolutions)
+        .where(eq(bookingRequestPaymentResolutions.propertyId, propertyId)),
+      db.select().from(bookingRequestStayAmendments)
+        .where(eq(bookingRequestStayAmendments.propertyId, propertyId)),
+      db.select().from(bookingRequestConsequences)
+        .where(eq(bookingRequestConsequences.propertyId, propertyId)),
+      db.select().from(bookingRequestEmailDeliveries)
+        .where(eq(bookingRequestEmailDeliveries.propertyId, propertyId)),
+      db.select().from(webhookDeliveries).where(eq(webhookDeliveries.propertyId, propertyId)),
+      // Audit rows may be system-scoped when no tenant can be correlated. The
+      // scratch database is isolated, so a global snapshot catches those writes
+      // without observing activity from other test workers.
       db.select().from(auditLogs),
-      db.select().from(bookingRequestConsequences),
-      db.select().from(bookingRequests),
-      db.select().from(charges),
     ]);
-    return { paymentRows, auditRows, consequenceRows, requestRows, chargeRows };
+    return {
+      paymentRows,
+      chargeRows,
+      folioRows,
+      depositRows,
+      reservationRows,
+      requestRows,
+      installmentRows,
+      allocationRows,
+      resolutionRows,
+      amendmentRows,
+      consequenceRows,
+      emailRows,
+      webhookRows,
+      auditRows,
+    };
   }
 });
 

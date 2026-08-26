@@ -28,8 +28,10 @@ maintainer packaging decision, so this plan does not move the implementation.
 - Acceptance creates a reservation independently of payment and is idempotent.
 - Request mode defaults to `instant`; card collection defaults to `disabled`.
 - Request persistence activates only for properties explicitly configured with
-  `bookingMode=request`; default/migrated instant properties retain the legacy
-  quote, booking, deposit, Stripe-refund, and folio behavior.
+  `bookingMode=request`; a configuration row created on the final migrated
+  schema with `bookingMode` omitted takes the database default `instant` and
+  retains legacy quote, booking, deposit, Stripe-refund, and folio behavior.
+  Legacy-row backfill remains migration-test coverage, not this behavior gate.
 - Shared payment and folio invariants cannot be feature-gated with request-only
   routes, workers, or persistence.
 - Do not add runtime dependencies unless an existing package cannot satisfy an approved requirement.
@@ -964,10 +966,10 @@ git commit -m "test(booking-requests): verify the complete workflow"
 - [ ] Confirm request acceptance and payment retries cannot duplicate external or database side effects.
 - [ ] Confirm no raw card data, client-trusted card metadata, application answers, consent text, or payment token appears in logs/webhooks.
 - [ ] Confirm instant booking remains the default and passes its original tests.
-- [ ] Run the compact default-flow release gate covering migrated instant
-  configuration, no request persistence, cumulative full/partial Stripe
-  dashboard refunds, folio netting, unrelated Stripe traffic, and a separately
-  opted-in request property.
+- [ ] Run the compact default-flow release gate covering final-schema
+  database-default instant configuration, no request persistence, cumulative
+  full/partial Stripe dashboard refunds, folio netting, unrelated Stripe
+  traffic, and a separately opted-in request property.
 - [ ] Confirm request mode is usable end-to-end before exposing its setting.
 - [ ] Use `superpowers:verification-before-completion` before claiming completion.
 - [ ] Use `superpowers:requesting-code-review` before proposing merge.
