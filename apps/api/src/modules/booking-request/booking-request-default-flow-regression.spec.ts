@@ -177,15 +177,24 @@ function execFileBounded(
 
 function sanitizedChildError(label: string, error: unknown, secret: string): Error {
   const childError = error as {
+    code?: string | number;
+    message?: string;
     status?: number | null;
     signal?: NodeJS.Signals | null;
     stderr?: Buffer | string;
   };
-  const rawDetail = childError.stderr?.toString().trim() ?? '';
+  const rawDetail = childError.stderr?.toString().trim()
+    || childError.message?.trim()
+    || '';
   const detail = sanitizeDiagnostic(rawDetail, secret);
-  const outcome = childError.signal
+  const rawOutcome = childError.signal
     ? `signal ${childError.signal}`
-    : `exit ${childError.status ?? 'unknown'}`;
+    : childError.status !== undefined && childError.status !== null
+      ? `exit ${childError.status}`
+      : childError.code !== undefined
+        ? `code ${childError.code}`
+        : 'exit unknown';
+  const outcome = sanitizeDiagnostic(rawOutcome, secret);
   return new Error(`${label} failed (${outcome})${detail ? `: ${detail}` : ''}`);
 }
 
@@ -193,7 +202,7 @@ function sanitizeDiagnostic(value: string, secret: string): string {
   const structurallySanitized = value
     .replace(/\b(postgres(?:ql)?:\/\/)[^\s/?#@]*@/gi, '$1')
     .replace(
-      /\b(password\s*=\s*)(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|[^\s]+)/gi,
+      /\b(password\s*=\s*)(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|(?:\\.|[^\s])+)/gi,
       '$1[redacted]',
     );
   const sensitiveValues = [
@@ -214,7 +223,8 @@ describe('default-flow release-gate diagnostic sanitization', () => {
     const error = sanitizedChildError('database schema installation', {
       status: 1,
       stderr: Buffer.from(
-        `createdb: ${leakedUrl} failed; password='p\\'word' authentication rejected`,
+        `createdb: ${leakedUrl} failed; password='p\\'word' authentication rejected; `
+        + 'password=foo\\ bar host=db',
       ),
     }, "p'word");
 
@@ -226,6 +236,25 @@ describe('default-flow release-gate diagnostic sanitization', () => {
     expect(error.message).not.toContain('p%27word');
     expect(error.message).not.toContain("p'word");
     expect(error.message).not.toContain("p\\'word");
+    expect(error.message).toContain('password=[redacted] host=db');
+    expect(error.message).not.toContain('foo\\ bar');
+
+    const metadataOnlyError = Object.assign(
+      new Error(`spawn failed for ${leakedUrl}; password=foo\\ bar host=db`),
+      { code: 'ENOENT' },
+    );
+    const metadataOnly = sanitizedChildError(
+      'PostgreSQL createdb',
+      metadataOnlyError,
+      "p'word",
+    );
+    expect(metadataOnly.message).toContain('(code ENOENT)');
+    expect(metadataOnly.message).toContain(
+      'spawn failed for postgresql://host/task8_x?sslmode=require; '
+      + 'password=[redacted] host=db',
+    );
+    expect(metadataOnly.message).not.toContain('u:p%27word');
+    expect(metadataOnly.message).not.toContain('foo\\ bar');
   });
 });
 
