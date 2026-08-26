@@ -31,7 +31,7 @@ maintainer packaging decision, so this plan does not move the implementation.
   `bookingMode=request`; a configuration row created on the final migrated
   schema with `bookingMode` omitted takes the database default `instant` and
   retains legacy quote, booking, deposit, Stripe-refund, and folio behavior.
-  Legacy-row backfill remains migration-test coverage, not this behavior gate.
+  This behavior gate makes no claim about pre-existing rows or backfill.
 - Shared payment and folio invariants cannot be feature-gated with request-only
   routes, workers, or persistence.
 - Do not add runtime dependencies unless an existing package cannot satisfy an approved requirement.

@@ -44,6 +44,8 @@ const baseDatabaseUrl = process.env['DATABASE_URL'];
 const describeDatabase = baseDatabaseUrl ? describe : describe.skip;
 const connectionTemplate = baseDatabaseUrl
   ?? 'postgresql://unavailable:unavailable@127.0.0.1:1/haip';
+const DATABASE_UTILITY_TIMEOUT_MS = 30_000;
+const PUSH_SCHEMA_TIMEOUT_MS = 60_000;
 
 type Fixture = {
   propertyId: string;
@@ -76,44 +78,55 @@ function runDatabaseUtility(
 ): void {
   const maintenanceUrl = new URL(connectionTemplate);
   maintenanceUrl.pathname = '/postgres';
+  const databasePassword = decodeURIComponent(maintenanceUrl.password);
+  const publicMaintenanceUrl = new URL(maintenanceUrl);
+  publicMaintenanceUrl.password = '';
   const utilityArgs = [
-    `--maintenance-db=${maintenanceUrl.toString()}`,
+    `--maintenance-db=${publicMaintenanceUrl.toString()}`,
     '--no-password',
     ...(command === 'dropdb' ? ['--if-exists', '--force'] : []),
     databaseName,
   ];
-  const options = { stdio: 'pipe' as const, timeout: 30_000 };
-  try {
-    execFileSync(command, utilityArgs, options);
-    return;
-  } catch (error: unknown) {
-    if (!isMissingExecutable(error)) throw error;
-  }
+  const childEnv = { ...process.env, PGPASSWORD: databasePassword };
+  const hostResult = execFileBounded(command, utilityArgs, {
+    env: childEnv,
+    label: `PostgreSQL ${command}`,
+    secret: databasePassword,
+    timeout: DATABASE_UTILITY_TIMEOUT_MS,
+    tolerateMissing: true,
+  });
+  if (hostResult !== undefined) return;
 
   const host = maintenanceUrl.hostname;
-  if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
     throw new Error(
       `${command} is required to provision the remote PostgreSQL test database`,
     );
   }
   const publishedPort = maintenanceUrl.port || '5432';
-  const containers = execFileSync('docker', [
+  const containerOutput = execFileBounded('docker', [
     'ps',
     '--filter',
     `publish=${publishedPort}`,
     '--format',
     '{{.Names}}',
-  ], options).toString().trim().split('\n').filter(Boolean);
+  ], {
+    env: childEnv,
+    label: 'PostgreSQL container lookup',
+    secret: databasePassword,
+    timeout: DATABASE_UTILITY_TIMEOUT_MS,
+  });
+  const containers = containerOutput!.toString().trim().split('\n').filter(Boolean);
   if (containers.length !== 1) {
     throw new Error(
       `${command} is unavailable and PostgreSQL container lookup for port ${publishedPort} `
       + `returned ${containers.length} matches`,
     );
   }
-  execFileSync('docker', [
+  execFileBounded('docker', [
     'exec',
     '--env',
-    `PGPASSWORD=${decodeURIComponent(maintenanceUrl.password)}`,
+    'PGPASSWORD',
     containers[0]!,
     command,
     '--username',
@@ -123,13 +136,70 @@ function runDatabaseUtility(
     '--no-password',
     ...(command === 'dropdb' ? ['--if-exists', '--force'] : []),
     databaseName,
-  ], options);
+  ], {
+    env: childEnv,
+    label: `containerized PostgreSQL ${command}`,
+    secret: databasePassword,
+    timeout: DATABASE_UTILITY_TIMEOUT_MS,
+  });
 }
 
 function isMissingExecutable(error: unknown): boolean {
   return error instanceof Error
     && 'code' in error
     && (error as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
+function execFileBounded(
+  command: string,
+  args: string[],
+  options: {
+    env: NodeJS.ProcessEnv;
+    label: string;
+    secret: string;
+    timeout: number;
+    tolerateMissing?: boolean;
+    cwd?: string;
+  },
+): Buffer | undefined {
+  try {
+    return execFileSync(command, args, {
+      env: options.env,
+      cwd: options.cwd,
+      stdio: 'pipe',
+      timeout: options.timeout,
+    });
+  } catch (error: unknown) {
+    if (options.tolerateMissing && isMissingExecutable(error)) return undefined;
+    throw sanitizedChildError(options.label, error, options.secret);
+  }
+}
+
+function sanitizedChildError(label: string, error: unknown, secret: string): Error {
+  const childError = error as {
+    status?: number | null;
+    signal?: NodeJS.Signals | null;
+    stderr?: Buffer | string;
+  };
+  const rawDetail = childError.stderr?.toString().trim() ?? '';
+  const detail = sanitizeDiagnostic(rawDetail, secret);
+  const outcome = childError.signal
+    ? `signal ${childError.signal}`
+    : `exit ${childError.status ?? 'unknown'}`;
+  return new Error(`${label} failed (${outcome})${detail ? `: ${detail}` : ''}`);
+}
+
+function sanitizeDiagnostic(value: string, secret: string): string {
+  const sensitiveValues = [
+    secret,
+    encodeURIComponent(secret),
+    connectionTemplate,
+    databaseUrlFor('postgres'),
+  ].filter(Boolean);
+  return sensitiveValues.reduce(
+    (sanitized, sensitive) => sanitized.replaceAll(sensitive, '[redacted]'),
+    value,
+  ).slice(-2_000);
 }
 
 describeDatabase('Booking Request default-flow release gate', () => {
@@ -168,10 +238,12 @@ describeDatabase('Booking Request default-flow release gate', () => {
     vi.stubEnv('REDIS_URL', process.env['REDIS_URL'] ?? 'redis://localhost:6379');
 
     runDatabaseUtility('createdb', databaseName);
-    execFileSync('node', ['packages/database/dist/push-schema.js'], {
+    execFileBounded('node', ['packages/database/dist/push-schema.js'], {
       cwd: join(__dirname, '../../../../..'),
       env: { ...process.env, DATABASE_URL: scratchDatabaseUrl },
-      stdio: 'pipe',
+      label: 'database schema installation',
+      secret: decodeURIComponent(new URL(scratchDatabaseUrl).password),
+      timeout: PUSH_SCHEMA_TIMEOUT_MS,
     });
 
     instant = await createFixture('instant-default', 60);
@@ -335,7 +407,7 @@ describeDatabase('Booking Request default-flow release gate', () => {
     expect(refundChildren.map((row) => row.amount).sort()).toEqual(['-25.00', '-75.00']);
     await expectFolioTotals(folio!.id, instant.propertyId, '200.00', '0.00', '200.00');
 
-    const beforeUnrelated = await financialWriteSnapshot(instant.propertyId);
+    const beforeUnrelated = await financialWriteSnapshot();
     const beforeWebhookCalls = {
       emit: webhookService.emit.mock.calls.length,
       dispatchPersisted: webhookService.dispatchPersisted.mock.calls.length,
@@ -372,7 +444,7 @@ describeDatabase('Booking Request default-flow release gate', () => {
     ]) {
       await expectStripeWebhookAccepted(stripeWebhook, stripeDriver, event);
     }
-    expect(await financialWriteSnapshot(instant.propertyId)).toEqual(beforeUnrelated);
+    expect(await financialWriteSnapshot()).toEqual(beforeUnrelated);
     expect({
       emit: webhookService.emit.mock.calls.length,
       dispatchPersisted: webhookService.dispatchPersisted.mock.calls.length,
@@ -535,7 +607,7 @@ describeDatabase('Booking Request default-flow release gate', () => {
     expect(folio).toMatchObject({ totalCharges, totalPayments, balance });
   }
 
-  async function financialWriteSnapshot(propertyId: string) {
+  async function financialWriteSnapshot() {
     const [
       paymentRows,
       chargeRows,
@@ -552,29 +624,22 @@ describeDatabase('Booking Request default-flow release gate', () => {
       webhookRows,
       auditRows,
     ] = await Promise.all([
-      db.select().from(payments).where(eq(payments.propertyId, propertyId)),
-      db.select().from(charges).where(eq(charges.propertyId, propertyId)),
-      db.select().from(folios).where(eq(folios.propertyId, propertyId)),
-      db.select().from(depositLedgerEntries)
-        .where(eq(depositLedgerEntries.propertyId, propertyId)),
-      db.select().from(reservations).where(eq(reservations.propertyId, propertyId)),
-      db.select().from(bookingRequests).where(eq(bookingRequests.propertyId, propertyId)),
-      db.select().from(bookingRequestInstallments)
-        .where(eq(bookingRequestInstallments.propertyId, propertyId)),
-      db.select().from(bookingRequestPaymentAllocations)
-        .where(eq(bookingRequestPaymentAllocations.propertyId, propertyId)),
-      db.select().from(bookingRequestPaymentResolutions)
-        .where(eq(bookingRequestPaymentResolutions.propertyId, propertyId)),
-      db.select().from(bookingRequestStayAmendments)
-        .where(eq(bookingRequestStayAmendments.propertyId, propertyId)),
-      db.select().from(bookingRequestConsequences)
-        .where(eq(bookingRequestConsequences.propertyId, propertyId)),
-      db.select().from(bookingRequestEmailDeliveries)
-        .where(eq(bookingRequestEmailDeliveries.propertyId, propertyId)),
-      db.select().from(webhookDeliveries).where(eq(webhookDeliveries.propertyId, propertyId)),
-      // Audit rows may be system-scoped when no tenant can be correlated. The
-      // scratch database is isolated, so a global snapshot catches those writes
-      // without observing activity from other test workers.
+      // Service queries remain tenant-scoped. This inventory is intentionally
+      // global because the scratch database is isolated: it must catch a broken
+      // unrelated-event path that writes under either fixture or no tenant.
+      db.select().from(payments),
+      db.select().from(charges),
+      db.select().from(folios),
+      db.select().from(depositLedgerEntries),
+      db.select().from(reservations),
+      db.select().from(bookingRequests),
+      db.select().from(bookingRequestInstallments),
+      db.select().from(bookingRequestPaymentAllocations),
+      db.select().from(bookingRequestPaymentResolutions),
+      db.select().from(bookingRequestStayAmendments),
+      db.select().from(bookingRequestConsequences),
+      db.select().from(bookingRequestEmailDeliveries),
+      db.select().from(webhookDeliveries),
       db.select().from(auditLogs),
     ]);
     return {
