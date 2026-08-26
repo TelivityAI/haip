@@ -2052,6 +2052,7 @@
       "allocated": "{{allocated}} od {{total}} dodeljeno",
       "editLabel": "Izmeni {{label}}",
       "deleteLabel": "Obriši {{label}}",
+      "removeRemainingAmount": "Ukloni preostali iznos — {{amount}} ostaje plaćeno",
       "allocateLabel": "Dodeli uplatu na {{label}}",
       "allocateTo": "Dodeli uplatu na {{label}}",
       "movement": "Naplaćena uplata",

@@ -738,6 +738,7 @@
       "allocated": "{{allocated}} von {{total}} zugewiesen",
       "editLabel": "Bearbeiten {{label}}",
       "deleteLabel": "{{label}} löschen",
+      "removeRemainingAmount": "Restbetrag entfernen — {{amount}} bleibt bezahlt",
       "allocateLabel": "Ordnen Sie die Zahlung der Nummer {{label}} zu",
       "allocateTo": "Ordnen Sie die Zahlung der Nummer {{label}} zu",
       "movement": "Eingezogene Zahlung",

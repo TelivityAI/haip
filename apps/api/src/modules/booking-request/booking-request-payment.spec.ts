@@ -618,29 +618,195 @@ describe('BookingRequestPaymentService installments', () => {
     }
   });
 
-  it('blocks editing and deletion after any amount has been allocated', async () => {
-    const allocated = installment({ allocatedAmount: '1.00', status: 'partial' });
-    const editHarness = makeHarness({ installments: [allocated] });
-    await expect(editHarness.service.updateInstallment(
-      REQUEST_ID,
-      INSTALLMENT_ID,
-      PROPERTY_ID,
-      { label: 'Changed' },
-      actor,
-    )).rejects.toThrow(/allocated/i);
+  it('allows metadata edits to a partially allocated installment without rewriting allocations', async () => {
+    const durableAllocation = {
+      id: '99999999-0000-4000-a000-000000000001',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      installmentId: INSTALLMENT_ID,
+      paymentId: PAYMENT_ID,
+      amount: '40.00',
+    };
+    const harness = makeHarness({
+      installments: [installment({ allocatedAmount: '0.00', status: 'unpaid' })],
+      allocations: [durableAllocation],
+    });
 
-    const deleteHarness = makeHarness({ installments: [allocated] });
-    await expect(deleteHarness.service.deleteInstallment(
+    await expect(harness.service.updateInstallment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      { label: 'Updated deposit' },
+      actor,
+    )).resolves.toMatchObject({
+      label: 'Updated deposit',
+      resolvedAmount: '100.00',
+      allocatedAmount: '40.00',
+      status: 'partial',
+    });
+    expect(harness.state.allocations).toEqual([durableAllocation]);
+  });
+
+  it('allows increasing a partially allocated installment total', async () => {
+    const harness = makeHarness({
+      installments: [installment({ allocatedAmount: '40.00', status: 'partial' })],
+      allocations: [{
+        id: '99999999-0000-4000-a000-000000000002',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        installmentId: INSTALLMENT_ID,
+        paymentId: PAYMENT_ID,
+        amount: '40.00',
+      }],
+    });
+
+    await expect(harness.service.updateInstallment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      { fixedAmount: '120.00' },
+      actor,
+    )).resolves.toMatchObject({
+      fixedAmount: '120.00',
+      resolvedAmount: '120.00',
+      allocatedAmount: '40.00',
+      status: 'partial',
+    });
+  });
+
+  it('allows reducing a partially allocated installment total to its durable allocation', async () => {
+    const harness = makeHarness({
+      installments: [installment({ allocatedAmount: '40.00', status: 'partial' })],
+      allocations: [{
+        id: '99999999-0000-4000-a000-000000000003',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        installmentId: INSTALLMENT_ID,
+        paymentId: PAYMENT_ID,
+        amount: '40.00',
+      }],
+    });
+
+    await expect(harness.service.updateInstallment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      { fixedAmount: '40.00' },
+      actor,
+    )).resolves.toMatchObject({
+      fixedAmount: '40.00',
+      resolvedAmount: '40.00',
+      allocatedAmount: '40.00',
+      status: 'paid',
+    });
+  });
+
+  it('rejects reducing an installment below its durable allocation', async () => {
+    const original = installment({ allocatedAmount: '40.00', status: 'partial' });
+    const durableAllocation = {
+      id: '99999999-0000-4000-a000-000000000004',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      installmentId: INSTALLMENT_ID,
+      paymentId: PAYMENT_ID,
+      amount: '40.00',
+    };
+    const harness = makeHarness({ installments: [original], allocations: [durableAllocation] });
+
+    await expect(harness.service.updateInstallment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      { fixedAmount: '39.99' },
+      actor,
+    )).rejects.toThrow(/allocation/i);
+    expect(harness.state.installments).toEqual([original]);
+    expect(harness.state.allocations).toEqual([durableAllocation]);
+  });
+
+  it('deletes an installment with no durable allocation', async () => {
+    const harness = makeHarness({ installments: [installment()] });
+
+    await expect(harness.service.deleteInstallment(
       REQUEST_ID,
       INSTALLMENT_ID,
       PROPERTY_ID,
       actor,
-    )).rejects.toThrow(/allocated/i);
+    )).resolves.toEqual({ deleted: true, installmentId: INSTALLMENT_ID });
+    expect(harness.state.installments).toEqual([]);
+    expect(harness.state.allocations).toEqual([]);
+  });
+
+  it('removes only the unallocated remainder of a partially allocated installment', async () => {
+    const durableAllocation = {
+      id: '99999999-0000-4000-a000-000000000005',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      installmentId: INSTALLMENT_ID,
+      paymentId: PAYMENT_ID,
+      amount: '40.00',
+    };
+    const harness = makeHarness({
+      installments: [installment({ allocatedAmount: '0.00', status: 'unpaid' })],
+      allocations: [durableAllocation],
+    });
+
+    await expect(harness.service.deleteInstallment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      actor,
+    )).resolves.toEqual({ deleted: true, installmentId: INSTALLMENT_ID });
+    expect(harness.state.installments).toEqual([expect.objectContaining({
+      id: INSTALLMENT_ID,
+      fixedAmount: '40.00',
+      percentage: null,
+      resolvedAmount: '40.00',
+      allocatedAmount: '40.00',
+      status: 'paid',
+    })]);
+    expect(harness.state.allocations).toEqual([durableAllocation]);
+    expect(harness.state.audits).toEqual([expect.objectContaining({
+      action: 'update',
+      description: 'Booking request unallocated installment remainder removed',
+    })]);
+  });
+
+  it('rejects removing a fully allocated installment', async () => {
+    const existing = installment({ allocatedAmount: '100.00', status: 'paid' });
+    const durableAllocation = {
+      id: '99999999-0000-4000-a000-000000000006',
+      propertyId: PROPERTY_ID,
+      bookingRequestId: REQUEST_ID,
+      installmentId: INSTALLMENT_ID,
+      paymentId: PAYMENT_ID,
+      amount: '100.00',
+    };
+    const harness = makeHarness({ installments: [existing], allocations: [durableAllocation] });
+
+    await expect(harness.service.deleteInstallment(
+      REQUEST_ID,
+      INSTALLMENT_ID,
+      PROPERTY_ID,
+      actor,
+    )).rejects.toThrow(/remainder/i);
+    expect(harness.state.installments).toEqual([existing]);
+    expect(harness.state.allocations).toEqual([durableAllocation]);
   });
 
   it('allows an allocated installment to be reordered without changing financial fields', async () => {
     const allocated = installment({ allocatedAmount: '1.00', status: 'partial', sortOrder: 3 });
-    const harness = makeHarness({ installments: [allocated] });
+    const harness = makeHarness({
+      installments: [allocated],
+      allocations: [{
+        id: '99999999-0000-4000-a000-000000000007',
+        propertyId: PROPERTY_ID,
+        bookingRequestId: REQUEST_ID,
+        installmentId: INSTALLMENT_ID,
+        paymentId: PAYMENT_ID,
+        amount: '1.00',
+      }],
+    });
 
     const updated = await harness.service.updateInstallment(
       REQUEST_ID,
@@ -793,7 +959,11 @@ describe('BookingRequestPaymentService installments', () => {
       PROPERTY_ID,
       { label: 'Must stay unchanged' },
       actor,
-    )).rejects.toThrow(/allocated/i);
+    )).resolves.toMatchObject({
+      label: 'Must stay unchanged',
+      allocatedAmount: '1.00',
+      status: 'partial',
+    });
   });
 
   it('returns not found for a cross-property installment', async () => {

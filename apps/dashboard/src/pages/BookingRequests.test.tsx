@@ -767,6 +767,12 @@ describe('Booking request payments, messages, and audit', () => {
     expect(screen.getByText('Due at arrival')).toBeInTheDocument();
     expect(screen.getByText('Nothing is charged automatically.')).toBeInTheDocument();
 
+    const partialEdit = screen.getByRole('button', { name: 'Edit 30% deposit' });
+    expect(partialEdit).toBeEnabled();
+    expect(screen.getByRole('button', {
+      name: 'Remove remaining amount — €50.00 will remain paid',
+    })).toBeEnabled();
+
     await userEvent.click(screen.getByRole('button', { name: 'Edit Final balance' }));
     const label = screen.getByRole('textbox', { name: 'Installment label' });
     await userEvent.clear(label);

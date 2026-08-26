@@ -2048,6 +2048,7 @@
       "allocated": "{{allocated}} of {{total}} allocated",
       "editLabel": "Edit {{label}}",
       "deleteLabel": "Delete {{label}}",
+      "removeRemainingAmount": "Remove remaining amount — {{amount}} will remain paid",
       "allocateLabel": "Allocate payment to {{label}}",
       "allocateTo": "Allocate payment to {{label}}",
       "movement": "Captured movement",

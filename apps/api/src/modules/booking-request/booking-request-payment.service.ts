@@ -213,19 +213,6 @@ export class BookingRequestPaymentService {
         installmentId,
         propertyId,
       );
-      const reorderOnly = input.sortOrder != null
-        && input.label == null
-        && input.dueMilestone == null
-        && input.dueDate == null
-        && input.fixedAmount == null
-        && input.percentage == null;
-      if (
-        !reorderOnly
-        && (new Decimal(existing.allocatedAmount).gt(0) || persistedAllocation.gt(0))
-      ) {
-        throw new ConflictException('An allocated installment cannot be edited');
-      }
-
       const merged: CreateBookingRequestInstallmentDto = {
         label: input.label ?? existing.label,
         sortOrder: input.sortOrder ?? existing.sortOrder,
@@ -238,10 +225,19 @@ export class BookingRequestPaymentService {
       if (input.percentage != null) merged.fixedAmount = undefined;
       if (merged.dueMilestone !== 'date') merged.dueDate = undefined;
       const normalized = this.normalizeInstallment(request, merged);
+      if (new Decimal(normalized.resolvedAmount).lt(persistedAllocation)) {
+        throw new ConflictException('Installment total cannot be below its durable allocation');
+      }
+      const allocatedAmount = persistedAllocation.toFixed(2);
+      const status: InstallmentRow['status'] = persistedAllocation.eq(0)
+        ? 'unpaid'
+        : persistedAllocation.gte(normalized.resolvedAmount)
+          ? 'paid'
+          : 'partial';
       const updatedAt = new Date();
       const candidates = await tx
         .update(bookingRequestInstallments)
-        .set({ ...normalized, updatedAt })
+        .set({ ...normalized, allocatedAmount, status, updatedAt })
         .where(and(
           eq(bookingRequestInstallments.id, installmentId),
           eq(bookingRequestInstallments.bookingRequestId, bookingRequestId),
@@ -290,25 +286,61 @@ export class BookingRequestPaymentService {
         installmentId,
         propertyId,
       );
-      if (new Decimal(existing.allocatedAmount).gt(0) || persistedAllocation.gt(0)) {
-        throw new ConflictException('An allocated installment cannot be deleted');
+      if (persistedAllocation.eq(0)) {
+        await tx
+          .delete(bookingRequestInstallments)
+          .where(and(
+            eq(bookingRequestInstallments.id, installmentId),
+            eq(bookingRequestInstallments.bookingRequestId, bookingRequestId),
+            eq(bookingRequestInstallments.propertyId, propertyId),
+          ));
+        await this.audit(tx, {
+          propertyId,
+          bookingRequestId,
+          action: 'delete',
+          entityType: 'booking_request_installment',
+          entityId: installmentId,
+          actor,
+          previousValue: this.installmentAuditValue(existing),
+          description: 'Booking request installment deleted',
+        });
+        return { deleted: true, installmentId };
       }
-      await tx
-        .delete(bookingRequestInstallments)
+      if (persistedAllocation.gte(this.resolvedInstallmentAmount(existing))) {
+        throw new ConflictException('A fully allocated installment has no removable remainder');
+      }
+      const allocatedAmount = persistedAllocation.toFixed(2);
+      const candidates = await tx
+        .update(bookingRequestInstallments)
+        .set({
+          fixedAmount: allocatedAmount,
+          percentage: null,
+          resolvedAmount: allocatedAmount,
+          allocatedAmount,
+          status: 'paid',
+          updatedAt: new Date(),
+        })
         .where(and(
           eq(bookingRequestInstallments.id, installmentId),
           eq(bookingRequestInstallments.bookingRequestId, bookingRequestId),
           eq(bookingRequestInstallments.propertyId, propertyId),
-        ));
+        ))
+        .returning();
+      const updated = candidates.find((row: InstallmentRow) =>
+        row.id === installmentId
+        && row.bookingRequestId === bookingRequestId
+        && row.propertyId === propertyId) ?? candidates[0];
+      if (!updated) throw new NotFoundException(`Installment ${installmentId} not found`);
       await this.audit(tx, {
         propertyId,
         bookingRequestId,
-        action: 'delete',
+        action: 'update',
         entityType: 'booking_request_installment',
         entityId: installmentId,
         actor,
         previousValue: this.installmentAuditValue(existing),
-        description: 'Booking request installment deleted',
+        newValue: this.installmentAuditValue(updated),
+        description: 'Booking request unallocated installment remainder removed',
       });
       return { deleted: true, installmentId };
     });

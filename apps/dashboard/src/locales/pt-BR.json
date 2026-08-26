@@ -1937,6 +1937,7 @@
       "allocated": "{{allocated}} de {{total}} alocados",
       "editLabel": "Editar {{label}}",
       "deleteLabel": "Excluir {{label}}",
+      "removeRemainingAmount": "Remover valor restante — {{amount}} permanecerá pago",
       "allocateLabel": "Alocar pagamento para {{label}}",
       "allocateTo": "Alocar pagamento para {{label}}",
       "movement": "Pagamento cobrado",

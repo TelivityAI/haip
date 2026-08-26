@@ -2052,6 +2052,7 @@
       "allocated": "{{allocated}} de {{total}} asignados",
       "editLabel": "Editar {{label}}",
       "deleteLabel": "Eliminar {{label}}",
+      "removeRemainingAmount": "Eliminar importe restante — {{amount}} seguirá pagado",
       "allocateLabel": "Asignar pago al {{label}}",
       "allocateTo": "Asignar pago al {{label}}",
       "movement": "Pago cobrado",
