@@ -185,15 +185,18 @@ export function RequestPayment() {
 
   const setupMutation = useRequestPaymentSetup();
 
-  const idempotencyKey = flow.requestIdempotencyKey;
+  const applicationId = flow.requestIdempotencyKey;
+  const idempotencyKey = flow.requestPaymentSetupKey;
   useEffect(() => {
-    if (!idempotencyKey) flow.ensureRequestIdempotencyKey();
-  }, [flow, idempotencyKey]);
+    if (!applicationId) flow.ensureRequestIdempotencyKey();
+    if (!idempotencyKey) flow.ensureRequestPaymentSetupKey();
+  }, [applicationId, flow, idempotencyKey]);
 
   useEffect(() => {
     if (
       !collectCard ||
       !cardCollectionAvailable ||
+      !applicationId ||
       !idempotencyKey ||
       !flow.guest?.email ||
       setupMutation.isPending ||
@@ -205,10 +208,12 @@ export function RequestPayment() {
     setupMutation.mutate({
       guestEmail: flow.guest.email,
       idempotencyKey,
+      applicationId,
     });
   }, [
     cardCollectionAvailable,
     collectCard,
+    applicationId,
     flow.guest?.email,
     idempotencyKey,
     setupMutation,
@@ -276,11 +281,12 @@ export function RequestPayment() {
     submitRequest();
   };
   const retrySetup = () => {
-    if (!idempotencyKey || !flow.guest?.email) return;
+    if (!applicationId || !idempotencyKey || !flow.guest?.email) return;
     setupMutation.reset();
     setupMutation.mutate({
       guestEmail: flow.guest.email,
       idempotencyKey,
+      applicationId,
     });
   };
 

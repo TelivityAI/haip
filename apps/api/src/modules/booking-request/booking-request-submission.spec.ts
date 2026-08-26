@@ -446,6 +446,7 @@ describe('BookingRequestService public card setup', () => {
 
     await expect(harness.service.createPaymentMethodSetup(PROPERTY_ID, {
       guestEmail: 'ada@example.com',
+      applicationId: 'widget-application-1',
       idempotencyKey: 'widget-attempt-1',
     })).rejects.toBeInstanceOf(errorType);
     expect(harness.savedPaymentMethod.createSetup).not.toHaveBeenCalled();
@@ -461,6 +462,7 @@ describe('BookingRequestService public card setup', () => {
 
     await expect(harness.service.createPaymentMethodSetup(PROPERTY_ID, {
       guestEmail: 'ada@example.com',
+      applicationId: 'widget-application-1',
       idempotencyKey: 'widget-attempt-1',
     })).rejects.toThrow(/unavailable/i);
     expect(harness.savedPaymentMethod.createSetup).not.toHaveBeenCalled();
@@ -475,6 +477,7 @@ describe('BookingRequestService public card setup', () => {
 
     await expect(harness.service.createPaymentMethodSetup(PROPERTY_ID, {
       guestEmail: 'ada@example.com',
+      applicationId: 'widget-application-1',
       idempotencyKey: 'widget-attempt-1',
     })).resolves.toEqual({
       setupIntentId: 'seti_trusted',
@@ -484,7 +487,7 @@ describe('BookingRequestService public card setup', () => {
     expect(harness.savedPaymentMethod.createSetup).toHaveBeenCalledWith(
       'ada@example.com',
       `booking-request:${PROPERTY_ID}:widget-attempt-1`,
-      { propertyId: PROPERTY_ID, applicationId: 'widget-attempt-1' },
+      { propertyId: PROPERTY_ID, applicationId: 'widget-application-1' },
     );
   });
 
@@ -505,6 +508,7 @@ describe('BookingRequestService public card setup', () => {
 
     await expect(harness.service.createPaymentMethodSetup(PROPERTY_ID, {
       guestEmail: 'ada@example.com',
+      applicationId: 'widget-application-1',
       idempotencyKey: 'widget-attempt-1',
     })).resolves.toEqual({
       setupIntentId: 'seti_mock_local',

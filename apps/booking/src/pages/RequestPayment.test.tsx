@@ -129,6 +129,25 @@ function SeedPayment({ prepareRequestKey = false }: { prepareRequestKey?: boolea
   );
 }
 
+function EditApplication() {
+  const flow = useBookingFlow();
+  const navigate = useNavigate();
+  const continueToPayment = (email: string) => {
+    flow.setGuest({ ...flow.guest!, email });
+    flow.setSetupIntentId(undefined);
+    flow.setSetupIntentConsentText(undefined);
+    flow.rotateRequestPaymentSetupKey();
+    navigate('/request/payment');
+  };
+  return (
+    <div>
+      <p>Application page</p>
+      <button onClick={() => continueToPayment('grace@example.com')}>Continue with edited email</button>
+      <button onClick={() => continueToPayment(flow.guest!.email)}>Continue unchanged</button>
+    </div>
+  );
+}
+
 function renderPayment(
   policy: BookingConfig['paymentMethodCollection'],
   widgetStyle?: CSSProperties,
@@ -155,7 +174,7 @@ function renderPayment(
                   element={<SeedPayment prepareRequestKey={options.prepareRequestKey} />}
                 />
                 <Route path="/request/payment" element={<RequestPayment />} />
-                <Route path="/request/application" element={<p>Application page</p>} />
+                <Route path="/request/application" element={<EditApplication />} />
                 <Route path="/request/received" element={<RequestReceived />} />
               </Routes>
             </BookingFlowProvider>
@@ -260,6 +279,22 @@ describe('RequestPayment', () => {
     await waitFor(() => expect(mocks.createSetup).toHaveBeenCalledOnce());
     expect(mocks.loadStripe).toHaveBeenCalledWith('pk_test_public');
     expect(await screen.findByLabelText('Secure card entry')).toBeVisible();
+  });
+
+  it('uses a new card-attempt key but stable application provenance after editing email', async () => {
+    renderPayment('required');
+    await begin();
+    await waitFor(() => expect(mocks.createSetup).toHaveBeenCalledOnce());
+    const first = mocks.createSetup.mock.calls[0]![0];
+
+    await userEvent.click(screen.getByRole('button', { name: /Back to your details/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue with edited email' }));
+
+    await waitFor(() => expect(mocks.createSetup).toHaveBeenCalledTimes(2));
+    const second = mocks.createSetup.mock.calls[1]![0];
+    expect(second.guestEmail).toBe('grace@example.com');
+    expect(second.applicationId).toBe(first.applicationId);
+    expect(second.idempotencyKey).not.toBe(first.idempotencyKey);
   });
 
   it.each([
@@ -429,6 +464,12 @@ describe('RequestPayment', () => {
     await waitFor(() => expect(mocks.confirmSetup).toHaveBeenCalledOnce());
     expect(mocks.submitRequest).not.toHaveBeenCalled();
     expect(screen.getByText('Application page')).toBeVisible();
+
+    const firstSetupKey = mocks.createSetup.mock.calls[0]![0].idempotencyKey;
+    await userEvent.click(screen.getByRole('button', { name: 'Continue unchanged' }));
+    await waitFor(() => expect(mocks.createSetup).toHaveBeenCalledTimes(2));
+    expect(mocks.createSetup.mock.calls[1]![0].idempotencyKey).not.toBe(firstSetupKey);
+    expect(await screen.findByLabelText('Secure card entry')).toBeVisible();
   });
 
   it('shows setup and submission server errors without navigating or double submitting', async () => {

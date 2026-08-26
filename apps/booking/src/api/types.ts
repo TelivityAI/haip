@@ -199,6 +199,7 @@ export interface BookResponse {
 
 export interface RequestPaymentMethodSetupRequest {
   guestEmail: string;
+  applicationId: string;
   idempotencyKey: string;
 }
 

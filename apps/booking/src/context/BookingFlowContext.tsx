@@ -75,6 +75,10 @@ interface BookingFlowState {
   requestIdempotencyKey?: string;
   ensureRequestIdempotencyKey: () => string;
 
+  requestPaymentSetupKey?: string;
+  ensureRequestPaymentSetupKey: () => string;
+  rotateRequestPaymentSetupKey: () => string;
+
   requestSubmissionStatus: 'idle' | 'pending' | 'success' | 'error';
   requestSubmissionError?: unknown;
   submitRequest: (
@@ -97,6 +101,7 @@ interface BookingFlowData {
   setupIntentConsentText?: string;
   requestAcknowledgement?: BookingRequestAcknowledgement;
   requestIdempotencyKey?: string;
+  requestPaymentSetupKey?: string;
   requestSubmissionStatus: 'idle' | 'pending' | 'success' | 'error';
   requestSubmissionError?: unknown;
 }
@@ -149,6 +154,7 @@ const BookingFlowContext = createContext<BookingFlowState | null>(null);
 export function BookingFlowProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(bookingFlowReducer, initialFlow);
   const requestKey = useRef<string>();
+  const requestPaymentSetupKey = useRef<string>();
   const requestSubmission = useRef<Promise<BookingRequestAcknowledgement>>();
 
   const value = useMemo<BookingFlowState>(
@@ -179,6 +185,20 @@ export function BookingFlowProvider({ children }: { children: React.ReactNode })
           type: 'patch',
           value: { requestIdempotencyKey: id },
         });
+        return id;
+      },
+      ensureRequestPaymentSetupKey: () => {
+        if (state.requestPaymentSetupKey) return state.requestPaymentSetupKey;
+        if (requestPaymentSetupKey.current) return requestPaymentSetupKey.current;
+        const id = `booking-widget-card-${crypto.randomUUID()}`;
+        requestPaymentSetupKey.current = id;
+        dispatch({ type: 'patch', value: { requestPaymentSetupKey: id } });
+        return id;
+      },
+      rotateRequestPaymentSetupKey: () => {
+        const id = `booking-widget-card-${crypto.randomUUID()}`;
+        requestPaymentSetupKey.current = id;
+        dispatch({ type: 'patch', value: { requestPaymentSetupKey: id } });
         return id;
       },
       submitRequest: (request) => {
@@ -224,6 +244,7 @@ export function BookingFlowProvider({ children }: { children: React.ReactNode })
       },
       reset: () => {
         requestKey.current = undefined;
+        requestPaymentSetupKey.current = undefined;
         requestSubmission.current = undefined;
         dispatch({ type: 'reset' });
       },

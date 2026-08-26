@@ -149,10 +149,12 @@ export function RequestApplication() {
     flow.setGuest(cleanGuest);
     flow.setApplicationAnswers({ ...answers });
     flow.setSetupIntentId(undefined);
+    flow.setSetupIntentConsentText(undefined);
     flow.setRequestAcknowledgement(undefined);
     const idempotencyKey = flow.ensureRequestIdempotencyKey();
 
     if (config.paymentMethodCollection !== 'disabled') {
+      flow.rotateRequestPaymentSetupKey();
       navigate('/request/payment');
       return;
     }

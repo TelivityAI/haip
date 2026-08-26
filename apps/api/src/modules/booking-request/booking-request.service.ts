@@ -1193,10 +1193,11 @@ export class BookingRequestService {
     }
     this.assertCardCollectionCapability(config, true);
 
-    const applicationId = this.normalizeApplicationId(dto.idempotencyKey);
+    const applicationId = this.normalizeApplicationId(dto.applicationId);
+    const setupAttemptId = this.normalizeApplicationId(dto.idempotencyKey);
     const setup = await this.savedPaymentMethodGateway.createSetup(
       dto.guestEmail,
-      `booking-request:${propertyId}:${applicationId}`,
+      `booking-request:${propertyId}:${setupAttemptId}`,
       { propertyId, applicationId },
     );
     return {
