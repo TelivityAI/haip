@@ -3,6 +3,7 @@ import {
   classifyHaipMetadata,
   decidePaymentIntentTransition,
   decideRefundTransition,
+  paymentIntentCorrelation,
   refundCorrelation,
 } from './stripe-financial-state';
 
@@ -92,8 +93,22 @@ describe('Stripe financial webhook state', () => {
   });
 
   it('classifies metadata by HAIP ownership before correlation parsing', () => {
-    expect(classifyHaipMetadata({})).toBe('external');
-    expect(classifyHaipMetadata({ unrelated: 'value' })).toBe('external');
-    expect(classifyHaipMetadata({ haip_payment_id: 'payment-1' })).toBe('owned-valid');
+    expect(classifyHaipMetadata({}, paymentIntentCorrelation)).toEqual({ ownership: 'external' });
+    expect(classifyHaipMetadata({ unrelated: 'value' }, paymentIntentCorrelation))
+      .toEqual({ ownership: 'external' });
+    expect(classifyHaipMetadata({ haip_payment_id: 'payment-1' }, paymentIntentCorrelation))
+      .toMatchObject({ ownership: 'owned-malformed' });
+    expect(classifyHaipMetadata({
+      haip_payment_id: 'aaaaaaaa-0000-4000-a000-000000000001',
+      haip_property_id: 'bbbbbbbb-0000-4000-a000-000000000001',
+      haip_booking_request_id: 'cccccccc-0000-4000-a000-000000000001',
+    }, paymentIntentCorrelation)).toEqual({
+      ownership: 'owned-valid',
+      correlation: {
+        paymentId: 'aaaaaaaa-0000-4000-a000-000000000001',
+        propertyId: 'bbbbbbbb-0000-4000-a000-000000000001',
+        bookingRequestId: 'cccccccc-0000-4000-a000-000000000001',
+      },
+    });
   });
 });

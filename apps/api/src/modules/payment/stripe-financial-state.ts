@@ -1,6 +1,9 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 
-export type HaipMetadataClassification = 'external' | 'owned-valid' | 'owned-malformed';
+export type HaipMetadataClassification<T> =
+  | { ownership: 'external' }
+  | { ownership: 'owned-valid'; correlation: T }
+  | { ownership: 'owned-malformed'; error: unknown };
 
 export function hasHaipFinancialMetadata(
   metadata: Record<string, string> | null | undefined,
@@ -12,13 +15,16 @@ export function hasHaipFinancialMetadata(
  * Separates Stripe-account traffic from HAIP-owned traffic before any ledger lookup.
  * Event-specific correlation parsers remain responsible for exact required fields.
  */
-export function classifyHaipMetadata(
+export function classifyHaipMetadata<T>(
   metadata: Record<string, string> | null | undefined,
-): HaipMetadataClassification {
-  if (!hasHaipFinancialMetadata(metadata)) return 'external';
-  return Object.entries(metadata ?? {}).some(([key, value]) => key.startsWith('haip_') && !value)
-    ? 'owned-malformed'
-    : 'owned-valid';
+  parseCorrelation: (metadata: Record<string, string> | null | undefined) => T,
+): HaipMetadataClassification<T> {
+  if (!hasHaipFinancialMetadata(metadata)) return { ownership: 'external' };
+  try {
+    return { ownership: 'owned-valid', correlation: parseCorrelation(metadata) };
+  } catch (error) {
+    return { ownership: 'owned-malformed', error };
+  }
 }
 
 export type PaymentIntentEvent =

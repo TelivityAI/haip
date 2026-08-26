@@ -184,8 +184,10 @@ export class StripeWebhookController {
     let correlation: PaymentIntentCorrelation | undefined;
     let initial = await this.findPaymentByGatewayTransactionId(pi.id);
     if (!initial) {
-      if (classifyHaipMetadata(pi.metadata) === 'external') return;
-      correlation = paymentIntentCorrelation(pi.metadata);
+      const ownership = classifyHaipMetadata(pi.metadata, paymentIntentCorrelation);
+      if (ownership.ownership === 'external') return;
+      if (ownership.ownership === 'owned-malformed') throw ownership.error;
+      correlation = ownership.correlation;
       initial = await this.findPaymentByCorrelation(correlation);
       if (!initial) {
         throw new ConflictException(
@@ -555,11 +557,15 @@ export class StripeWebhookController {
 
   private async handleRefundUpdated(refund: Stripe.Refund) {
     const linkedPayment = await this.findPaymentByGatewayTransactionId(refund.id);
-    if (classifyHaipMetadata(refund.metadata) === 'external') {
+    const ownership = classifyHaipMetadata(refund.metadata, refundCorrelation);
+    if (ownership.ownership === 'external') {
       if (!linkedPayment) return;
-      return;
+      throw new ConflictException(
+        'Stripe refund is linked to a payment but missing exact HAIP correlation metadata',
+      );
     }
-    const correlation = refundCorrelation(refund.metadata);
+    if (ownership.ownership === 'owned-malformed') throw ownership.error;
+    const correlation = ownership.correlation;
     const providerStatus = this.refundStatus(refund.status);
     const result = await this.db.transaction(async (tx: any) => {
       const requestRows = await tx

@@ -375,6 +375,18 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.db.transaction).not.toHaveBeenCalled();
   });
 
+  it('rejects a directly linked refund that omits HAIP correlation metadata', async () => {
+    const h = await harness({
+      payments: [payment({ gatewayTransactionId: 're_linked_without_metadata' })],
+    });
+
+    await expect(h.controller.handleRefundUpdated({
+      id: 're_linked_without_metadata', metadata: {},
+    })).rejects.toThrow(/linked to a payment.*correlation metadata/i);
+
+    expect(h.db.transaction).not.toHaveBeenCalled();
+  });
+
   it('finalizes a pending request PaymentIntent under request→payment locks with fresh folio', async () => {
     const h = await harness({ requests: [request({ status: 'accepted', acceptedFolioId: FOLIO_ID })] });
     await h.controller.handlePaymentIntentSucceeded(knownPaymentIntent());
