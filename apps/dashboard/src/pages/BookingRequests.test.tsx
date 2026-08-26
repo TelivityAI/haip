@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../components/ui/Toast';
+import { localDateTimeInputValue } from '../components/booking-requests/PaymentActionModal';
 import BookingRequests from './BookingRequests';
 import de from '../locales/de.json';
 import en from '../locales/en.json';
@@ -950,6 +951,48 @@ describe('Booking request payments, messages, and audit', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Charge saved card' })).not.toBeInTheDocument();
     });
+  });
+
+  it('preserves Madrid wall-clock time for external payment and return payloads', async () => {
+    const previousTimezone = process.env['TZ'];
+    process.env['TZ'] = 'Europe/Madrid';
+    try {
+      expect(localDateTimeInputValue(new Date('2026-08-26T14:00:00.000Z')))
+        .toBe('2026-08-26T16:00');
+
+      renderAt(`/booking-requests/${REQUEST_ID}`);
+      await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Record external payment' }));
+      let dialog = screen.getByRole('dialog', { name: 'Record external payment' });
+      await userEvent.type(within(dialog).getByRole('textbox', { name: 'Amount' }), '25');
+      await userEvent.clear(within(dialog).getByLabelText('Processed at'));
+      await userEvent.type(within(dialog).getByLabelText('Processed at'), '2026-08-26T16:00');
+      await userEvent.type(within(dialog).getByRole('textbox', { name: 'Reference' }), 'CASH-25');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Record external payment' }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+        `/v1/booking-requests/${REQUEST_ID}/payments/external`,
+        expect.objectContaining({ processedAt: '2026-08-26T14:00:00.000Z' }),
+        { params: { propertyId: 'property-1' } },
+      ));
+
+      await userEvent.click(screen.getAllByRole('button', { name: 'Record return' })[0]!);
+      dialog = screen.getByRole('dialog', { name: 'Record external return' });
+      await userEvent.clear(within(dialog).getByRole('textbox', { name: 'Amount' }));
+      await userEvent.type(within(dialog).getByRole('textbox', { name: 'Amount' }), '10');
+      await userEvent.clear(within(dialog).getByLabelText('Processed at'));
+      await userEvent.type(within(dialog).getByLabelText('Processed at'), '2026-08-26T16:00');
+      await userEvent.type(within(dialog).getByRole('textbox', { name: 'Reference' }), 'RETURN-10');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Record return' }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+        `/v1/booking-requests/${REQUEST_ID}/payments/${EXTERNAL_PAYMENT_ID}/external-returns`,
+        expect.objectContaining({ processedAt: '2026-08-26T14:00:00.000Z' }),
+        { params: { propertyId: 'property-1' } },
+      ));
+    } finally {
+      if (previousTimezone === undefined) delete process.env['TZ'];
+      else process.env['TZ'] = previousTimezone;
+    }
   });
 
   it('offers provenance-correct refund/return/retain actions with required reasons', async () => {

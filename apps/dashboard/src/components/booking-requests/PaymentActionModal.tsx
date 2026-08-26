@@ -24,6 +24,11 @@ function newIdentity(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+export function localDateTimeInputValue(date: Date): string {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 export default function PaymentActionModal({
   action,
   requestId,
@@ -38,7 +43,7 @@ export default function PaymentActionModal({
   const queryClient = useQueryClient();
   const [amount, setAmount] = useState(initialAmount);
   const [method, setMethod] = useState('cash');
-  const [processedAt, setProcessedAt] = useState(() => new Date().toISOString().slice(0, 16));
+  const [processedAt, setProcessedAt] = useState(() => localDateTimeInputValue(new Date()));
   const [provider, setProvider] = useState('');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
