@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '@telivityhaip/database';
 import { postgresOptionsFromEnv } from '@telivityhaip/database';
-import { isBookingRequestsEnabled } from '@telivityhaip/booking-requests';
+import { isBookingRequestsEnabled } from '../modules/payment/booking-request-stripe-handler.interface';
 
 export const DRIZZLE = Symbol('DRIZZLE');
 
