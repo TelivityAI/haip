@@ -443,10 +443,20 @@ export class StripeWebhookController {
       ? charge.payment_intent
       : charge.payment_intent?.id;
 
-    if (!piId) return;
+    if (!piId) {
+      if (ownership.ownership === 'external') return;
+      throw new ConflictException(
+        `Stripe charge ${charge.id} metadata does not identify a linked PaymentIntent`,
+      );
+    }
 
     const payment = await this.findPaymentByGatewayTransactionId(piId);
-    if (!payment) return;
+    if (!payment) {
+      if (ownership.ownership === 'external') return;
+      throw new ConflictException(
+        `Stripe charge ${charge.id} metadata does not identify a linked payment`,
+      );
+    }
 
     const outcome = await this.db.transaction(async (tx: any) => {
       if (payment.bookingRequestId) {

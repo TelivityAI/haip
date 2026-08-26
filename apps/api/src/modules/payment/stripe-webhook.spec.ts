@@ -858,6 +858,29 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.state.audits).toHaveLength(0);
   });
 
+  it.each([
+    ['missing PaymentIntent', undefined],
+    ['unknown PaymentIntent', 'pi_unknown_owned_charge'],
+  ])('rejects complete HAIP charge metadata with a %s', async (_label, paymentIntent) => {
+    const h = await harness({ requests: [], payments: [] });
+
+    await expect(h.controller.handleChargeRefunded({
+      id: 'ch_owned_unlinked',
+      payment_intent: paymentIntent,
+      amount_refunded: 2500,
+      currency: 'usd',
+      metadata: {
+        haip_payment_id: PAYMENT_ID,
+        haip_property_id: PROPERTY_ID,
+        haip_booking_request_id: REQUEST_ID,
+      },
+      refunds: { data: [] },
+    })).rejects.toThrow(/does not identify a linked/i);
+
+    expect(h.db.transaction).not.toHaveBeenCalled();
+    expect(h.state.audits).toHaveLength(0);
+  });
+
   it('treats cumulative charge.refunded as a reconciliation signal, never a claim match', async () => {
     const first = resolution('11111111-0000-4000-a000-000000000001');
     const second = resolution('22222222-0000-4000-a000-000000000002');
