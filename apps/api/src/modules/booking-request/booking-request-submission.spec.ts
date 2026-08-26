@@ -794,6 +794,7 @@ describe('BookingRequestService.submit', () => {
       formSnapshot: [formQuestion],
       applicationAnswers: { [QUESTION_ID]: 'Leisure' },
       submittedQuoteSnapshot: quote,
+      submittedTotal: '220.00',
       currentQuoteSnapshot: null,
       currencyCode: 'EUR',
     });

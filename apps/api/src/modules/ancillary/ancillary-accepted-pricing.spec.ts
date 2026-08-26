@@ -1,21 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
+import { reservations } from '@telivityhaip/database';
 import { AncillaryService } from './ancillary.service';
 import { WebhookService } from '../webhook/webhook.service';
 
 function stagedSelect(stages: any[][]) {
   let index = 0;
-  return vi.fn(() => {
-    const rows = stages[index++] ?? [];
+  const select: any = vi.fn((selection?: Record<string, unknown>) => {
+    const reservationMutex = selection?.id === reservations.id;
+    const rows = reservationMutex ? [{ id: 'res-1' }] : stages[index++] ?? [];
     const promise = Promise.resolve(rows);
     const chain: any = {
       from: vi.fn(() => chain),
       innerJoin: vi.fn(() => chain),
       where: vi.fn(() => chain),
+      for: vi.fn(async () => {
+        if (reservationMutex) select.reservationLockCount++;
+        return rows;
+      }),
       limit: vi.fn(() => promise),
       then: promise.then.bind(promise),
     };
     return chain;
   });
+  select.reservationLockCount = 0;
+  return select;
 }
 
 function transactionalDb<T extends Record<string, any>>(db: T): T {
@@ -460,7 +468,7 @@ describe('AncillaryService accepted operational pricing', () => {
 
     expect(result.count).toBe(0);
     expect(folio.postChargeFromSnapshotWithOutcome).not.toHaveBeenCalled();
-    expect(db.execute).toHaveBeenCalledOnce();
+    expect(db.select.reservationLockCount).toBe(1);
   });
 
   it('posts a once service from the amended snapshot when the live row is still per-night', async () => {

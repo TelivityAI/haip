@@ -20,8 +20,6 @@ const databaseUrl = process.env['DATABASE_URL'];
 const suite = live && databaseUrl ? describe : describe.skip;
 
 suite('accepted-pricing mutex against PostgreSQL', () => {
-  const propertyId = 'property-race';
-  const reservationId = 'reservation-race';
   const client = postgres(databaseUrl!, { max: 8 });
   const db = drizzle(client);
   const actualIds = {
@@ -41,6 +39,8 @@ suite('accepted-pricing mutex against PostgreSQL', () => {
     correctionCharge: '12000000-0000-4000-a000-000000000013',
     bookingRequest: '12000000-0000-4000-a000-000000000015',
   };
+  const propertyId = actualIds.property;
+  const reservationId = actualIds.reservation;
 
   beforeAll(async () => {
     await client.unsafe('DROP SCHEMA IF EXISTS task12_accepted_pricing_lock_test CASCADE');
@@ -212,6 +212,7 @@ suite('accepted-pricing mutex against PostgreSQL', () => {
           status, arrival_date, departure_date, room_type_id, rate_plan_id,
           adults, children, guest_first_name, guest_last_name, guest_email,
           service_ids, submitted_quote_snapshot, currency_code,
+          submitted_total,
           accepted_price_source, accepted_total, accepted_reservation_id,
           accepted_folio_id, decided_at)
       VALUES
@@ -219,27 +220,28 @@ suite('accepted-pricing mutex against PostgreSQL', () => {
           ${'a'.repeat(64)}, 'accepted', '2026-10-01', '2026-10-02',
           ${actualIds.roomType}, ${actualIds.ratePlan}, 1, 0, 'Task', 'Twelve',
           'task12@example.invalid', ${JSON.stringify([actualIds.service])}::jsonb,
-          ${JSON.stringify(acceptedPricingSnapshot)}::jsonb, 'EUR', 'current', 122.00,
+          ${JSON.stringify(acceptedPricingSnapshot)}::jsonb, 'EUR', 122.00, 'current', 122.00,
           ${actualIds.reservation}, ${actualIds.folio}, now())
     `;
   }
 
-  async function waitForAdvisoryLock() {
+  async function waitForTriggerSleep() {
     for (let attempt = 0; attempt < 100; attempt++) {
       const [row] = await client<{ count: number }[]>`
         SELECT count(*)::int AS count
-        FROM pg_locks
-        WHERE locktype = 'advisory' AND database = (
-          SELECT oid FROM pg_database WHERE datname = current_database()
-        ) AND granted
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND pid <> pg_backend_pid()
+          AND wait_event = 'PgSleep'
       `;
       if ((row?.count ?? 0) > 0) return;
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
-    throw new Error('accepted-pricing advisory lock was not observed');
+    throw new Error('accepted-pricing fixture delay was not observed');
   }
 
   async function reset() {
+    await setupActualServiceFixture();
     await client.unsafe('TRUNCATE task12_accepted_pricing_lock_test.ledger');
     await client.unsafe('TRUNCATE task12_accepted_pricing_lock_test.pricing_state');
     await client`
@@ -478,7 +480,7 @@ suite('accepted-pricing mutex against PostgreSQL', () => {
       },
       { userEmail: 'night.manager@example.invalid' },
     );
-    await waitForAdvisoryLock();
+    await waitForTriggerSleep();
     const tariffPosting = nightAudit.postRoomTariffs(actualIds.property, '2026-10-01');
 
     const [amended, tariff] = await Promise.all([amendment, tariffPosting]);
@@ -544,7 +546,7 @@ suite('accepted-pricing mutex against PostgreSQL', () => {
     `);
 
     const tariffPosting = nightAudit.postRoomTariffs(actualIds.property, '2026-10-01');
-    await waitForAdvisoryLock();
+    await waitForTriggerSleep();
     const amendment = bookingRequest.amendStay(
       actualIds.bookingRequest,
       actualIds.property,
@@ -682,7 +684,7 @@ suite('accepted-pricing mutex against PostgreSQL', () => {
       actualIds.property,
       actualIds.reservation,
     );
-    await waitForAdvisoryLock();
+    await waitForTriggerSleep();
     const stalePosting = ancillary.postOnceForReservation(
       actualIds.reservation,
       actualIds.property,
@@ -724,7 +726,7 @@ suite('accepted-pricing mutex against PostgreSQL', () => {
       actualIds.reservation,
       actualIds.property,
     );
-    await waitForAdvisoryLock();
+    await waitForTriggerSleep();
     const losingCancellation = ancillary.cancelReservationService(
       actualIds.reservationService,
       actualIds.property,

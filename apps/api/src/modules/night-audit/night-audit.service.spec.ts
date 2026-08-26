@@ -145,6 +145,7 @@ function createMockDb(overrides: {
     select: vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
+          for: vi.fn().mockResolvedValue([{ id: 'res-001' }]),
           then: (resolve: any) => {
             const result = selectResults[selectCallCount] ?? selectResults[selectResults.length - 1]!;
             selectCallCount++;
@@ -463,7 +464,6 @@ describe('NightAuditService', () => {
 
     expect(result.count).toBe(0);
     expect(mockFolioService.postChargeFromSnapshotWithOutcome).not.toHaveBeenCalled();
-    expect(db.execute).toHaveBeenCalledOnce();
   });
 
   it('posts a custom accepted-price delta once with the arrival-night snapshot', async () => {

@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql, lte, gte, inArray } from 'drizzle-orm';
+import { eq, and, sql, lte, gte, inArray, sum } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import {
   charges,
@@ -46,7 +46,7 @@ export class ReportsService {
     // so its adjustment is 80 and net revenue is exactly zero.
     const [adjResult] = await this.db
       .select({
-        total: sql<string>`coalesce(-sum(${charges.amount}::numeric), 0)`,
+        total: sum(charges.amount),
       })
       .from(charges)
       .where(
@@ -105,7 +105,10 @@ export class ReportsService {
       paymentsTotalDec = paymentsTotalDec.plus(amount);
     }
 
-    const adjustmentsDec = new Decimal(adjResult?.total ?? '0');
+    const signedReversalTotal = new Decimal(adjResult?.total ?? '0');
+    const adjustmentsDec = signedReversalTotal.isZero()
+      ? new Decimal(0)
+      : signedReversalTotal.negated();
 
     return {
       date,

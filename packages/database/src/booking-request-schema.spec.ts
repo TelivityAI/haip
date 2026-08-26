@@ -23,6 +23,8 @@ describe('booking request schema', () => {
     expect(bookingRequests.submittedQuoteSnapshot).toBeDefined();
     expect(bookingRequests.submissionIdempotencyKey).toBeDefined();
     expect(bookingRequests.submissionFingerprint).toBeDefined();
+    expect(bookingRequests.submittedTotal).toBeDefined();
+    expect(bookingRequests.submittedTotal.notNull).toBe(true);
     expect(bookingRequests.setupIntentId).toBeDefined();
     expect(bookingRequestConsequences.propertyId).toBeDefined();
     expect(bookingRequestConsequences.bookingRequestId).toBeDefined();
@@ -64,6 +66,8 @@ describe('booking request schema', () => {
       'audit_logs_property_entity_timeline_idx',
     );
     expect(auditLogs.bookingRequestId).toBeDefined();
+    expect(auditLogs.timelineSequence).toBeDefined();
+    expect(auditLogs.timelineSequence.notNull).toBe(true);
     expect(getTableConfig(auditLogs).indexes.map((index) => index.config.name)).toContain(
       'audit_logs_booking_request_timeline_idx',
     );
@@ -71,6 +75,7 @@ describe('booking request schema', () => {
     const indexNames = getTableConfig(bookingRequests).indexes.map((index) => index.config.name);
     expect(indexNames).toContain('booking_requests_property_submission_key_unique');
     expect(indexNames).toContain('booking_requests_setup_intent_unique');
+    expect(indexNames).toContain('booking_requests_property_submitted_total_idx');
 
     const consequenceIndexNames = getTableConfig(bookingRequestConsequences)
       .indexes.map((index) => index.config.name);

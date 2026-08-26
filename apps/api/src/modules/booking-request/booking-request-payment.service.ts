@@ -16,7 +16,7 @@ import {
 } from '@telivityhaip/database';
 import { createHash } from 'node:crypto';
 import Decimal from 'decimal.js';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { AuditActor } from '../../common/audit/audit-actor';
 import { actorFields } from '../../common/audit/audit-actor';
 import { DRIZZLE } from '../../database/database.module';
@@ -387,19 +387,17 @@ export class BookingRequestPaymentService {
       const previousOrder = [...installments]
         .sort((left, right) => left.sortOrder - right.sortOrder)
         .map((row) => row.id);
-      const orderCases = input.installmentIds.map((id, index) => sql`when ${id} then ${index}`);
       const updatedAt = new Date();
-      await tx
-        .update(bookingRequestInstallments)
-        .set({
-          sortOrder: sql<number>`case ${bookingRequestInstallments.id} ${sql.join(orderCases, sql.raw(' '))} end`,
-          updatedAt,
-        })
-        .where(and(
-          eq(bookingRequestInstallments.propertyId, propertyId),
-          eq(bookingRequestInstallments.bookingRequestId, bookingRequestId),
-          inArray(bookingRequestInstallments.id, input.installmentIds),
-        ));
+      for (const [sortOrder, installmentId] of input.installmentIds.entries()) {
+        await tx
+          .update(bookingRequestInstallments)
+          .set({ sortOrder, updatedAt })
+          .where(and(
+            eq(bookingRequestInstallments.id, installmentId),
+            eq(bookingRequestInstallments.propertyId, propertyId),
+            eq(bookingRequestInstallments.bookingRequestId, bookingRequestId),
+          ));
+      }
       await this.audit(tx, {
         propertyId,
         bookingRequestId,

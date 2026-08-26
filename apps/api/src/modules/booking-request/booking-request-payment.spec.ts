@@ -119,6 +119,19 @@ function tableRows(state: State, table: unknown): Array<Record<string, any>> {
   throw new Error('Unexpected table in payment test');
 }
 
+function sqlPredicateParts(value: any, parts = {
+  columns: [] as string[],
+  params: [] as unknown[],
+}) {
+  if (!value || typeof value !== 'object') return parts;
+  if (typeof value.name === 'string') parts.columns.push(value.name);
+  if (value.constructor?.name === 'Param') parts.params.push(value.value);
+  if (Array.isArray(value.queryChunks)) {
+    for (const chunk of value.queryChunks) sqlPredicateParts(chunk, parts);
+  }
+  return parts;
+}
+
 function makeDatabase(state: State) {
   let sequence = 10;
   let transactionActive = false;
@@ -216,18 +229,27 @@ function makeDatabase(state: State) {
 
   const update = vi.fn((table: unknown) => ({
     set: vi.fn((changes: Record<string, unknown>) => ({
-      where: vi.fn(() => {
+      where: vi.fn((predicate: unknown) => {
         const apply = () => {
           const rows = tableRows(state, table);
           const cloneableChanges = { ...changes };
+          let targetRows = rows;
           if (
             table === bookingRequestInstallments
             && typeof cloneableChanges['sortOrder'] === 'object'
           ) {
             delete cloneableChanges['sortOrder'];
+          } else if (
+            table === bookingRequestInstallments
+            && typeof cloneableChanges['sortOrder'] === 'number'
+          ) {
+            const predicateParts = sqlPredicateParts(predicate);
+            const targetId = predicateParts.params.find((param) =>
+              rows.some((row) => row.id === param));
+            targetRows = rows.filter((row) => row.id === targetId);
           }
-          for (const row of rows) Object.assign(row, structuredClone(cloneableChanges));
-          return structuredClone(rows);
+          for (const row of targetRows) Object.assign(row, structuredClone(cloneableChanges));
+          return structuredClone(targetRows);
         };
         const chain: Record<string, any> & PromiseLike<any> = {
           returning: vi.fn(async () => apply()),
@@ -853,7 +875,10 @@ describe('BookingRequestPaymentService installments', () => {
       [secondId, 0],
       [INSTALLMENT_ID, 1],
     ]);
-    expect(harness.database.db.update).toHaveBeenCalledTimes(1);
+    expect(harness.state.installments.map((row) => [row.id, row.sortOrder])).toEqual([
+      [INSTALLMENT_ID, 1],
+      [secondId, 0],
+    ]);
     expect(harness.state.audits).toHaveLength(1);
     expect(harness.state.audits[0]).toMatchObject({
       entityType: 'booking_request',
@@ -946,7 +971,6 @@ describe('BookingRequestPaymentService installments', () => {
       [0, 1],
     ]);
     expect(harness.database.lockCalls).toBeGreaterThanOrEqual(4);
-    expect(harness.database.db.update).toHaveBeenCalledTimes(2);
     expect(harness.state.audits).toHaveLength(2);
   });
 

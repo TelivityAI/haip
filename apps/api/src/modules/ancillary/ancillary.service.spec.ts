@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { reservations } from '@telivityhaip/database';
 import { AncillaryService } from './ancillary.service';
 import { FolioService } from '../folio/folio.service';
 import { WebhookService } from '../webhook/webhook.service';
@@ -246,19 +247,19 @@ describe('AncillaryService', () => {
     it('sets status to cancelled', async () => {
       const cancelled = { ...mockRs, status: 'cancelled' };
       const lockOrder: string[] = [];
-      const select = vi.fn(() => {
+      const select = vi.fn((selection?: Record<string, unknown>) => {
+        const reservationMutex = selection?.id === reservations.id;
         const chain: any = {
           from: vi.fn(() => chain),
           where: vi.fn(() => chain),
           for: vi.fn(async () => {
-            lockOrder.push('service');
-            return [mockRs];
+            lockOrder.push(reservationMutex ? 'pricing-lock' : 'service');
+            return [reservationMutex ? mockReservation : mockRs];
           }),
         };
         return chain;
       });
       const db: any = {
-        execute: vi.fn(async () => { lockOrder.push('pricing-lock'); }),
         transaction: vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db)),
         select,
         insert: vi.fn(),

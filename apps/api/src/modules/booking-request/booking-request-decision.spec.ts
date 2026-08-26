@@ -101,6 +101,7 @@ type RequestRow = {
   specialRequests: string | null;
   serviceIds: string[];
   submittedQuoteSnapshot: typeof submittedQuote;
+  submittedTotal: string;
   currentQuoteSnapshot: typeof currentQuote | null;
   currencyCode: string;
   acceptedPriceSource: 'submitted' | 'current' | 'custom' | null;
@@ -134,6 +135,7 @@ function pendingRequest(overrides: Partial<RequestRow> = {}): RequestRow {
     specialRequests: 'A quiet room, please.',
     serviceIds: [],
     submittedQuoteSnapshot: structuredClone(submittedQuote),
+    submittedTotal: '220.00',
     currentQuoteSnapshot: null,
     currencyCode: 'EUR',
     acceptedPriceSource: null,
@@ -214,10 +216,31 @@ function makeDatabase(state: State) {
     let table: unknown;
     let offset = 0;
     let limit: number | undefined;
+    let orderExpressions: unknown[] = [];
     const resolveRows = () => {
       let rows = structuredClone(rowsFor(table));
       if (selection && Object.keys(selection).length === 1 && 'count' in selection) {
         return [{ count: rows.length }];
+      }
+      if (table === bookingRequests && orderExpressions.length > 0) {
+        const parts = sqlExpressionParts(orderExpressions[0]);
+        if (parts.columns.includes('submitted_total')) {
+          const multiplier = parts.strings.join(' ').toLowerCase().includes('desc') ? -1 : 1;
+          rows.sort((left, right) => {
+            const amountOrder = Number(left['submittedTotal']) - Number(right['submittedTotal']);
+            if (amountOrder !== 0) return amountOrder * multiplier;
+            return String(left['id']).localeCompare(String(right['id'])) * multiplier;
+          });
+        }
+      }
+      if (table === auditLogs) {
+        rows = rows.map((row) => ({
+          ...row,
+          timelineSequence: row['timelineSequence'] ?? (
+            BigInt((row['occurredAt'] as Date).getTime()) * 1_000_000n
+            + BigInt(String(row['id']).replace(/\D/g, '').slice(-6) || '0')
+          ),
+        }));
       }
       if (table === auditLogs && selection && 'occurredAtMicros' in selection) {
         rows = rows.map((row) => ({
@@ -240,7 +263,10 @@ function makeDatabase(state: State) {
         await acquireLock?.();
         return resolveRows();
       }),
-      orderBy: vi.fn(() => chain),
+      orderBy: vi.fn((...expressions: unknown[]) => {
+        orderExpressions = expressions;
+        return chain;
+      }),
       limit: vi.fn((value: number) => {
         limit = value;
         return chain;
@@ -334,6 +360,22 @@ function makeDatabase(state: State) {
     db,
     isTransactionActive: () => transactionActive,
   };
+}
+
+function sqlExpressionParts(value: any, parts = {
+  columns: [] as string[],
+  strings: [] as string[],
+}) {
+  if (!value || typeof value !== 'object') return parts;
+  if (typeof value.name === 'string') parts.columns.push(value.name);
+  if (Array.isArray(value.value)) {
+    parts.strings.push(...value.value.filter((part: unknown): part is string =>
+      typeof part === 'string'));
+  }
+  if (Array.isArray(value.queryChunks)) {
+    for (const chunk of value.queryChunks) sqlExpressionParts(chunk, parts);
+  }
+  return parts;
 }
 
 function makeHarness(requests: RequestRow[] = [pendingRequest()]) {
@@ -577,13 +619,14 @@ describe('Booking Request staff HTTP contract', () => {
 });
 
 describe('BookingRequestService staff reads', () => {
-  it('applies requested-total numeric ordering in SQL before page boundaries', async () => {
+  it('sorts a requested-total page from the durable submitted amount before pagination', async () => {
     const harness = makeHarness(Array.from({ length: 25 }, (_, index) => pendingRequest({
       id: `bbbbbbbb-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
-      submittedQuoteSnapshot: { grandTotal: String(index === 0 ? 9 : index * 10) },
+      submittedTotal: String(index === 0 ? 9 : index * 10),
+      submittedQuoteSnapshot: { grandTotal: '999999.00' },
     })));
 
-    await call(harness.service, 'list', [{
+    const result = await call(harness.service, 'list', [{
       propertyId: PROPERTY_ID,
       page: 2,
       limit: 20,
@@ -591,18 +634,14 @@ describe('BookingRequestService staff reads', () => {
       sortOrder: 'desc',
     }]);
 
-    const listSelect = vi.mocked((harness.database.db as any).select).mock.results[0]?.value;
-    expect(listSelect.orderBy).toHaveBeenCalledTimes(1);
-    expect(listSelect.orderBy.mock.invocationCallOrder[0]).toBeLessThan(
-      listSelect.limit.mock.invocationCallOrder[0],
-    );
-    const directionSql = listSelect.orderBy.mock.calls[0]?.[0];
-    const requestedTotalSql = directionSql.queryChunks.find((chunk: any) => chunk.queryChunks);
-    expect(requestedTotalSql.queryChunks[0]?.value).toEqual(['cast(']);
-    expect(requestedTotalSql.queryChunks.at(-1)?.value)
-      .toEqual(["->>'grandTotal' as numeric)"]);
-    expect(listSelect.limit).toHaveBeenCalledWith(20);
-    expect(listSelect.offset).toHaveBeenCalledWith(20);
+    expect(result.data.map((row: RequestRow) => row.id)).toEqual([
+      'bbbbbbbb-0000-4000-a000-000000000005',
+      'bbbbbbbb-0000-4000-a000-000000000004',
+      'bbbbbbbb-0000-4000-a000-000000000003',
+      'bbbbbbbb-0000-4000-a000-000000000002',
+      'bbbbbbbb-0000-4000-a000-000000000001',
+    ]);
+    expect(result.total).toBe(25);
   });
 
   it('lists only the requested property and never leaks cross-property rows', async () => {
@@ -782,7 +821,7 @@ describe('BookingRequestService staff reads', () => {
     expect(second.nextCursor).toBeNull();
   });
 
-  it('keeps PostgreSQL microseconds in the opaque audit cursor and total ordering', async () => {
+  it('uses the durable timeline sequence in the opaque audit cursor and total ordering', async () => {
     const harness = makeHarness();
     harness.state.audits.push(
       {
@@ -794,7 +833,7 @@ describe('BookingRequestService staff reads', () => {
         entityId: REQUEST_ID,
         newValue: { status: 'accepted' },
         occurredAt: new Date('2026-08-25T10:00:00.000Z'),
-        occurredAtMicros: '1787652000000900',
+        timelineSequence: 900n,
       },
       {
         id: '10000000-0000-4000-a000-000000000043',
@@ -805,7 +844,7 @@ describe('BookingRequestService staff reads', () => {
         entityId: REQUEST_ID,
         newValue: { status: 'pending' },
         occurredAt: new Date('2026-08-25T10:00:00.000Z'),
-        occurredAtMicros: '1787652000000800',
+        timelineSequence: 800n,
       },
       {
         id: '10000000-0000-4000-a000-000000000042',
@@ -816,7 +855,7 @@ describe('BookingRequestService staff reads', () => {
         entityId: REQUEST_ID,
         newValue: { status: 'pending' },
         occurredAt: new Date('2026-08-25T10:00:00.000Z'),
-        occurredAtMicros: '1787652000000700',
+        timelineSequence: 700n,
       },
     );
 
@@ -839,10 +878,9 @@ describe('BookingRequestService staff reads', () => {
       '10000000-0000-4000-a000-000000000043',
     ]);
     expect(decodedCursor).toMatchObject({
-      occurredAtMicros: '1787652000000800',
-      source: 'audit_log',
-      id: '10000000-0000-4000-a000-000000000043',
+      timelineSequence: '800',
     });
+    expect(Object.keys(decodedCursor)).toEqual(['timelineSequence']);
     expect(decodedCursor).not.toHaveProperty('occurredAt');
     expect(second.data.map((row: { id: string }) => row.id)).toEqual([
       '10000000-0000-4000-a000-000000000042',

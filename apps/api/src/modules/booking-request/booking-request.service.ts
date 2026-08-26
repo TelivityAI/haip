@@ -30,9 +30,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import {
   and,
   asc,
+  count,
   desc,
   eq,
-  getTableColumns,
   gte,
   ilike,
   inArray,
@@ -41,7 +41,6 @@ import {
   lt,
   lte,
   or,
-  sql,
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -117,28 +116,16 @@ import {
 } from './dto/booking-request-response.dto';
 
 type BookingRequestAuditCursor = {
-  version: 2;
-  occurredAtMicros: string;
-  source: 'audit_log';
-  id: string;
+  timelineSequence: string;
 };
 
-type BookingRequestAuditRow = typeof auditLogs.$inferSelect & {
-  occurredAtMicros: string;
-};
-
-const POSTGRES_BIGINT_MIN = -9_223_372_036_854_775_808n;
 const POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807n;
-const auditOccurredAtMicros = sql<bigint>`
-  (extract(epoch from ${auditLogs.occurredAt}) * 1000000)::bigint
-`;
 
-function encodeBookingRequestAuditCursor(row: Pick<BookingRequestAuditRow, 'id' | 'occurredAtMicros'>): string {
+function encodeBookingRequestAuditCursor(
+  row: Pick<typeof auditLogs.$inferSelect, 'timelineSequence'>,
+): string {
   const cursor: BookingRequestAuditCursor = {
-    version: 2,
-    occurredAtMicros: row.occurredAtMicros,
-    source: 'audit_log',
-    id: row.id,
+    timelineSequence: row.timelineSequence.toString(),
   };
   return Buffer.from(JSON.stringify(cursor)).toString('base64url');
 }
@@ -147,40 +134,29 @@ function decodeBookingRequestAuditCursor(value: string | undefined): BookingRequ
   if (!value) return null;
   try {
     const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Partial<BookingRequestAuditCursor>;
-    const occurredAtMicros = parsed.occurredAtMicros;
-    const occurredAtMicrosValue = typeof occurredAtMicros === 'string'
-      && /^-?\d{1,19}$/.test(occurredAtMicros)
-      ? BigInt(occurredAtMicros)
+    const timelineSequence = parsed.timelineSequence;
+    const timelineSequenceValue = typeof timelineSequence === 'string'
+      && /^[1-9]\d{0,18}$/.test(timelineSequence)
+      ? BigInt(timelineSequence)
       : null;
     if (
-      parsed.version !== 2
-      || parsed.source !== 'audit_log'
-      || typeof parsed.id !== 'string'
-      || typeof occurredAtMicros !== 'string'
-      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parsed.id)
-      || occurredAtMicrosValue == null
-      || occurredAtMicrosValue < POSTGRES_BIGINT_MIN
-      || occurredAtMicrosValue > POSTGRES_BIGINT_MAX
+      Object.keys(parsed).length !== 1
+      || typeof timelineSequence !== 'string'
+      || timelineSequenceValue == null
+      || timelineSequenceValue > POSTGRES_BIGINT_MAX
     ) throw new Error('invalid cursor');
-    return {
-      version: 2,
-      source: 'audit_log',
-      id: parsed.id,
-      occurredAtMicros,
-    };
+    return { timelineSequence };
   } catch {
     throw new BadRequestException('Invalid booking request audit cursor');
   }
 }
 
 function auditRowPrecedesCursor(
-  row: Pick<BookingRequestAuditRow, 'id' | 'occurredAtMicros'>,
+  row: Pick<typeof auditLogs.$inferSelect, 'timelineSequence'>,
   cursor: BookingRequestAuditCursor | null,
 ): boolean {
   if (!cursor) return true;
-  const cursorTime = BigInt(cursor.occurredAtMicros);
-  const rowTime = BigInt(row.occurredAtMicros);
-  return rowTime < cursorTime || (rowTime === cursorTime && row.id < cursor.id);
+  return row.timelineSequence < BigInt(cursor.timelineSequence);
 }
 
 export type AcceptBookingRequestInput = {
@@ -369,9 +345,8 @@ export class BookingRequestService {
     const offset = (page - 1) * limit;
     const where = and(...conditions);
     const direction = dto.sortOrder === 'asc' ? asc : desc;
-    const requestedTotal = sql<number>`cast(${bookingRequests.submittedQuoteSnapshot}->>'grandTotal' as numeric)`;
     const orderBy = dto.sortBy === 'requestedTotal'
-      ? [direction(requestedTotal), direction(bookingRequests.id)]
+      ? [direction(bookingRequests.submittedTotal), direction(bookingRequests.id)]
       : dto.sortBy === 'arrivalDate'
         ? [direction(bookingRequests.arrivalDate), direction(bookingRequests.id)]
         : dto.sortBy === 'guestName'
@@ -392,7 +367,7 @@ export class BookingRequestService {
         .limit(limit)
         .offset(offset),
       this.db
-        .select({ count: sql<number>`count(*)` })
+        .select({ count: count() })
         .from(bookingRequests)
         .where(where),
     ]);
@@ -484,26 +459,17 @@ export class BookingRequestService {
     const limit = Math.max(1, Math.min(pagination.limit ?? 50, 100));
     const cursor = decodeBookingRequestAuditCursor(pagination.cursor);
     const selected = await this.db
-      .select({
-        ...getTableColumns(auditLogs),
-        occurredAtMicros: sql<string>`${auditOccurredAtMicros}::text`,
-      })
+      .select()
       .from(auditLogs)
       .where(and(
         eq(auditLogs.propertyId, propertyId),
         inArray(auditLogs.entityType, allowedEntityTypes),
         or(...entityConditions),
         cursor
-          ? or(
-            lt(auditOccurredAtMicros, sql<bigint>`${cursor.occurredAtMicros}::bigint`),
-            and(
-              eq(auditOccurredAtMicros, sql<bigint>`${cursor.occurredAtMicros}::bigint`),
-              lt(auditLogs.id, cursor.id),
-            ),
-          )
+          ? lt(auditLogs.timelineSequence, BigInt(cursor.timelineSequence))
           : undefined,
       ))
-      .orderBy(desc(auditLogs.occurredAt), desc(auditLogs.id))
+      .orderBy(desc(auditLogs.timelineSequence))
       .limit(limit + 1);
     const rows = selected.filter((row) => row.propertyId === propertyId);
     const relatedEntities = new Set<string>([
@@ -523,11 +489,9 @@ export class BookingRequestService {
         )
         && auditRowPrecedesCursor(row, cursor))
       .sort((left, right) => {
-        const leftMicros = BigInt(left.occurredAtMicros);
-        const rightMicros = BigInt(right.occurredAtMicros);
-        return rightMicros !== leftMicros
-          ? (rightMicros > leftMicros ? 1 : -1)
-          : right.id.localeCompare(left.id);
+        return right.timelineSequence === left.timelineSequence
+          ? 0
+          : right.timelineSequence > left.timelineSequence ? 1 : -1;
       });
     const data = pageRows.slice(0, limit).map(toBookingRequestAuditHistoryItem);
     return {
@@ -1342,6 +1306,7 @@ export class BookingRequestService {
           formSnapshot: structuredClone(config.formQuestions),
           applicationAnswers: structuredClone(applicationAnswers),
           submittedQuoteSnapshot: structuredClone(quote),
+          submittedTotal: quote.grandTotal,
           currentQuoteSnapshot: null,
           currencyCode: quote.currencyCode,
           ...card,

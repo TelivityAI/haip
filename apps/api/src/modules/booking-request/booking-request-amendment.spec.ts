@@ -189,6 +189,12 @@ function makeDatabase(state: HarnessState, lockOrder: string[]) {
       for: vi.fn(async () => {
         if (table === properties) lockOrder.push('property');
         else if (table === bookingRequests) lockOrder.push('request');
+        else if (
+          table === reservations
+          && selection
+          && Object.keys(selection).length === 1
+          && 'id' in selection
+        ) lockOrder.push('pricing-lock');
         else if (table === reservations) lockOrder.push('reservation');
         return resolveRows();
       }),
@@ -199,9 +205,7 @@ function makeDatabase(state: HarnessState, lockOrder: string[]) {
   };
 
   const db: any = {
-    execute: vi.fn(async () => {
-      lockOrder.push('pricing-lock');
-    }),
+    execute: vi.fn(async () => undefined),
     select: vi.fn((selection?: Record<string, unknown>) => selectBuilder(selection)),
     insert: vi.fn((table: unknown) => ({
       values: vi.fn((values: Record<string, any>) => {

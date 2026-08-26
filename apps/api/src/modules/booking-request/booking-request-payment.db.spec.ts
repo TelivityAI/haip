@@ -118,6 +118,7 @@ describeDatabase('Booking Request PostgreSQL money and audit contract', () => {
       guestLastName: 'Seven',
       guestEmail: 'task7@example.com',
       submittedQuoteSnapshot: { grandTotal: '100.00' },
+      submittedTotal: '100.00',
       currencyCode: 'EUR',
     });
     await db.insert(bookingRequests).values({
@@ -133,6 +134,7 @@ describeDatabase('Booking Request PostgreSQL money and audit contract', () => {
       guestLastName: 'Cursor',
       guestEmail: 'audit-cursor@example.com',
       submittedQuoteSnapshot: { grandTotal: '100.00' },
+      submittedTotal: '100.00',
       currencyCode: 'EUR',
     });
     await db.insert(payments).values({
@@ -188,6 +190,7 @@ describeDatabase('Booking Request PostgreSQL money and audit contract', () => {
       guestLastName: 'Property',
       guestEmail: 'other@example.com',
       submittedQuoteSnapshot: { grandTotal: '100.00' },
+      submittedTotal: '100.00',
       currencyCode: 'EUR',
     });
   });
@@ -218,7 +221,7 @@ describeDatabase('Booking Request PostgreSQL money and audit contract', () => {
     await client.end();
   });
 
-  it('paginates audit rows by exact PostgreSQL microseconds and rejects invalid cursors', async () => {
+  it('paginates audit rows by their durable sequence and rejects invalid cursors', async () => {
     const auditIds = [
       '71000000-0000-4000-a000-000000000021',
       '71000000-0000-4000-a000-000000000022',
@@ -233,12 +236,14 @@ describeDatabase('Booking Request PostgreSQL money and audit contract', () => {
       entityId: auditRequestId,
       newValue: { status: 'pending' },
     })));
-    for (const [index, id] of auditIds.entries()) {
-      await client.unsafe(
-        'UPDATE audit_logs SET occurred_at = $1::timestamptz WHERE id = $2::uuid',
-        [`2100-01-01 00:00:00.000${9 - index}00+00`, id],
-      );
-    }
+    const insertedTimeline = await db.select({
+      id: auditLogs.id,
+      timelineSequence: auditLogs.timelineSequence,
+    }).from(auditLogs).where(eq(auditLogs.bookingRequestId, auditRequestId));
+    const sequenceById = new Map(insertedTimeline.map((row) => [
+      row.id,
+      row.timelineSequence.toString(),
+    ]));
     const service = makeAuditService(db);
 
     const first = await service.auditHistory(auditRequestId, propertyId, { limit: 2 });
@@ -248,22 +253,18 @@ describeDatabase('Booking Request PostgreSQL money and audit contract', () => {
       cursor: first.nextCursor!,
     });
 
-    expect(first.data.map((row) => row.id)).toEqual(auditIds.slice(0, 2));
+    expect(first.data.map((row) => row.id)).toEqual([auditIds[2], auditIds[1]]);
     expect(decoded).toMatchObject({
-      occurredAtMicros: '4102444800000800',
-      source: 'audit_log',
-      id: auditIds[1],
+      timelineSequence: sequenceById.get(auditIds[1]),
     });
+    expect(Object.keys(decoded)).toEqual(['timelineSequence']);
     expect(decoded).not.toHaveProperty('occurredAt');
-    expect(second.data[0]?.id).toBe(auditIds[2]);
+    expect(second.data[0]?.id).toBe(auditIds[0]);
     expect(new Set([...first.data, ...second.data].map((row) => row.id)).size)
       .toBe(first.data.length + second.data.length);
 
     const invalidCursor = Buffer.from(JSON.stringify({
-      version: 2,
-      occurredAtMicros: 'not-microseconds',
-      source: 'audit_log',
-      id: auditIds[1],
+      timelineSequence: 'not-a-sequence',
     })).toString('base64url');
     await expect(service.auditHistory(auditRequestId, propertyId, {
       limit: 2,

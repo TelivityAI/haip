@@ -5,7 +5,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { eq, and, sql, lte } from 'drizzle-orm';
+import { eq, and, inArray, sql, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import {
   auditRuns,
@@ -177,7 +177,7 @@ export class NightAuditService {
                 .where(and(
                   eq(reservations.id, reservation.id),
                   eq(reservations.propertyId, propertyId),
-                  sql`${reservations.status} in ('checked_in', 'stayover', 'due_out')`,
+                  inArray(reservations.status, ['checked_in', 'stayover', 'due_out']),
                 ));
               const acceptedPricing = currentReservation?.acceptedPricingSnapshot;
               const acceptedNight = acceptedPricing?.nights?.find(

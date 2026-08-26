@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const bookingRequestMigration = readFileSync(
@@ -33,6 +33,10 @@ const auditRelationshipMigration = readFileSync(
 const amendmentLedgerMigration = readFileSync(
   new URL('./migrations/0031_booking_request_amendment_ledger.sql', import.meta.url),
   'utf8',
+);
+const remediationMigrationUrl = new URL(
+  './migrations/0032_booking_request_remediation.sql',
+  import.meta.url,
 );
 
 describe('booking request migration sequence', () => {
@@ -200,7 +204,7 @@ describe('booking request immutable audit relationship migration safety', () => 
     expect(pushSchema).toContain('ADD COLUMN IF NOT EXISTS booking_request_id uuid');
     expect(pushSchema).toContain('audit_logs_booking_request_timeline_idx');
     expect(pushSchema).toMatch(
-      /\(property_id, booking_request_id, occurred_at DESC, id DESC\)/,
+      /\(property_id, booking_request_id, timeline_sequence DESC\)/,
     );
     expect(pushSchema).toMatch(
       /INSERT INTO audit_logs \(\s*property_id, booking_request_id,[\s\S]*?SELECT mutation\.property_id,\s*mutation\.booking_request_id,/,
@@ -268,5 +272,64 @@ describe('booking request amendment ledger migration safety', () => {
     for (const source of [amendmentLedgerMigration]) {
       expect(source).not.toMatch(/SET\s+(amount|is_reversal|is_locked|service_date)\s*=/i);
     }
+  });
+});
+
+describe('booking request query support migration safety', () => {
+  it('ships migration 0032 and mirrors it in the push-schema path', () => {
+    expect(existsSync(remediationMigrationUrl)).toBe(true);
+    if (!existsSync(remediationMigrationUrl)) return;
+    const remediationMigration = readFileSync(remediationMigrationUrl, 'utf8');
+
+    for (const source of [remediationMigration, pushSchema]) {
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS submitted_total numeric(12,2)');
+      expect(source).toContain("submitted_quote_snapshot->>'grandTotal'");
+      expect(source).toContain('ALTER COLUMN submitted_total SET NOT NULL');
+      expect(source).toContain('booking_requests_property_submitted_total_idx');
+      expect(source).toContain('ADD COLUMN IF NOT EXISTS timeline_sequence bigint');
+      expect(source).toMatch(/row_number\(\)\s+OVER\s*\(ORDER BY occurred_at, id\)/i);
+      expect(source).toContain('ALTER COLUMN timeline_sequence SET NOT NULL');
+      expect(source).toContain('audit_logs_booking_request_timeline_idx');
+    }
+  });
+
+  it('backfills both required columns before enforcing their constraints and indexes', () => {
+    expect(existsSync(remediationMigrationUrl)).toBe(true);
+    if (!existsSync(remediationMigrationUrl)) return;
+    const remediationMigration = readFileSync(remediationMigrationUrl, 'utf8');
+
+    const submittedColumn = remediationMigration.indexOf(
+      'ADD COLUMN IF NOT EXISTS submitted_total numeric(12,2)',
+    );
+    const submittedBackfill = remediationMigration.indexOf('UPDATE booking_requests');
+    const submittedNotNull = remediationMigration.indexOf(
+      'ALTER COLUMN submitted_total SET NOT NULL',
+    );
+    const submittedIndex = remediationMigration.indexOf(
+      'booking_requests_property_submitted_total_idx',
+    );
+    expect(submittedColumn).toBeGreaterThanOrEqual(0);
+    expect(submittedBackfill).toBeGreaterThan(submittedColumn);
+    expect(submittedNotNull).toBeGreaterThan(submittedBackfill);
+    expect(submittedIndex).toBeGreaterThan(submittedNotNull);
+
+    const timelineColumn = remediationMigration.indexOf(
+      'ADD COLUMN IF NOT EXISTS timeline_sequence bigint',
+    );
+    const timelineBackfill = remediationMigration.indexOf('row_number() OVER');
+    const timelineDefault = remediationMigration.indexOf(
+      'ALTER COLUMN timeline_sequence SET DEFAULT',
+    );
+    const timelineNotNull = remediationMigration.indexOf(
+      'ALTER COLUMN timeline_sequence SET NOT NULL',
+    );
+    const timelineIndex = remediationMigration.indexOf(
+      'audit_logs_booking_request_timeline_idx',
+    );
+    expect(timelineColumn).toBeGreaterThanOrEqual(0);
+    expect(timelineBackfill).toBeGreaterThan(timelineColumn);
+    expect(timelineDefault).toBeGreaterThan(timelineBackfill);
+    expect(timelineNotNull).toBeGreaterThan(timelineDefault);
+    expect(timelineIndex).toBeGreaterThan(timelineNotNull);
   });
 });

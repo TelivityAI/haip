@@ -91,6 +91,7 @@ export const bookingRequests = pgTable('booking_requests', {
   formSnapshot: jsonb('form_snapshot').$type<BookingFormQuestion[]>().notNull().default([]),
   applicationAnswers: jsonb('application_answers').$type<Record<string, unknown>>().notNull().default({}),
   submittedQuoteSnapshot: jsonb('submitted_quote_snapshot').notNull(),
+  submittedTotal: numeric('submitted_total', { precision: 12, scale: 2 }).notNull(),
   currentQuoteSnapshot: jsonb('current_quote_snapshot'),
   currencyCode: varchar('currency_code', { length: 3 }).notNull(),
   setupIntentId: varchar('setup_intent_id', { length: 255 }),
@@ -121,6 +122,8 @@ export const bookingRequests = pgTable('booking_requests', {
     .on(table.acceptedReservationId),
   propertyIdUnique: uniqueIndex('booking_requests_property_id_unique')
     .on(table.propertyId, table.id),
+  propertySubmittedTotal: index('booking_requests_property_submitted_total_idx')
+    .on(table.propertyId, table.submittedTotal, table.id),
 }));
 
 /**

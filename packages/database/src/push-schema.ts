@@ -543,6 +543,7 @@ async function main() {
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS night_audit_runs_property_date_unique ON audit_runs (property_id, business_date)`,
     // audit_logs
+    `CREATE SEQUENCE IF NOT EXISTS audit_logs_timeline_sequence_seq AS bigint`,
     `CREATE TABLE IF NOT EXISTS audit_logs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id uuid REFERENCES properties(id),
@@ -556,7 +557,8 @@ async function main() {
       previous_value jsonb,
       new_value jsonb,
       description text,
-      occurred_at timestamptz NOT NULL DEFAULT now()
+      occurred_at timestamptz NOT NULL DEFAULT now(),
+      timeline_sequence bigint NOT NULL DEFAULT nextval('audit_logs_timeline_sequence_seq'::regclass)
     )`,
     `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS booking_request_id uuid`,
     `UPDATE audit_logs
@@ -595,10 +597,36 @@ async function main() {
         AND target.property_id = relationship.property_id
         AND target.entity_type = relationship.entity_type
         AND target.entity_id = relationship.entity_id`,
+    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timeline_sequence bigint`,
+    `WITH current_max AS (
+        SELECT COALESCE(max(timeline_sequence), 0) AS value
+        FROM audit_logs
+      ), ordered AS (
+        SELECT id,
+          current_max.value + row_number() OVER (ORDER BY occurred_at, id) AS timeline_sequence
+        FROM audit_logs
+        CROSS JOIN current_max
+        WHERE audit_logs.timeline_sequence IS NULL
+      )
+      UPDATE audit_logs AS target
+      SET timeline_sequence = ordered.timeline_sequence
+      FROM ordered
+      WHERE target.id = ordered.id`,
+    `SELECT setval(
+        'audit_logs_timeline_sequence_seq'::regclass,
+        COALESCE((SELECT max(timeline_sequence) FROM audit_logs), 1),
+        EXISTS (SELECT 1 FROM audit_logs)
+      )`,
+    `ALTER TABLE audit_logs
+      ALTER COLUMN timeline_sequence SET DEFAULT nextval('audit_logs_timeline_sequence_seq'::regclass),
+      ALTER COLUMN timeline_sequence SET NOT NULL`,
     `CREATE INDEX IF NOT EXISTS audit_logs_property_entity_timeline_idx
       ON audit_logs (property_id, entity_type, entity_id, occurred_at, id)`,
-    `CREATE INDEX IF NOT EXISTS audit_logs_booking_request_timeline_idx
-      ON audit_logs (property_id, booking_request_id, occurred_at DESC, id DESC)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_timeline_sequence_unique
+      ON audit_logs (timeline_sequence)`,
+    `DROP INDEX IF EXISTS audit_logs_booking_request_timeline_idx`,
+    `CREATE INDEX audit_logs_booking_request_timeline_idx
+      ON audit_logs (property_id, booking_request_id, timeline_sequence DESC)`,
     // channel_connections
     `CREATE TABLE IF NOT EXISTS channel_connections (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1199,6 +1227,7 @@ async function main() {
       form_snapshot jsonb NOT NULL DEFAULT '[]'::jsonb,
       application_answers jsonb NOT NULL DEFAULT '{}'::jsonb,
       submitted_quote_snapshot jsonb NOT NULL,
+      submitted_total numeric(12,2) NOT NULL,
       current_quote_snapshot jsonb,
       currency_code varchar(3) NOT NULL,
       setup_intent_id varchar(255),
@@ -1730,11 +1759,37 @@ async function main() {
     `ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS submission_idempotency_key varchar(200)`,
     `ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS submission_fingerprint varchar(64)`,
     `ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS setup_intent_id varchar(255)`,
+    `ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS submitted_total numeric(12,2)`,
+    `DO $booking_request_submitted_total_precondition$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM booking_requests
+          WHERE submitted_total IS NULL
+            AND (
+              jsonb_typeof(submitted_quote_snapshot -> 'grandTotal') IS DISTINCT FROM 'string'
+              OR submitted_quote_snapshot->>'grandTotal' !~ '^[0-9]{1,10}(\\.[0-9]{1,2})?$'
+              OR CASE
+                WHEN submitted_quote_snapshot->>'grandTotal' ~ '^[0-9]{1,10}(\\.[0-9]{1,2})?$'
+                  THEN (submitted_quote_snapshot->>'grandTotal')::numeric > 9999999999.99
+                ELSE false
+              END
+            )
+        ) THEN
+          RAISE EXCEPTION 'Cannot backfill booking_requests.submitted_total from an invalid submitted quote total';
+        END IF;
+      END
+      $booking_request_submitted_total_precondition$`,
+    `UPDATE booking_requests
+      SET submitted_total = (submitted_quote_snapshot->>'grandTotal')::numeric(12,2)
+      WHERE submitted_total IS NULL`,
     `UPDATE booking_requests SET submission_idempotency_key = COALESCE(submission_idempotency_key, 'legacy-' || id::text), submission_fingerprint = COALESCE(submission_fingerprint, md5(id::text) || md5('booking-request:' || id::text))`,
     `ALTER TABLE booking_requests ALTER COLUMN submission_idempotency_key SET NOT NULL`,
     `ALTER TABLE booking_requests ALTER COLUMN submission_fingerprint SET NOT NULL`,
+    `ALTER TABLE booking_requests ALTER COLUMN submitted_total SET NOT NULL`,
     `CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_property_submission_key_unique ON booking_requests (property_id, submission_idempotency_key)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS booking_requests_setup_intent_unique ON booking_requests (setup_intent_id)`,
+    `CREATE INDEX IF NOT EXISTS booking_requests_property_submitted_total_idx ON booking_requests (property_id, submitted_total, id)`,
     `ALTER TABLE booking_request_payment_resolutions ADD COLUMN IF NOT EXISTS status varchar(20) NOT NULL DEFAULT 'completed'`,
     `ALTER TABLE booking_request_payment_resolutions ADD COLUMN IF NOT EXISTS idempotency_key varchar(255)`,
     `ALTER TABLE booking_request_payment_resolutions ADD COLUMN IF NOT EXISTS operation_fingerprint varchar(64)`,
