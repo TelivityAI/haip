@@ -502,6 +502,23 @@ At least one end-to-end scenario covers:
 - Deployment must not expose request mode until schema, API, dashboard, widget,
   payment, and email pieces are all present.
 
+### Module and packaging boundary
+
+Request behavior is opt-in at the property-configuration boundary and is owned
+by the registered `BookingRequestModule`; a property activates it only by
+selecting `bookingMode=request`. The module can be registered alongside the
+existing Booking Engine without changing the database-default instant path.
+
+Payment-ledger, Stripe-webhook ownership/refund handling, and folio-balance
+invariants are shared core behavior. They remain active for instant bookings and
+must never be conditional on request mode or on whether a future deployment
+loads request-specific routes and workflows.
+
+This is a logical feature-module boundary, not a packaging decision. Maintainers
+will choose whether it remains a Nest feature module, becomes a workspace
+package, or moves to a separately deployable integration. Until that choice is
+made, implementation stays in its current module and workspace locations.
+
 ## Delivery scope
 
 The product slice is complete only when the end-to-end workflow above is
