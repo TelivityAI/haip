@@ -70,7 +70,7 @@ describe('booking request realtime invalidation', () => {
     })).toEqual([]);
   });
 
-  it('never trusts a property carried in event data or returns unscoped keys', () => {
+  it('never trusts a property carried in event data and includes legacy root prefixes', () => {
     expect(realtimeQueryKeys(null, {
       event: 'booking_request.created',
       data: { requestId: 'request-1' },
@@ -85,7 +85,23 @@ describe('booking request realtime invalidation', () => {
       },
       timestamp,
     });
-    expect(keys.every((key) => key.includes('property-2'))).toBe(true);
+    expect(keys).toEqual(expect.arrayContaining([
+      ['reservations'],
+      ['rooms'],
+      ['reports'],
+      ['reservations', 'property-2'],
+    ]));
     expect(keys.some((key) => key.includes('property-1'))).toBe(false);
+  });
+
+  it.each([
+    ['payment.refunded', ['payments'], ['folios']],
+    ['reservation.modified', ['reservations'], ['rooms']],
+    ['folio.settled', ['folios'], ['payments']],
+    ['room.status_changed', ['rooms'], ['housekeeping']],
+  ])('keeps object- and subtype-shaped query keys reachable for %s', (event, first, second) => {
+    const keys = realtimeQueryKeys('property-1', { event, data: {}, timestamp });
+    expect(keys).toContainEqual(first);
+    expect(keys).toContainEqual(second);
   });
 });

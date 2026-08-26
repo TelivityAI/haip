@@ -181,14 +181,16 @@ export class StripeWebhookController {
   }
 
   private async finalizePaymentIntent(pi: Stripe.PaymentIntent, event: PaymentIntentEvent) {
-    let correlation: PaymentIntentCorrelation | undefined;
+    const ownership = classifyHaipMetadata(pi.metadata, paymentIntentCorrelation);
+    if (ownership.ownership === 'owned-malformed') throw ownership.error;
+    const correlation = ownership.ownership === 'owned-valid'
+      ? ownership.correlation
+      : undefined;
     let initial = await this.findPaymentByGatewayTransactionId(pi.id);
+    const linkedByGatewayTransactionId = initial != null;
     if (!initial) {
-      const ownership = classifyHaipMetadata(pi.metadata, paymentIntentCorrelation);
       if (ownership.ownership === 'external') return;
-      if (ownership.ownership === 'owned-malformed') throw ownership.error;
-      correlation = ownership.correlation;
-      initial = await this.findPaymentByCorrelation(correlation);
+      initial = await this.findPaymentByCorrelation(ownership.correlation);
       if (!initial) {
         throw new ConflictException(
           `Stripe PaymentIntent ${pi.id} metadata does not identify a pending payment`,
@@ -229,12 +231,14 @@ export class StripeWebhookController {
           || payment.gatewayProvider !== 'stripe') {
           throw new ConflictException('Stripe PaymentIntent metadata ownership is invalid');
         }
-        if (payment.status !== 'pending') {
+        if (!linkedByGatewayTransactionId && payment.status !== 'pending') {
           throw new ConflictException(
             `Stripe PaymentIntent metadata can bind only a pending payment, not '${payment.status}'`,
           );
         }
-        if (payment.gatewayTransactionId && payment.gatewayTransactionId !== pi.id) {
+        if (!linkedByGatewayTransactionId
+          && payment.gatewayTransactionId
+          && payment.gatewayTransactionId !== pi.id) {
           throw new ConflictException(
             'Stripe PaymentIntent does not match the provider identity already bound to the payment',
           );
@@ -430,6 +434,11 @@ export class StripeWebhookController {
   }
 
   private async handleChargeRefunded(charge: Stripe.Charge) {
+    const ownership = classifyHaipMetadata(charge.metadata, paymentIntentCorrelation);
+    if (ownership.ownership === 'owned-malformed') throw ownership.error;
+    const correlation = ownership.ownership === 'owned-valid'
+      ? ownership.correlation
+      : undefined;
     const piId = typeof charge.payment_intent === 'string'
       ? charge.payment_intent
       : charge.payment_intent?.id;
@@ -464,6 +473,14 @@ export class StripeWebhookController {
       const parent = parents.find((row: typeof payments.$inferSelect) =>
         row.id === payment.id && row.propertyId === payment.propertyId);
       if (!parent) return;
+      if (correlation && (
+        parent.id !== correlation.paymentId
+        || parent.propertyId !== correlation.propertyId
+        || parent.bookingRequestId !== correlation.bookingRequestId
+        || parent.gatewayProvider !== 'stripe'
+      )) {
+        throw new ConflictException('Stripe charge metadata ownership is invalid');
+      }
       if (parent.bookingRequestId) {
         await tx.insert(auditLogs).values({
           propertyId: parent.propertyId,

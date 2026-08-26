@@ -9,18 +9,21 @@ interface ModalProps {
   title: string;
   children: ReactNode;
   wide?: boolean;
+  closeDisabled?: boolean;
 }
 
-export default function Modal({ open, onClose, title, children, wide }: ModalProps) {
+export default function Modal({ open, onClose, title, children, wide, closeDisabled = false }: ModalProps) {
   const { t } = useTranslation();
   const titleId = useId();
   const panelRef = useRef<HTMLDialogElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
 
   useEffect(() => {
     onCloseRef.current = onClose;
-  }, [onClose]);
+    closeDisabledRef.current = closeDisabled;
+  }, [closeDisabled, onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -58,10 +61,12 @@ export default function Modal({ open, onClose, title, children, wide }: ModalPro
       }
     };
     const fallbackEscape = (event: KeyboardEvent) => {
-      if (!supportsNativeModal && event.key === 'Escape') onCloseRef.current();
+      if (!supportsNativeModal && event.key === 'Escape' && !closeDisabledRef.current) {
+        onCloseRef.current();
+      }
     };
     const closeFromNativeBackdrop = (event: MouseEvent) => {
-      if (event.target === dialog) onCloseRef.current();
+      if (event.target === dialog && !closeDisabledRef.current) onCloseRef.current();
     };
     document.addEventListener('focusin', guardFocus, true);
     document.addEventListener('click', guardClick, true);
@@ -95,6 +100,7 @@ export default function Modal({ open, onClose, title, children, wide }: ModalPro
         tabIndex={-1}
         aria-label={`${t('common.close')} ${title}`}
         className="absolute inset-0 border-0 bg-black/40 p-0"
+        disabled={closeDisabled}
         onClick={onClose}
       />
       <dialog
@@ -104,13 +110,13 @@ export default function Modal({ open, onClose, title, children, wide }: ModalPro
         tabIndex={-1}
         onCancel={(event) => {
           event.preventDefault();
-          onClose();
+          if (!closeDisabled) onClose();
         }}
         className={`fixed inset-0 m-auto max-h-[85vh] border-0 bg-white p-0 rounded-xl shadow-xl outline-none backdrop:bg-black/40 ${wide ? 'w-[calc(100%-2rem)] max-w-2xl' : 'w-[calc(100%-2rem)] max-w-md'} overflow-y-auto`}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 id={titleId} className="text-lg font-semibold text-telivity-navy">{title}</h2>
-          <button type="button" aria-label={t('common.close')} onClick={onClose} className="p-1 rounded-lg hover:bg-telivity-light-grey transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
+          <button type="button" aria-label={t('common.close')} disabled={closeDisabled} onClick={onClose} className="p-1 rounded-lg hover:bg-telivity-light-grey transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-telivity-deep-blue disabled:cursor-not-allowed disabled:opacity-50">
             <X size={18} className="text-telivity-mid-grey" aria-hidden="true" />
           </button>
         </div>

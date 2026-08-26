@@ -109,7 +109,7 @@ export default function PaymentActionModal({
   });
 
   return (
-    <Modal open onClose={onClose} title={title}>
+    <Modal open onClose={onClose} title={title} closeDisabled={mutation.isPending}>
       <p className="mb-4 text-sm leading-6 text-telivity-slate">
         {t(`bookingRequests.paymentActions.${action}.description`)}
       </p>

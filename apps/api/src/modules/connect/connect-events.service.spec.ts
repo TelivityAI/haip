@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { DRIZZLE } from '../../database/database.module';
+import { WebhookService } from '../webhook/webhook.service';
 import { ConnectEventsService } from './connect-events.service';
 
 describe('ConnectEventsService', () => {
@@ -292,5 +296,35 @@ describe('ConnectEventsService', () => {
 
       expect(result).toHaveLength(1);
     });
+  });
+});
+
+describe('ConnectEventsService durable event delivery', () => {
+  it('propagates wildcard listener failures to a persisted dispatcher', async () => {
+    const db = {
+      select: vi.fn(() => {
+        throw new Error('subscription lookup unavailable');
+      }),
+    };
+    const moduleRef = await Test.createTestingModule({
+      imports: [EventEmitterModule.forRoot({ wildcard: true })],
+      providers: [
+        ConnectEventsService,
+        WebhookService,
+        { provide: DRIZZLE, useValue: db },
+      ],
+    }).compile();
+    await moduleRef.init();
+
+    await expect(moduleRef.get(WebhookService).dispatchPersisted({
+      event: 'booking_request.created',
+      entityType: 'booking_request',
+      entityId: 'bbbbbbbb-0000-4000-a000-000000000001',
+      propertyId: 'aaaaaaaa-0000-4000-a000-000000000001',
+      data: {},
+      timestamp: '2026-08-26T00:00:00.000Z',
+    }, 'logical-event-1')).rejects.toThrow('subscription lookup unavailable');
+
+    await moduleRef.close();
   });
 });

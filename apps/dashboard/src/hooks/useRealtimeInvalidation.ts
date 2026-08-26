@@ -72,54 +72,74 @@ export function realtimeQueryKeys(
   if (payload.event.startsWith('booking_request.')) {
     return uniqueKeys([
       ...requestKeys(),
-      ...(reservationId ? [['reservations', propertyId]] : []),
-      ...(folioId ? [['folios', propertyId]] : []),
-      ...(folioId ? [['payments', propertyId]] : []),
+      ...(reservationId ? [['reservations'], ['reservations', propertyId]] : []),
+      ...(folioId ? [['folios'], ['folios', propertyId]] : []),
+      ...(folioId ? [['payments'], ['payments', propertyId]] : []),
     ]);
   }
   if (payload.event.startsWith('payment.')) {
     return uniqueKeys([
+      ['payments'],
       ['payments', propertyId],
+      ['folios'],
       ['folios', propertyId],
       ...requestKeys(),
     ]);
   }
   if (payload.event.startsWith('reservation.')) {
     return uniqueKeys([
+      ['reservations'],
       ['reservations', propertyId],
+      ['rooms'],
       ['rooms', propertyId],
+      ['reports'],
       ['reports', propertyId],
       ...requestKeys(),
     ]);
   }
   if (payload.event.startsWith('folio.')) {
     return uniqueKeys([
+      ['folios'],
       ['folios', propertyId],
+      ['payments'],
       ['payments', propertyId],
       ...requestKeys(),
     ]);
   }
   if (payload.event.startsWith('audit.')) {
     return uniqueKeys([
+      ['audit'],
       ['audit', propertyId],
+      ['reports'],
       ['reports', propertyId],
       ...requestKeys(),
     ]);
   }
   if (payload.event === 'guest.communication_sent') {
     return uniqueKeys([
+      ['communications'],
       ['communications', propertyId],
       ...requestKeys(),
     ]);
   }
-  if (payload.event.startsWith('room.')) return [['rooms', propertyId], ['housekeeping', propertyId]];
-  if (payload.event.startsWith('housekeeping.')) return [['housekeeping', propertyId], ['rooms', propertyId]];
-  if (payload.event.startsWith('channel.')) return [['channels', propertyId]];
-  if (payload.event.startsWith('agent.')) {
-    return [['agents', propertyId], ['agent-decisions', propertyId], ['agent-performance', propertyId]];
+  if (payload.event.startsWith('room.')) {
+    return [['rooms'], ['rooms', propertyId], ['housekeeping'], ['housekeeping', propertyId]];
   }
-  if (payload.event.startsWith('guest.')) return [['agent-decisions', propertyId], ['reviews', propertyId]];
-  if (payload.event.startsWith('connect.')) return [['connect', propertyId]];
+  if (payload.event.startsWith('housekeeping.')) {
+    return [['housekeeping'], ['housekeeping', propertyId], ['rooms'], ['rooms', propertyId]];
+  }
+  if (payload.event.startsWith('channel.')) return [['channels'], ['channels', propertyId]];
+  if (payload.event.startsWith('agent.')) {
+    return [
+      ['agents'], ['agents', propertyId],
+      ['agent-decisions'], ['agent-decisions', propertyId],
+      ['agent-performance'], ['agent-performance', propertyId],
+    ];
+  }
+  if (payload.event.startsWith('guest.')) {
+    return [['agent-decisions'], ['agent-decisions', propertyId], ['reviews'], ['reviews', propertyId]];
+  }
+  if (payload.event.startsWith('connect.')) return [['connect'], ['connect', propertyId]];
   return [];
 }
 

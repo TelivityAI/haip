@@ -375,6 +375,38 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.db.transaction).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['booking-request', payment()],
+    ['legacy', payment({ bookingRequestId: null })],
+  ])('rejects incomplete HAIP metadata on a directly linked %s PaymentIntent', async (_label, row) => {
+    const h = await harness({
+      requests: row.bookingRequestId ? [request()] : [],
+      payments: [row],
+    });
+
+    await expect(h.controller.handlePaymentIntentSucceeded(knownPaymentIntent({
+      metadata: { haip_payment_id: PAYMENT_ID },
+    }))).rejects.toThrow(/correlation metadata/i);
+
+    expect(h.db.transaction).not.toHaveBeenCalled();
+    expect(h.state.payments[0]).toMatchObject({ status: 'pending' });
+  });
+
+  it('rejects contradictory HAIP ownership metadata on a directly linked PaymentIntent', async () => {
+    const h = await harness({ requests: [request()] });
+
+    await expect(h.controller.handlePaymentIntentSucceeded(knownPaymentIntent({
+      metadata: {
+        haip_payment_id: PAYMENT_ID,
+        haip_property_id: 'aaaaaaaa-0000-4000-a000-000000000099',
+        haip_booking_request_id: REQUEST_ID,
+      },
+    }))).rejects.toThrow(/metadata ownership is invalid/i);
+
+    expect(h.state.payments[0]).toMatchObject({ status: 'pending' });
+    expect(h.state.consequences).toHaveLength(0);
+  });
+
   it('acknowledges a directly linked legacy refund that omits HAIP correlation metadata', async () => {
     const legacy = payment({
       bookingRequestId: null,
@@ -785,13 +817,60 @@ describe('StripeWebhookController financial finalization', () => {
     expect(h.state.payments.filter((row) => row.originalPaymentId === PAYMENT_ID)).toHaveLength(0);
   });
 
+  it.each([
+    ['booking-request', payment()],
+    ['legacy', payment({ bookingRequestId: null })],
+  ])('rejects malformed HAIP metadata on a directly linked %s charge refund', async (_label, row) => {
+    const h = await harness({
+      requests: row.bookingRequestId ? [request()] : [],
+      payments: [row],
+    });
+
+    await expect(h.controller.handleChargeRefunded({
+      id: 'ch_malformed',
+      payment_intent: 'pi_request_1',
+      amount_refunded: 2500,
+      currency: 'usd',
+      metadata: { haip_payment_id: PAYMENT_ID },
+      refunds: { data: [] },
+    })).rejects.toThrow(/correlation metadata/i);
+
+    expect(h.db.transaction).not.toHaveBeenCalled();
+    expect(h.state.audits).toHaveLength(0);
+  });
+
+  it('rejects contradictory HAIP metadata on a directly linked charge refund', async () => {
+    const h = await harness();
+
+    await expect(h.controller.handleChargeRefunded({
+      id: 'ch_contradictory',
+      payment_intent: 'pi_request_1',
+      amount_refunded: 2500,
+      currency: 'usd',
+      metadata: {
+        haip_payment_id: PAYMENT_ID,
+        haip_property_id: 'aaaaaaaa-0000-4000-a000-000000000099',
+        haip_booking_request_id: REQUEST_ID,
+      },
+      refunds: { data: [] },
+    })).rejects.toThrow(/metadata ownership is invalid/i);
+
+    expect(h.state.audits).toHaveLength(0);
+  });
+
   it('treats cumulative charge.refunded as a reconciliation signal, never a claim match', async () => {
     const first = resolution('11111111-0000-4000-a000-000000000001');
     const second = resolution('22222222-0000-4000-a000-000000000002');
     const h = await harness({ resolutions: [first, second] });
     await h.controller.handleChargeRefunded({
       id: 'ch_cumulative', payment_intent: 'pi_request_1', amount_refunded: 5000,
-      currency: 'usd', refunds: { data: [] },
+      currency: 'usd',
+      metadata: {
+        haip_payment_id: PAYMENT_ID,
+        haip_property_id: PROPERTY_ID,
+        haip_booking_request_id: REQUEST_ID,
+      },
+      refunds: { data: [] },
     });
     expect(h.state.resolutions.every((row) => row.status === 'pending')).toBe(true);
     expect(h.state.payments).toHaveLength(1);

@@ -926,6 +926,32 @@ describe('Booking request payments, messages, and audit', () => {
     ));
   });
 
+  it('cannot dismiss and reopen a saved-card charge while the financial request is pending', async () => {
+    let resolveCharge!: (value: { data: Record<string, never> }) => void;
+    vi.mocked(api.post).mockImplementation(() => new Promise((resolve) => {
+      resolveCharge = resolve;
+    }) as never);
+    renderAt(`/booking-requests/${REQUEST_ID}`);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Charge saved card' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Charge saved card' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Amount' }), '25');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Charge saved card' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeDisabled();
+    expect(screen.getByLabelText('Close Charge saved card')).toBeDisabled();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Charge saved card' })).toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledTimes(1);
+
+    resolveCharge({ data: {} });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Charge saved card' })).not.toBeInTheDocument();
+    });
+  });
+
   it('offers provenance-correct refund/return/retain actions with required reasons', async () => {
     renderAt(`/booking-requests/${REQUEST_ID}`);
     await userEvent.click(await screen.findByRole('tab', { name: 'Payments & plan' }));

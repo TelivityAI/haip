@@ -173,7 +173,7 @@ export class ConnectEventsService {
    * Handle all webhook events — match against subscriptions and log delivery.
    * Listens to all events via wildcard.
    */
-  @OnEvent('**')
+  @OnEvent('**', { suppressErrors: false })
   async handleEvent(payload: WebhookPayload) {
     if (!payload?.propertyId || !payload?.event) return;
 
