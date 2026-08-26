@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import {
+  classifyHaipMetadata,
   decidePaymentIntentTransition,
   decideRefundTransition,
   refundCorrelation,
@@ -88,5 +89,11 @@ describe('Stripe financial webhook state', () => {
     });
     expect(() => refundCorrelation({ haip_claim_id: 'claim-2' }))
       .toThrow(/correlation metadata/i);
+  });
+
+  it('classifies metadata by HAIP ownership before correlation parsing', () => {
+    expect(classifyHaipMetadata({})).toBe('external');
+    expect(classifyHaipMetadata({ unrelated: 'value' })).toBe('external');
+    expect(classifyHaipMetadata({ haip_payment_id: 'payment-1' })).toBe('owned-valid');
   });
 });

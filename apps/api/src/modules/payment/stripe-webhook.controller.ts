@@ -26,6 +26,7 @@ import Stripe from 'stripe';
 import { reconcileBookingRequestPaymentAllocations } from '../booking-request/booking-request-allocation-reconciler';
 import { ensureBookingRequestFinancialConsequence } from '../booking-request/booking-request-payment-consequence';
 import {
+  classifyHaipMetadata,
   decidePaymentIntentTransition,
   decideRefundTransition,
   paymentIntentCorrelation,
@@ -183,6 +184,7 @@ export class StripeWebhookController {
     let correlation: PaymentIntentCorrelation | undefined;
     let initial = await this.findPaymentByGatewayTransactionId(pi.id);
     if (!initial) {
+      if (classifyHaipMetadata(pi.metadata) === 'external') return;
       correlation = paymentIntentCorrelation(pi.metadata);
       initial = await this.findPaymentByCorrelation(correlation);
       if (!initial) {
@@ -536,7 +538,7 @@ export class StripeWebhookController {
       }
       return { movement };
     });
-    if (outcome.movement) {
+    if (outcome?.movement) {
       await this.webhookService.emit(
         'payment.refunded',
         'payment',
@@ -552,6 +554,11 @@ export class StripeWebhookController {
   }
 
   private async handleRefundUpdated(refund: Stripe.Refund) {
+    const linkedPayment = await this.findPaymentByGatewayTransactionId(refund.id);
+    if (classifyHaipMetadata(refund.metadata) === 'external') {
+      if (!linkedPayment) return;
+      return;
+    }
     const correlation = refundCorrelation(refund.metadata);
     const providerStatus = this.refundStatus(refund.status);
     const result = await this.db.transaction(async (tx: any) => {

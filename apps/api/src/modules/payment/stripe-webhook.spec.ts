@@ -304,14 +304,75 @@ function refundEvent(claimId: string, id: string, status = 'succeeded', amount =
   };
 }
 
+async function deliverStripeWebhook(controller: any, event: Record<string, unknown>) {
+  controller.stripe = {
+    webhooks: {
+      constructEvent: vi.fn(() => event),
+    },
+  };
+  controller.webhookSecret = 'whsec_test';
+  config.get.mockImplementation((key: string, fallback?: string) =>
+    key === 'STRIPE_MODE' ? 'live' : fallback);
+  const response = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() };
+
+  await controller.handleWebhook({
+    headers: { 'stripe-signature': 'test-signature' },
+    body: Buffer.from('{}'),
+  }, response);
+
+  return response;
+}
+
 describe('StripeWebhookController financial finalization', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    config.get.mockImplementation((key: string, fallback?: string) =>
+      key === 'STRIPE_MODE' ? 'mock' : fallback);
+  });
 
   it('keeps mock-mode HTTP behavior inert', async () => {
     const h = await harness();
     const response = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() };
     await h.controller.handleWebhook({}, response);
     expect(response.status).toHaveBeenCalledWith(200);
+  });
+
+  it.each([
+    ['payment_intent.succeeded', unknownPaymentIntent({ id: 'pi_external_success', metadata: {} })],
+    ['payment_intent.payment_failed', unknownPaymentIntent({ id: 'pi_external_failure', metadata: {} })],
+    ['refund.updated', {
+      id: 're_external', status: 'succeeded', amount: 2500, currency: 'usd', metadata: {},
+    }],
+  ])('acknowledges unrelated %s without financial side effects', async (type, object) => {
+    const h = await harness({ requests: [], payments: [] });
+
+    const response = await deliverStripeWebhook(h.controller, {
+      id: `evt_${type}`,
+      type,
+      data: { object },
+    });
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(h.state).toEqual({
+      requests: [], payments: [], resolutions: [], consequences: [], audits: [], emails: [],
+    });
+    expect(h.webhookService.emit).not.toHaveBeenCalled();
+    expect(h.folioService.recalculateBalance).not.toHaveBeenCalled();
+    expect(h.db.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects incomplete HAIP metadata on an otherwise uncorrelated PaymentIntent', async () => {
+    const h = await harness({ requests: [], payments: [] });
+
+    await expect(h.controller.handlePaymentIntentSucceeded(unknownPaymentIntent({
+      id: 'pi_malformed_owned',
+      metadata: { haip_payment_id: PAYMENT_ID },
+    }))).rejects.toThrow(/correlation metadata/i);
+
+    expect(h.state).toEqual({
+      requests: [], payments: [], resolutions: [], consequences: [], audits: [], emails: [],
+    });
+    expect(h.db.transaction).not.toHaveBeenCalled();
   });
 
   it('finalizes a pending request PaymentIntent under request→payment locks with fresh folio', async () => {
@@ -540,7 +601,7 @@ describe('StripeWebhookController financial finalization', () => {
   });
 
   it.each([
-    ['missing', undefined],
+    ['incomplete', { haip_payment_id: PAYMENT_ID }],
     ['cross-property', {
       haip_payment_id: PAYMENT_ID,
       haip_property_id: 'aaaaaaaa-0000-4000-a000-000000000099',
@@ -721,6 +782,26 @@ describe('StripeWebhookController financial finalization', () => {
     });
     expect(h.state.payments).toHaveLength(1);
     expect(h.state.audits[0]!.description).toMatch(/reconciliation signal/i);
+  });
+
+  it('acknowledges a charge refund when its locked parent disappears after lookup', async () => {
+    const legacy = payment({
+      bookingRequestId: null, folioId: FOLIO_ID, amount: '100.00', status: 'captured',
+    });
+    const h = await harness({ requests: [], payments: [legacy] });
+    const transaction = h.db.transaction.getMockImplementation();
+    h.db.transaction.mockImplementation(async (callback: (tx: any) => Promise<unknown>) => {
+      h.state.payments.splice(0, h.state.payments.length);
+      return transaction(callback);
+    });
+
+    await expect(h.controller.handleChargeRefunded({
+      id: 'ch_deleted_parent', payment_intent: 'pi_request_1', amount_refunded: 2500,
+      currency: 'usd', refunds: { data: [] },
+    })).resolves.toBeUndefined();
+
+    expect(h.webhookService.emit).not.toHaveBeenCalled();
+    expect(h.folioService.recalculateBalance).not.toHaveBeenCalled();
   });
 
   it('posts the missing negative movement for a partial instant-booking refund', async () => {
