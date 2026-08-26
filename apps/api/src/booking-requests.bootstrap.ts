@@ -1,7 +1,7 @@
-import type { Type } from '@nestjs/common';
+import type { DynamicModule, Type } from '@nestjs/common';
 import { BOOKING_REQUEST_STRIPE_HANDLER } from './modules/payment/booking-request-stripe-handler.interface';
 
-let cachedModules: Type[] | null | undefined;
+let cachedModules: Array<Type | DynamicModule> | null | undefined;
 
 /** Preload optional booking-requests Nest modules when the feature flag is on. */
 export async function preloadBookingRequestsModules(): Promise<void> {
@@ -24,7 +24,7 @@ export async function preloadBookingRequestsModules(): Promise<void> {
   ];
 }
 
-export function bookingRequestsModules(): Type[] {
+export function bookingRequestsModules(): Array<Type | DynamicModule> {
   if (process.env['HAIP_BOOKING_REQUESTS'] !== 'true') return [];
   if (!cachedModules) {
     throw new Error(
