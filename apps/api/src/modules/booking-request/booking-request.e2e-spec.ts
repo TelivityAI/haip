@@ -281,7 +281,11 @@ describeDatabase('Booking Request complete vertical slice', () => {
     const setupResponse = await http
       .post('/api/v1/booking-engine/request-payment-method-setup')
       .set('x-booking-key', bookingKey)
-      .send({ guestEmail: 'vertical@example.com', idempotencyKey: applicationKey })
+      .send({
+        guestEmail: 'vertical@example.com',
+        applicationId: applicationKey,
+        idempotencyKey: `${applicationKey}-card-attempt-1`,
+      })
       .expect(201);
     expect(setupResponse.body.setupIntentId).toBe(PRIVATE_SETUP_INTENT);
     expect(setupResponse.body.clientSecret).toContain('E2E_PRIVATE_CLIENT_TOKEN');
