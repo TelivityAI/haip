@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 
 export type MoneyValue = string | Decimal;
@@ -61,6 +61,31 @@ export type DenialResolution = {
   amount: MoneyValue;
   reason?: string | null;
 };
+
+/**
+ * The payment ledger is stored as numeric(12,2), so only ISO currencies
+ * whose minor units fit that scale can enter booking-request money flows.
+ */
+export function assertLedgerCurrencySupported(currencyCode: string): number {
+  const normalized = currencyCode.trim().toUpperCase();
+  let exponent: number;
+  try {
+    const resolvedExponent = new Intl.NumberFormat('en', {
+      style: 'currency',
+      currency: normalized,
+    }).resolvedOptions().maximumFractionDigits;
+    if (resolvedExponent == null) throw new Error('missing exponent');
+    exponent = resolvedExponent;
+  } catch {
+    throw new BadRequestException(`Unsupported currency '${currencyCode}'`);
+  }
+  if (exponent > 2) {
+    throw new BadRequestException(
+      `${normalized} is not supported by the scale-two payment ledger`,
+    );
+  }
+  return exponent;
+}
 
 function decimal(value: MoneyValue, field: string): Decimal {
   try {

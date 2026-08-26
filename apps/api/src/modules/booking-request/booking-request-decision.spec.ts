@@ -1275,6 +1275,33 @@ describe('BookingRequestService acceptance', () => {
     expect(harness.state.reservations).toHaveLength(0);
   });
 
+  it('rejects a legacy scale-three request before accepting it into ledger-backed records', async () => {
+    const bhdQuote = {
+      ...structuredClone(currentQuote),
+      currencyCode: 'BHD',
+      grandTotal: '260.000',
+    };
+    const harness = makeHarness([pendingRequest({
+      currencyCode: 'BHD',
+      submittedQuoteSnapshot: {
+        ...structuredClone(submittedQuote),
+        currencyCode: 'BHD',
+        grandTotal: '220.000',
+      },
+    })]);
+    harness.bookingEngine.quote.mockResolvedValue(bhdQuote);
+
+    await expect(call(harness.service, 'accept', [
+      REQUEST_ID,
+      PROPERTY_ID,
+      { priceSource: 'submitted', previewToken: previewToken(bhdQuote, harness.state.requests[0]!) },
+      actor,
+    ])).rejects.toThrow(/BHD.*scale-two payment ledger/i);
+    expect(harness.state.requests[0]?.status).toBe('pending');
+    expect(harness.state.reservations).toHaveLength(0);
+    expect(harness.state.folios).toHaveLength(0);
+  });
+
   it('rejects acceptance when the authoritative quote changes after preview', async () => {
     const harness = makeHarness();
     const preview = await call(harness.service, 'acceptancePreview', [

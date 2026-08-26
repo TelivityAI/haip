@@ -3,11 +3,18 @@ import { describe, expect, it } from 'vitest';
 import {
   assertAllocationAmount,
   assertDenialMoneyResolved,
+  assertLedgerCurrencySupported,
   resolveAcceptedTotal,
   resolveInstallmentAmount,
 } from './booking-request-money';
 
 describe('booking request money', () => {
+  it('returns supported ISO currency exponents and rejects scales beyond the ledger', () => {
+    expect(assertLedgerCurrencySupported(' usd ')).toBe(2);
+    expect(assertLedgerCurrencySupported('JPY')).toBe(0);
+    expect(() => assertLedgerCurrencySupported('BHD')).toThrow(/BHD.*scale-two payment ledger/i);
+  });
+
   it('requires a reason for a custom accepted price', () => {
     expect(() => resolveAcceptedTotal({
       source: 'custom',

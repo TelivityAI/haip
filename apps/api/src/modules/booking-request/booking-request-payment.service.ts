@@ -37,7 +37,11 @@ import {
   type BookingRequestPaymentLedgerSummary,
 } from './booking-request-payment-ledger';
 import { BookingRequestMailerService } from './booking-request-mailer.service';
-import { assertAllocationAmount, resolveInstallmentAmount } from './booking-request-money';
+import {
+  assertAllocationAmount,
+  assertLedgerCurrencySupported,
+  resolveInstallmentAmount,
+} from './booking-request-money';
 import type {
   AllocateBookingRequestPaymentDto,
   ChargeBookingRequestCardDto,
@@ -1790,7 +1794,7 @@ export class BookingRequestPaymentService {
       total: this.requestTotal(request),
       fixedAmount,
       percentage,
-      currencyExponent: this.currencyExponent(request.currencyCode),
+      currencyExponent: assertLedgerCurrencySupported(request.currencyCode),
     });
     return {
       label,
@@ -1818,12 +1822,7 @@ export class BookingRequestPaymentService {
   private positiveMoney(value: string, currencyCode: string, field: string): Decimal {
     const amount = this.decimal(value, field);
     if (amount.lte(0)) throw new ConflictException(`${field} must be positive`);
-    const exponent = this.currencyExponent(currencyCode);
-    if (exponent > 2) {
-      throw new BadRequestException(
-        `${currencyCode.toUpperCase()} minor-unit exponent ${exponent} exceeds ledger storage precision`,
-      );
-    }
+    const exponent = assertLedgerCurrencySupported(currencyCode);
     if (amount.decimalPlaces() > exponent) {
       throw new BadRequestException(
         `${field} has fractional minor units for ${currencyCode.toUpperCase()}`,
@@ -1842,19 +1841,6 @@ export class BookingRequestPaymentService {
       return amount;
     } catch {
       throw new BadRequestException(`Invalid ${field}`);
-    }
-  }
-
-  private currencyExponent(currencyCode: string): number {
-    try {
-      const exponent = new Intl.NumberFormat('en', {
-        style: 'currency',
-        currency: currencyCode.trim().toUpperCase(),
-      }).resolvedOptions().maximumFractionDigits;
-      if (exponent == null) throw new Error('missing exponent');
-      return exponent;
-    } catch {
-      throw new BadRequestException(`Unsupported currency '${currencyCode}'`);
     }
   }
 

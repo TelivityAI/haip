@@ -1,7 +1,10 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { AcceptedPricingSnapshot } from '@telivityhaip/database';
 import Decimal from 'decimal.js';
-import type { BookingRequestPriceSource } from './booking-request-money';
+import {
+  assertLedgerCurrencySupported,
+  type BookingRequestPriceSource,
+} from './booking-request-money';
 
 type QuoteRecord = Record<string, unknown>;
 
@@ -199,6 +202,7 @@ function normalizeQuote(
 export function buildAcceptedPricingSnapshot(
   input: BuildAcceptedPricingInput,
 ): AcceptedPricingSnapshot {
+  const exponent = assertLedgerCurrencySupported(input.requestCurrencyCode);
   const submitted = object(input.submittedQuote, 'Submitted quote');
   const current = object(input.currentQuote, 'Current quote');
   assertCurrency(submitted, input.requestCurrencyCode, 'Submitted quote');
@@ -228,22 +232,6 @@ export function buildAcceptedPricingSnapshot(
   }
   if (!custom.isFinite() || custom.lessThanOrEqualTo(0)) {
     throw new BadRequestException('Custom accepted total must be greater than zero');
-  }
-  let exponent: number;
-  try {
-    const resolvedExponent = new Intl.NumberFormat('en', {
-      style: 'currency',
-      currency: input.requestCurrencyCode.toUpperCase(),
-    }).resolvedOptions().maximumFractionDigits;
-    if (resolvedExponent == null) throw new Error('unknown exponent');
-    exponent = resolvedExponent;
-  } catch {
-    throw new BadRequestException('Request currency is not supported');
-  }
-  if (exponent > 2) {
-    throw new BadRequestException(
-      `${input.requestCurrencyCode.toUpperCase()} minor units exceed ledger precision`,
-    );
   }
   if (custom.decimalPlaces() > exponent) {
     throw new BadRequestException(

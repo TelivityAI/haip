@@ -1368,7 +1368,7 @@ describe('BookingRequestPaymentService saved-card charges', () => {
       PROPERTY_ID,
       { amount: '1.00', idempotencyKey: 'unsupported-bhd' },
       actor,
-    )).rejects.toThrow(/ledger.*precision|unsupported.*BHD/i);
+    )).rejects.toThrow(/BHD.*scale-two payment ledger/i);
     expect(harness.gateway.charge).not.toHaveBeenCalled();
     expect(harness.state.payments).toHaveLength(0);
   });
@@ -1715,7 +1715,7 @@ describe('BookingRequestPaymentService external movements and denial resolutions
         reference: 'unsupported-bhd',
       },
       actor,
-    )).rejects.toThrow(/ledger.*precision|unsupported.*BHD/i);
+    )).rejects.toThrow(/BHD.*scale-two payment ledger/i);
     expect(bhd.state.payments).toHaveLength(0);
   });
 

@@ -81,6 +81,7 @@ import {
 } from '../webhook/webhook.service';
 import { assertCanonicalStayDates } from './booking-request-date.validator';
 import {
+  assertLedgerCurrencySupported,
   type BookingRequestPriceSource,
 } from './booking-request-money';
 import { summarizeBookingRequestPaymentLedger } from './booking-request-payment-ledger';
@@ -1292,6 +1293,7 @@ export class BookingRequestService {
       serviceIds: dto.serviceIds,
     });
     this.assertQuoteUsesConfigSnapshot(config, quote);
+    assertLedgerCurrencySupported(quote.currencyCode);
     const card = await this.resolveCard(
       config.paymentMethodCollection,
       dto,

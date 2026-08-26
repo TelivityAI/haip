@@ -647,6 +647,31 @@ describe('BookingRequestService.submit', () => {
     });
   });
 
+  it('rejects a scale-three authoritative quote before resolving a card or creating a request obligation', async () => {
+    harness.config.getPublicConfig.mockResolvedValue({
+      ...structuredClone(publicConfig),
+      paymentMethodCollection: 'required',
+    });
+    harness.lockedConfig.paymentMethodCollection = 'required';
+    harness.bookingEngine.quote.mockResolvedValue({
+      ...structuredClone(quote),
+      currencyCode: 'BHD',
+      grandTotal: '220.000',
+    });
+
+    await expect(harness.service.submit(PROPERTY_ID, {
+      ...submitDto,
+      setupIntentId: 'seti_client_reference_only',
+      consentAccepted: true,
+      consentText: 'Save this card for later staff-initiated payments; no charge is made now.',
+      consentVersion: 'request-card-v1',
+    })).rejects.toThrow(/BHD.*scale-two payment ledger/i);
+
+    expect(harness.savedPaymentMethod.resolveSetup).not.toHaveBeenCalled();
+    expect(harness.storedRequests).toHaveLength(0);
+    expect(harness.db.transaction).not.toHaveBeenCalled();
+  });
+
   it.each(['required', 'optional'] as const)(
     'resolves trusted saved-card details and stores consent for %s collection',
     async (paymentMethodCollection) => {
