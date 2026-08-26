@@ -10,12 +10,12 @@ describe('WebhookService persisted dispatch', () => {
       eventEmitter as unknown as ConstructorParameters<typeof WebhookService>[1],
     );
     const payload: WebhookPayload = {
-      event: 'booking_request.created',
-      entityType: 'booking_request',
+      event: 'reservation.created',
+      entityType: 'reservation',
       entityId: 'bbbbbbbb-0000-4000-a000-000000000001',
       propertyId: 'aaaaaaaa-0000-4000-a000-000000000001',
       data: {
-        requestId: 'bbbbbbbb-0000-4000-a000-000000000001',
+        reservationId: 'bbbbbbbb-0000-4000-a000-000000000001',
         status: 'pending',
       },
       timestamp: '2026-08-24T17:15:00.000Z',
@@ -27,7 +27,7 @@ describe('WebhookService persisted dispatch', () => {
     );
 
     expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
-      'booking_request.created',
+      'reservation.created',
       {
         ...payload,
         logicalEventId: 'bbbbbbbb-0000-4000-a000-000000000002',

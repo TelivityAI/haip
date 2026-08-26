@@ -1449,6 +1449,9 @@ async function main() {
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS house_account_id uuid`,
     // Split-component tax charges link to their parent charge (self-FK).
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS parent_charge_id uuid`,
+    `ALTER TABLE charges ADD COLUMN IF NOT EXISTS adjusts_charge_id uuid`,
+    `ALTER TABLE charges ADD COLUMN IF NOT EXISTS source_key varchar(255)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS charges_property_folio_source_key_unique ON charges (property_id, folio_id, source_key)`,
     `ALTER TABLE payments ALTER COLUMN folio_id DROP NOT NULL`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS house_account_id uuid`,
     // Group linkage on reservations (KB 14.3) — added via ALTER to avoid a
