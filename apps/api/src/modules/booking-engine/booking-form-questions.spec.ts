@@ -35,7 +35,7 @@ const futureInactiveQuestion = {
   order: 2,
   isActive: false,
   isRequired: false,
-  futureConfig: { maximum: 5, icon: 'star' },
+  futureConfig: { maximum: 5, icon: 'star', accessKey: 'form-definition-secret' },
 };
 
 const adminValidationPipe = new ValidationPipe({
@@ -200,9 +200,13 @@ function makeConfigService(
   row: Record<string, unknown>,
   paymentGateway: 'mock' | 'stripe' | 'adyen' = 'stripe',
 ) {
-  const returning = vi.fn().mockResolvedValue([row]);
+  let updatedRow = row;
+  const returning = vi.fn().mockImplementation(async () => [updatedRow]);
   const where = vi.fn().mockReturnValue({ returning });
-  const set = vi.fn().mockReturnValue({ where });
+  const set = vi.fn().mockImplementation((values) => {
+    updatedRow = { ...row, ...values };
+    return { where };
+  });
   const update = vi.fn().mockReturnValue({ set });
   const selectWhere = vi.fn().mockResolvedValue([row]);
   const from = vi.fn().mockReturnValue({ where: selectWhere });
@@ -211,7 +215,12 @@ function makeConfigService(
   const lockedWhere = vi.fn().mockReturnValue({ for: lock });
   const lockedFrom = vi.fn().mockReturnValue({ where: lockedWhere });
   const lockedSelect = vi.fn().mockReturnValue({ from: lockedFrom });
-  const tx = { select: lockedSelect, update };
+  const storedAudits: Record<string, unknown>[] = [];
+  const insertValues = vi.fn().mockImplementation(async (values) => {
+    storedAudits.push(values);
+  });
+  const insert = vi.fn().mockReturnValue({ values: insertValues });
+  const tx = { select: lockedSelect, update, insert };
   const transaction = vi.fn(async (callback: (transaction: typeof tx) => unknown) => callback(tx));
   const db = { select, update, transaction };
   const runtimeConfig = {
@@ -228,11 +237,13 @@ function makeConfigService(
     set,
     transaction,
     lock,
+    storedAudits,
   };
 }
 
 describe('BookingEngineConfigService request settings', () => {
   const configRow = {
+    id: 'bbbbbbbb-0000-4000-b000-000000000001',
     propertyId: 'aaaaaaaa-0000-4000-a000-000000000001',
     isEnabled: true,
     displayName: 'Demo Hotel',
@@ -284,6 +295,61 @@ describe('BookingEngineConfigService request settings', () => {
     });
   });
 
+  it('records one sanitized actor-attributed audit entry for a successful request configuration update', async () => {
+    const { service, storedAudits } = makeConfigService(configRow);
+    const actor = {
+      userId: 'cccccccc-0000-4000-c000-000000000001',
+      userEmail: 'operator@example.com',
+      ipAddress: '203.0.113.10',
+    };
+    const updatedQuestions = [{
+      id: '20000000-0000-4000-8000-000000000002',
+      label: 'Arrival time',
+      type: 'short_text' as const,
+      order: 0,
+      isActive: true,
+      isRequired: true,
+    }];
+
+    await service.updateConfig(configRow.propertyId, {
+      bookingMode: 'request',
+      paymentMethodCollection: 'required',
+      formQuestions: updatedQuestions,
+      stripePublishableKey: 'pk_test_replacement',
+    }, configRow.updatedAt.toISOString(), actor);
+
+    expect(storedAudits).toEqual([expect.objectContaining({
+      propertyId: configRow.propertyId,
+      action: 'update',
+      entityType: 'booking_engine_config',
+      entityId: configRow.id,
+      userId: actor.userId,
+      userEmail: actor.userEmail,
+      ipAddress: actor.ipAddress,
+      description: 'Booking engine configuration updated',
+      previousValue: expect.objectContaining({
+        bookingMode: 'request',
+        paymentMethodCollection: 'optional',
+        formQuestions: expect.arrayContaining([
+          expect.objectContaining({
+            id: futureInactiveQuestion.id,
+            futureConfig: expect.objectContaining({ maximum: 5, icon: 'star' }),
+          }),
+        ]),
+      }),
+      newValue: expect.objectContaining({
+        bookingMode: 'request',
+        paymentMethodCollection: 'required',
+        formQuestions: updatedQuestions,
+      }),
+    })]);
+    expect(storedAudits[0]?.['previousValue']).not.toHaveProperty('stripePublishableKey');
+    expect(storedAudits[0]?.['newValue']).not.toHaveProperty('stripePublishableKey');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('pk_test_123');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('pk_test_replacement');
+    expect(JSON.stringify(storedAudits[0])).not.toContain('form-definition-secret');
+  });
+
   it('accepts a legacy admin save without a version during the compatibility window', async () => {
     const { service, set } = makeConfigService(configRow);
 
@@ -292,8 +358,8 @@ describe('BookingEngineConfigService request settings', () => {
     expect(set.mock.calls[0][0]).toMatchObject({ displayName: 'Legacy admin name' });
   });
 
-  it('rejects a stale If-Match version under the row lock before writing', async () => {
-    const { service, update, lock } = makeConfigService(configRow);
+  it('rejects a stale If-Match version under the row lock before writing or auditing', async () => {
+    const { service, update, lock, storedAudits } = makeConfigService(configRow);
 
     await expect(service.updateConfig(configRow.propertyId, {
       displayName: 'Stale admin name',
@@ -301,6 +367,7 @@ describe('BookingEngineConfigService request settings', () => {
 
     expect(lock).toHaveBeenCalledWith('update');
     expect(update).not.toHaveBeenCalled();
+    expect(storedAudits).toEqual([]);
   });
 
   it('writes only a partial patch when the If-Match version is current', async () => {
@@ -320,12 +387,13 @@ describe('BookingEngineConfigService request settings', () => {
   it.each(['required', 'optional'] as const)(
     'rejects %s Stripe card collection without a publishable card key',
     async (paymentMethodCollection) => {
-    const { service, update } = makeConfigService({ ...configRow, stripePublishableKey: null });
+    const { service, update, storedAudits } = makeConfigService({ ...configRow, stripePublishableKey: null });
 
     await expect(service.updateConfig(configRow.propertyId, {
       paymentMethodCollection,
     }, configRow.updatedAt.toISOString())).rejects.toThrow(/publishable/i);
     expect(update).not.toHaveBeenCalled();
+    expect(storedAudits).toEqual([]);
     },
   );
 
@@ -345,12 +413,13 @@ describe('BookingEngineConfigService request settings', () => {
   it.each(['required', 'optional'] as const)(
     'rejects %s card collection when the configured provider does not support saved cards',
     async (paymentMethodCollection) => {
-      const { service, update } = makeConfigService(configRow, 'adyen');
+      const { service, update, storedAudits } = makeConfigService(configRow, 'adyen');
 
       await expect(service.updateConfig(configRow.propertyId, {
         paymentMethodCollection,
       }, configRow.updatedAt.toISOString())).rejects.toThrow(/not supported/i);
       expect(update).not.toHaveBeenCalled();
+      expect(storedAudits).toEqual([]);
     },
   );
 
@@ -392,19 +461,27 @@ describe('BookingEngineConfigService request settings', () => {
     expect(lock).toHaveBeenCalledWith('update');
   });
 
-  it('parses a strong If-Match header and rejects malformed values at the controller', async () => {
-    const { service, set } = makeConfigService(configRow);
+  it('parses a strong If-Match header and forwards the authenticated audit actor', async () => {
+    const { service, set, storedAudits } = makeConfigService(configRow);
     const controller = new BookingEngineAdminController(service);
+    const actor = {
+      userId: 'cccccccc-0000-4000-c000-000000000001',
+      userEmail: 'operator@example.com',
+      ipAddress: '203.0.113.10',
+    };
 
     await controller.updateConfig(
       configRow.propertyId,
       { displayName: 'Header admin name' },
+      actor,
       `"${configRow.updatedAt.toISOString()}"`,
     );
     expect(set.mock.calls[0][0]).toMatchObject({ displayName: 'Header admin name' });
+    expect(storedAudits[0]).toMatchObject(actor);
     expect(() => controller.updateConfig(
       configRow.propertyId,
       { displayName: 'Malformed header' },
+      actor,
       'not-an-etag',
     )).toThrow(BadRequestException);
   });
@@ -428,6 +505,7 @@ describe('BookingEngineConfigService request settings', () => {
     await controller.updateConfig(
       configRow.propertyId,
       dto,
+      {},
       `"${configRow.updatedAt.toISOString()}"`,
     );
 

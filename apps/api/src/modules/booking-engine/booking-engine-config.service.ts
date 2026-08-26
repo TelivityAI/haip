@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { eq, and, desc } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
-import { bookingEngineConfig, bookingEngineCredentials } from '@telivityhaip/database';
+import { auditLogs, bookingEngineConfig, bookingEngineCredentials } from '@telivityhaip/database';
 import type {
   BookingFormQuestionDefinition,
   BookingMode,
@@ -16,6 +16,7 @@ import type {
   PaymentMethodCollection,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { hashBookingKey } from '../auth/booking-key.guard';
 import { resolvePaymentGatewayProvider } from '../payment/payment-gateway.factory';
 import { isSupportedQuestion, validateQuestionDefinitions } from './booking-form-questions';
@@ -47,6 +48,44 @@ export interface UpdateConfigInput {
   bookingMode?: BookingMode;
   paymentMethodCollection?: PaymentMethodCollection;
   formQuestions?: BookingFormQuestionDefinition[];
+}
+
+const SENSITIVE_AUDIT_FIELD = /secret|credential|password|token|(?:private|publishable|api|access).*key|key.*hash|ciphertext/i;
+
+function sanitizeOperationalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeOperationalValue);
+  if (!value || typeof value !== 'object') return value;
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, nestedValue]) => (
+      key === 'key' || SENSITIVE_AUDIT_FIELD.test(key)
+        ? []
+        : [[key, sanitizeOperationalValue(nestedValue)]]
+    )),
+  );
+}
+
+/**
+ * Keep the settings operators need to reconstruct a configuration change while
+ * explicitly excluding credential-bearing fields from the immutable audit trail.
+ */
+export function sanitizeBookingEngineConfig(
+  config: typeof bookingEngineConfig.$inferSelect,
+): Record<string, unknown> {
+  return sanitizeOperationalValue({
+    isEnabled: config.isEnabled,
+    displayName: config.displayName,
+    logoMediaId: config.logoMediaId,
+    primaryColor: config.primaryColor,
+    accentColor: config.accentColor,
+    sellableRoomTypeIds: config.sellableRoomTypeIds,
+    sellableRatePlanIds: config.sellableRatePlanIds,
+    depositPolicy: config.depositPolicy,
+    autoConfirm: config.autoConfirm,
+    bookingMode: config.bookingMode,
+    paymentMethodCollection: config.paymentMethodCollection,
+    formQuestions: config.formQuestions,
+  }) as Record<string, unknown>;
 }
 
 @Injectable()
@@ -122,7 +161,12 @@ export class BookingEngineConfigService {
     };
   }
 
-  async updateConfig(propertyId: string, input: UpdateConfigInput, expectedVersion?: string) {
+  async updateConfig(
+    propertyId: string,
+    input: UpdateConfigInput,
+    expectedVersion?: string,
+    actor?: AuditActor,
+  ) {
     await this.getConfig(propertyId); // ensure a row exists before locking it
 
     return this.db.transaction(async (tx: any) => {
@@ -193,6 +237,16 @@ export class BookingEngineConfigService {
         })
         .where(eq(bookingEngineConfig.propertyId, propertyId))
         .returning();
+      await tx.insert(auditLogs).values({
+        propertyId,
+        action: 'update',
+        entityType: 'booking_engine_config',
+        entityId: updated.id,
+        ...actorFields(actor),
+        previousValue: sanitizeBookingEngineConfig(current),
+        newValue: sanitizeBookingEngineConfig(updated),
+        description: 'Booking engine configuration updated',
+      });
       return updated;
     });
   }

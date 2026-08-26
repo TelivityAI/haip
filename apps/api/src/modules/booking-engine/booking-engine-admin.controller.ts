@@ -14,6 +14,7 @@ import {
 import { ApiTags, ApiOperation, ApiHeader } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { AuditActorCtx, type AuditActor } from '../../common/audit/audit-actor';
 import { BookingEngineConfigService } from './booking-engine-config.service';
 import { CreateBookingKeyDto, UpdateBookingEngineConfigDto } from './dto/be-admin.dto';
 
@@ -50,9 +51,10 @@ export class BookingEngineAdminController {
   updateConfig(
     @Query('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Body() dto: UpdateBookingEngineConfigDto,
+    @AuditActorCtx() actor: AuditActor,
     @Headers('if-match') ifMatch?: string,
   ) {
-    return this.configService.updateConfig(propertyId, dto, parseConfigVersion(ifMatch));
+    return this.configService.updateConfig(propertyId, dto, parseConfigVersion(ifMatch), actor);
   }
 
   @Get('keys')
