@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { setBookingKey } from './api/client';
@@ -10,6 +10,17 @@ import { ConfigProvider } from './context/ConfigContext';
 import { BookingFlowProvider } from './context/BookingFlowContext';
 import App from './App';
 import './index.css';
+
+function BookingWidgetError() {
+  return (
+    <main className="mx-auto max-w-xl p-6">
+      <div role="alert" className="rounded-brand border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+        The booking form could not be displayed. Please refresh the page or contact
+        the hotel.
+      </div>
+    </main>
+  );
+}
 
 /**
  * Mount the booking widget into a host element. Shared by the standalone SPA
@@ -30,9 +41,10 @@ export function mountBooking(el: Element) {
   // (set on :root) because the container is a closer ancestor of the widget's elements.
   applyTheme(el, resolveTheme(el));
 
-  createRoot(el).render(
-    <StrictMode>
-      <MemoryRouter>
+  const router = createMemoryRouter([
+    {
+      path: '*',
+      element: (
         <QueryClientProvider client={queryClient}>
           <ConfigProvider>
             <BookingFlowProvider>
@@ -40,7 +52,14 @@ export function mountBooking(el: Element) {
             </BookingFlowProvider>
           </ConfigProvider>
         </QueryClientProvider>
-      </MemoryRouter>
+      ),
+      errorElement: <BookingWidgetError />,
+    },
+  ]);
+
+  createRoot(el).render(
+    <StrictMode>
+      <RouterProvider router={router} />
     </StrictMode>,
   );
 }

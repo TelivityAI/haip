@@ -20,7 +20,7 @@ export class ConsoleEmailProvider implements EmailProvider {
     return {
       sent: false,
       provider: this.name,
-      messageId: `console-${Date.now()}`,
+      messageId: message.messageId ?? `console-${Date.now()}`,
       error: 'No email provider configured — message logged only',
     };
   }

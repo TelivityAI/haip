@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, jsonb, integer, date, pgEnum, numeric, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, jsonb, integer, date, pgEnum, numeric, boolean, uniqueIndex } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 import { rooms } from './room.js';
 import { roomTypes } from './room.js';
@@ -35,6 +35,52 @@ export const bookingSourceEnum = pgEnum('booking_source', [
   'group',          // Group/block booking
   'corporate',      // Corporate portal
 ]);
+
+export interface AcceptedPricingNight {
+  date: string;
+  roomAmount: string;
+  taxAmount: string;
+}
+
+export interface AcceptedPricingServiceNight {
+  date: string;
+  amount: string;
+  taxAmount: string;
+}
+
+export interface AcceptedPricingService {
+  serviceId: string;
+  code: string;
+  name: string;
+  postingRule: string;
+  chargeType: string;
+  currencyCode: string;
+  unitPrice: string;
+  quantity: number;
+  lineTotal: string;
+  taxTotal: string;
+  lineItems: AcceptedPricingServiceNight[];
+}
+
+/** Immutable operational tariff chosen when staff accepts a Booking Request. */
+export interface AcceptedPricingSnapshot {
+  version: 1;
+  source: 'submitted' | 'current' | 'custom' | 'prior';
+  currencyCode: string;
+  grandTotal: string;
+  roomTotal: string;
+  taxTotal: string;
+  nights: AcceptedPricingNight[];
+  services: AcceptedPricingService[];
+  servicesTotal: string;
+  servicesTaxTotal: string;
+  customReason: string | null;
+  adjustment: null | {
+    amount: string;
+    reason: string;
+    serviceDate: string;
+  };
+}
 
 /**
  * Bookings — container for one or more reservations; identifies the booker.
@@ -92,6 +138,7 @@ export const reservations = pgTable('reservations', {
   ratePlanId: uuid('rate_plan_id').notNull().references(() => ratePlans.id),
   totalAmount: numeric('total_amount', { precision: 12, scale: 2 }).notNull(),
   currencyCode: varchar('currency_code', { length: 3 }).notNull(),
+  acceptedPricingSnapshot: jsonb('accepted_pricing_snapshot').$type<AcceptedPricingSnapshot>(),
 
   // Occupancy
   adults: integer('adults').notNull().default(1),
@@ -136,7 +183,10 @@ export const reservations = pgTable('reservations', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  propertyIdUnique: uniqueIndex('reservations_property_id_unique')
+    .on(table.propertyId, table.id),
+}));
 
 /**
  * Named occupants on a reservation (one physical room).

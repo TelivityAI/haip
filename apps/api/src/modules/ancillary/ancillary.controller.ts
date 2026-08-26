@@ -130,11 +130,11 @@ export class AncillaryController {
   @ApiOperation({ summary: 'Cancel an attached reservation service' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })
   cancelReservationService(
-    @Param('reservationId', ParseUUIDPipe) _reservationId: string,
+    @Param('reservationId', ParseUUIDPipe) reservationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
   ) {
-    return this.ancillaryService.cancelReservationService(id, propertyId);
+    return this.ancillaryService.cancelReservationService(id, propertyId, reservationId);
   }
 
   @Post('reservations/:reservationId/post-once')

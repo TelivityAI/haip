@@ -136,8 +136,9 @@ export class TaxService {
    * Get the active tax profile for a property on a given date.
    * Returns profile with its active rules, sorted by sortOrder.
    */
-  async getActiveTaxProfile(propertyId: string, date: string) {
-    const [profile] = await this.db
+  async getActiveTaxProfile(propertyId: string, date: string, db?: any) {
+    const conn = db ?? this.db;
+    const [profile] = await conn
       .select()
       .from(taxProfiles)
       .where(
@@ -151,7 +152,7 @@ export class TaxService {
 
     if (!profile) return null;
 
-    const rules = await this.db
+    const rules = await conn
       .select()
       .from(taxRules)
       .where(
@@ -186,14 +187,20 @@ export class TaxService {
       numberOfNights?: number;
       nightNumber?: number;
     },
+    db?: any,
   ): Promise<TaxLineItem[]> {
-    const profile = await this.getActiveTaxProfile(propertyId, serviceDate.slice(0, 10));
+    const conn = db ?? this.db;
+    const profile = await this.getActiveTaxProfile(
+      propertyId,
+      serviceDate.slice(0, 10),
+      conn,
+    );
     if (!profile || !profile.rules.length) return [];
 
     // Load guest if needed for exemption checks
     let guest: any = null;
     if (options?.guestId) {
-      const [g] = await this.db
+      const [g] = await conn
         .select()
         .from(guests)
         .where(eq(guests.id, options.guestId));

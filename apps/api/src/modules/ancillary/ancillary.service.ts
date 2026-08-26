@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { eq, and, sql, inArray, like } from 'drizzle-orm';
 import Decimal from 'decimal.js';
@@ -16,6 +17,8 @@ import {
   ratePlans,
 } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { matchAcceptedReservationServiceRows } from '../../common/accepted-pricing/accepted-reservation-service';
+import { withAcceptedPricingLock } from '../../common/database/accepted-pricing-lock';
 import { FolioService } from '../folio/folio.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -23,6 +26,13 @@ import { UpdateServiceDto } from './dto/update-service.dto';
 import { ListServicesDto } from './dto/list-services.dto';
 import { CreateRatePlanComponentDto } from './dto/create-rate-plan-component.dto';
 import { AttachReservationServiceDto } from './dto/attach-reservation-service.dto';
+import { reservationServiceAttachedPayload } from './reservation-service-event';
+
+export interface ReservationServicePricingOverride {
+  currencyCode: string;
+  postingRule: string;
+  chargeType: string;
+}
 
 const IN_HOUSE_STATUSES = ['checked_in', 'stayover', 'due_out'] as const;
 
@@ -66,8 +76,9 @@ export class AncillaryService {
     return row;
   }
 
-  async findServiceById(id: string, propertyId: string) {
-    const [row] = await this.db
+  async findServiceById(id: string, propertyId: string, tx?: any) {
+    const db = tx ?? this.db;
+    const [row] = await db
       .select()
       .from(services)
       .where(and(eq(services.id, id), eq(services.propertyId, propertyId)));
@@ -197,8 +208,9 @@ export class AncillaryService {
 
   // --- Reservation services ---
 
-  private async findReservation(reservationId: string, propertyId: string) {
-    const [reservation] = await this.db
+  private async findReservation(reservationId: string, propertyId: string, tx?: any) {
+    const db = tx ?? this.db;
+    const [reservation] = await db
       .select()
       .from(reservations)
       .where(
@@ -210,8 +222,9 @@ export class AncillaryService {
     return reservation;
   }
 
-  private async findOpenGuestFolio(reservationId: string, propertyId: string) {
-    const [folio] = await this.db
+  private async findOpenGuestFolio(reservationId: string, propertyId: string, tx?: any) {
+    const db = tx ?? this.db;
+    const [folio] = await db
       .select()
       .from(folios)
       .where(
@@ -234,7 +247,9 @@ export class AncillaryService {
     propertyId: string,
     reservationServiceId: string,
     businessDate?: string,
+    tx?: any,
   ): Promise<boolean> {
+    const db = tx ?? this.db;
     const conditions: any[] = [
       eq(charges.folioId, folioId),
       eq(charges.propertyId, propertyId),
@@ -244,7 +259,7 @@ export class AncillaryService {
     if (businessDate) {
       conditions.push(sql`${charges.serviceDate}::date = ${businessDate}`);
     }
-    const [existing] = await this.db
+    const [existing] = await db
       .select({ id: charges.id })
       .from(charges)
       .where(and(...conditions))
@@ -252,9 +267,15 @@ export class AncillaryService {
     return !!existing;
   }
 
-  async attachToReservation(reservationId: string, dto: AttachReservationServiceDto) {
-    const reservation = await this.findReservation(reservationId, dto.propertyId);
-    const service = await this.findServiceById(dto.serviceId, dto.propertyId);
+  async attachToReservation(
+    reservationId: string,
+    dto: AttachReservationServiceDto,
+    tx?: any,
+    pricingOverride?: ReservationServicePricingOverride,
+  ) {
+    const db = tx ?? this.db;
+    const reservation = await this.findReservation(reservationId, dto.propertyId, db);
+    const service = await this.findServiceById(dto.serviceId, dto.propertyId, db);
 
     if (!service.isActive) {
       throw new BadRequestException('Service is not active');
@@ -263,7 +284,7 @@ export class AncillaryService {
     const quantity = dto.quantity ?? 1;
     const unitPrice = dto.unitPrice ?? service.price;
 
-    const [row] = await this.db
+    const [row] = await db
       .insert(reservationServices)
       .values({
         propertyId: dto.propertyId,
@@ -271,33 +292,28 @@ export class AncillaryService {
         serviceId: service.id,
         quantity,
         unitPrice,
-        currencyCode: service.currencyCode,
+        currencyCode: pricingOverride?.currencyCode ?? service.currencyCode,
         startDate: dto.startDate,
         endDate: dto.endDate,
         status: 'confirmed',
         sourceChannel: dto.sourceChannel ?? 'front_desk',
-        postingRule: service.postingRule,
-        chargeType: service.chargeType,
+        postingRule: pricingOverride?.postingRule ?? service.postingRule,
+        chargeType: pricingOverride?.chargeType ?? service.chargeType,
         notes: dto.notes,
       })
       .returning();
 
-    await this.webhookService.emit(
-      'reservation.service_attached',
-      'reservation_service',
-      row.id,
-      {
-        reservationId,
-        serviceId: service.id,
-        serviceName: service.name,
-        quantity,
-        unitPrice,
-        postingRule: row.postingRule,
-      },
-      dto.propertyId,
-    );
+    if (!tx) {
+      await this.webhookService.emit(
+        'reservation.service_attached',
+        'reservation_service',
+        row.id,
+        reservationServiceAttachedPayload(row, service.name),
+        dto.propertyId,
+      );
+    }
 
-    return row;
+    return { ...row, serviceName: service.name };
   }
 
   async listForReservation(propertyId: string, reservationId: string) {
@@ -314,30 +330,51 @@ export class AncillaryService {
       .orderBy(reservationServices.createdAt);
   }
 
-  async cancelReservationService(id: string, propertyId: string) {
-    const [row] = await this.db
-      .select()
-      .from(reservationServices)
-      .where(
-        and(eq(reservationServices.id, id), eq(reservationServices.propertyId, propertyId)),
-      );
-    if (!row) {
-      throw new NotFoundException(`Reservation service ${id} not found`);
-    }
-    if (row.status === 'cancelled') {
-      throw new BadRequestException('Reservation service is already cancelled');
-    }
-    if (row.status === 'posted') {
-      throw new BadRequestException('Cannot cancel a posted reservation service');
-    }
+  async cancelReservationService(id: string, propertyId: string, reservationId: string) {
+    const updated = await withAcceptedPricingLock(
+      this.db,
+      propertyId,
+      reservationId,
+      async (tx) => {
+        const query = tx
+          .select()
+          .from(reservationServices)
+          .where(and(
+            eq(reservationServices.id, id),
+            eq(reservationServices.propertyId, propertyId),
+            eq(reservationServices.reservationId, reservationId),
+          ));
+        const [row] = typeof query.for === 'function'
+          ? await query.for('update')
+          : await query;
+        if (!row) {
+          throw new NotFoundException(`Reservation service ${id} not found`);
+        }
+        if (row.status === 'cancelled') {
+          throw new BadRequestException('Reservation service is already cancelled');
+        }
+        if (row.status === 'posted') {
+          throw new BadRequestException('Cannot cancel a posted reservation service');
+        }
 
-    const [updated] = await this.db
-      .update(reservationServices)
-      .set({ status: 'cancelled', updatedAt: new Date() })
-      .where(
-        and(eq(reservationServices.id, id), eq(reservationServices.propertyId, propertyId)),
-      )
-      .returning();
+        const [cancelled] = await tx
+          .update(reservationServices)
+          .set({ status: 'cancelled', updatedAt: new Date() })
+          .where(and(
+            eq(reservationServices.id, id),
+            eq(reservationServices.propertyId, propertyId),
+            eq(reservationServices.reservationId, reservationId),
+            inArray(reservationServices.status, ['quoted', 'confirmed'] as any),
+          ))
+          .returning();
+        if (!cancelled) {
+          throw new ConflictException(
+            `Reservation service ${id} changed while it was being cancelled`,
+          );
+        }
+        return cancelled;
+      },
+    );
 
     await this.webhookService.emit(
       'reservation.service_cancelled',
@@ -354,10 +391,19 @@ export class AncillaryService {
    * Attach package rate-plan components that are not yet on the reservation.
    * Intended to be called from check-in / book flows.
    */
-  async ensurePackageComponents(reservationId: string, propertyId: string) {
-    const reservation = await this.findReservation(reservationId, propertyId);
+  async ensurePackageComponents(
+    reservationId: string,
+    propertyId: string,
+    tx?: any,
+    acceptedPricing?: {
+      freezeUnquotedAtZero: true;
+      currencyCode: string;
+    },
+  ) {
+    const db = tx ?? this.db;
+    const reservation = await this.findReservation(reservationId, propertyId, db);
 
-    const components = await this.db
+    const components = await db
       .select()
       .from(ratePlanComponents)
       .where(
@@ -371,7 +417,7 @@ export class AncillaryService {
       return [];
     }
 
-    const existing = await this.db
+    const existing = await db
       .select({ serviceId: reservationServices.serviceId })
       .from(reservationServices)
       .where(
@@ -388,9 +434,15 @@ export class AncillaryService {
         continue;
       }
 
-      const service = await this.findServiceById(component.serviceId, propertyId);
+      const service = await this.findServiceById(component.serviceId, propertyId, db);
       let unitPrice: string;
-      if (component.amountOverride != null) {
+      if (acceptedPricing?.freezeUnquotedAtZero) {
+        // Booking-request totals contain only explicitly quoted extras. A rate
+        // package component absent from that immutable quote may still be
+        // attached for operations/event parity, but can never acquire a later
+        // live catalog price and silently exceed the staff-accepted total.
+        unitPrice = '0.00';
+      } else if (component.amountOverride != null) {
         unitPrice = component.amountOverride;
       } else if (component.includedInRate) {
         unitPrice = '0.00';
@@ -398,7 +450,7 @@ export class AncillaryService {
         unitPrice = service.price;
       }
 
-      const [row] = await this.db
+      const [row] = await db
         .insert(reservationServices)
         .values({
           propertyId,
@@ -406,7 +458,7 @@ export class AncillaryService {
           serviceId: service.id,
           quantity: component.quantity ?? 1,
           unitPrice,
-          currencyCode: service.currencyCode,
+          currencyCode: acceptedPricing?.currencyCode ?? service.currencyCode,
           status: 'confirmed',
           sourceChannel: 'package',
           postingRule: service.postingRule,
@@ -414,124 +466,196 @@ export class AncillaryService {
         })
         .returning();
 
-      await this.webhookService.emit(
-        'reservation.service_attached',
-        'reservation_service',
-        row.id,
-        {
-          reservationId,
-          serviceId: service.id,
-          serviceName: service.name,
-          sourceChannel: 'package',
-          quantity: row.quantity,
-          unitPrice,
-        },
-        propertyId,
-      );
+      if (!tx) {
+        await this.webhookService.emit(
+          'reservation.service_attached',
+          'reservation_service',
+          row.id,
+          reservationServiceAttachedPayload(row, service.name),
+          propertyId,
+        );
+      }
 
-      attached.push(row);
+      attached.push({ ...row, serviceName: service.name });
     }
 
     return attached;
   }
 
   async postOnceForReservation(reservationId: string, propertyId: string) {
-    const reservation = await this.findReservation(reservationId, propertyId);
-    const folio = await this.findOpenGuestFolio(reservationId, propertyId);
-    if (!folio) {
-      throw new BadRequestException(
-        `No open guest folio for reservation ${reservationId}`,
-      );
-    }
+    const result = await withAcceptedPricingLock(
+      this.db,
+      propertyId,
+      reservationId,
+      async (tx) => {
+        const reservation = await this.findReservation(reservationId, propertyId, tx);
+        const folio = await this.findOpenGuestFolio(reservationId, propertyId, tx);
+        if (!folio) {
+          throw new BadRequestException(
+            `No open guest folio for reservation ${reservationId}`,
+          );
+        }
+        const rows = await tx
+          .select({
+            rs: reservationServices,
+            serviceName: services.name,
+          })
+          .from(reservationServices)
+          .innerJoin(
+            services,
+            and(
+              eq(services.id, reservationServices.serviceId),
+              eq(services.propertyId, reservationServices.propertyId),
+            ),
+          )
+          .where(and(
+            eq(reservationServices.propertyId, propertyId),
+            eq(reservationServices.reservationId, reservationId),
+          ));
+        const posted: any[] = [];
+        const events: Array<{
+          reservationServiceId: string;
+          amount: string;
+          postingRule: string;
+          chargeType: string;
+        }> = [];
+        const folioOutcomes: Array<{ charge: any; wasCreated: boolean }> = [];
+        const serviceDate = reservation.arrivalDate ?? new Date().toISOString().slice(0, 10);
+        const acceptedRows = matchAcceptedReservationServiceRows(
+          reservation.acceptedPricingSnapshot,
+          rows.map(({ rs }: any) => rs),
+        );
 
-    const rows = await this.db
-      .select({
-        rs: reservationServices,
-        serviceName: services.name,
-      })
-      .from(reservationServices)
-      .innerJoin(
-        services,
-        and(
-          eq(services.id, reservationServices.serviceId),
-          eq(services.propertyId, reservationServices.propertyId),
-        ),
-      )
-      .where(
-        and(
-          eq(reservationServices.propertyId, propertyId),
-          eq(reservationServices.reservationId, reservationId),
-          eq(reservationServices.status, 'confirmed' as any),
-          inArray(reservationServices.postingRule, ['once', 'included_in_rate'] as any),
-        ),
-      );
-
-    const posted: any[] = [];
-    const serviceDate =
-      reservation.arrivalDate ?? new Date().toISOString().slice(0, 10);
-
-    for (const { rs, serviceName } of rows) {
-      if (await this.hasPostedCharge(folio.id, propertyId, rs.id)) {
-        if (rs.status === 'confirmed') {
-          await this.db
-            .update(reservationServices)
-            .set({ status: 'posted', updatedAt: new Date() })
-            .where(
-              and(
+        for (const { rs, serviceName } of rows) {
+          if (rs.status === 'cancelled') continue;
+          const hasAcceptedPricing = reservation.acceptedPricingSnapshot != null;
+          const isAcceptedRow = hasAcceptedPricing
+            && acceptedRows.get(rs.serviceId)?.id === rs.id;
+          if (hasAcceptedPricing && rs.sourceChannel === 'booking_engine' && !isAcceptedRow) {
+            continue;
+          }
+          const acceptedLine = isAcceptedRow
+            ? this.acceptedServiceLine(reservation, rs.serviceId, serviceDate, true)
+            : null;
+          const effectivePostingRule = acceptedLine?.postingRule ?? rs.postingRule;
+          const effectiveChargeType = acceptedLine?.chargeType ?? rs.chargeType;
+          if (isAcceptedRow) {
+            if (!acceptedLine) continue;
+            if (!['once', 'included_in_rate'].includes(effectivePostingRule)) continue;
+          } else if (
+            rs.status !== 'confirmed'
+            || !['once', 'included_in_rate'].includes(effectivePostingRule)
+          ) {
+            continue;
+          }
+          if (!isAcceptedRow && await this.hasPostedCharge(
+            folio.id,
+            propertyId,
+            rs.id,
+            undefined,
+            tx,
+          )) {
+            await tx
+              .update(reservationServices)
+              .set({ status: 'posted', updatedAt: new Date() })
+              .where(and(
                 eq(reservationServices.id, rs.id),
                 eq(reservationServices.propertyId, propertyId),
-              ),
-            );
+                eq(reservationServices.status, 'confirmed' as any),
+              ));
+            continue;
+          }
+
+          const amount = acceptedLine?.amount
+            ?? new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
+          let ledgerGroupWasCreated = false;
+          if (new Decimal(amount).greaterThan(0)) {
+            const chargeInput = {
+              propertyId,
+              type: effectiveChargeType,
+              description: `${serviceName} ${this.svcTag(rs.id)}`,
+              amount,
+              currencyCode: acceptedLine?.currencyCode ?? rs.currencyCode,
+              serviceDate: new Date(
+                `${acceptedLine?.date ?? serviceDate}T00:00:00Z`,
+              ).toISOString(),
+              guestId: reservation.guestId,
+            };
+            const outcome = acceptedLine
+              ? await this.folioService.postChargeFromSnapshotWithOutcome(
+                  folio.id,
+                  chargeInput,
+                  acceptedLine.taxAmount,
+                  undefined,
+                  `accepted-pricing:reservation-service:${rs.id}:once:${acceptedLine.date}`,
+                  tx,
+                )
+              : {
+                  charge: await this.folioService.postCharge(folio.id, chargeInput, tx),
+                  wasCreated: true,
+                };
+            folioOutcomes.push(outcome);
+            ledgerGroupWasCreated = outcome.wasCreated;
+          }
+
+          let updated: any;
+          if (isAcceptedRow && rs.status === 'posted') {
+            // A once service can acquire a new immutable operational date after
+            // a stay amendment. Its row remains posted, while the date-bearing
+            // source key decides whether this revision still needs a group.
+            if (!ledgerGroupWasCreated) continue;
+            updated = rs;
+          } else {
+            [updated] = await tx
+              .update(reservationServices)
+              .set({ status: 'posted', updatedAt: new Date() })
+              .where(and(
+                eq(reservationServices.id, rs.id),
+                eq(reservationServices.propertyId, propertyId),
+                eq(reservationServices.status, 'confirmed' as any),
+              ))
+              .returning();
+            if (!updated) {
+              throw new ConflictException(
+                `Reservation service ${rs.id} changed while posting`,
+              );
+            }
+          }
+          posted.push(updated);
+          events.push({
+            reservationServiceId: rs.id,
+            amount,
+            postingRule: effectivePostingRule,
+            chargeType: effectiveChargeType,
+          });
         }
-        continue;
-      }
+        return { folio, posted, events, folioOutcomes };
+      },
+    );
 
-      const amount = new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
-      const description = `${serviceName} ${this.svcTag(rs.id)}`;
-
-      // FolioService rejects non-positive amounts except adjustments/reversals.
-      // Zero-priced included lines are marked posted without a ledger row.
-      if (new Decimal(amount).greaterThan(0)) {
-        await this.folioService.postCharge(folio.id, {
-          propertyId,
-          type: rs.chargeType,
-          description,
-          amount,
-          currencyCode: rs.currencyCode,
-          serviceDate: new Date(serviceDate + 'T00:00:00Z').toISOString(),
-          guestId: reservation.guestId,
-        });
-      }
-
-      const [updated] = await this.db
-        .update(reservationServices)
-        .set({ status: 'posted', updatedAt: new Date() })
-        .where(
-          and(
-            eq(reservationServices.id, rs.id),
-            eq(reservationServices.propertyId, propertyId),
-          ),
-        )
-        .returning();
-
+    for (const outcome of result.folioOutcomes) {
+      await this.folioService.emitSnapshotChargeWebhooks(
+        result.folio.id,
+        propertyId,
+        outcome,
+      );
+    }
+    for (const event of result.events) {
       await this.webhookService.emit(
         'reservation.service_posted',
         'reservation_service',
-        rs.id,
+        event.reservationServiceId,
         {
           reservationId,
-          folioId: folio.id,
-          amount,
-          postingRule: rs.postingRule,
-          chargeType: rs.chargeType,
+          folioId: result.folio.id,
+          amount: event.amount,
+          postingRule: event.postingRule,
+          chargeType: event.chargeType,
         },
         propertyId,
       );
-
-      posted.push(updated);
     }
-
-    return { posted, count: posted.length };
+    return { posted: result.posted, count: result.posted.length };
   }
 
   async postPerNightForProperty(propertyId: string, businessDate?: string) {
@@ -562,8 +686,6 @@ export class AncillaryService {
       .where(
         and(
           eq(reservationServices.propertyId, propertyId),
-          eq(reservationServices.status, 'confirmed' as any),
-          eq(reservationServices.postingRule, 'per_night' as any),
           inArray(reservations.status, [...IN_HOUSE_STATUSES] as any),
         ),
       );
@@ -574,13 +696,166 @@ export class AncillaryService {
 
     for (const { rs, serviceName, reservation } of rows) {
       try {
-        if (rs.startDate && date < rs.startDate) {
+        if (reservation.acceptedPricingSnapshot) {
+          const lockedPost = await withAcceptedPricingLock(
+            this.db,
+            propertyId,
+            reservation.id,
+            async (tx) => {
+              const currentRows = await tx
+                .select({
+                  rs: reservationServices,
+                  serviceName: services.name,
+                  reservation: reservations,
+                })
+                .from(reservationServices)
+                .innerJoin(
+                  reservations,
+                  and(
+                    eq(reservations.id, reservationServices.reservationId),
+                    eq(reservations.propertyId, reservationServices.propertyId),
+                  ),
+                )
+                .innerJoin(
+                  services,
+                  and(
+                    eq(services.id, reservationServices.serviceId),
+                    eq(services.propertyId, reservationServices.propertyId),
+                  ),
+                )
+                .where(and(
+                  eq(reservationServices.propertyId, propertyId),
+                  eq(reservationServices.reservationId, reservation.id),
+                ));
+              const current = currentRows.find(({ rs: candidate }: any) => candidate.id === rs.id);
+              if (!current || current.rs.status === 'cancelled') return null;
+              const acceptedRows = matchAcceptedReservationServiceRows(
+                current.reservation.acceptedPricingSnapshot,
+                currentRows.map(({ rs: candidate }: any) => candidate),
+              );
+              const isAcceptedRow = acceptedRows.get(current.rs.serviceId)?.id === current.rs.id;
+              if (current.rs.sourceChannel === 'booking_engine' && !isAcceptedRow) return null;
+              const acceptedLine = isAcceptedRow
+                ? this.acceptedServiceLine(
+                    current.reservation,
+                    current.rs.serviceId,
+                    date,
+                    false,
+                  )
+                : null;
+              const postingRule = acceptedLine?.postingRule ?? current.rs.postingRule;
+              const chargeType = acceptedLine?.chargeType ?? current.rs.chargeType;
+              if (isAcceptedRow) {
+                if (!acceptedLine || postingRule !== 'per_night') return null;
+              } else {
+                if (current.rs.status !== 'confirmed' || postingRule !== 'per_night') return null;
+                if (current.rs.startDate && date < current.rs.startDate) return null;
+                if (current.rs.endDate && date > current.rs.endDate) return null;
+              }
+              const folio = await this.findOpenGuestFolio(reservation.id, propertyId, tx);
+              if (!folio) {
+                throw new BadRequestException(
+                  `No open guest folio for reservation ${reservation.id}`,
+                );
+              }
+              if (!isAcceptedRow && await this.hasPostedCharge(
+                folio.id, propertyId, current.rs.id, date, tx,
+              )) return null;
+              const amount = acceptedLine?.amount
+                ?? new Decimal(current.rs.unitPrice).times(current.rs.quantity).toFixed(2);
+              if (new Decimal(amount).lessThanOrEqualTo(0)) return null;
+              const chargeInput = {
+                propertyId,
+                type: chargeType,
+                description: `${current.serviceName} ${this.svcTag(current.rs.id)}`,
+                amount,
+                currencyCode: acceptedLine?.currencyCode ?? current.rs.currencyCode,
+                serviceDate: new Date(`${date}T00:00:00Z`).toISOString(),
+                guestId: current.reservation.guestId,
+              };
+              const outcome = acceptedLine
+                ? await this.folioService.postChargeFromSnapshotWithOutcome(
+                    folio.id,
+                    chargeInput,
+                    acceptedLine.taxAmount,
+                    undefined,
+                    `accepted-pricing:reservation-service:${current.rs.id}:night:${date}`,
+                    tx,
+                  )
+                : {
+                    charge: await this.folioService.postCharge(folio.id, chargeInput, tx),
+                    wasCreated: true,
+                  };
+              return {
+                folio,
+                reservation: current.reservation,
+                rs: current.rs,
+                amount,
+                postingRule,
+                chargeType,
+                outcome,
+              };
+            },
+          );
+          if (!lockedPost || !lockedPost.outcome.wasCreated) {
+            skipped.push(rs.id);
+            continue;
+          }
+          await this.folioService.emitSnapshotChargeWebhooks(
+            lockedPost.folio.id,
+            propertyId,
+            lockedPost.outcome,
+          );
+          await this.webhookService.emit(
+            'reservation.service_posted',
+            'reservation_service',
+            lockedPost.rs.id,
+            {
+              reservationId: lockedPost.reservation.id,
+              folioId: lockedPost.folio.id,
+              amount: lockedPost.amount,
+              businessDate: date,
+              postingRule: lockedPost.postingRule,
+              chargeType: lockedPost.chargeType,
+              chargeId: lockedPost.outcome.charge.id,
+            },
+            propertyId,
+          );
+          posted.push({
+            reservationServiceId: lockedPost.rs.id,
+            chargeId: lockedPost.outcome.charge.id,
+            amount: lockedPost.amount,
+          });
+          continue;
+        }
+
+        const acceptedLine = this.acceptedServiceLine(
+          reservation,
+          rs.serviceId,
+          date,
+          false,
+        );
+        const hasAcceptedPricing = reservation.acceptedPricingSnapshot != null;
+        const effectivePostingRule = acceptedLine?.postingRule ?? rs.postingRule;
+        const effectiveChargeType = acceptedLine?.chargeType ?? rs.chargeType;
+        if (hasAcceptedPricing) {
+          if (!acceptedLine || effectivePostingRule !== 'per_night') {
+            skipped.push(rs.id);
+            continue;
+          }
+        } else if (rs.status !== 'confirmed' || effectivePostingRule !== 'per_night') {
           skipped.push(rs.id);
           continue;
         }
-        if (rs.endDate && date > rs.endDate) {
-          skipped.push(rs.id);
-          continue;
+        if (!hasAcceptedPricing) {
+          if (rs.startDate && date < rs.startDate) {
+            skipped.push(rs.id);
+            continue;
+          }
+          if (rs.endDate && date > rs.endDate) {
+            skipped.push(rs.id);
+            continue;
+          }
         }
 
         const folio = await this.findOpenGuestFolio(reservation.id, propertyId);
@@ -592,27 +867,44 @@ export class AncillaryService {
           continue;
         }
 
-        if (await this.hasPostedCharge(folio.id, propertyId, rs.id, date)) {
+        if (!hasAcceptedPricing && await this.hasPostedCharge(folio.id, propertyId, rs.id, date)) {
           skipped.push(rs.id);
           continue;
         }
-
-        const amount = new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
+        const amount = acceptedLine?.amount
+          ?? new Decimal(rs.unitPrice).times(rs.quantity).toFixed(2);
         if (new Decimal(amount).lessThanOrEqualTo(0)) {
           skipped.push(rs.id);
           continue;
         }
 
         const description = `${serviceName} ${this.svcTag(rs.id)}`;
-        const charge = await this.folioService.postCharge(folio.id, {
+        const chargeInput = {
           propertyId,
-          type: rs.chargeType,
+          type: effectiveChargeType,
           description,
           amount,
-          currencyCode: rs.currencyCode,
+          currencyCode: acceptedLine?.currencyCode ?? rs.currencyCode,
           serviceDate: new Date(date + 'T00:00:00Z').toISOString(),
           guestId: reservation.guestId,
-        });
+        };
+        const outcome = acceptedLine
+          ? await this.folioService.postChargeFromSnapshotWithOutcome(
+              folio.id,
+              chargeInput,
+              acceptedLine.taxAmount,
+              undefined,
+              `accepted-pricing:reservation-service:${rs.id}:night:${date}`,
+            )
+          : {
+              charge: await this.folioService.postCharge(folio.id, chargeInput),
+              wasCreated: true,
+            };
+        if (!outcome.wasCreated) {
+          skipped.push(rs.id);
+          continue;
+        }
+        const charge = outcome.charge;
 
         // Stay confirmed until stay ends — idempotency via charge existence.
         await this.webhookService.emit(
@@ -624,7 +916,8 @@ export class AncillaryService {
             folioId: folio.id,
             amount,
             businessDate: date,
-            postingRule: 'per_night',
+            postingRule: effectivePostingRule,
+            chargeType: effectiveChargeType,
             chargeId: charge.id,
           },
           propertyId,
@@ -642,6 +935,39 @@ export class AncillaryService {
       skipped,
       errors,
       count: posted.length,
+    };
+  }
+
+  private acceptedServiceLine(
+    reservation: any,
+    serviceId: string,
+    date: string,
+    useFirstLine: boolean,
+  ): {
+    date: string;
+    amount: string;
+    taxAmount: string;
+    currencyCode: string;
+    postingRule: string;
+    chargeType: string;
+  } | null {
+    const pricing = reservation.acceptedPricingSnapshot;
+    if (!pricing || !Array.isArray(pricing.services)) return null;
+    const service = pricing.services.find(
+      (candidate: { serviceId?: string }) => candidate.serviceId === serviceId,
+    );
+    if (!service || !Array.isArray(service.lineItems)) return null;
+    const line = service.lineItems.find(
+      (candidate: { date?: string }) => candidate.date === date,
+    ) ?? (useFirstLine ? service.lineItems[0] : undefined);
+    if (!line) return null;
+    return {
+      date: line.date,
+      amount: line.amount,
+      taxAmount: line.taxAmount,
+      currencyCode: pricing.currencyCode,
+      postingRule: service.postingRule,
+      chargeType: service.chargeType,
     };
   }
 }

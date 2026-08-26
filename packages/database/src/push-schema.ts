@@ -715,6 +715,7 @@ async function main() {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id uuid NOT NULL REFERENCES properties(id),
       subscription_id uuid NOT NULL REFERENCES agent_webhook_subscriptions(id),
+      logical_event_id uuid,
       event_type varchar(100) NOT NULL,
       payload jsonb NOT NULL,
       status webhook_delivery_status NOT NULL DEFAULT 'pending',
@@ -1119,6 +1120,9 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS booking_mode varchar(10) NOT NULL DEFAULT 'instant'`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS payment_method_collection varchar(10) NOT NULL DEFAULT 'disabled'`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS form_questions jsonb NOT NULL DEFAULT '[]'::jsonb`,
     `CREATE UNIQUE INDEX IF NOT EXISTS bookings_property_external_channel_unique ON bookings (property_id, external_confirmation, channel_code) WHERE external_confirmation IS NOT NULL AND channel_code IS NOT NULL`,
     // Stay extras / packages
     `CREATE TABLE IF NOT EXISTS services (
@@ -1472,6 +1476,8 @@ async function main() {
     `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS provider_channel_id varchar(255)`,
     `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS last_synced_at timestamptz`,
     `CREATE UNIQUE INDEX IF NOT EXISTS guest_reviews_property_source_external_unique ON guest_reviews (property_id, source, external_id)`,
+    `ALTER TABLE webhook_deliveries ADD COLUMN IF NOT EXISTS logical_event_id uuid`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS webhook_deliveries_property_subscription_logical_event_unique ON webhook_deliveries (property_id, subscription_id, logical_event_id)`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));

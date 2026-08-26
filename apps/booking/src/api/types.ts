@@ -17,6 +17,30 @@ export interface Branding {
   accentColor?: string | null;
 }
 
+export type BookingMode = 'instant' | 'request';
+export type PaymentMethodCollection = 'required' | 'optional' | 'disabled';
+export type PaymentMethodClientMode = 'mock' | 'stripe' | 'unsupported';
+export type BookingFormQuestionType =
+  | 'short_text'
+  | 'long_text'
+  | 'single_select'
+  | 'multi_select'
+  | 'yes_no'
+  | 'date';
+
+export interface BookingFormQuestion {
+  id: string;
+  label: string;
+  type: BookingFormQuestionType;
+  options?: string[];
+  order: number;
+  isActive: boolean;
+  isRequired: boolean;
+}
+
+export type BookingApplicationAnswer = string | string[] | boolean;
+export type BookingApplicationAnswers = Record<string, BookingApplicationAnswer>;
+
 export interface BookingConfig {
   isEnabled: boolean;
   displayName?: string | null;
@@ -27,6 +51,10 @@ export interface BookingConfig {
   stripePublishableKey?: string | null;
   sellableRoomTypeIds: string[];
   sellableRatePlanIds: string[];
+  bookingMode: BookingMode;
+  paymentMethodCollection: PaymentMethodCollection;
+  paymentMethodClientMode?: PaymentMethodClientMode;
+  formQuestions: BookingFormQuestion[];
 }
 
 // --- Search ---
@@ -165,6 +193,47 @@ export interface BookResponse {
   deposit?: { paymentId: string; amount: string; status: string } | null;
   lineItems: QuoteLineItem[];
   cancellationPolicy: string;
+}
+
+// --- Request to book ---
+
+export interface RequestPaymentMethodSetupRequest {
+  guestEmail: string;
+  applicationId: string;
+  idempotencyKey: string;
+}
+
+export interface RequestPaymentMethodSetupResponse {
+  setupIntentId: string;
+  clientSecret: string;
+  clientMode: 'mock' | 'stripe';
+}
+
+export interface SubmitBookingRequest {
+  idempotencyKey: string;
+  roomTypeId: string;
+  ratePlanId: string;
+  checkIn: string;
+  checkOut: string;
+  guestFirstName: string;
+  guestLastName: string;
+  guestEmail: string;
+  guestPhone?: string;
+  adults: number;
+  children?: number;
+  specialRequests?: string;
+  serviceIds?: string[];
+  applicationAnswers: BookingApplicationAnswers;
+  setupIntentId?: string;
+  consentAccepted?: true;
+  consentText?: string;
+  consentVersion?: string;
+}
+
+export interface BookingRequestAcknowledgement {
+  requestId: string;
+  status: 'pending';
+  message: string;
 }
 
 // --- Manage ---

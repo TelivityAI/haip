@@ -12,6 +12,40 @@ export function money(amount: number | string, currency = 'USD'): string {
   }
 }
 
+/** Format a YYYY-MM-DD calendar date without allowing the device timezone to shift it. */
+export function calendarDate(
+  value: string,
+  locales?: string | string[],
+): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(year, month - 1, day);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return value;
+  }
+
+  try {
+    return new Intl.DateTimeFormat(locales, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(date);
+  } catch {
+    return value;
+  }
+}
+
 /** Lowest nightly/total rate across a room type's rate options. */
 export function lowestRate(rates?: { totalAmount: number }[]): number | undefined {
   if (!rates || rates.length === 0) return undefined;

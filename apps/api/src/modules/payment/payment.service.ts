@@ -5,7 +5,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
 import { payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
@@ -19,6 +19,11 @@ import { ListPaymentsDto } from './dto/list-payments.dto';
 import { sumRefundChildren, parentCountsTowardFolioBalance } from './payment-ledger';
 
 const CARD_METHODS = ['credit_card', 'debit_card', 'vcc'];
+
+export type RefundPaymentOptions = {
+  /** Stable logical refund identity used for crash-safe provider/ledger replay. */
+  idempotencyKey?: string;
+};
 
 @Injectable()
 export class PaymentService {
@@ -97,7 +102,7 @@ export class PaymentService {
       dto.propertyId,
     );
 
-    return payment;
+    return this.safePaymentResponse(payment);
   }
 
   async authorizePayment(dto: AuthorizePaymentDto) {
@@ -177,7 +182,7 @@ export class PaymentService {
       dto.propertyId,
     );
 
-    return payment;
+    return this.safePaymentResponse(payment);
   }
 
   /**
@@ -194,6 +199,8 @@ export class PaymentService {
    * idempotency key provides a second line of defense if a retry slips past.
    */
   async capturePayment(id: string, propertyId: string) {
+    const target = await this.findPaymentRow(id, propertyId);
+    this.assertGenericAccessAllowed(target);
     // Phase 1: atomically claim the payment (authorized → captured)
     const [claimed] = await this.db
       .update(payments)
@@ -230,7 +237,7 @@ export class PaymentService {
     const result = await this.gateway.capture(
       claimed.gatewayTransactionId,
       new Decimal(claimed.amount).toNumber(),
-      { idempotencyKey: `cap_${id}` },
+      { idempotencyKey: `cap_${id}`, currencyCode: claimed.currencyCode },
     );
 
     if (!result.success) {
@@ -252,13 +259,15 @@ export class PaymentService {
       propertyId,
     );
 
-    return claimed;
+    return this.safePaymentResponse(claimed);
   }
 
   /**
    * Void an authorized payment. Same two-phase concurrency-safe pattern as capture.
    */
   async voidPayment(id: string, propertyId: string) {
+    const target = await this.findPaymentRow(id, propertyId);
+    this.assertGenericAccessAllowed(target);
     // Phase 1: atomically claim the payment (authorized → voided)
     const [claimed] = await this.db
       .update(payments)
@@ -305,7 +314,7 @@ export class PaymentService {
       propertyId,
     );
 
-    return claimed;
+    return this.safePaymentResponse(claimed);
   }
 
   /**
@@ -314,7 +323,12 @@ export class PaymentService {
    * Parent row stays `captured` (or `settled`); net folio effect comes from a
    * negative child row. Row lock serializes concurrent partial refunds.
    */
-  async refundPayment(id: string, propertyId: string, amount?: string) {
+  async refundPayment(
+    id: string,
+    propertyId: string,
+    amount?: string,
+    options: RefundPaymentOptions = {},
+  ) {
     const prepared = await this.db.transaction(async (tx: any) => {
       const [original] = await tx
         .select()
@@ -325,6 +339,8 @@ export class PaymentService {
       if (!original) {
         throw new NotFoundException(`Payment ${id} not found`);
       }
+
+      this.assertGenericAccessAllowed(original);
 
       if (!['captured', 'settled', 'partially_refunded'].includes(original.status)) {
         throw new BadRequestException(
@@ -338,7 +354,40 @@ export class PaymentService {
       if (refundAmountInTx.lte(0)) {
         throw new BadRequestException('Refund amount must be positive');
       }
+      if (!original.gatewayTransactionId) {
+        throw new BadRequestException(
+          `Payment ${id} has no gateway transaction to refund`,
+        );
+      }
 
+      if (options.idempotencyKey) {
+        const replayRows = await tx
+          .select()
+          .from(payments)
+          .where(and(
+            eq(payments.propertyId, propertyId),
+            eq(payments.idempotencyKey, options.idempotencyKey),
+          ));
+        const replay = (replayRows ?? []).find((row: typeof payments.$inferSelect) =>
+          row.propertyId === propertyId
+          && row.idempotencyKey === options.idempotencyKey);
+        if (replay) {
+          if (
+            replay.originalPaymentId !== id
+            || !new Decimal(replay.amount).abs().eq(refundAmountInTx)
+          ) {
+            throw new ConflictException(
+              'Refund idempotency key was already used for different refund data',
+            );
+          }
+          return {
+            original,
+            totalAfterDec: new Decimal(original.amount),
+            refundAmountDec: refundAmountInTx,
+            replay,
+          };
+        }
+      }
       const existingRefunds = await tx
         .select()
         .from(payments)
@@ -362,16 +411,28 @@ export class PaymentService {
       }
 
       const totalAfterDec = alreadyRefundedDec.plus(refundAmountInTx);
-      return { original, totalAfterDec, refundAmountDec: refundAmountInTx };
+      return {
+        original,
+        totalAfterDec,
+        refundAmountDec: refundAmountInTx,
+        replay: undefined,
+      };
     });
 
-    const { original, totalAfterDec, refundAmountDec: refundDec } = prepared;
+    const {
+      original,
+      totalAfterDec,
+      refundAmountDec: refundDec,
+      replay,
+    } = prepared;
+    if (replay) return this.safePaymentResponse(replay);
 
-    const idempotencyKey = `ref_${id}_${totalAfterDec.toFixed(2)}`;
+    const idempotencyKey = options.idempotencyKey
+      ?? `ref_${id}_${totalAfterDec.toFixed(2)}`;
     const result = await this.gateway.refund(
       original.gatewayTransactionId,
       refundDec.toNumber(),
-      { idempotencyKey },
+      { idempotencyKey, currencyCode: original.currencyCode },
     );
 
     if (!result.success) {
@@ -399,6 +460,32 @@ export class PaymentService {
           ),
         );
       const alreadyRefundedDec = sumRefundChildren(existingRefunds ?? []);
+
+      if (options.idempotencyKey) {
+        const replayRows = await tx
+          .select()
+          .from(payments)
+          .where(and(
+            eq(payments.propertyId, propertyId),
+            eq(payments.idempotencyKey, options.idempotencyKey),
+          ));
+        const replayAfterGateway = (replayRows ?? []).find(
+          (row: typeof payments.$inferSelect) =>
+          row.propertyId === propertyId
+          && row.idempotencyKey === options.idempotencyKey,
+        );
+        if (replayAfterGateway) {
+          if (
+            replayAfterGateway.originalPaymentId !== id
+            || !new Decimal(replayAfterGateway.amount).abs().eq(refundDec)
+          ) {
+            throw new ConflictException(
+              'Refund idempotency key was already used for different refund data',
+            );
+          }
+          return { row: replayAfterGateway, isNew: false };
+        }
+      }
 
       if (result.transactionId) {
         const existingByGateway = (existingRefunds ?? []).find(
@@ -433,6 +520,8 @@ export class PaymentService {
         .values({
           folioId: locked.folioId,
           propertyId,
+          bookingRequestId: locked.bookingRequestId,
+          idempotencyKey: options.idempotencyKey ?? null,
           method: locked.method,
           amount: ledgerRefundDec.negated().toFixed(2),
           currencyCode: locked.currencyCode,
@@ -449,7 +538,9 @@ export class PaymentService {
     });
 
     if (refund.isNew) {
-      await this.folioService.recalculateBalance(original.folioId, propertyId);
+      if (original.folioId) {
+        await this.folioService.recalculateBalance(original.folioId, propertyId);
+      }
 
       await this.webhookService.emit(
         'payment.refunded',
@@ -460,7 +551,7 @@ export class PaymentService {
       );
     }
 
-    return refund.row;
+    return this.safePaymentResponse(refund.row);
   }
 
   /**
@@ -482,7 +573,8 @@ export class PaymentService {
     propertyId: string,
     opOverride?: 'void' | 'refund' | 'adjust',
   ) {
-    const payment = await this.findById(id, propertyId);
+    const payment = await this.findPaymentRow(id, propertyId);
+    this.assertGenericAccessAllowed(payment);
 
     const CASH_VOID_WINDOW_MS = 24 * 60 * 60 * 1000;
     const isGatewayCard =
@@ -557,7 +649,7 @@ export class PaymentService {
           { folioId: voided.folioId, status: 'voided' },
           propertyId,
         );
-        result = voided;
+        result = this.safePaymentResponse(voided);
       }
       await this.webhookService.emit(
         'payment.corrected',
@@ -653,10 +745,16 @@ export class PaymentService {
       { op: 'adjust', method: payment.method, adjustmentAmount: adjustment.adjustmentAmount },
       propertyId,
     );
-    return { op: 'adjust', adjustment: adjustment.row };
+    return { op: 'adjust', adjustment: this.safePaymentResponse(adjustment.row) };
   }
 
   async findById(id: string, propertyId: string) {
+    const payment = await this.findPaymentRow(id, propertyId);
+    this.assertGenericAccessAllowed(payment);
+    return this.safePaymentResponse(payment);
+  }
+
+  private async findPaymentRow(id: string, propertyId: string) {
     const [payment] = await this.db
       .select()
       .from(payments)
@@ -667,8 +765,45 @@ export class PaymentService {
     return payment;
   }
 
+  private assertGenericAccessAllowed(
+    payment: typeof payments.$inferSelect,
+  ): void {
+    if (payment.bookingRequestId) {
+      throw new ConflictException(
+        'Request-targeted payments must be accessed or changed through the Booking Request payment endpoint',
+      );
+    }
+  }
+
+  private safePaymentResponse(payment: typeof payments.$inferSelect) {
+    return {
+      id: payment.id,
+      propertyId: payment.propertyId,
+      folioId: payment.folioId,
+      houseAccountId: payment.houseAccountId,
+      bookingRequestId: payment.bookingRequestId,
+      method: payment.method,
+      status: payment.status,
+      amount: payment.amount,
+      currencyCode: payment.currencyCode,
+      gatewayProvider: payment.gatewayProvider,
+      cardLastFour: payment.cardLastFour,
+      cardBrand: payment.cardBrand,
+      isPreAuthorization: payment.isPreAuthorization,
+      preAuthExpiresAt: payment.preAuthExpiresAt,
+      originalPaymentId: payment.originalPaymentId,
+      notes: payment.notes,
+      processedAt: payment.processedAt,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+    };
+  }
+
   async list(dto: ListPaymentsDto) {
-    const conditions: any[] = [eq(payments.propertyId, dto.propertyId)];
+    const conditions: any[] = [
+      eq(payments.propertyId, dto.propertyId),
+      isNull(payments.bookingRequestId),
+    ];
 
     if (dto.folioId) conditions.push(eq(payments.folioId, dto.folioId));
     if (dto.status) conditions.push(eq(payments.status, dto.status as any));
@@ -694,7 +829,8 @@ export class PaymentService {
     ]);
 
     return {
-      data,
+      data: data.map((payment: typeof payments.$inferSelect) =>
+        this.safePaymentResponse(payment)),
       total: Number(countResult[0]?.count ?? 0),
       page,
       limit,

@@ -1,8 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { EmailMessage, EmailProvider, EmailResult } from './email-provider.interface';
+import type {
+  EmailMessage,
+  EmailProvider,
+  EmailResult,
+  EmailSendOptions,
+} from './email-provider.interface';
 import { EMAIL_PROVIDERS } from './email-provider.interface';
 
-export type { EmailMessage, EmailResult } from './email-provider.interface';
+export type { EmailMessage, EmailResult, EmailSendOptions } from './email-provider.interface';
 
 /**
  * Email transport service — SendGrid, Mailgun, SES gateway, SMTP, or console fallback.
@@ -19,9 +24,9 @@ export class EmailService {
     return this.providers.some((p) => p.name !== 'console' && p.isConfigured());
   }
 
-  async send(message: EmailMessage): Promise<EmailResult> {
+  async send(message: EmailMessage, options?: EmailSendOptions): Promise<EmailResult> {
     const provider = this.activeProvider();
-    const result = await provider.send(message);
+    const result = await provider.send(message, options);
     if (!result.provider) {
       return { ...result, provider: provider.name };
     }

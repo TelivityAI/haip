@@ -173,8 +173,9 @@ export class PolicyService {
   /**
    * Resolve the linked policy for a rate plan (property-scoped), or the default heuristic.
    */
-  async resolvePolicyForRatePlan(propertyId: string, ratePlanId: string) {
-    const [ratePlan] = await this.db
+  async resolvePolicyForRatePlan(propertyId: string, ratePlanId: string, db?: any) {
+    const conn = db ?? this.db;
+    const [ratePlan] = await conn
       .select()
       .from(ratePlans)
       .where(and(eq(ratePlans.id, ratePlanId), eq(ratePlans.propertyId, propertyId)));
@@ -183,7 +184,7 @@ export class PolicyService {
     }
 
     if (ratePlan.cancellationPolicyId) {
-      const [policy] = await this.db
+      const [policy] = await conn
         .select()
         .from(cancellationPolicies)
         .where(
@@ -202,8 +203,8 @@ export class PolicyService {
   }
 
   /** Guest-facing summary for search / quote / book responses. */
-  async getPolicySummary(propertyId: string, ratePlanId: string) {
-    const { policy } = await this.resolvePolicyForRatePlan(propertyId, ratePlanId);
+  async getPolicySummary(propertyId: string, ratePlanId: string, db?: any) {
+    const { policy } = await this.resolvePolicyForRatePlan(propertyId, ratePlanId, db);
     const p = policy ?? DEFAULT_POLICY;
     const type =
       p.penaltyType === 'full' && (p.freeCancelHoursBeforeArrival ?? 0) === 0

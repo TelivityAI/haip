@@ -4,6 +4,7 @@ import AppLayout from './components/layout/AppLayout';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { SkeletonPage } from './components/ui/Skeleton';
 import { useRealtimeInvalidation } from './hooks/useRealtimeInvalidation';
+import { isBookingRequestsUiEnabled } from './lib/bookingRequestsFeature';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const FrontDesk = lazy(() => import('./pages/FrontDesk'));
@@ -28,6 +29,7 @@ const Cashier = lazy(() => import('./pages/Cashier'));
 const HouseAccounts = lazy(() => import('./pages/HouseAccounts'));
 const Accounting = lazy(() => import('./pages/Accounting'));
 const TaxSettings = lazy(() => import('./pages/TaxSettings'));
+const BookingRequests = lazy(() => import('./pages/BookingRequests'));
 
 export default function App() {
   useRealtimeInvalidation();
@@ -39,6 +41,9 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/front-desk" element={<FrontDesk />} />
+            {isBookingRequestsUiEnabled() && (
+              <Route path="/booking-requests/*" element={<BookingRequests />} />
+            )}
             <Route path="/reservations/*" element={<Reservations />} />
             <Route path="/guests/*" element={<Guests />} />
             <Route path="/rooms/*" element={<Rooms />} />

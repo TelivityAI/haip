@@ -73,9 +73,71 @@ jobs:
           DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_test
           REDIS_URL: redis://localhost:6379
 
+  ci-booking-requests:
+    name: CI (booking-requests)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: haip
+          POSTGRES_PASSWORD: haip
+          POSTGRES_DB: haip_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Push core database schema
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_test
+
+      - name: Push booking-requests schema
+        run: pnpm db:migrate:booking-requests
+        env:
+          DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_test
+
+      - name: Run booking-requests release gate
+        run: pnpm --filter @telivityhaip/api exec vitest run src/modules/booking-request/booking-request-default-flow-regression.spec.ts
+        env:
+          DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_test
+          REDIS_URL: redis://localhost:6379
+          HAIP_BOOKING_REQUESTS: 'true'
+          AUTH_ENABLED: 'false'
+
   release:
     name: Auto Release
-    needs: ci
+    needs: [ci, ci-booking-requests]
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.version.outputs.skip }}

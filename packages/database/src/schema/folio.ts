@@ -1,4 +1,5 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { check, foreignKey, pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 import { reservations, bookings } from './reservation.js';
 import { guests } from './guest.js';
@@ -56,6 +57,8 @@ export const folios = pgTable('folios', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
+  propertyIdUnique: uniqueIndex('folios_property_id_unique')
+    .on(table.propertyId, table.id),
   uniqueFolioNumber: uniqueIndex('folios_property_folio_number_unique')
     .on(table.propertyId, table.folioNumber),
 }));
@@ -105,6 +108,12 @@ export const charges = pgTable('charges', {
   isReversal: boolean('is_reversal').notNull().default(false),
   originalChargeId: uuid('original_charge_id').references((): any => charges.id), // FK to self for reversals
   parentChargeId: uuid('parent_charge_id').references((): any => charges.id), // FK to self — tax charges linked to their parent charge
+  // Immutable provenance for signed amendment corrections. Unlike
+  // originalChargeId, this does not make the row a canonical reversal.
+  adjustsChargeId: uuid('adjusts_charge_id'),
+  // Stable, namespaced identity for conflict-safe system posting. Legacy and
+  // manually entered rows remain NULL and cannot collide with these keys.
+  sourceKey: varchar('source_key', { length: 255 }),
 
   // Night audit lock (KB 5.8: transactions locked after day close)
   isLocked: boolean('is_locked').notNull().default(false),
@@ -115,7 +124,17 @@ export const charges = pgTable('charges', {
   postedAt: timestamp('posted_at', { withTimezone: true }).notNull().defaultNow(),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  propertyIdUnique: uniqueIndex('charges_property_id_unique')
+    .on(table.propertyId, table.id),
+  propertyFolioSourceKeyUnique: uniqueIndex('charges_property_folio_source_key_unique')
+    .on(table.propertyId, table.folioId, table.sourceKey),
+  adjustsChargeOwnership: foreignKey({
+    name: 'charges_adjusts_charge_property_fkey',
+    columns: [table.propertyId, table.adjustsChargeId],
+    foreignColumns: [table.propertyId, table.id],
+  }),
+}));
 
 /**
  * Payment methods.
@@ -154,6 +173,8 @@ export const payments = pgTable('payments', {
   // (KB 13 — house accounts reuse the payments ledger but have no folio).
   folioId: uuid('folio_id').references(() => folios.id),
   houseAccountId: uuid('house_account_id').references(() => houseAccounts.id),
+  bookingRequestId: uuid('booking_request_id'),
+  idempotencyKey: varchar('idempotency_key', { length: 255 }),
 
   method: paymentMethodEnum('method').notNull(),
   status: paymentStatusEnum('status').notNull().default('pending'),
@@ -182,4 +203,23 @@ export const payments = pgTable('payments', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  // `payments_financial_target_check` intentionally lives in migration 0021
+  // and push-schema SQL. Drizzle cannot express the folio/house-account/request
+  // target invariant here without reintroducing the payments ↔ request module
+  // cycle; the PostgreSQL vertical contract verifies the live constraint.
+  propertyIdempotencyKeyUnique: uniqueIndex('payments_property_idempotency_key_unique')
+    .on(table.propertyId, table.idempotencyKey),
+  propertyRequestIdUnique: uniqueIndex('payments_property_request_id_unique')
+    .on(table.propertyId, table.bookingRequestId, table.id),
+  propertyRequestParentIdUnique: uniqueIndex('payments_property_request_parent_id_unique')
+    .on(table.propertyId, table.bookingRequestId, table.originalPaymentId, table.id),
+  bookingRequestParentPositiveCheck: check(
+    'payments_booking_request_parent_positive_check',
+    sql`${table.bookingRequestId} is null or ${table.originalPaymentId} is not null or ${table.amount} > 0`,
+  ),
+  bookingRequestChildShapeCheck: check(
+    'payments_booking_request_child_shape_check',
+    sql`${table.bookingRequestId} is null or ${table.originalPaymentId} is null or (${table.amount} < 0 and ${table.status} = 'captured')`,
+  ),
+}));

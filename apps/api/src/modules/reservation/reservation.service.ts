@@ -11,7 +11,11 @@ import Decimal from 'decimal.js';
 import { reservations, reservationGuests, bookings, guests, rooms, roomTypes, ratePlans, properties, payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { assertTransition, type ReservationStatus } from './reservation-state-machine';
-import { AvailabilityService } from './availability.service';
+import {
+  assertFullStayAvailability,
+  AvailabilityService,
+  stayDates,
+} from './availability.service';
 import { FolioService } from '../folio/folio.service';
 import { RoomStatusService } from '../room/room-status.service';
 import { PaymentService } from '../payment/payment.service';
@@ -32,7 +36,19 @@ import { CheckOutDto } from './dto/check-out.dto';
 import { GroupCheckInDto } from './dto/group-check-in.dto';
 import { BulkActionDto } from './dto/bulk-action.dto';
 import { ListUnassignedDto } from './dto/list-unassigned.dto';
-import { randomUUID, createCipheriv, randomBytes } from 'crypto';
+import { createCipheriv, randomBytes } from 'crypto';
+import { generateConfirmationNumber } from '../../common/crypto/confirmation-number';
+import type { AcceptedPricingSnapshot } from '@telivityhaip/database';
+
+type ReservationRow = typeof reservations.$inferSelect;
+
+export type ReservationAmendmentResult = {
+  reservation: ReservationRow;
+  previousArrivalDate: string;
+  previousDepartureDate: string;
+  previousTotalAmount: string;
+  newTotalAmount: string;
+};
 
 @Injectable()
 export class ReservationService {
@@ -50,9 +66,17 @@ export class ReservationService {
     private readonly ratePlanService: RatePlanService,
   ) {}
 
-  async create(dto: CreateReservationDto, opts?: { confirmationNumber?: string }) {
+  async create(
+    dto: CreateReservationDto,
+    opts?: {
+      confirmationNumber?: string;
+      acceptedPricingSnapshot?: AcceptedPricingSnapshot;
+    },
+    tx?: any,
+  ) {
+    const db = tx ?? this.db;
     // Check guest is not DNR
-    const [guest] = await this.db
+    const [guest] = await db
       .select()
       .from(guests)
       .where(eq(guests.id, dto.guestId));
@@ -75,51 +99,74 @@ export class ReservationService {
       throw new BadRequestException('Departure date must be after arrival date');
     }
 
-    // Generate confirmation number. Callers that expose it to guests as a bearer
-    // credential (e.g. the booking engine) inject a high-entropy value instead of
-    // the default timestamp form, which is too low-entropy to be unguessable.
-    const confirmationNumber =
-      opts?.confirmationNumber ??
-      `HAIP-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
+    // Every confirmation number is a bearer credential. Use the same 128-bit
+    // generator for direct, staff, channel, and fallback canonical callers.
+    const confirmationNumber = opts?.confirmationNumber ?? generateConfirmationNumber();
 
     // FK ownership (security audit #4): the caller supplies roomTypeId AND
     // ratePlanId in the DTO. Without scoping these to dto.propertyId, a caller
     // at property A could reference property B's rate plan / room type and
     // leak its details back on read. Verify same-property before any insert.
-    await this.assertSamePropertyFk(roomTypes, dto.roomTypeId, dto.propertyId, 'room type');
-    await this.assertSamePropertyFk(ratePlans, dto.ratePlanId, dto.propertyId, 'rate plan');
+    await this.assertSamePropertyFk(
+      roomTypes,
+      dto.roomTypeId,
+      dto.propertyId,
+      'room type',
+      db,
+    );
+    await this.assertSamePropertyFk(
+      ratePlans,
+      dto.ratePlanId,
+      dto.propertyId,
+      'rate plan',
+      db,
+    );
 
     // RatePlanService.assertSellable docs: BOOK path MUST call this. PMS create
     // was the gap — Connect / booking-engine already gate; keep propertyId scoped.
-    await this.ratePlanService.assertSellable(
-      dto.propertyId,
-      dto.ratePlanId,
-      dto.arrivalDate,
-      dto.departureDate,
-    );
+    if (tx) {
+      await this.ratePlanService.assertSellable(
+        dto.propertyId,
+        dto.ratePlanId,
+        dto.arrivalDate,
+        dto.departureDate,
+        db,
+      );
+    } else {
+      await this.ratePlanService.assertSellable(
+        dto.propertyId,
+        dto.ratePlanId,
+        dto.arrivalDate,
+        dto.departureDate,
+      );
+    }
 
-    // TOCTOU: availability check + insert run inside the same transaction so the
-    // race window between "there's space" and "we wrote the booking" is minimized.
-    // Postgres default isolation is READ COMMITTED, so concurrent txs can still
-    // double-book in theory; for stronger guarantees promote to SERIALIZABLE.
-    // See Bug 5 — kept at default to avoid driver-compat surprises.
-    const result = await this.db.transaction(async (tx: any) => {
+    // Availability check + insert run under the room-type inventory mutex in
+    // the same transaction. Under READ COMMITTED, competing canonical creates
+    // serialize on that row and the later transaction re-reads every stay date.
+    const createInTransaction = async (transaction: any) => {
+      // A room-type row is the inventory mutex. Every canonical reservation
+      // creation for this room type takes the same lock before re-reading
+      // date-level availability, preventing two requests from consuming the
+      // final room concurrently under READ COMMITTED.
+      await this.lockInventory(dto.propertyId, dto.roomTypeId, transaction);
+
       // Check inventory availability inside the tx
       const availability = await this.availabilityService.searchAvailability(
         dto.propertyId,
         dto.arrivalDate,
         dto.departureDate,
         dto.roomTypeId,
-        tx,
+        transaction,
       );
-      const roomTypeAvail = availability.find((a: any) => a.roomTypeId === dto.roomTypeId);
-      if (!roomTypeAvail || roomTypeAvail.available <= 0) {
-        throw new BadRequestException(
-          `No availability for room type ${dto.roomTypeId} on the requested dates`,
-        );
-      }
+      assertFullStayAvailability(
+        availability,
+        dto.roomTypeId,
+        dto.arrivalDate,
+        dto.departureDate,
+      );
 
-      const [booking] = await tx
+      const [booking] = await transaction
         .insert(bookings)
         .values({
           propertyId: dto.propertyId,
@@ -131,7 +178,7 @@ export class ReservationService {
         })
         .returning();
 
-      const [reservation] = await tx
+      const [reservation] = await transaction
         .insert(reservations)
         .values({
           propertyId: dto.propertyId,
@@ -144,6 +191,7 @@ export class ReservationService {
           ratePlanId: dto.ratePlanId,
           totalAmount: dto.totalAmount,
           currencyCode: dto.currencyCode,
+          acceptedPricingSnapshot: opts?.acceptedPricingSnapshot,
           adults: dto.adults ?? 1,
           children: dto.children ?? 0,
           specialRequests: dto.specialRequests,
@@ -152,7 +200,7 @@ export class ReservationService {
         .returning();
 
       // Named occupants roster — primary mirrors reservations.guestId.
-      await tx.insert(reservationGuests).values({
+      await transaction.insert(reservationGuests).values({
         propertyId: dto.propertyId,
         reservationId: reservation.id,
         guestId: dto.guestId,
@@ -160,23 +208,42 @@ export class ReservationService {
       });
 
       return { ...reservation, booking };
-    });
+    };
+    const result = tx
+      ? await createInTransaction(tx)
+      : await this.db.transaction(createInTransaction);
 
     // Emit reservation.created so channel manager / ARI can push updated availability.
-    await this.webhookService.emit(
-      'reservation.created',
-      'reservation',
-      result.id,
-      {
-        reservationId: result.id,
-        arrivalDate: result.arrivalDate,
-        departureDate: result.departureDate,
-        roomTypeId: result.roomTypeId,
-      },
-      dto.propertyId,
-    );
+    if (!tx) {
+      await this.webhookService.emit(
+        'reservation.created',
+        'reservation',
+        result.id,
+        {
+          reservationId: result.id,
+          arrivalDate: result.arrivalDate,
+          departureDate: result.departureDate,
+          roomTypeId: result.roomTypeId,
+        },
+        dto.propertyId,
+      );
+    }
 
     return result;
+  }
+
+  async lockInventory(propertyId: string, roomTypeId: string, tx: any): Promise<void> {
+    const lockedRoomTypes = await tx
+      .select({ id: roomTypes.id })
+      .from(roomTypes)
+      .where(and(
+        eq(roomTypes.id, roomTypeId),
+        eq(roomTypes.propertyId, propertyId),
+      ))
+      .for('update');
+    if (!lockedRoomTypes.some((row: { id: string }) => row.id === roomTypeId)) {
+      throw new NotFoundException(`room type ${roomTypeId} not found in this property`);
+    }
   }
 
   async confirm(id: string, propertyId: string) {
@@ -1011,6 +1078,28 @@ export class ReservationService {
   async modify(id: string, propertyId: string, dto: ModifyReservationDto) {
     const reservation = await this.findByIdRaw(id, propertyId);
 
+    // Booking Request acceptance freezes the operational tariff. Until the
+    // audited Stay Amendment workflow owns coordinated snapshot + folio
+    // changes, do not let the generic modify path make that tariff stale.
+    if (reservation.acceptedPricingSnapshot) {
+      const changesAcceptedPricing =
+        (dto.arrivalDate !== undefined && dto.arrivalDate !== reservation.arrivalDate)
+        || (dto.departureDate !== undefined && dto.departureDate !== reservation.departureDate)
+        || (dto.roomTypeId !== undefined && dto.roomTypeId !== reservation.roomTypeId)
+        || (dto.ratePlanId !== undefined && dto.ratePlanId !== reservation.ratePlanId)
+        || (
+          dto.totalAmount !== undefined
+          && !new Decimal(dto.totalAmount).equals(reservation.totalAmount)
+        )
+        || (dto.adults !== undefined && dto.adults !== reservation.adults)
+        || (dto.children !== undefined && dto.children !== reservation.children);
+      if (changesAcceptedPricing) {
+        throw new ConflictException(
+          'A Stay Amendment is required before changing accepted pricing, stay dates, room type, rate plan, occupancy, or total',
+        );
+      }
+    }
+
     // Can only modify before check-out
     const nonModifiable: ReservationStatus[] = ['checked_out', 'no_show', 'cancelled'];
     if (nonModifiable.includes(reservation.status as ReservationStatus)) {
@@ -1028,13 +1117,7 @@ export class ReservationService {
     if (dto.arrivalDate || dto.departureDate) {
       const arrival = dto.arrivalDate ?? reservation.arrivalDate;
       const departure = dto.departureDate ?? reservation.departureDate;
-      const nights = Math.ceil(
-        (new Date(departure).getTime() - new Date(arrival).getTime()) /
-          (1000 * 60 * 60 * 24),
-      );
-      if (nights <= 0) {
-        throw new BadRequestException('Departure date must be after arrival date');
-      }
+      const nights = stayDates(arrival, departure).length;
       if (dto.arrivalDate) updates['arrivalDate'] = dto.arrivalDate;
       if (dto.departureDate) updates['departureDate'] = dto.departureDate;
       updates['nights'] = nights;
@@ -1062,16 +1145,15 @@ export class ReservationService {
     // The existing reservation still occupies its old window (and room type) in searchAvailability,
     // so if roomType is unchanged we must exclude it from the count to avoid blocking itself on overlap.
     //
-    // TOCTOU: we run the availability check and the update inside the same transaction
-    // so concurrent writers cannot slip between them. Postgres' default isolation
-    // (READ COMMITTED) still permits some overlap, but the race window is minimized.
-    // For stricter guarantees, raise the transaction to SERIALIZABLE — not done here
-    // to avoid breakage with drizzle-orm's postgres-js driver; see Bug 5.
-    const updated = await this.db.transaction(async (tx: any) => {
+    // Use the same room-type inventory mutex as canonical creation so a modify
+    // cannot race another create/modify for the final unit.
+    const updated: ReservationRow = await this.db.transaction(async (tx: any) => {
       if (arrivalChanged || departureChanged || roomTypeChanged) {
         const newArrival = (dto.arrivalDate ?? reservation.arrivalDate) as string;
         const newDeparture = (dto.departureDate ?? reservation.departureDate) as string;
         const newRoomTypeId = (dto.roomTypeId ?? reservation.roomTypeId) as string;
+
+        await this.lockInventory(propertyId, newRoomTypeId, tx);
 
         const availability = await this.availabilityService.searchAvailability(
           reservation.propertyId,
@@ -1088,21 +1170,29 @@ export class ReservationService {
           reservation.arrivalDate < newDeparture &&
           reservation.departureDate > newArrival;
 
-        const nightsOk = availability
-          .filter((a: any) => a.roomTypeId === newRoomTypeId)
-          .every((a: any) => {
-            const existingOccupiesThisNight =
-              currentCountsItself &&
-              (reservation.arrivalDate as string) <= a.date &&
-              (reservation.departureDate as string) > a.date;
-            const effectiveAvailable = a.available + (existingOccupiesThisNight ? 1 : 0);
-            return effectiveAvailable > 0;
-          });
-
-        if (!nightsOk) {
-          throw new ConflictException(
-            `No availability for room type ${newRoomTypeId} on ${newArrival} → ${newDeparture}`,
+        const adjustedAvailability = availability.map((row: any) => {
+          if (row.roomTypeId !== newRoomTypeId) return row;
+          const existingOccupiesThisNight =
+            currentCountsItself &&
+            (reservation.arrivalDate as string) <= row.date &&
+            (reservation.departureDate as string) > row.date;
+          return {
+            ...row,
+            available: row.available + (existingOccupiesThisNight ? 1 : 0),
+          };
+        });
+        try {
+          assertFullStayAvailability(
+            adjustedAvailability,
+            newRoomTypeId,
+            newArrival,
+            newDeparture,
           );
+        } catch (error: unknown) {
+          if (error instanceof BadRequestException) {
+            throw new ConflictException(error.message);
+          }
+          throw error;
         }
       }
 
@@ -1133,7 +1223,66 @@ export class ReservationService {
       updated.propertyId,
     );
 
-    return updated;
+    return this.amendmentResult(reservation, updated);
+  }
+
+  /**
+   * Explicit seam for a Booking Request stay amendment that already owns the
+   * property/request/reservation/inventory locks and transaction. The generic
+   * modify path intentionally cannot opt into this behavior.
+   */
+  async modifyAcceptedStay(
+    lockedReservation: ReservationRow,
+    propertyId: string,
+    dto: Required<Pick<ModifyReservationDto, 'arrivalDate' | 'departureDate' | 'totalAmount'>>,
+    acceptedPricingSnapshot: AcceptedPricingSnapshot,
+    tx: any,
+  ): Promise<ReservationAmendmentResult> {
+    if (
+      lockedReservation.propertyId !== propertyId
+      || !lockedReservation.acceptedPricingSnapshot
+    ) {
+      throw new ConflictException('Reservation is not eligible for an accepted stay amendment');
+    }
+    const nonModifiable: ReservationStatus[] = ['checked_out', 'no_show', 'cancelled'];
+    if (nonModifiable.includes(lockedReservation.status as ReservationStatus)) {
+      throw new BadRequestException(
+        `Cannot modify reservation in '${lockedReservation.status}' status`,
+      );
+    }
+    const dates = stayDates(dto.arrivalDate, dto.departureDate);
+    if (
+      acceptedPricingSnapshot.currencyCode !== lockedReservation.currencyCode
+      || acceptedPricingSnapshot.grandTotal !== new Decimal(dto.totalAmount).toFixed(2)
+    ) {
+      throw new ConflictException('Amended pricing does not match the reservation currency and total');
+    }
+    if (
+      acceptedPricingSnapshot.nights.length !== dates.length
+      || acceptedPricingSnapshot.nights.some((night, index) => night.date !== dates[index])
+    ) {
+      throw new ConflictException('Amended pricing does not cover the complete stay window');
+    }
+
+    const [updated] = await tx
+      .update(reservations)
+      .set({
+        arrivalDate: dto.arrivalDate,
+        departureDate: dto.departureDate,
+        nights: dates.length,
+        totalAmount: acceptedPricingSnapshot.grandTotal,
+        acceptedPricingSnapshot,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(reservations.id, lockedReservation.id),
+        eq(reservations.propertyId, propertyId),
+      ))
+      .returning();
+    if (!updated) {
+      throw new ConflictException('Reservation changed while applying the stay amendment');
+    }
+    return this.amendmentResult(lockedReservation, updated);
   }
 
   async findById(id: string, propertyId: string) {
@@ -1325,8 +1474,9 @@ export class ReservationService {
     id: string,
     propertyId: string,
     label: string,
+    db: any = this.db,
   ): Promise<void> {
-    const [row] = await this.db
+    const [row] = await db
       .select({ id: table.id })
       .from(table)
       .where(and(eq(table.id, id), eq(table.propertyId, propertyId)));
@@ -1346,6 +1496,19 @@ export class ReservationService {
       throw new NotFoundException(`Reservation ${id} not found`);
     }
     return reservation;
+  }
+
+  private amendmentResult(
+    previous: ReservationRow,
+    reservation: ReservationRow,
+  ): ReservationAmendmentResult {
+    return {
+      reservation,
+      previousArrivalDate: previous.arrivalDate,
+      previousDepartureDate: previous.departureDate,
+      previousTotalAmount: previous.totalAmount,
+      newTotalAmount: reservation.totalAmount,
+    };
   }
 
   private encryptIdNumber(plainText: string): { encrypted: string; iv: string; authTag: string } {

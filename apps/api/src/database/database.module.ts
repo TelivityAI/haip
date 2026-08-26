@@ -4,8 +4,15 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '@telivityhaip/database';
 import { postgresOptionsFromEnv } from '@telivityhaip/database';
+import { isBookingRequestsEnabled } from '@telivityhaip/booking-requests';
 
 export const DRIZZLE = Symbol('DRIZZLE');
+
+async function loadSchema() {
+  if (!isBookingRequestsEnabled()) return schema;
+  const bookingRequestsSchema = await import('@telivityhaip/booking-requests/schema');
+  return { ...schema, ...bookingRequestsSchema };
+}
 
 @Global()
 @Module({
@@ -13,7 +20,7 @@ export const DRIZZLE = Symbol('DRIZZLE');
     {
       provide: DRIZZLE,
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
+      useFactory: async (config: ConfigService) => {
         const url = config.get<string>(
           'DATABASE_URL',
           'postgresql://haip:haip@localhost:5432/haip',
@@ -25,7 +32,8 @@ export const DRIZZLE = Symbol('DRIZZLE');
             DATABASE_SSL: config.get<string>('DATABASE_SSL'),
           }),
         );
-        return drizzle(client, { schema });
+        const mergedSchema = await loadSchema();
+        return drizzle(client, { schema: mergedSchema });
       },
     },
   ],

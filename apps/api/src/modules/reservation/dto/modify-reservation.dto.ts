@@ -1,15 +1,16 @@
-import { IsUUID, IsDateString, IsInt, IsOptional, IsString, IsBoolean, Min, MaxLength } from 'class-validator';
+import { IsUUID, IsInt, IsOptional, IsString, IsBoolean, Min } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsCanonicalCalendarDate } from '../../booking-request/booking-request-date.validator';
 
 export class ModifyReservationDto {
   @ApiPropertyOptional({ example: '2024-06-02' })
   @IsOptional()
-  @IsDateString()
+  @IsCanonicalCalendarDate()
   arrivalDate?: string;
 
   @ApiPropertyOptional({ example: '2024-06-06' })
   @IsOptional()
-  @IsDateString()
+  @IsCanonicalCalendarDate()
   departureDate?: string;
 
   @ApiPropertyOptional()

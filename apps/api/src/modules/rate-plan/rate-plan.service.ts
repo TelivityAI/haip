@@ -60,7 +60,9 @@ export class RatePlanService {
     ratePlanId: string,
     checkIn: string,
     checkOut: string,
+    db?: any,
   ): Promise<void> {
+    const conn = db ?? this.db;
     const nights = Math.ceil(
       (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86_400_000,
     );
@@ -69,7 +71,7 @@ export class RatePlanService {
     }
 
     // Plan lookup is scoped by both ids — never infer propertyId from the row.
-    const [plan] = await this.db
+    const [plan] = await conn
       .select()
       .from(ratePlans)
       .where(and(eq(ratePlans.id, ratePlanId), eq(ratePlans.propertyId, propertyId)));
@@ -89,7 +91,7 @@ export class RatePlanService {
     }
 
     // Restrictions overlapping the stay (scoped by property — multi-tenancy).
-    const restrictions = await this.db
+    const restrictions = await conn
       .select()
       .from(rateRestrictions)
       .where(
@@ -218,11 +220,13 @@ export class RatePlanService {
       );
   }
 
-  async findById(id: string, propertyId: string) {
-    const [ratePlan] = await this.db
+  async findById(id: string, propertyId: string, db?: any, lockForUpdate = false) {
+    const conn = db ?? this.db;
+    const query = conn
       .select()
       .from(ratePlans)
       .where(and(eq(ratePlans.id, id), eq(ratePlans.propertyId, propertyId)));
+    const [ratePlan] = lockForUpdate ? await query.for('update') : await query;
     if (!ratePlan) {
       throw new NotFoundException(`Rate plan ${id} not found`);
     }
@@ -291,14 +295,21 @@ export class RatePlanService {
     id: string,
     propertyId: string,
     context?: EffectiveRateQueryDto,
+    db?: any,
+    lockForUpdate = false,
   ): Promise<EffectiveRateResult> {
-    const ratePlan = await this.findById(id, propertyId);
+    const ratePlan = await this.findById(id, propertyId, db, lockForUpdate);
 
     let baseRate: number;
     if (ratePlan.type !== 'derived' || !ratePlan.parentRatePlanId) {
       baseRate = Number(ratePlan.baseAmount);
     } else {
-      const parent = await this.findById(ratePlan.parentRatePlanId, propertyId);
+      const parent = await this.findById(
+        ratePlan.parentRatePlanId,
+        propertyId,
+        db,
+        lockForUpdate,
+      );
       const parentAmount = Number(parent.baseAmount);
       const adjustmentValue = Number(ratePlan.derivedAdjustmentValue);
 
@@ -327,7 +338,7 @@ export class RatePlanService {
     let occupancyPct: number | undefined;
     let occupancyAdjustment: OccupancyBand | null = null;
     if (stayDate && ratePlan.occupancyBands?.length) {
-      occupancyPct = await this.getStayOccupancyPct(propertyId, stayDate);
+      occupancyPct = await this.getStayOccupancyPct(propertyId, stayDate, db);
       occupancyAdjustment = selectOccupancyBand(
         ratePlan.occupancyBands as OccupancyBand[],
         occupancyPct,
@@ -351,14 +362,15 @@ export class RatePlanService {
   /**
    * Projected occupancy % for a stay date (confirmed/in-house reservations).
    */
-  async getStayOccupancyPct(propertyId: string, stayDate: string): Promise<number> {
-    const [property] = await this.db
+  async getStayOccupancyPct(propertyId: string, stayDate: string, db?: any): Promise<number> {
+    const conn = db ?? this.db;
+    const [property] = await conn
       .select({ totalRooms: properties.totalRooms })
       .from(properties)
       .where(eq(properties.id, propertyId));
     const totalRooms = property?.totalRooms ?? 0;
 
-    const roomStatusCounts = await this.db
+    const roomStatusCounts = await conn
       .select({
         status: rooms.status,
         count: sql<number>`count(*)::int`,
@@ -375,7 +387,7 @@ export class RatePlanService {
     }
     const availableRooms = totalRooms - unavailableRooms;
 
-    const [soldResult] = await this.db
+    const [soldResult] = await conn
       .select({ count: sql<number>`count(distinct ${reservations.id})::int` })
       .from(reservations)
       .where(

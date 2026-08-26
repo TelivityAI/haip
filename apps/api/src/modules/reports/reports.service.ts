@@ -103,7 +103,10 @@ export class ReportsService {
       paymentsTotalDec = paymentsTotalDec.plus(amount);
     }
 
-    const adjustmentsDec = new Decimal(adjResult?.total ?? '0');
+    const signedReversalTotal = new Decimal(adjResult?.total ?? '0');
+    const adjustmentsDec = signedReversalTotal.isZero()
+      ? new Decimal(0)
+      : signedReversalTotal.negated();
 
     return {
       date,
