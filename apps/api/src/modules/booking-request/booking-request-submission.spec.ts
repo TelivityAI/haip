@@ -442,6 +442,21 @@ describe('BookingRequestService public card setup', () => {
     expect(harness.savedPaymentMethod.createSetup).not.toHaveBeenCalled();
   });
 
+  it('rejects required card setup when the configured provider is unsupported', async () => {
+    const harness = makeHarness();
+    harness.config.getPublicConfig.mockResolvedValue({
+      ...structuredClone(publicConfig),
+      paymentMethodCollection: 'required',
+      paymentMethodClientMode: 'unsupported',
+    });
+
+    await expect(harness.service.createPaymentMethodSetup(PROPERTY_ID, {
+      guestEmail: 'ada@example.com',
+      idempotencyKey: 'widget-attempt-1',
+    })).rejects.toThrow(/unavailable/i);
+    expect(harness.savedPaymentMethod.createSetup).not.toHaveBeenCalled();
+  });
+
   it('creates an idempotent setup only for request-mode card collection', async () => {
     const harness = makeHarness();
     harness.config.getPublicConfig.mockResolvedValue({
@@ -585,6 +600,26 @@ describe('BookingRequestService.submit', () => {
       setupIntentId: 'seti_trusted',
     })).rejects.toBeInstanceOf(BadRequestException);
     expect(harness.savedPaymentMethod.resolveSetup).not.toHaveBeenCalled();
+    expect(harness.db.insert).not.toHaveBeenCalled();
+  });
+
+  it('rejects required card submission before quote or writes when collection is unavailable', async () => {
+    harness.config.getPublicConfig.mockResolvedValue({
+      ...structuredClone(publicConfig),
+      paymentMethodCollection: 'required',
+      paymentMethodClientMode: 'unsupported',
+    });
+    harness.lockedConfig.paymentMethodCollection = 'required';
+
+    await expect(harness.service.submit(PROPERTY_ID, {
+      ...submitDto,
+      setupIntentId: 'seti_trusted',
+      consentAccepted: true,
+      consentText: 'Save this card for later staff-initiated payments; no charge is made now.',
+      consentVersion: 'request-card-v1',
+    })).rejects.toThrow(/unavailable/i);
+    expect(harness.ratePlan.assertSellable).not.toHaveBeenCalled();
+    expect(harness.bookingEngine.quote).not.toHaveBeenCalled();
     expect(harness.db.insert).not.toHaveBeenCalled();
   });
 

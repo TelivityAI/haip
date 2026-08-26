@@ -225,6 +225,22 @@ describe('RequestPayment', () => {
     expect(mocks.createSetup).not.toHaveBeenCalled();
   });
 
+  it('blocks required submission when card collection is unavailable', async () => {
+    renderPayment('required', undefined, {
+      stripePublishableKey: null,
+      paymentMethodClientMode: 'unsupported',
+    });
+    await begin();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Secure card collection is unavailable.',
+    );
+    expect(screen.queryByRole('button', { name: /submit booking request/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Continue without a card' })).not.toBeInTheDocument();
+    expect(mocks.createSetup).not.toHaveBeenCalled();
+    expect(mocks.submitRequest).not.toHaveBeenCalled();
+  });
+
   it('redirects disabled collection without loading Stripe or requesting a setup', async () => {
     renderPayment('disabled');
     await userEvent.click(screen.getByRole('button', { name: 'Begin payment' }));

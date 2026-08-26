@@ -1226,10 +1226,7 @@ export class BookingRequestService {
     if (config.paymentMethodCollection === 'disabled') {
       throw new BadRequestException('Payment method collection is disabled for booking requests');
     }
-    if ((config.paymentMethodClientMode ?? 'stripe') === 'stripe'
-      && !config.stripePublishableKey?.trim()) {
-      throw new BadRequestException('Payment method collection is unavailable for this property');
-    }
+    this.assertCardCollectionCapability(config, true);
 
     const applicationId = this.normalizeApplicationId(dto.idempotencyKey);
     const setup = await this.savedPaymentMethodGateway.createSetup(
@@ -1270,6 +1267,10 @@ export class BookingRequestService {
     const applicationAnswers = validateApplicationAnswers(
       config.formQuestions,
       dto.applicationAnswers,
+    );
+    this.assertCardCollectionCapability(
+      config,
+      config.paymentMethodCollection === 'required' || Boolean(dto.setupIntentId?.trim()),
     );
     this.assertCardPolicyInput(config.paymentMethodCollection, dto);
 
@@ -1415,6 +1416,21 @@ export class BookingRequestService {
     }
     if (!config.sellableRatePlanIds.includes(ratePlanId)) {
       throw new BadRequestException('This rate is not available for direct booking');
+    }
+  }
+
+  private assertCardCollectionCapability(
+    config: PublicRequestConfig,
+    collectingCard: boolean,
+  ): void {
+    if (!collectingCard) return;
+
+    if (config.paymentMethodClientMode === 'unsupported') {
+      throw new BadRequestException('Payment method collection is unavailable for this property');
+    }
+    if ((config.paymentMethodClientMode ?? 'stripe') === 'stripe'
+      && !config.stripePublishableKey?.trim()) {
+      throw new BadRequestException('Payment method collection is unavailable for this property');
     }
   }
 

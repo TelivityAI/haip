@@ -89,11 +89,6 @@ export class BookingEngineConfigService {
     const configuredPaymentMethodCollection =
       cfg.paymentMethodCollection as PaymentMethodCollection;
     const paymentMethodClientMode = this.paymentMethodClientMode();
-    const paymentMethodCollection = bookingMode === 'request'
-      && paymentMethodClientMode === 'unsupported'
-      && configuredPaymentMethodCollection !== 'disabled'
-      ? 'disabled'
-      : configuredPaymentMethodCollection;
     const formQuestions = validateQuestionDefinitions(
       cfg.formQuestions ?? [],
       { allowActiveUnsupported: true },
@@ -113,7 +108,7 @@ export class BookingEngineConfigService {
       sellableRoomTypeIds: cfg.sellableRoomTypeIds as string[],
       sellableRatePlanIds: cfg.sellableRatePlanIds as string[],
       bookingMode,
-      paymentMethodCollection,
+      paymentMethodCollection: configuredPaymentMethodCollection,
       paymentMethodClientMode,
       formQuestions,
     };

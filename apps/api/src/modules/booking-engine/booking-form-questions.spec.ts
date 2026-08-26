@@ -271,7 +271,7 @@ describe('BookingEngineConfigService request settings', () => {
     expect(publicConfig).not.toHaveProperty('updatedAt');
   });
 
-  it('degrades an unsupported legacy card policy to a completable public flow', async () => {
+  it('returns an unsupported legacy required-card policy unchanged to the public flow', async () => {
     const { service } = makeConfigService(
       { ...configRow, paymentMethodCollection: 'required' },
       'adyen',
@@ -279,7 +279,7 @@ describe('BookingEngineConfigService request settings', () => {
 
     await expect(service.getPublicConfig(configRow.propertyId)).resolves.toMatchObject({
       bookingMode: 'request',
-      paymentMethodCollection: 'disabled',
+      paymentMethodCollection: 'required',
       paymentMethodClientMode: 'unsupported',
     });
   });
