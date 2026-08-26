@@ -1,5 +1,6 @@
 import {
   IsArray,
+  ArrayUnique,
   IsDateString,
   IsEmail,
   IsInt,
@@ -97,6 +98,7 @@ export class BeCreateBookingDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayUnique()
   @IsUUID('4', { each: true })
   serviceIds?: string[];
 }

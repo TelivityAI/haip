@@ -335,4 +335,17 @@ describe('BookingEngineService.quote — rate/room pairing', () => {
       svc.quote(PROP, { roomTypeId: RT, ratePlanId: RP, checkIn: '2026-07-01', checkOut: '2026-07-03', adults: 2 } as any),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('rejects duplicate ancillary service IDs before pricing them', async () => {
+    const { svc, ancillary } = makeService();
+    await expect(svc.quote(PROP, {
+      roomTypeId: RT,
+      ratePlanId: RP,
+      checkIn: '2026-07-01',
+      checkOut: '2026-07-03',
+      adults: 2,
+      serviceIds: ['service-parking', 'service-parking'],
+    } as any)).rejects.toThrow(/services.*duplicates/i);
+    expect(ancillary.findServiceById).not.toHaveBeenCalled();
+  });
 });

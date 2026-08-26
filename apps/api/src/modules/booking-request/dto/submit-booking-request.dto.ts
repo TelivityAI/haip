@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  ArrayUnique,
   IsBoolean,
   IsEmail,
   IsInt,
@@ -90,6 +91,7 @@ export class SubmitBookingRequestDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayUnique()
   @IsUUID('4', { each: true })
   serviceIds?: string[];
 

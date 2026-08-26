@@ -140,6 +140,7 @@ export class BookingEngineService {
     db?: any,
     options?: { lockForUpdate?: boolean; excludeReservationId?: string },
   ) {
+    this.assertUniqueServiceIds(dto.serviceIds);
     const config = options?.lockForUpdate
       ? await this.configService.getPublicConfig(propertyId, db, true)
       : await this.configService.getPublicConfig(propertyId, db);
@@ -616,6 +617,12 @@ export class BookingEngineService {
   }
 
   // --- Helpers ---
+
+  private assertUniqueServiceIds(serviceIds: string[] | undefined): void {
+    if (serviceIds && new Set(serviceIds).size !== serviceIds.length) {
+      throw new BadRequestException('Selected services must not contain duplicates');
+    }
+  }
 
   private assertSellable(config: { sellableRoomTypeIds: string[]; sellableRatePlanIds: string[] }, roomTypeId: string, ratePlanId: string) {
     if (!config.sellableRoomTypeIds.includes(roomTypeId)) {

@@ -415,6 +415,15 @@ describe('SubmitBookingRequestDto calendar dates and replay key', () => {
 
     expect(result.some((error) => error.property === 'idempotencyKey')).toBe(true);
   });
+
+  it('rejects duplicate ancillary service IDs at the public request boundary', async () => {
+    const serviceId = 'ffffffff-0000-4000-a000-000000000001';
+    const result = await errors({ serviceIds: [serviceId, serviceId] });
+
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ property: 'serviceIds' }),
+    ]));
+  });
 });
 
 describe('BookingRequestService public card setup', () => {
