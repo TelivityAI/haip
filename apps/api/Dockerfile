@@ -27,15 +27,19 @@ RUN pnpm --filter @telivityhaip/shared run build
 RUN pnpm --filter @telivityhaip/database run build
 RUN pnpm --filter @telivityhaip/booking-requests run build
 
-# Dashboard SPA — auth/Keycloak settings are baked at build time (Vite env).
+# Dashboard/booking SPAs — auth/Keycloak/feature flags are baked at build time (Vite env).
 ARG VITE_AUTH_ENABLED=false
 ARG VITE_KEYCLOAK_URL=http://localhost:8080
 ARG VITE_KEYCLOAK_REALM=haip
 ARG VITE_KEYCLOAK_CLIENT_ID=haip-dashboard
+# Must match the API's HAIP_BOOKING_REQUESTS at deploy time, or the module can
+# be enabled server-side while the UIs compile it out (see booking-engine-config.service.ts).
+ARG VITE_HAIP_BOOKING_REQUESTS=false
 ENV VITE_AUTH_ENABLED=$VITE_AUTH_ENABLED \
     VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL \
     VITE_KEYCLOAK_REALM=$VITE_KEYCLOAK_REALM \
-    VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID
+    VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID \
+    VITE_HAIP_BOOKING_REQUESTS=$VITE_HAIP_BOOKING_REQUESTS
 
 # Build dashboard (Vite static output)
 RUN pnpm --filter dashboard run build
@@ -69,6 +73,9 @@ COPY --from=base /app/packages/shared/dist ./packages/shared/dist
 COPY --from=base /app/packages/shared/package.json ./packages/shared/
 COPY --from=base /app/packages/booking-requests/dist ./packages/booking-requests/dist
 COPY --from=base /app/packages/booking-requests/package.json ./packages/booking-requests/
+# booking-requests' own node_modules (postgres) — needed so `node
+# dist/database/migrate.js` can run standalone, matching packages/database.
+COPY --from=base /app/packages/booking-requests/node_modules ./packages/booking-requests/node_modules
 
 ENV NODE_ENV=production
 

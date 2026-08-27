@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { eq, and, desc } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { isBookingRequestsEnabled } from '@telivityhaip/booking-requests';
 import { auditLogs, bookingEngineConfig, bookingEngineCredentials } from '@telivityhaip/database';
 import type {
   BookingFormQuestionDefinition,
@@ -254,6 +255,18 @@ export class BookingEngineConfigService {
       }
 
       const paymentMethodClientMode = this.paymentMethodClientMode();
+
+      // Fail-safe: request mode has no controllers/services/UI to serve it
+      // unless the deployment opted into the optional booking-requests
+      // package (HAIP_BOOKING_REQUESTS=true). Without this gate, a property
+      // could persist bookingMode=request while the module is unloaded, and
+      // BookingEngineService.book() would reject every instant booking with
+      // no request-mode path to replace it.
+      if (bookingMode === 'request' && !isBookingRequestsEnabled()) {
+        throw new BadRequestException(
+          'Request booking mode requires the HAIP_BOOKING_REQUESTS deployment flag to be enabled',
+        );
+      }
 
       if (bookingMode === 'request'
         && paymentMethodCollection !== 'disabled'

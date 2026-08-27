@@ -19,6 +19,8 @@ services:
         VITE_KEYCLOAK_URL: http://localhost:8080
         VITE_KEYCLOAK_REALM: haip
         VITE_KEYCLOAK_CLIENT_ID: haip-dashboard
+        # Must match the api service's HAIP_BOOKING_REQUESTS below.
+        VITE_HAIP_BOOKING_REQUESTS: 'false'
     env_file:
       - .env.production
     environment:
@@ -51,6 +53,7 @@ services:
         VITE_KEYCLOAK_URL: http://localhost:8080
         VITE_KEYCLOAK_REALM: haip
         VITE_KEYCLOAK_CLIENT_ID: haip-dashboard
+        VITE_HAIP_BOOKING_REQUESTS: 'false'
     env_file:
       - .env.production
     environment:

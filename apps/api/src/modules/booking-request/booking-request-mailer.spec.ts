@@ -599,10 +599,10 @@ describe('BookingRequestMailerService', () => {
       settleProvider = () => {
         providerSettled = true;
         resolve({
+          status: 'outcomeUnknown',
           sent: false,
           provider: 'smtp',
           error: 'Email transport timed out',
-          outcomeUnknown: true,
         });
       };
     }));

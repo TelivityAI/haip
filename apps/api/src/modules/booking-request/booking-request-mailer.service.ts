@@ -346,8 +346,9 @@ export class BookingRequestMailerService {
     actor?: AuditActor,
   ): Promise<Delivery> {
     const finishedAt = new Date();
+    const outcomeUnknown = transportResult.status === 'outcomeUnknown';
     const shouldRetry = !transportResult.sent
-      && !transportResult.outcomeUnknown
+      && !outcomeUnknown
       && mode === 'automatic'
       && claimed.automaticAttempts < MAX_AUTOMATIC_ATTEMPTS;
     const status: Delivery['status'] = transportResult.sent
@@ -358,7 +359,7 @@ export class BookingRequestMailerService {
       : null;
     const errorMessage = transportResult.sent
       ? null
-      : transportResult.outcomeUnknown
+      : outcomeUnknown
         ? 'Email delivery outcome requires manual review'
         : 'Email transport failed';
 

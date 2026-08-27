@@ -18,6 +18,7 @@ services:
         VITE_KEYCLOAK_URL: http://localhost:8080
         VITE_KEYCLOAK_REALM: haip
         VITE_KEYCLOAK_CLIENT_ID: haip-dashboard
+        VITE_HAIP_BOOKING_REQUESTS: 'false'
     environment:
       AUTH_ENABLED: 'true'
       # Demo exploration only — not production. Prod overlay clears this flag.
@@ -41,3 +42,4 @@ services:
         VITE_KEYCLOAK_URL: http://localhost:8080
         VITE_KEYCLOAK_REALM: haip
         VITE_KEYCLOAK_CLIENT_ID: haip-dashboard
+        VITE_HAIP_BOOKING_REQUESTS: 'false'

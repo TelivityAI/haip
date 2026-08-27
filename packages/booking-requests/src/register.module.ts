@@ -1,10 +1,13 @@
 import { DynamicModule, Module, type Type } from '@nestjs/common';
 
 export type BookingRequestsRootModuleOptions = {
-  /** Nest module class from the API app (BookingRequestModule). */
+  /**
+   * Nest module class from the API app (BookingRequestModule). It must itself
+   * provide and export the BOOKING_REQUEST_STRIPE_HANDLER token consumed by
+   * core PaymentModule/StripeWebhookController — this root module only wires
+   * the module into the app, it does not re-provide that token.
+   */
   bookingRequestModule: Type<unknown>;
-  /** Injection token shared with core PaymentModule (BOOKING_REQUEST_STRIPE_HANDLER). */
-  stripeHandlerToken: symbol | string;
 };
 
 /**

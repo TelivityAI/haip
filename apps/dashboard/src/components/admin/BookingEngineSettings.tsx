@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Check, Copy, Image as ImageIcon, KeyRound, RefreshCw, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { isBookingRequestsUiEnabled } from '../../lib/bookingRequestsFeature';
 import { useToast } from '../ui/Toast';
 import MediaGallery from '../media/MediaGallery';
 import BookingQuestionBuilder from './BookingQuestionBuilder';
@@ -439,7 +440,13 @@ function BookingEngineSettingsForProperty({ propertyId }: { propertyId: string }
                 <label htmlFor="booking-mode" className="block text-xs font-medium text-telivity-slate mb-1">{t('bookingEngine.requestSettings.bookingMode')}</label>
                 <select id="booking-mode" value={form.bookingMode} onChange={(event) => updateForm((current) => ({ ...current, bookingMode: event.target.value as BookingMode }))} className="w-full border border-telivity-slate rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-deep-blue focus-visible:ring-2 focus-visible:ring-telivity-deep-blue">
                   <option value="instant">{t('bookingEngine.requestSettings.modes.instant')}</option>
-                  <option value="request">{t('bookingEngine.requestSettings.modes.request')}</option>
+                  {/* Request mode requires the API to run with HAIP_BOOKING_REQUESTS=true
+                      (see booking-engine-config.service.ts). Hidden unless this build opted
+                      in, or the property is already configured for it (opaque preservation,
+                      matching the unsupported-question pattern above). */}
+                  {(isBookingRequestsUiEnabled() || form.bookingMode === 'request') && (
+                    <option value="request">{t('bookingEngine.requestSettings.modes.request')}</option>
+                  )}
                 </select>
                 <p className="text-[11px] text-telivity-slate mt-1">{t(`bookingEngine.requestSettings.modeDescriptions.${form.bookingMode}`)}</p>
               </div>

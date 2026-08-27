@@ -344,6 +344,9 @@ importers:
       drizzle-orm:
         specifier: ^0.39.0
         version: 0.39.3(postgres@3.4.9)
+      postgres:
+        specifier: ^3.4.5
+        version: 3.4.9
     devDependencies:
       '@nestjs/common':
         specifier: ^10.4.0
@@ -357,9 +360,6 @@ importers:
       eslint:
         specifier: ^9.0.0
         version: 9.39.4(jiti@1.21.7)
-      postgres:
-        specifier: ^3.4.5
-        version: 3.4.9
       tsup:
         specifier: ^8.3.0
         version: 8.5.1(@swc/core@1.15.24)(jiti@1.21.7)(postcss@8.5.8)(tsx@4.21.0)(typescript@5.9.3)

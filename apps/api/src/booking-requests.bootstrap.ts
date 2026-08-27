@@ -1,5 +1,4 @@
 import type { DynamicModule, Type } from '@nestjs/common';
-import { BOOKING_REQUEST_STRIPE_HANDLER } from './modules/payment/booking-request-stripe-handler.interface';
 
 let cachedModules: Array<Type | DynamicModule> | null | undefined;
 
@@ -19,7 +18,6 @@ export async function preloadBookingRequestsModules(): Promise<void> {
   cachedModules = [
     createBookingRequestsRootModule({
       bookingRequestModule: BookingRequestModule,
-      stripeHandlerToken: BOOKING_REQUEST_STRIPE_HANDLER,
     }),
   ];
 }

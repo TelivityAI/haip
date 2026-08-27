@@ -107,7 +107,7 @@ describeDatabase('Booking Request complete vertical slice', () => {
     }
 
     const root = join(__dirname, '../../../../..');
-    execFileSync('node', ['packages/database/dist/push-schema.js'], {
+    execFileSync('node', ['packages/database/dist/run-migrations.js'], {
       cwd: root,
       env: { ...process.env, DATABASE_URL: databaseUrl! },
       stdio: 'pipe',

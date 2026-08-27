@@ -316,7 +316,7 @@ describeDatabase('Booking Request default-flow release gate', () => {
     vi.stubEnv('REDIS_URL', process.env['REDIS_URL'] ?? 'redis://localhost:6379');
 
     runDatabaseUtility('createdb', databaseName);
-    execFileBounded('node', ['packages/database/dist/push-schema.js'], {
+    execFileBounded('node', ['packages/database/dist/run-migrations.js'], {
       cwd: join(__dirname, '../../../../..'),
       env: { ...process.env, DATABASE_URL: scratchDatabaseUrl },
       label: 'database schema installation',

@@ -2,6 +2,7 @@
  * Push schema to database using drizzle-orm's migrate API.
  * Workaround for drizzle-kit CJS/.js extension issue.
  */
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -1501,7 +1502,7 @@ async function main() {
   await pushSchema();
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((err) => {
     console.error('Push failed:', err);
     process.exit(1);
