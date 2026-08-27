@@ -17,6 +17,7 @@ import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
 import { sumRefundChildren } from './payment-ledger';
+import { classifyHaipMetadata } from './stripe-financial-state';
 import Stripe from 'stripe';
 
 /**
@@ -126,11 +127,8 @@ export class StripeWebhookController {
   }
 
   private async handlePaymentIntentSucceeded(pi: Stripe.PaymentIntent) {
-    const payment = await this.findPaymentByGatewayTransactionId(pi.id);
-    if (!payment) {
-      this.logger.warn(`No payment found for PaymentIntent ${pi.id}`);
-      return;
-    }
+    const payment = await this.resolvePaymentForIntent(pi);
+    if (!payment) return;
 
     if (payment.status === 'captured') {
       this.logger.debug(`Payment ${payment.id} already captured, skipping`);
@@ -157,7 +155,7 @@ export class StripeWebhookController {
   }
 
   private async handlePaymentIntentFailed(pi: Stripe.PaymentIntent) {
-    const payment = await this.findPaymentByGatewayTransactionId(pi.id);
+    const payment = await this.resolvePaymentForIntent(pi);
     if (!payment) return;
 
     if (payment.status === 'failed') return;
@@ -184,7 +182,7 @@ export class StripeWebhookController {
   }
 
   private async handlePaymentIntentCanceled(pi: Stripe.PaymentIntent) {
-    const payment = await this.findPaymentByGatewayTransactionId(pi.id);
+    const payment = await this.resolvePaymentForIntent(pi);
     if (!payment) return;
 
     if (payment.status === 'voided') return;
@@ -303,6 +301,22 @@ export class StripeWebhookController {
     this.logger.log(
       `Payment ${recorded.parent.id} refund child ${recorded.row.id} recorded via webhook (${recorded.deltaDec.toFixed(2)})`,
     );
+  }
+
+  /**
+   * Correlate a PaymentIntent to a HAIP payment row. Lookup by gateway id first
+   * so legacy instant-booking intents without haip_* metadata still reconcile;
+   * only unmatched intents with no HAIP metadata are treated as external noise.
+   */
+  private async resolvePaymentForIntent(pi: Stripe.PaymentIntent) {
+    const payment = await this.findPaymentByGatewayTransactionId(pi.id);
+    if (payment) return payment;
+    if (classifyHaipMetadata(pi.metadata) === 'external') {
+      this.logger.debug(`Ignoring unrelated Stripe PaymentIntent ${pi.id}`);
+      return null;
+    }
+    this.logger.warn(`No payment found for PaymentIntent ${pi.id}`);
+    return null;
   }
 
   private async findPaymentByGatewayTransactionId(transactionId: string) {
