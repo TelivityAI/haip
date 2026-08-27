@@ -87,7 +87,7 @@ describe('GuestCommunicationAgent', () => {
 
   it('execute sends email when provider is configured', async () => {
     emailService.isConfigured.mockReturnValue(true);
-    emailService.send.mockResolvedValue({ sent: true, provider: 'sendgrid' });
+    emailService.send.mockResolvedValue({ status: 'sent', sent: true, provider: 'sendgrid' });
 
     const result = await agent.execute({
       recommendation: {

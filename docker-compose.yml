@@ -73,7 +73,7 @@ services:
       dockerfile: apps/api/Dockerfile
     image: haip-api
     container_name: haip-init
-    command: sh -c "node packages/database/dist/push-schema.js && node packages/database/dist/seed.js"
+    command: sh -c "node packages/database/dist/run-migrations.js && node packages/database/dist/seed.js"
     environment:
       DATABASE_URL: postgresql://haip:haip@postgres:5432/haip
     depends_on:
