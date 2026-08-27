@@ -52,7 +52,7 @@ Each matching event is POSTed to your `callbackUrl`:
 POST <callbackUrl>
 Content-Type: application/json
 X-HAIP-Signature: sha256=<hex HMAC-SHA256 of the raw body, keyed by your secret>
-X-HAIP-Event-Id: <delivery uuid>
+X-HAIP-Event-Id: <logical event uuid, or delivery row uuid for legacy events>
 X-HAIP-Event-Type: reservation.checked_in
 ```
 

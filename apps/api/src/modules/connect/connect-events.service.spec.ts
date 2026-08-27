@@ -187,6 +187,37 @@ describe('ConnectEventsService', () => {
       );
     });
 
+    it('forwards logicalEventId to WebhookDeliveryService for persisted dedup', async () => {
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([mockSubscription]),
+        }),
+      }));
+
+      const logicalEventId = 'bbbbbbbb-0000-4000-a000-000000000002';
+      const deliveryService = { enqueue: vi.fn().mockResolvedValue({ id: 'del-1' }) };
+      const svc = new ConnectEventsService(mockDb, deliveryService as any);
+
+      await svc.handleEvent({
+        event: 'reservation.created',
+        entityType: 'reservation',
+        entityId: 'res-1',
+        propertyId: 'prop-1',
+        data: { foo: 'bar' },
+        timestamp: new Date().toISOString(),
+        logicalEventId,
+      });
+
+      expect(deliveryService.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'reservation.created',
+          propertyId: 'prop-1',
+        }),
+        'sub-1',
+        logicalEventId,
+      );
+    });
+
     it('does nothing when no subscriptions match', async () => {
       mockDb.select.mockImplementation(() => ({
         from: vi.fn().mockReturnValue({

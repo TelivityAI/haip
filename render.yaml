@@ -31,7 +31,7 @@ services:
     # Push schema + seed the demo hotel before each deploy goes live.
     # Idempotent (schema IF NOT EXISTS; seed skips if property 'TGH' exists),
     # so redeploys are safe. Runs in the built image (compiled dist, no tsx).
-    preDeployCommand: 'node packages/database/dist/push-schema.js && node packages/database/dist/seed.js'
+    preDeployCommand: 'node packages/database/dist/run-migrations.js && node packages/database/dist/seed.js'
     envVars:
       - key: NODE_ENV
         value: production

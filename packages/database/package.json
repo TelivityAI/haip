@@ -42,9 +42,9 @@
     "test:coverage": "vitest run --coverage",
     "seed": "tsx src/seed.ts",
     "link-integration": "tsx src/link-integration-principal.ts",
-    "migrate": "tsx src/push-schema.ts",
+    "migrate": "tsx src/run-migrations.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/push-schema.ts",
+    "db:migrate": "tsx src/run-migrations.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

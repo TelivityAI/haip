@@ -43,7 +43,7 @@ describe.runIf(runSmoke)('release smoke (migrate → reservation lifecycle)', ()
     process.env.REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
     const root = join(__dirname, '..', '..', '..');
-    execSync('node packages/database/dist/push-schema.js', {
+    execSync('node packages/database/dist/run-migrations.js', {
       cwd: root,
       env: { ...process.env, DATABASE_URL: dbUrl },
       stdio: 'inherit',
