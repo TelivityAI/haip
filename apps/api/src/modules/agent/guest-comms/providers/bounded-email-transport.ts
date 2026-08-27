@@ -18,9 +18,11 @@ export function emailSendTimeoutMs(options?: EmailSendOptions): number {
 }
 
 /**
- * Aborts an HTTP transport at the deadline but does not return until fetch has
- * actually settled, so callers never make the delivery retry-eligible while
- * the original in-process request is still live.
+ * Cooperative HTTP send deadline: aborts fetch at `timeoutMs` but does not
+ * return until the in-flight request settles (success, error, or abort).
+ * This prevents marking a delivery retry-eligible while the original socket
+ * may still complete server-side. Callers receive `outcomeUnknown` only after
+ * settlement when the deadline fired first.
  */
 export async function boundedEmailFetch<T>(
   input: string,
