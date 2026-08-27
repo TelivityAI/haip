@@ -1,181 +1,21 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
-
-/** Simple ownership label used by core instant-booking PaymentIntent resolution. */
-export type HaipMetadataOwnership = 'external' | 'owned-valid' | 'owned-malformed';
-
-/** Parsed ownership result used by booking-request Stripe correlation. */
-export type HaipMetadataClassification<T> =
-  | { ownership: 'external' }
-  | { ownership: 'owned-valid'; correlation: T }
-  | { ownership: 'owned-malformed'; error: unknown };
-
-export function hasHaipFinancialMetadata(
-  metadata: Record<string, string> | null | undefined,
-): boolean {
-  return Object.keys(metadata ?? {}).some((key) => key.startsWith('haip_'));
-}
-
 /**
- * Classifies PaymentIntent / refund metadata ownership.
- *
- * - One-arg form: used by core `resolvePaymentForIntent` after the
- *   legacy-compatible gateway transaction lookup misses.
- * - Two-arg form: used by booking-request handlers to parse exact correlation
- *   fields for intents that carry `haip_*` keys.
+ * Canonical definition lives in @telivityhaip/shared — this logic is shared
+ * between core's `resolvePaymentForIntent` (stripe-webhook.controller.ts) and
+ * @telivityhaip/booking-requests' Stripe handler, so it cannot live only in
+ * apps/api without the package importing apps/api.
  */
-export function classifyHaipMetadata(
-  metadata: Record<string, string> | null | undefined,
-): HaipMetadataOwnership;
-export function classifyHaipMetadata<T>(
-  metadata: Record<string, string> | null | undefined,
-  parseCorrelation: (metadata: Record<string, string> | null | undefined) => T,
-): HaipMetadataClassification<T>;
-export function classifyHaipMetadata<T>(
-  metadata: Record<string, string> | null | undefined,
-  parseCorrelation?: (metadata: Record<string, string> | null | undefined) => T,
-): HaipMetadataOwnership | HaipMetadataClassification<T> {
-  if (!parseCorrelation) {
-    if (!hasHaipFinancialMetadata(metadata)) return 'external';
-    return Object.entries(metadata ?? {}).some(([key, value]) => key.startsWith('haip_') && !value)
-      ? 'owned-malformed'
-      : 'owned-valid';
-  }
-  if (!hasHaipFinancialMetadata(metadata)) return { ownership: 'external' };
-  try {
-    return { ownership: 'owned-valid', correlation: parseCorrelation(metadata) };
-  } catch (error) {
-    return { ownership: 'owned-malformed', error };
-  }
-}
-
-export type PaymentIntentEvent =
-  | 'processing'
-  | 'succeeded'
-  | 'payment_failed'
-  | 'canceled'
-  | 'requires_action';
-
-export type PaymentIntentCorrelation = {
-  paymentId: string;
-  propertyId: string;
-  bookingRequestId: string;
-};
-
-export function paymentIntentCorrelation(
-  metadata: Record<string, string> | null | undefined,
-): PaymentIntentCorrelation {
-  const correlation = {
-    paymentId: metadata?.['haip_payment_id'],
-    propertyId: metadata?.['haip_property_id'],
-    bookingRequestId: metadata?.['haip_booking_request_id'],
-  };
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!correlation.paymentId
-    || !correlation.propertyId
-    || !correlation.bookingRequestId
-    || !uuid.test(correlation.paymentId)
-    || !uuid.test(correlation.propertyId)
-    || !uuid.test(correlation.bookingRequestId)) {
-    throw new BadRequestException('Stripe PaymentIntent is missing exact HAIP correlation metadata');
-  }
-  return correlation as PaymentIntentCorrelation;
-}
-
-export type PaymentIntentLedgerStatus =
-  | 'pending'
-  | 'authorized'
-  | 'captured'
-  | 'failed'
-  | 'voided'
-  | 'settled'
-  | 'partially_refunded';
-
-type PaymentDecision = {
-  action: 'transition' | 'repair' | 'unexpected';
-  status: 'captured' | 'failed' | 'voided' | PaymentIntentLedgerStatus;
-};
-
-const targetStatus: Record<
-  Exclude<PaymentIntentEvent, 'processing'>,
-  'captured' | 'failed' | 'voided'
-> = {
-  succeeded: 'captured',
-  payment_failed: 'failed',
-  canceled: 'voided',
-  requires_action: 'failed',
-};
-
-/** Pure monotonic transition policy shared by every PaymentIntent webhook. */
-export function decidePaymentIntentTransition(
-  current: PaymentIntentLedgerStatus,
-  event: PaymentIntentEvent,
-  requestStatus?: 'pending' | 'accepted' | 'denied',
-): PaymentDecision {
-  if (event === 'processing') {
-    return current === 'pending'
-      ? { action: 'repair', status: current }
-      : { action: 'unexpected', status: current };
-  }
-  const target = targetStatus[event];
-  if (event === 'succeeded' && requestStatus === 'denied' && current !== 'captured') {
-    throw new ConflictException(
-      'A captured provider payment cannot finalize after the booking request was denied',
-    );
-  }
-  if (current === target) return { action: 'repair', status: current };
-  if (current === 'pending' || (current === 'authorized' && event === 'succeeded')) {
-    return { action: 'transition', status: target };
-  }
-  return { action: 'unexpected', status: current };
-}
-
-export type RefundProviderStatus =
-  | 'succeeded'
-  | 'pending'
-  | 'requires_action'
-  | 'failed'
-  | 'canceled';
-
-export function decideRefundTransition(
-  current: 'pending' | 'completed' | 'failed',
-  providerStatus: RefundProviderStatus,
-) {
-  const target = providerStatus === 'succeeded'
-    ? 'completed' as const
-    : providerStatus === 'failed' || providerStatus === 'canceled'
-      ? 'failed' as const
-      : 'pending' as const;
-  if (current === target) {
-    return {
-      action: current === 'pending' ? 'record_pending' as const : 'repair' as const,
-      status: current,
-    };
-  }
-  if (current === 'pending') return { action: 'transition' as const, status: target };
-  return { action: 'unexpected' as const, status: current };
-}
-
-export type RefundCorrelation = {
-  claimId: string;
-  propertyId: string;
-  bookingRequestId: string;
-  paymentId: string;
-};
-
-export function refundCorrelation(
-  metadata: Record<string, string> | null | undefined,
-): RefundCorrelation {
-  const correlation = {
-    claimId: metadata?.['haip_claim_id'],
-    propertyId: metadata?.['haip_property_id'],
-    bookingRequestId: metadata?.['haip_booking_request_id'],
-    paymentId: metadata?.['haip_payment_id'],
-  };
-  if (!correlation.claimId
-    || !correlation.propertyId
-    || !correlation.bookingRequestId
-    || !correlation.paymentId) {
-    throw new BadRequestException('Stripe refund is missing exact HAIP correlation metadata');
-  }
-  return correlation as RefundCorrelation;
-}
+export {
+  type HaipMetadataClassification,
+  type HaipMetadataOwnership,
+  type PaymentIntentCorrelation,
+  type PaymentIntentEvent,
+  type PaymentIntentLedgerStatus,
+  type RefundCorrelation,
+  type RefundProviderStatus,
+  classifyHaipMetadata,
+  decidePaymentIntentTransition,
+  decideRefundTransition,
+  hasHaipFinancialMetadata,
+  paymentIntentCorrelation,
+  refundCorrelation,
+} from '@telivityhaip/shared';

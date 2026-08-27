@@ -49,17 +49,14 @@ import type {
 } from '@telivityhaip/shared';
 import {
   actorFields,
+  assertCanonicalStayDates,
   type AuditActor,
 } from '@telivityhaip/shared';
 import { matchAcceptedReservationServiceRows } from './accepted-reservation-service.js';
 import { withAcceptedPricingLock } from './accepted-pricing-lock.js';
 import { DRIZZLE } from '@telivityhaip/database';
 import { reservationServiceAttachedPayload } from './reservation-service-event.js';
-import {
-  isSupportedQuestion,
-  validateApplicationAnswers,
-  validateQuestionDefinitions,
-} from './booking-form-questions.js';
+import { validateApplicationAnswers } from './booking-form-questions.js';
 import {
   SAVED_PAYMENT_METHOD_GATEWAY,
   type SavedPaymentMethod,
@@ -87,7 +84,6 @@ type WebhookPayload = {
   timestamp: string;
   logicalEventId?: string;
 };
-import { assertCanonicalStayDates } from './booking-request-date.validator.js';
 import {
   assertLedgerCurrencySupported,
   type BookingRequestPriceSource,
@@ -1274,6 +1270,9 @@ export class BookingRequestService {
     );
 
     const result = await this.db.transaction(async (tx) => {
+      // Locks the same physical `booking_engine_config` row `getPublicConfig`
+      // read `config` from above — `lockForUpdate=true` takes a `FOR UPDATE`
+      // row lock that blocks concurrent writers.
       const lockedConfig = await this.configService.getPublicConfig(propertyId, tx, true);
       if (!this.sameRequestConfig(config, lockedConfig)) {
         throw new ConflictException('Booking request configuration changed; retry submission');
@@ -2269,10 +2268,11 @@ export class BookingRequestService {
   }
 
   /**
-   * `locked` comes from `configService.getPublicConfig(propertyId, tx, true)`
-   * — already validated/filtered/sorted the same way `initial` was when the
-   * submission first quoted, so both snapshots are directly comparable
-   * without re-running form-question validation here.
+   * `locked` is `getPublicConfig(propertyId, tx, true)`'s result under
+   * `submit()`'s in-transaction `FOR UPDATE` row lock — the same
+   * validate/filter/sort `getPublicConfig` applies to `formQuestions` for
+   * `initial` already applies here too, so both snapshots are directly
+   * comparable without re-deriving anything from a raw row.
    */
   private sameRequestConfig(
     initial: PublicRequestConfig,

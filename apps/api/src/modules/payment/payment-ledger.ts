@@ -1,6 +1,8 @@
 import { and, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import { payments } from '@telivityhaip/database';
-import Decimal from 'decimal.js';
+
+/** Canonical definitions live in @telivityhaip/shared (used by @telivityhaip/booking-requests too). */
+export { remainingCapturedAmount, sumRefundChildren } from '@telivityhaip/shared';
 
 /**
  * Net folio / cash-report payment ledger:
@@ -72,22 +74,4 @@ export function reportPaymentSumWhere(propertyId: string): SQL {
       ),
     ),
   )!;
-}
-
-/** Sum refund / correction child rows already posted against a parent payment. */
-export function sumRefundChildren(
-  rows: Array<{ amount: string | number }>,
-): Decimal {
-  return rows.reduce(
-    (sum, r) => sum.plus(new Decimal(r.amount).abs()),
-    new Decimal(0),
-  );
-}
-
-/** Exact remaining captured value after canonical negative child movements. */
-export function remainingCapturedAmount(
-  capturedAmount: string | number,
-  childRows: Array<{ amount: string | number }>,
-): Decimal {
-  return new Decimal(capturedAmount).minus(sumRefundChildren(childRows));
 }

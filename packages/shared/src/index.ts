@@ -2,6 +2,54 @@
  * HAIP Shared — Types, constants, and utilities shared across packages.
  */
 
+export { Public, IS_PUBLIC_KEY, RequirePermissions, PERMISSIONS_KEY } from './access-decorators.js';
+export { IsMoneyString, type MoneyStringOptions } from './is-money-string.validator.js';
+export {
+  IsAfterCheckIn,
+  IsCanonicalCalendarDate,
+  assertCanonicalStayDates,
+  isCanonicalCalendarDate,
+} from './canonical-calendar-date.validator.js';
+export { type AuditActor, actorFields } from './audit-actor.js';
+export { stayDates } from './stay-dates.js';
+export { remainingCapturedAmount, sumRefundChildren } from './payment-ledger.js';
+export {
+  type PaymentGateway,
+  type PaymentGatewayCallOptions,
+  type PaymentGatewayResult,
+  PAYMENT_GATEWAY,
+} from './payment-gateway.interface.js';
+export {
+  type SavedPaymentMethod,
+  type SavedPaymentMethodChargeInput,
+  type SavedPaymentMethodChargeResult,
+  type SavedPaymentMethodGateway,
+  type SavedPaymentMethodProvenance,
+  SAVED_PAYMENT_METHOD_GATEWAY,
+} from './saved-payment-method-gateway.interface.js';
+export {
+  type BookingRequestStripeHandler,
+  type BookingRequestStripePaymentRow,
+  BOOKING_REQUEST_STRIPE_HANDLER,
+  paymentHasBookingRequestId,
+} from './booking-request-stripe-handler.interface.js';
+export { isBookingRequestsEnabled } from './is-booking-requests-enabled.js';
+export {
+  type HaipMetadataClassification,
+  type HaipMetadataOwnership,
+  type PaymentIntentCorrelation,
+  type PaymentIntentEvent,
+  type PaymentIntentLedgerStatus,
+  type RefundCorrelation,
+  type RefundProviderStatus,
+  classifyHaipMetadata,
+  decidePaymentIntentTransition,
+  decideRefundTransition,
+  hasHaipFinancialMetadata,
+  paymentIntentCorrelation,
+  refundCorrelation,
+} from './stripe-financial-state.js';
+
 /** Webhook event types following entity.action pattern */
 export const WEBHOOK_EVENTS = {
   // Reservation events

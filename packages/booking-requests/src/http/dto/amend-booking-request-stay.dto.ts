@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 import { IsMoneyString } from '@telivityhaip/shared';
-import { IsCanonicalCalendarDate } from '../../domain/booking-request-date.validator.js';
+import { IsCanonicalCalendarDate } from '@telivityhaip/shared';
 
 const STAY_AMENDMENT_PRICE_SOURCES = ['prior', 'current', 'custom'] as const;
 

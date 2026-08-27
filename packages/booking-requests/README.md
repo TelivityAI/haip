@@ -23,19 +23,43 @@ would otherwise collide with core's own version 0022). Use `db:migrate` in
 production (runs the compiled `dist/` entry — the Docker image ships only `dist/`
 and `package.json`, no `src/`/tsx) or `db:migrate:dev` locally against `src/`.
 
-## Remaining work (not done in this pass)
+## Package boundary
 
-- **Vertical-slice move**: `apps/api/src/modules/booking-request/**` (controllers,
-  services, DTOs, dashboard/booking-widget UI) still lives in the main API app and
-  is wired in conditionally via `apps/api/src/booking-requests.bootstrap.ts`. Moving
-  that whole slice into this package is a larger, separate change.
-- **Core push-schema de-pollution**: `packages/database/src/push-schema.ts` still
-  carries a handful of request-related columns needed by core regardless of the
-  flag (`payments.booking_request_id`, `payments.idempotency_key`,
-  `reservations.accepted_pricing_snapshot`, `charges.source_key`,
-  `charges.adjusts_charge_id`, `audit_logs.booking_request_id`). These were left in
-  place because core code paths (and/or other features) reference them even with
-  this package disabled; removing them needs a case-by-case audit, not a bulk pass.
+The full Nest vertical slice — controllers (`src/http/`), DTOs (`src/http/dto/`),
+services, the Stripe webhook handler, pricing/money/state/ledger/reconciler/template
+helpers, and their unit specs (`src/domain/`) — lives in this package, not
+`apps/api`. `BookingRequestModule.forRoot(...)` (`src/module/booking-request.module.ts`)
+is a real NestJS `DynamicModule` that owns those controllers and providers directly;
+it is not a facade re-exporting `apps/api` classes. The package never imports from
+`apps/api` — it depends only on `@telivityhaip/database`, `@telivityhaip/shared`,
+and a set of package-local DI ports (`src/module/ports.ts`: folio, webhook, email,
+reservation, rate-plan, guest, ancillary, availability, booking-engine, and
+booking-engine-config, plus guard-bridge ports for the public controller's
+credential/scope/throttle checks).
+
+`apps/api/src/booking-requests.bootstrap.ts` is the only place core wires itself to
+this package: it binds every port to the concrete core singleton that satisfies it
+(mostly `{ useExisting: CoreService }`) inside `BookingRequestModule.forRoot(...)`,
+and only does so when `HAIP_BOOKING_REQUESTS=true`. `apps/api` itself keeps only:
+
+- The bootstrap wiring above, plus the guard classes it already owned
+  (`BookingKeyGuard`, `BookingEngineScopeGuard`, `BookingThrottleGuard`) — these are
+  shared with core's own `BookingEngineController` and stay the single source of
+  truth for credential/scope/rate-limit checks.
+- The regression/integration specs that exercise the flag end-to-end from
+  `apps/api`'s Nest app (`apps/api/src/modules/booking-request/*.e2e-spec.ts`,
+  `*-authorization.spec.ts`, `*-default-flow-regression.spec.ts`,
+  `*-flag-off-instant-booking.regression.spec.ts`, `regression-database-utils.ts`).
+- Thin schema/config hooks core reads directly regardless of the flag:
+  `booking_engine_config.booking_mode` / `payment_method_collection` /
+  `form_questions` (the request-mode fail-safe gate in
+  `BookingEngineConfigService.updateConfig`), and `payments.booking_request_id` /
+  `idempotency_key`, `reservations.accepted_pricing_snapshot`, and
+  `charges.adjusts_charge_id` / `source_key` (financial-target and reversal
+  provenance invariants). See `packages/database/src/push-schema-kept-fields.spec.ts`
+  for the exact contract of what core keeps vs. what only this package's own
+  migrations declare (`audit_logs.booking_request_id` + its timeline index, and the
+  request-shape unique indexes/checks on `payments`).
 
 ## Credit
 

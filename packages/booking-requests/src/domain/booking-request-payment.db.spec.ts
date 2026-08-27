@@ -22,11 +22,11 @@ import { BookingRequestPaymentService } from './booking-request-payment.service.
 const databaseUrl = process.env['PAYMENT_DB_TEST_URL'];
 const describeDatabase = databaseUrl ? describe : describe.skip;
 const financialRecoveryMigration = readFileSync(
-  new URL('../../../../../packages/booking-requests/src/database/migrations/0025_booking_request_financial_recovery.sql', import.meta.url),
+  new URL('../database/migrations/0025_booking_request_financial_recovery.sql', import.meta.url),
   'utf8',
 );
 const bookingRequestAuditRelationshipMigration = readFileSync(
-  new URL('../../../../../packages/booking-requests/src/database/migrations/0029_booking_request_audit_relationship.sql', import.meta.url),
+  new URL('../database/migrations/0029_booking_request_audit_relationship.sql', import.meta.url),
   'utf8',
 );
 

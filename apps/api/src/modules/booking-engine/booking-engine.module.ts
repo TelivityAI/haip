@@ -40,6 +40,16 @@ import { PolicyModule } from '../policy/policy.module';
     BookingEngineScopeGuard,
     BookingThrottleGuard,
   ],
-  exports: [BookingEngineService, BookingEngineConfigService],
+  exports: [
+    BookingEngineService,
+    BookingEngineConfigService,
+    // Exported so `@telivityhaip/booking-requests`'s `BookingRequestModule.forRoot(...)`
+    // can bind its guard-bridge ports to these same singletons via `useExisting`
+    // (see `apps/api/src/booking-requests.bootstrap.ts`) instead of duplicating
+    // credential/scope/rate-limit logic in the package.
+    BookingKeyGuard,
+    BookingEngineScopeGuard,
+    BookingThrottleGuard,
+  ],
 })
 export class BookingEngineModule {}

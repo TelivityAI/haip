@@ -8,10 +8,6 @@ import { BookingRequestMailerService } from '../domain/booking-request-mailer.se
 import { BookingRequestConsequenceWorkerService } from '../domain/booking-request-consequence-worker.service.js';
 import { BookingRequestStripeHandler } from '../domain/booking-request-stripe.handler.js';
 import {
-  BOOKING_REQUEST_CONFIG_FIELDS_PORT,
-  DrizzleBookingRequestConfigFieldsAdapter,
-} from './booking-request-config-fields.port.js';
-import {
   AncillaryServicePort,
   AvailabilityServicePort,
   BookingEngineConfigServicePort,
@@ -26,6 +22,11 @@ import {
   ReservationServicePort,
   WebhookServicePort,
 } from './ports.js';
+import {
+  BookingEngineScopeGuardBridge,
+  BookingKeyGuardBridge,
+  BookingThrottleGuardBridge,
+} from './guard-bridges.js';
 
 /**
  * A DI binding for one port, without the `provide` token — the caller only
@@ -104,17 +105,20 @@ export class BookingRequestModule {
       BookingRequestConsequenceWorkerService,
       BookingRequestStripeHandler,
       { provide: BOOKING_REQUEST_STRIPE_HANDLER, useExisting: BookingRequestStripeHandler },
-      DrizzleBookingRequestConfigFieldsAdapter,
-      { provide: BOOKING_REQUEST_CONFIG_FIELDS_PORT, useExisting: DrizzleBookingRequestConfigFieldsAdapter },
+      // Concrete bridge classes referenced by `@UseGuards(...)` on
+      // `BookingRequestPublicController` (see `./guard-bridges.js` for why the
+      // abstract port tokens above can't be used directly there).
+      BookingKeyGuardBridge,
+      BookingEngineScopeGuardBridge,
+      BookingThrottleGuardBridge,
     ] as Provider[];
 
     return {
       module: BookingRequestModule,
-      // Global so BOOKING_REQUEST_STRIPE_HANDLER / BOOKING_REQUEST_CONFIG_FIELDS_PORT
-      // reach apps/api's PaymentModule / BookingEngineModule (StripeWebhookController,
-      // BookingEngineConfigService) without those core modules importing this
-      // optional feature module — mirrors the previous apps/api facade's
-      // `createBookingRequestsRootModule({ global: true })`.
+      // Global so BOOKING_REQUEST_STRIPE_HANDLER reaches apps/api's
+      // PaymentModule (StripeWebhookController) without that core module
+      // importing this optional feature module — mirrors the previous
+      // apps/api facade's `createBookingRequestsRootModule({ global: true })`.
       global: true,
       imports: options.imports,
       controllers: [BookingRequestPublicController, BookingRequestController],
@@ -124,7 +128,6 @@ export class BookingRequestModule {
         BookingRequestPaymentService,
         BookingRequestMailerService,
         BOOKING_REQUEST_STRIPE_HANDLER,
-        BOOKING_REQUEST_CONFIG_FIELDS_PORT,
       ],
     };
   }

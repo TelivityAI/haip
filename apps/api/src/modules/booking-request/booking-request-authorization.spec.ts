@@ -12,10 +12,12 @@ import { PermissionsGuard } from '../auth/permissions.guard';
 import { PermissionsService } from '../auth/permissions.service';
 import { BookingEngineAdminController } from '../booking-engine/booking-engine-admin.controller';
 import { BookingEngineConfigService } from '../booking-engine/booking-engine-config.service';
-import { BookingRequestMailerService } from './booking-request-mailer.service';
-import { BookingRequestPaymentService } from './booking-request-payment.service';
-import { BookingRequestController } from './booking-request.controller';
-import { BookingRequestService } from './booking-request.service';
+import {
+  BookingRequestController,
+  BookingRequestMailerService,
+  BookingRequestPaymentService,
+  BookingRequestService,
+} from '@telivityhaip/booking-requests';
 
 const PROPERTY_ID = '11111111-1111-4111-8111-111111111111';
 const REQUEST_ID = '22222222-2222-4222-8222-222222222222';

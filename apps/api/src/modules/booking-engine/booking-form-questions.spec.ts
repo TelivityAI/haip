@@ -722,11 +722,19 @@ describe('BookingEngineConfigService request-mode deployment fail-safe', () => {
     ipAddress: '203.0.113.10',
   };
 
+  // `booking_mode` / `payment_method_collection` / `form_questions` are thin
+  // config-hook columns core keeps declared directly on `booking_engine_config`
+  // (see push-schema-kept-fields.spec.ts) — there is no port to swap out here.
+  // The ONLY fail-safe gate is on the effective `bookingMode` resolving to
+  // 'request' while `HAIP_BOOKING_REQUESTS` is off; `paymentMethodCollection`
+  // and `formQuestions` are otherwise ordinary columns an operator can
+  // pre-configure at any time, since they have no behavioral effect until
+  // `bookingMode` actually flips to 'request'.
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it('rejects switching a property to request mode when HAIP_BOOKING_REQUESTS is not "true"', async () => {
+  it('rejects switching a property to request mode when the deployment flag is off', async () => {
     vi.stubEnv('HAIP_BOOKING_REQUESTS', '');
     const { service, update, storedAudits } = makeConfigService(instantConfigRow);
 
@@ -738,32 +746,25 @@ describe('BookingEngineConfigService request-mode deployment fail-safe', () => {
     expect(storedAudits).toEqual([]);
   });
 
-  it('rejects a persisted request-mode row that no longer has the deployment flag enabled', async () => {
+  it('allows pre-configuring card collection and form questions on an instant-mode property even when the deployment flag is off', async () => {
     vi.stubEnv('HAIP_BOOKING_REQUESTS', '');
-    const staleRequestRow = { ...instantConfigRow, bookingMode: 'request' as const };
-    const { service, update } = makeConfigService(staleRequestRow);
-
-    // Even a change to an unrelated field must not silently re-persist an
-    // invalid request-mode row while the module is unloaded.
-    await expect(service.updateConfig(staleRequestRow.propertyId, {
-      displayName: 'Renamed while stale',
-    }, staleRequestRow.updatedAt.toISOString(), auditActor))
-      .rejects.toThrow(BadRequestException);
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it('allows switching to request mode once HAIP_BOOKING_REQUESTS=true', async () => {
-    vi.stubEnv('HAIP_BOOKING_REQUESTS', 'true');
-    const { service, set } = makeConfigService(instantConfigRow);
+    const { service, set } = makeConfigService({
+      ...instantConfigRow,
+      stripePublishableKey: 'pk_test_preconfig',
+    });
 
     await service.updateConfig(instantConfigRow.propertyId, {
-      bookingMode: 'request',
+      paymentMethodCollection: 'optional',
+      formQuestions: [arrivalQuestion],
     }, instantConfigRow.updatedAt.toISOString(), auditActor);
 
-    expect(set.mock.calls[0][0]).toMatchObject({ bookingMode: 'request' });
+    expect(set.mock.calls[0][0]).toMatchObject({
+      paymentMethodCollection: 'optional',
+      formQuestions: [arrivalQuestion],
+    });
   });
 
-  it('allows unrelated updates to an instant-mode property when the flag is off', async () => {
+  it('allows an unrelated branding update on an instant-mode property when the deployment flag is off', async () => {
     vi.stubEnv('HAIP_BOOKING_REQUESTS', '');
     const { service, set } = makeConfigService(instantConfigRow);
 
@@ -774,7 +775,26 @@ describe('BookingEngineConfigService request-mode deployment fail-safe', () => {
     expect(set.mock.calls[0][0]).toMatchObject({ displayName: 'Renamed instant hotel' });
   });
 
-  it('allows switching a stale request-mode row back to instant mode when the flag is off', async () => {
+  it('rejects any edit on a property whose persisted bookingMode is already request while the flag is off', async () => {
+    // A property can end up here if the deployment flag was disabled after
+    // the property was switched to request mode (e.g. rolling back the
+    // optional package). The fail-safe treats the persisted 'request' value
+    // as a live invariant violation and blocks every write — not just an
+    // attempt to re-affirm request mode — until an operator either
+    // re-enables the flag or explicitly reverts `bookingMode` to 'instant'.
+    vi.stubEnv('HAIP_BOOKING_REQUESTS', '');
+    const staleRequestRow = { ...instantConfigRow, bookingMode: 'request' as const };
+    const { service, update, storedAudits } = makeConfigService(staleRequestRow);
+
+    await expect(service.updateConfig(staleRequestRow.propertyId, {
+      displayName: 'Renamed while stale',
+    }, staleRequestRow.updatedAt.toISOString(), auditActor))
+      .rejects.toThrow(/HAIP_BOOKING_REQUESTS/);
+    expect(update).not.toHaveBeenCalled();
+    expect(storedAudits).toEqual([]);
+  });
+
+  it('allows reverting a stale request-mode row back to instant even when the flag is off', async () => {
     vi.stubEnv('HAIP_BOOKING_REQUESTS', '');
     const staleRequestRow = { ...instantConfigRow, bookingMode: 'request' as const };
     const { service, set } = makeConfigService(staleRequestRow);
@@ -784,5 +804,66 @@ describe('BookingEngineConfigService request-mode deployment fail-safe', () => {
     }, staleRequestRow.updatedAt.toISOString(), auditActor);
 
     expect(set.mock.calls[0][0]).toMatchObject({ bookingMode: 'instant' });
+  });
+
+  it('allows switching to request mode once the deployment flag is on', async () => {
+    vi.stubEnv('HAIP_BOOKING_REQUESTS', 'true');
+    const { service, set } = makeConfigService(instantConfigRow);
+
+    await service.updateConfig(instantConfigRow.propertyId, {
+      bookingMode: 'request',
+    }, instantConfigRow.updatedAt.toISOString(), auditActor);
+
+    expect(set.mock.calls[0][0]).toMatchObject({ bookingMode: 'request' });
+  });
+
+  it('allows unrelated updates to an instant-mode property when the deployment flag is on', async () => {
+    vi.stubEnv('HAIP_BOOKING_REQUESTS', 'true');
+    const { service, set } = makeConfigService(instantConfigRow);
+
+    await service.updateConfig(instantConfigRow.propertyId, {
+      displayName: 'Renamed while loaded',
+    }, instantConfigRow.updatedAt.toISOString(), auditActor);
+
+    expect(set.mock.calls[0][0]).toMatchObject({ displayName: 'Renamed while loaded' });
+  });
+
+  it('allows switching a request-mode row back to instant mode when the deployment flag is on', async () => {
+    vi.stubEnv('HAIP_BOOKING_REQUESTS', 'true');
+    const staleRequestRow = { ...instantConfigRow, bookingMode: 'request' as const };
+    const { service, set } = makeConfigService(staleRequestRow);
+
+    await service.updateConfig(staleRequestRow.propertyId, {
+      bookingMode: 'instant',
+    }, staleRequestRow.updatedAt.toISOString(), auditActor);
+
+    expect(set.mock.calls[0][0]).toMatchObject({ bookingMode: 'instant' });
+  });
+
+  it('reads return the persisted bookingMode/paymentMethodCollection/formQuestions regardless of the deployment flag', async () => {
+    // Unlike the write-time fail-safe above, reads are a direct passthrough
+    // of the persisted row — there is no port to fall back to defaults
+    // through, so a stale 'request' row remains visible to the admin/public
+    // config reads even while the flag is off (the write-time gate is what
+    // prevents new properties from reaching this state without the flag).
+    vi.stubEnv('HAIP_BOOKING_REQUESTS', '');
+    const staleRequestRow = {
+      ...instantConfigRow,
+      bookingMode: 'request' as const,
+      paymentMethodCollection: 'optional' as const,
+      stripePublishableKey: 'pk_test_stale',
+      formQuestions: [arrivalQuestion],
+    };
+    const { service } = makeConfigService(staleRequestRow);
+
+    await expect(service.getPublicConfig(staleRequestRow.propertyId)).resolves.toMatchObject({
+      bookingMode: 'request',
+      paymentMethodCollection: 'optional',
+      formQuestions: [{ id: 'arrival' }],
+    });
+    await expect(service.getAdminConfig(staleRequestRow.propertyId)).resolves.toMatchObject({
+      bookingMode: 'request',
+      paymentMethodCollection: 'optional',
+    });
   });
 });

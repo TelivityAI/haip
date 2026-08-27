@@ -2,15 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Test, type TestingModule } from '@nestjs/testing';
 import {
-  auditLogs,
   bookingEngineConfig,
-  bookingRequestConsequences,
-  bookingRequestEmailDeliveries,
-  bookingRequestInstallments,
-  bookingRequestPaymentAllocations,
-  bookingRequestPaymentResolutions,
-  bookingRequestStayAmendments,
-  bookingRequests,
   charges,
   depositLedgerEntries,
   folios,
@@ -21,8 +13,19 @@ import {
   rooms,
   roomTypes,
   webhookDeliveries,
-} from './booking-request-db.js';
-import * as schema from './booking-request-db.js';
+} from '@telivityhaip/database';
+import * as coreSchema from '@telivityhaip/database';
+import {
+  bookingRequestAuditLogs as auditLogs,
+  bookingRequestConsequences,
+  bookingRequestEmailDeliveries,
+  bookingRequestInstallments,
+  bookingRequestPaymentAllocations,
+  bookingRequestPaymentResolutions,
+  bookingRequestStayAmendments,
+  bookingRequests,
+} from '@telivityhaip/booking-requests/schema';
+import * as bookingRequestsSchema from '@telivityhaip/booking-requests/schema';
 import { and, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -37,8 +40,10 @@ import type { PaymentGateway } from '../payment/interfaces/payment-gateway.inter
 import { PaymentService } from '../payment/payment.service';
 import { StripeWebhookController } from '../payment/stripe-webhook.controller';
 import { WebhookService } from '../webhook/webhook.service';
-import { BookingRequestService } from './booking-request.service';
+import { BookingRequestService } from '@telivityhaip/booking-requests';
 import { createRegressionDatabaseHelpers } from './regression-database-utils.js';
+
+const schema = { ...coreSchema, ...bookingRequestsSchema };
 
 const baseDatabaseUrl = process.env['DATABASE_URL'];
 const describeDatabase = baseDatabaseUrl ? describe : describe.skip;
@@ -519,8 +524,16 @@ describeDatabase('Booking Request default-flow release gate', () => {
       isEnabled: true,
       sellableRoomTypeIds: [roomTypeId],
       sellableRatePlanIds: [ratePlanId],
-      ...(bookingMode ? { bookingMode } : {}),
     });
+    // `bookingMode` is a thin request-mode config hook core reads directly
+    // (see `packages/database/src/schema/booking-engine.ts`), not a
+    // booking-requests-package-only column.
+    if (bookingMode) {
+      await db
+        .update(bookingEngineConfig)
+        .set({ bookingMode })
+        .where(eq(bookingEngineConfig.propertyId, propertyId));
+    }
     return {
       propertyId,
       roomTypeId,

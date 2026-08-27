@@ -1,3 +1,15 @@
+/**
+ * Real-PostgreSQL concurrency proof for `withAcceptedPricingLock` across the
+ * core services (Ancillary/Folio/Reservation/NightAudit/...) AND
+ * `@telivityhaip/booking-requests`'s `BookingRequestService`. Kept in apps/api
+ * (like `modules/booking-request/booking-request-service-transaction-seams.spec.ts`)
+ * because it instantiates every core service class directly — a ports-based
+ * rewrite would replace the exact real-transaction interleaving this test
+ * exists to prove with mocks, defeating its purpose. Importing
+ * `BookingRequestService` FROM the package here is the normal, expected
+ * direction of the package boundary (apps/api MAY depend on the package);
+ * only the reverse is forbidden.
+ */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { sql } from 'drizzle-orm';
@@ -5,7 +17,7 @@ import postgres from 'postgres';
 import { withAcceptedPricingLock } from './accepted-pricing-lock';
 import { AncillaryService } from '../../modules/ancillary/ancillary.service';
 import { FolioService } from '../../modules/folio/folio.service';
-import { BookingRequestService } from '../../modules/booking-request/booking-request.service';
+import { BookingRequestService } from '@telivityhaip/booking-requests';
 import { BookingEngineService } from '../../modules/booking-engine/booking-engine.service';
 import { BookingEngineConfigService } from '../../modules/booking-engine/booking-engine-config.service';
 import { AvailabilityService } from '../../modules/reservation/availability.service';

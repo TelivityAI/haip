@@ -6,12 +6,7 @@ import { Test } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   agentWebhookSubscriptions,
-  auditLogs,
   bookingEngineCredentials,
-  bookingRequestConsequences,
-  bookingRequestEmailDeliveries,
-  bookingRequestInstallments,
-  bookingRequests,
   charges,
   folios,
   payments,
@@ -21,7 +16,14 @@ import {
   rooms,
   roomTypes,
   webhookDeliveries,
-} from './booking-request-db.js';
+} from '@telivityhaip/database';
+import {
+  bookingRequestAuditLogs as auditLogs,
+  bookingRequestConsequences,
+  bookingRequestEmailDeliveries,
+  bookingRequestInstallments,
+  bookingRequests,
+} from '@telivityhaip/booking-requests/schema';
 import { and, eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -98,6 +100,7 @@ describeDatabase('Booking Request complete vertical slice', () => {
   let db: ReturnType<typeof drizzle>;
 
   beforeAll(async () => {
+    vi.stubEnv('HAIP_BOOKING_REQUESTS', 'true');
     vi.stubEnv('AUTH_ENABLED', 'false');
     vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('PAYMENT_GATEWAY', 'mock');
@@ -179,6 +182,8 @@ describeDatabase('Booking Request complete vertical slice', () => {
       })),
     );
 
+    const { preloadBookingRequestsModules } = await import('../../booking-requests.bootstrap.js');
+    await preloadBookingRequestsModules();
     const { AppModule } = await import('../../app.module');
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(EmailService)

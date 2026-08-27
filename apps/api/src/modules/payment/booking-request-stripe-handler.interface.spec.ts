@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  isBookingRequestsEnabled,
-  paymentHasBookingRequestId,
-} from './booking-request-stripe-handler.interface';
+import { isBookingRequestsEnabled } from '@telivityhaip/shared';
+import { paymentHasBookingRequestId } from './booking-request-stripe-handler.interface';
 
 describe('booking-request stripe handler helpers', () => {
   it('detects booking request payments', () => {

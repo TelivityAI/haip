@@ -4,22 +4,19 @@
  *
  * Core intentionally KEEPS a handful of thin, request-mode-adjacent columns
  * and indexes in `push-schema.ts` / Drizzle because non-request-mode code
- * paths read them directly (the payments financial-target invariant,
- * amendment/charge reversal provenance):
+ * paths read them directly (the booking-engine-config fail-safe gate, the
+ * payments financial-target invariant, amendment/charge reversal provenance):
+ *   - `booking_engine_config.booking_mode` / `payment_method_collection` /
+ *     `form_questions` — core's `BookingEngineConfigService.updateConfig`
+ *     rejects `bookingMode='request'` unless `HAIP_BOOKING_REQUESTS=true`,
+ *     even when the optional package is not installed at all.
  *   - `payments.booking_request_id` / `payments.idempotency_key`
  *   - `reservations.accepted_pricing_snapshot`
  *   - `charges.adjusts_charge_id` / `charges.source_key` (+ their unique index)
  *
- * Core intentionally DOES NOT keep the booking-requests-package-only DDL:
- *   - `booking_engine_config.booking_mode` / `payment_method_collection` /
- *     `form_questions` — request-mode-only columns. Core's
- *     `BookingEngineConfigService` reads/writes them through the optional
- *     `BOOKING_REQUEST_CONFIG_FIELDS_PORT` (see
- *     `@telivityhaip/booking-requests`'s `booking-request-config-fields.port.ts`
- *     + its `database/schema/booking-engine.ts` extension table), defaulting
- *     to instant/disabled/[] when the package isn't wired in.
- *   - `audit_logs.booking_request_id` (+ its timeline index)
- *   - the request-shape unique indexes/checks on `payments`
+ * Core intentionally DOES NOT keep the booking-requests-package-only DDL that
+ * only the package's own code reads: `audit_logs.booking_request_id` (+ its
+ * timeline index) and the request-shape unique indexes/checks on `payments`.
  * Those are declared and migrated by `packages/booking-requests` instead.
  *
  * This spec is a static guardrail, not a live-database test: it fails loudly
@@ -42,21 +39,21 @@ const pushSchemaSource = readFileSync(
 );
 
 describe('push-schema / drizzle kept vs. removed request-mode fields', () => {
-  it('does not declare booking-requests-package-only booking_engine_config DDL in core', () => {
-    expect((bookingEngineConfig as unknown as Record<string, unknown>)['bookingMode']).toBeUndefined();
-    expect(
-      (bookingEngineConfig as unknown as Record<string, unknown>)['paymentMethodCollection'],
-    ).toBeUndefined();
-    expect((bookingEngineConfig as unknown as Record<string, unknown>)['formQuestions']).toBeUndefined();
+  it('keeps booking_engine_config request-mode config-hook columns in drizzle', () => {
+    expect(bookingEngineConfig.bookingMode).toBeDefined();
+    expect(bookingEngineConfig.paymentMethodCollection).toBeDefined();
+    expect(bookingEngineConfig.formQuestions).toBeDefined();
+  });
 
-    expect(pushSchemaSource).not.toContain(
-      'ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS booking_mode',
+  it('keeps booking_engine_config request-mode config-hook columns in push-schema DDL', () => {
+    expect(pushSchemaSource).toContain(
+      "ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS booking_mode varchar(10) NOT NULL DEFAULT 'instant'",
     );
-    expect(pushSchemaSource).not.toContain(
-      'ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS payment_method_collection',
+    expect(pushSchemaSource).toContain(
+      "ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS payment_method_collection varchar(10) NOT NULL DEFAULT 'disabled'",
     );
-    expect(pushSchemaSource).not.toContain(
-      'ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS form_questions',
+    expect(pushSchemaSource).toContain(
+      "ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS form_questions jsonb NOT NULL DEFAULT '[]'::jsonb",
     );
   });
 

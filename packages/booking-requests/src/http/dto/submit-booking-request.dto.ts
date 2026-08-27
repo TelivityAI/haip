@@ -13,10 +13,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import {
-  IsAfterCheckIn,
-  IsCanonicalCalendarDate,
-} from '../../domain/booking-request-date.validator.js';
+import { IsAfterCheckIn, IsCanonicalCalendarDate } from '@telivityhaip/shared';
 
 /**
  * Public Booking Request input. Property scope and every persisted price/card

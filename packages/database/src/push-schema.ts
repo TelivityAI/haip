@@ -1121,10 +1121,9 @@ export async function pushSchema(databaseUrl: string = DATABASE_URL) {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
-    // `booking_mode` / `payment_method_collection` / `form_questions` on
-    // booking_engine_config are request-mode-only DDL owned by the optional
-    // `@telivityhaip/booking-requests` package (its migration 0022 adds them).
-    // Core deliberately does not create these columns here.
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS booking_mode varchar(10) NOT NULL DEFAULT 'instant'`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS payment_method_collection varchar(10) NOT NULL DEFAULT 'disabled'`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS form_questions jsonb NOT NULL DEFAULT '[]'::jsonb`,
     `CREATE UNIQUE INDEX IF NOT EXISTS bookings_property_external_channel_unique ON bookings (property_id, external_confirmation, channel_code) WHERE external_confirmation IS NOT NULL AND channel_code IS NOT NULL`,
     // Stay extras / packages
     `CREATE TABLE IF NOT EXISTS services (

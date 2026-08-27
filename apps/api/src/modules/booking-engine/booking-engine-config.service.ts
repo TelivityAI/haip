@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { eq, and, desc } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { isBookingRequestsEnabled } from '@telivityhaip/booking-requests';
+import { isBookingRequestsEnabled } from '@telivityhaip/shared';
 import { auditLogs, bookingEngineConfig, bookingEngineCredentials } from '@telivityhaip/database';
 import type {
   BookingFormQuestionDefinition,
@@ -261,7 +261,15 @@ export class BookingEngineConfigService {
       // package (HAIP_BOOKING_REQUESTS=true). Without this gate, a property
       // could persist bookingMode=request while the module is unloaded, and
       // BookingEngineService.book() would reject every instant booking with
-      // no request-mode path to replace it.
+      // no request-mode path to replace it. The check uses the *effective*
+      // (merged) bookingMode, so it also blocks unrelated edits on a row
+      // that is already stuck in 'request' from an earlier deployment that
+      // had the package loaded — an operator must explicitly revert
+      // bookingMode to 'instant' (or re-enable the flag) before any other
+      // field on that row can be written. paymentMethodCollection /
+      // formQuestions are otherwise ordinary columns with no behavioral
+      // effect until bookingMode actually flips to 'request', so they can be
+      // pre-configured at any time.
       if (bookingMode === 'request' && !isBookingRequestsEnabled()) {
         throw new BadRequestException(
           'Request booking mode requires the HAIP_BOOKING_REQUESTS deployment flag to be enabled',

@@ -168,7 +168,7 @@ describeDatabase('Booking engine flag-OFF default-install release gate', () => {
   });
 
   it('boots AppModule without a BookingRequestService provider registered', async () => {
-    const { BookingRequestService } = await import('./booking-request.service.js');
+    const { BookingRequestService } = await import('@telivityhaip/booking-requests');
     expect(() => moduleRef.get(BookingRequestService)).toThrow();
   });
 

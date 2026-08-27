@@ -1,4 +1,6 @@
-/** True when the optional booking-requests module should load. */
-export function isBookingRequestsEnabled(): boolean {
-  return process.env['HAIP_BOOKING_REQUESTS'] === 'true';
-}
+/**
+ * Canonical definition lives in `@telivityhaip/shared` so core modules that
+ * need this trivial flag check (e.g. `apps/api`'s `DatabaseModule`) can
+ * import it without pulling in this package's full compiled bundle.
+ */
+export { isBookingRequestsEnabled } from '@telivityhaip/shared';

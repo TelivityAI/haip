@@ -15,7 +15,8 @@ import {
   bookingRequests,
 } from './booking-request-db.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BookingThrottleGuardPort } from '../module/ports.js';
+import { isSupportedQuestion } from './booking-form-questions.js';
+import { BookingThrottleGuardBridge } from '../module/guard-bridges.js';
 import { BookingRequestPublicController } from '../http/booking-request-public.controller.js';
 import { BookingRequestService } from './booking-request.service.js';
 import { CreateRequestCardSetupDto } from '../http/dto/create-request-card-setup.dto.js';
@@ -253,8 +254,24 @@ function makeHarness() {
       release();
     }
   });
+  // Mirrors `BookingEngineConfigService.getPublicConfig`'s real contract:
+  // `lockForUpdate=true` (the in-transaction recheck in `submit()`) reads the
+  // row-locked `lockedConfig` fixture rather than the pre-transaction
+  // `publicConfig` snapshot, and both branches filter `formQuestions` down to
+  // supported types the same way the real service does — so tests can mutate
+  // `harness.lockedConfig` to simulate a config change that happens between
+  // the initial read and the transactional recheck. Individual tests that
+  // call `.mockResolvedValue(...)` override this entirely for both calls.
   const config = {
-    getPublicConfig: vi.fn().mockResolvedValue(structuredClone(publicConfig)),
+    getPublicConfig: vi.fn(
+      async (_propertyId?: string, _db?: unknown, lockForUpdate?: boolean) => {
+        const source = lockForUpdate ? lockedConfig : publicConfig;
+        return {
+          ...structuredClone(source),
+          formQuestions: structuredClone(source.formQuestions).filter(isSupportedQuestion),
+        };
+      },
+    ),
   };
   const availability = {
     searchAvailability: vi.fn().mockResolvedValue([
@@ -358,8 +375,12 @@ describe('BookingRequestPublicController validation contract', () => {
       BookingRequestPublicController.prototype.submit,
     ) as unknown[];
 
-    expect(setupGuards).toContain(BookingThrottleGuardPort);
-    expect(submitGuards).toContain(BookingThrottleGuardPort);
+    // `@UseGuards(...)` on the controller must reference the concrete guard
+    // bridge class (see `module/guard-bridges.ts`), not the abstract port —
+    // Nest's `GuardsContextCreator` resolves `@UseGuards` metadata through
+    // the module's `injectables` map, which only contains real classes.
+    expect(setupGuards).toContain(BookingThrottleGuardBridge);
+    expect(submitGuards).toContain(BookingThrottleGuardBridge);
   });
 });
 

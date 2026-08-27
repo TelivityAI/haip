@@ -1,6 +1,6 @@
 import { IsUUID, IsInt, IsOptional, IsString, IsBoolean, Min } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsCanonicalCalendarDate } from '../../booking-request/booking-request-date.validator';
+import { IsCanonicalCalendarDate } from '@telivityhaip/shared';
 
 export class ModifyReservationDto {
   @ApiPropertyOptional({ example: '2024-06-02' })
