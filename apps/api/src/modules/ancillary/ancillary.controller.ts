@@ -27,7 +27,6 @@ export class AncillaryController {
   // --- Catalog services ---
 
   @Post('services')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('services.manage')
   @ApiOperation({ summary: 'Create a sellable stay service' })
   @ApiResponse({ status: 201, description: 'Service created' })
@@ -57,7 +56,6 @@ export class AncillaryController {
   }
 
   @Patch('services/:id')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('services.manage')
   @ApiOperation({ summary: 'Update a service' })
   @ApiResponse({ status: 200, description: 'Service updated' })
@@ -73,7 +71,6 @@ export class AncillaryController {
   // --- Rate plan components ---
 
   @Post('rate-plan-components')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('services.manage')
   @ApiOperation({ summary: 'Link a service to a rate plan (package component)' })
   @ApiResponse({ status: 201, description: 'Component created' })
@@ -94,7 +91,6 @@ export class AncillaryController {
   }
 
   @Delete('rate-plan-components/:id')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('services.manage')
   @ApiOperation({ summary: 'Delete a rate plan component' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })
@@ -108,7 +104,6 @@ export class AncillaryController {
   // --- Reservation services ---
 
   @Post('reservations/:reservationId/services')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('reservations.write')
   @ApiOperation({ summary: 'Attach a service to a reservation' })
   @ApiResponse({ status: 201, description: 'Service attached' })
@@ -131,7 +126,6 @@ export class AncillaryController {
   }
 
   @Post('reservations/:reservationId/services/:id/cancel')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations')
   @RequirePermissions('reservations.write')
   @ApiOperation({ summary: 'Cancel an attached reservation service' })
   @ApiQuery({ name: 'propertyId', type: String, required: true })

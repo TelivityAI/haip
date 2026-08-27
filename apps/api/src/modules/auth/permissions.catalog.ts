@@ -68,7 +68,7 @@ export function isPermissionKey(key: string): boolean {
 export const ALL_PERMISSIONS: readonly string[] = PERMISSION_KEYS;
 
 /**
- * Default grants for the ten built-in (system) roles. These mirror the realm
+ * Default grants for the built-in (system) roles. These mirror the realm
  * roles Keycloak ships (keycloak/haip-realm.json). Existing six role keys are
  * unchanged; leadership roles are additive.
  */
@@ -188,6 +188,16 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
     'communications.manage',
     'reviews.manage',
   ],
+  /** Server integration — room / room-type inventory tooling (narrower than GM). */
+  integration_inventory: ['rooms.read', 'rooms.write', 'ops.manage'],
+  /** Server integration — enquiry / booking-desk style pipelines. */
+  integration_reservations: [
+    'reservations.read',
+    'reservations.write',
+    'guests.read',
+    'guests.write',
+    'rooms.read',
+  ],
 };
 
 /** Friendly display names for the system roles. */
@@ -202,6 +212,8 @@ export const SYSTEM_ROLE_LABELS: Record<string, string> = {
   revenue_manager: 'Revenue Manager',
   accounting: 'Accounting',
   reservations: 'Reservations',
+  integration_inventory: 'Integration — Inventory',
+  integration_reservations: 'Integration — Reservations',
 };
 
 export const SYSTEM_ROLE_KEYS = Object.keys(ROLE_DEFAULT_PERMISSIONS);

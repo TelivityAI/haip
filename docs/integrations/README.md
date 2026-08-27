@@ -19,6 +19,7 @@ Staff REST request/response conventions (propertyId locations, envelopes, pagina
 | [Webhooks in Zapier](webhooks-zapier.md) | Webhooks by Zapier catch |
 | [Slack, Teams, Discord](slack-teams-discord.md) | Post HAIP events to chat incoming webhooks |
 | [Connect API key](connect-api-key.md) | `x-api-key` auth, OpenAPI, subscriptions |
+| [Service principal (Keycloak JWT)](service-principal.md) | Staff REST for server integrations — client credentials + `pnpm integration:link` |
 | [Folio inbound (POS)](folio-inbound-pos.md) | Post incidental charges from any POS |
 | [Accounting CSV](accounting-csv.md) | Revenue journal / trial balance export |
 | [BI on Postgres](bi-postgres.md) | Read-only DB access for Metabase, Grafana, etc. |

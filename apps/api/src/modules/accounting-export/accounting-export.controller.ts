@@ -1,6 +1,5 @@
 import { Controller, Get, Query, Header, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { AccountingExportService } from './accounting-export.service';
 
@@ -12,7 +11,6 @@ import { AccountingExportService } from './accounting-export.service';
  */
 @ApiTags('accounting-export')
 @Controller('accounting-export')
-@Roles('admin', 'general_manager', 'accounting')
 export class AccountingExportController {
   constructor(private readonly service: AccountingExportService) {}
 

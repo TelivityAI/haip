@@ -10,7 +10,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { NightAuditService } from './night-audit.service';
 import { RunAuditDto } from './dto/run-audit.dto';
 
@@ -20,7 +20,7 @@ export class NightAuditController {
   constructor(private readonly nightAuditService: NightAuditService) {}
 
   @Post('/run')
-  @Roles('admin', 'general_manager', 'night_auditor', 'accounting')
+  @RequirePermissions('nightaudit.run')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Execute night audit for a business date' })
   async runAudit(@Body() dto: RunAuditDto) {

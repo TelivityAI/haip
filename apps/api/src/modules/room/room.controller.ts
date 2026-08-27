@@ -9,7 +9,6 @@ import {
   Query,
   ParseUUIDPipe,
 } from '@nestjs/common';import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { RoomService } from './room.service';
 import { RoomStatusService } from './room-status.service';
@@ -47,7 +46,7 @@ export class RoomController {
   }
 
   @Post('types')
-  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping_manager')
+  @RequirePermissions('ops.manage')
   @ApiOperation({
     summary: 'Create new room type',
     description:
@@ -195,7 +194,7 @@ export class RoomController {
   }
 
   @Post()
-  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping_manager')
+  @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Create new room' })
   @ApiResponse({ status: 201, description: 'Room created' })
   createRoom(@Body() dto: CreateRoomDto) {
@@ -215,7 +214,7 @@ export class RoomController {
   }
 
   @Patch(':id/status')
-  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping_manager')
+  @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Update room status with transition validation' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room status updated' })
@@ -229,7 +228,6 @@ export class RoomController {
   }
 
   @Put(':id/hk-observation')
-  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping', 'housekeeping_manager')
   @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Set housekeeping observed occupancy for discrepancy detection' })
   @ApiQuery({ name: 'propertyId', required: true })
@@ -242,7 +240,7 @@ export class RoomController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'general_manager', 'front_desk', 'housekeeping_manager')
+  @RequirePermissions('ops.manage')
   @ApiOperation({ summary: 'Update room' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room updated' })
