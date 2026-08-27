@@ -10,7 +10,7 @@ import { RatePlanService } from '../rate-plan/rate-plan.service';
 import { PolicyService } from '../policy/policy.service';
 import type { AgentBookDto } from './dto/agent-book.dto';
 import type { AgentModifyDto } from './dto/agent-modify.dto';
-import { randomBytes } from 'crypto';
+import { generateConfirmationToken } from '../../common/crypto/confirmation-number';
 
 @Injectable()
 export class ConnectBookingService {
@@ -553,21 +553,4 @@ export class ConnectBookingService {
   }
 }
 
-// Crockford base32 alphabet (no I/L/O/U — unambiguous when read/typed).
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-
-/**
- * 128 bits of cryptographic randomness (16 random bytes) rendered in Crockford
- * base32. Unguessable — the confirmation number is a bearer credential for the
- * booking, so it must not be enumerable (the old `timestamp-4hex` form had only
- * ~16 bits of randomness).
- */
-export function generateConfirmationToken(): string {
-  const bytes = randomBytes(16);
-  let out = '';
-  for (let i = 0; i < bytes.length; i++) {
-    out += CROCKFORD[bytes[i]! & 0x1f];
-    out += CROCKFORD[(bytes[i]! >> 5) & 0x1f];
-  }
-  return out;
-}
+export { generateConfirmationToken } from '../../common/crypto/confirmation-number';
