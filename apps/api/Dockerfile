@@ -71,6 +71,12 @@ COPY --from=base /app/packages/database/package.json ./packages/database/
 COPY --from=base /app/packages/database/node_modules ./packages/database/node_modules
 COPY --from=base /app/packages/shared/dist ./packages/shared/dist
 COPY --from=base /app/packages/shared/package.json ./packages/shared/
+# shared now peers on @nestjs/common (access decorators / HTTP exceptions
+# relocated here for the booking-requests package boundary). Without this
+# copy, `require('@nestjs/common')` from packages/shared/dist fails in the
+# production image even though root node_modules is present — pnpm keeps the
+# peer under packages/shared/node_modules.
+COPY --from=base /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=base /app/packages/booking-requests/dist ./packages/booking-requests/dist
 COPY --from=base /app/packages/booking-requests/package.json ./packages/booking-requests/
 # booking-requests' own node_modules (postgres) — needed so `node
