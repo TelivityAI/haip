@@ -7,6 +7,8 @@ import type {
 } from '../email-provider.interface';
 import {
   emailSendTimeoutMs,
+  notSentEmailResult,
+  sentEmailResult,
   unknownTimeoutResult,
 } from './bounded-email-transport';
 
@@ -81,7 +83,7 @@ export class SmtpEmailProvider implements EmailProvider {
 
   async send(message: EmailMessage, options?: EmailSendOptions): Promise<EmailResult> {
     if (!this.isConfigured()) {
-      return { sent: false, provider: this.name, error: 'SMTP not configured' };
+      return notSentEmailResult(this.name, 'SMTP not configured');
     }
 
     const timeoutMs = emailSendTimeoutMs(options);
@@ -97,7 +99,6 @@ export class SmtpEmailProvider implements EmailProvider {
       dnsTimeout: timeoutMs,
     }) as OwnedSmtpTransport;
     let timedOut = false;
-    let lateClose: ReturnType<typeof setImmediate> | undefined;
     const from = message.from ?? process.env['SMTP_FROM'] ?? 'noreply@haip.dev';
     const mailPayload = {
       from,
@@ -115,7 +116,7 @@ export class SmtpEmailProvider implements EmailProvider {
       (info) => {
         if (timedOut) return unknownTimeoutResult(this.name);
         this.logger.log(`Email sent via SMTP to ${message.to}: ${info.messageId}`);
-        return { sent: true, provider: this.name, messageId: info.messageId } satisfies EmailResult;
+        return sentEmailResult(this.name, info.messageId);
       },
       (error: any) => {
         if (
@@ -126,17 +127,19 @@ export class SmtpEmailProvider implements EmailProvider {
           return unknownTimeoutResult(this.name);
         }
         this.logger.error(`SMTP send failed to ${message.to}: ${error.message}`);
-        return { sent: false, provider: this.name, error: error.message } satisfies EmailResult;
+        return notSentEmailResult(this.name, error.message);
       },
     );
+
+    sendMailPromise.finally(() => {
+      this.closeOwnedTransport(transport);
+    });
 
     const deadlinePromise = new Promise<EmailResult>((resolve) => {
       const timeout = setTimeout(() => {
         timedOut = true;
         this.closeOwnedTransport(transport);
-        // Pool resource setup itself is asynchronous. Re-close on the next turn
-        // so a resource created at the deadline cannot outlive this send.
-        lateClose = setImmediate(() => this.closeOwnedTransport(transport));
+        const lateClose = setImmediate(() => this.closeOwnedTransport(transport));
         lateClose.unref?.();
         resolve(unknownTimeoutResult(this.name));
       }, timeoutMs);
@@ -144,14 +147,7 @@ export class SmtpEmailProvider implements EmailProvider {
       sendMailPromise.finally(() => clearTimeout(timeout));
     });
 
-    try {
-      return await Promise.race([sendMailPromise, deadlinePromise]);
-    } finally {
-      if (lateClose) clearImmediate(lateClose);
-      // Destroy again after settlement so return from send() is the ownership
-      // boundary for every per-send socket.
-      this.closeOwnedTransport(transport);
-    }
+    return await Promise.race([sendMailPromise, deadlinePromise]);
   }
 
   /**
@@ -166,11 +162,8 @@ export class SmtpEmailProvider implements EmailProvider {
       return wrappedSocket?.socket ?? wrappedSocket;
     });
 
-    // Marks the pool closed and fails any work that has not acquired a resource.
     transport.close?.();
     for (const resource of resources) resource.close?.();
-    // SMTPConnection.close() is graceful after greeting. A hard deadline also
-    // destroys the owned socket so an active half-open transaction cannot live.
     for (const socket of sockets) {
       if (!socket?.destroyed) socket?.destroy?.();
     }

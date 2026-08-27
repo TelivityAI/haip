@@ -8,6 +8,8 @@ import type {
 import {
   boundedEmailFetch,
   EmailTransportTimeoutError,
+  notSentEmailResult,
+  sentEmailResult,
   unknownTimeoutResult,
 } from './bounded-email-transport';
 
@@ -36,7 +38,7 @@ export class MailgunEmailProvider implements EmailProvider {
 
   async send(message: EmailMessage, options?: EmailSendOptions): Promise<EmailResult> {
     if (!this.isConfigured()) {
-      return { sent: false, provider: this.name, error: 'Mailgun not configured' };
+      return notSentEmailResult(this.name, 'Mailgun not configured');
     }
 
     const form = new URLSearchParams();
@@ -72,20 +74,16 @@ export class MailgunEmailProvider implements EmailProvider {
         }),
       );
       if (!res.ok) {
-        return {
-          sent: false,
-          provider: this.name,
-          error: payload.message ?? `Mailgun HTTP ${res.status}`,
-        };
+        return notSentEmailResult(this.name, payload.message ?? `Mailgun HTTP ${res.status}`);
       }
       this.logger.log(`Email sent via Mailgun to ${message.to}`);
-      return { sent: true, provider: this.name, messageId: payload.id };
+      return sentEmailResult(this.name, payload.id);
     } catch (error: any) {
       if (error instanceof EmailTransportTimeoutError) {
         return unknownTimeoutResult(this.name);
       }
       this.logger.error(`Mailgun send failed: ${error.message}`);
-      return { sent: false, provider: this.name, error: error.message };
+      return notSentEmailResult(this.name, error.message);
     }
   }
 }

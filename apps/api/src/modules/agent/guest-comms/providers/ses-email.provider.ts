@@ -8,6 +8,8 @@ import type {
 import {
   boundedEmailFetch,
   EmailTransportTimeoutError,
+  notSentEmailResult,
+  sentEmailResult,
   unknownTimeoutResult,
 } from './bounded-email-transport';
 
@@ -34,11 +36,10 @@ export class SesEmailProvider implements EmailProvider {
 
   async send(message: EmailMessage, options?: EmailSendOptions): Promise<EmailResult> {
     if (!this.isConfigured()) {
-      return {
-        sent: false,
-        provider: this.name,
-        error: 'Amazon SES gateway not configured (set SES_ENDPOINT + SES_API_KEY + SES_FROM)',
-      };
+      return notSentEmailResult(
+        this.name,
+        'Amazon SES gateway not configured (set SES_ENDPOINT + SES_API_KEY + SES_FROM)',
+      );
     }
 
     const payload = {
@@ -47,8 +48,6 @@ export class SesEmailProvider implements EmailProvider {
       Content: {
         Simple: {
           Subject: { Data: message.subject },
-          // SES assigns and overwrites the RFC Message-ID. Preserve our stable
-          // logical identity in a permitted custom header for gateway replay.
           ...(message.messageId
             ? { Headers: [{ Name: 'X-HAIP-Message-ID', Value: message.messageId }] }
             : {}),
@@ -85,20 +84,16 @@ export class SesEmailProvider implements EmailProvider {
         }),
       );
       if (!res.ok) {
-        return {
-          sent: false,
-          provider: this.name,
-          error: body.message ?? `SES HTTP ${res.status}`,
-        };
+        return notSentEmailResult(this.name, body.message ?? `SES HTTP ${res.status}`);
       }
       this.logger.log(`Email sent via SES gateway to ${message.to}`);
-      return { sent: true, provider: this.name, messageId: body.MessageId };
+      return sentEmailResult(this.name, body.MessageId);
     } catch (error: any) {
       if (error instanceof EmailTransportTimeoutError) {
         return unknownTimeoutResult(this.name);
       }
       this.logger.error(`SES send failed: ${error.message}`);
-      return { sent: false, provider: this.name, error: error.message };
+      return notSentEmailResult(this.name, error.message);
     }
   }
 }
