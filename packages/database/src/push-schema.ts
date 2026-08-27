@@ -2,6 +2,7 @@
  * Push schema to database using drizzle-orm's migrate API.
  * Workaround for drizzle-kit CJS/.js extension issue.
  */
+import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { sql } from 'drizzle-orm';
@@ -12,8 +13,8 @@ import { postgresOptionsFromEnv } from './postgres-options.js';
 const DATABASE_URL =
   process.env['DATABASE_URL'] ?? 'postgresql://haip:haip@localhost:5432/haip';
 
-async function main() {
-  const client = postgres(DATABASE_URL, postgresOptionsFromEnv());
+export async function pushSchema(databaseUrl: string = DATABASE_URL) {
+  const client = postgres(databaseUrl, postgresOptionsFromEnv());
   const db = drizzle(client, { schema });
 
   // Create enums
@@ -715,7 +716,6 @@ async function main() {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id uuid NOT NULL REFERENCES properties(id),
       subscription_id uuid NOT NULL REFERENCES agent_webhook_subscriptions(id),
-      logical_event_id uuid,
       event_type varchar(100) NOT NULL,
       payload jsonb NOT NULL,
       status webhook_delivery_status NOT NULL DEFAULT 'pending',
@@ -1482,7 +1482,13 @@ async function main() {
   await client.end();
 }
 
-main().catch((err) => {
-  console.error('Push failed:', err);
-  process.exit(1);
-});
+async function main() {
+  await pushSchema();
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error('Push failed:', err);
+    process.exit(1);
+  });
+}
