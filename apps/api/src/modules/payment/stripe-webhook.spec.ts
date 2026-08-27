@@ -279,5 +279,66 @@ describe('StripeWebhookController', () => {
 
       expect(emptyDb.update).not.toHaveBeenCalled();
     });
+
+    it.each([
+      ['handlePaymentIntentSucceeded', { id: 'pi_external_success', metadata: {} }],
+      ['handlePaymentIntentFailed', { id: 'pi_external_failure', metadata: {} }],
+      ['handlePaymentIntentCanceled', { id: 'pi_external_cancel', metadata: {} }],
+    ])('ignores unrelated %s after legacy lookup misses', async (handlerName, paymentIntent) => {
+      const emptyDb = createMockDb([]);
+      const module = await Test.createTestingModule({
+        controllers: [StripeWebhookController],
+        providers: [
+          { provide: DRIZZLE, useValue: emptyDb },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: ConfigService, useValue: mockConfigService },
+        ],
+      }).compile();
+      const ctrl = module.get<StripeWebhookController>(StripeWebhookController);
+
+      await (ctrl as any)[handlerName](paymentIntent);
+
+      expect(emptyDb.select).toHaveBeenCalled();
+      expect(emptyDb.update).not.toHaveBeenCalled();
+      expect(mockWebhookService.emit).not.toHaveBeenCalled();
+      expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
+    });
+
+    it('acknowledges charge.refunded when parent payment is gone after lookup', async () => {
+      const capturedDb = createRefundWebhookDb({ ...mockPayment, status: 'captured', method: 'credit_card' });
+      capturedDb.transaction.mockImplementation(async (callback: (tx: any) => Promise<unknown>) => {
+        const tx = {
+          select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockReturnValue({
+                for: vi.fn().mockResolvedValue([]),
+              }),
+            }),
+          }),
+        };
+        return callback(tx);
+      });
+      const module = await Test.createTestingModule({
+        controllers: [StripeWebhookController],
+        providers: [
+          { provide: DRIZZLE, useValue: capturedDb },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: ConfigService, useValue: mockConfigService },
+        ],
+      }).compile();
+      const ctrl = module.get<StripeWebhookController>(StripeWebhookController);
+
+      await expect((ctrl as any).handleChargeRefunded({
+        id: 'ch_deleted_parent',
+        payment_intent: 'pi_test_123',
+        amount_refunded: 2500,
+      })).resolves.toBeUndefined();
+
+      expect(mockWebhookService.emit).not.toHaveBeenCalled();
+      expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
+      expect(capturedDb.transaction).toHaveBeenCalled();
+    });
   });
 });
