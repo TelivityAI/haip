@@ -76,6 +76,11 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Migrate test database
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_test
+
       - name: Run tests and verify README test counts
         run: node scripts/sync-test-count.mjs --check
         env:
