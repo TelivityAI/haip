@@ -15,6 +15,11 @@ class Signed {
   amount!: string;
 }
 
+class Bounded {
+  @IsMoneyString({ maximum: '100.00' })
+  amount!: string;
+}
+
 async function fails(obj: any): Promise<boolean> {
   const errors = await validate(obj);
   return errors.length > 0;
@@ -41,5 +46,10 @@ describe('IsMoneyString', () => {
     expect(await fails(Object.assign(new Signed(), { amount: '-50.00' }))).toBe(false);
     expect(await fails(Object.assign(new Signed(), { amount: '50.00' }))).toBe(false);
     expect(await fails(Object.assign(new Signed(), { amount: 'nope' }))).toBe(true);
+  });
+
+  it('maximum: accepts the inclusive boundary and rejects values above it', async () => {
+    expect(await fails(Object.assign(new Bounded(), { amount: '100.00' }))).toBe(false);
+    expect(await fails(Object.assign(new Bounded(), { amount: '100.01' }))).toBe(true);
   });
 });
