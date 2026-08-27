@@ -1,5 +1,4 @@
-import { sql } from 'drizzle-orm';
-import { check, foreignKey, pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
+import { foreignKey, pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 import { reservations, bookings } from './reservation.js';
 import { guests } from './guest.js';
@@ -208,18 +207,12 @@ export const payments = pgTable('payments', {
   // and push-schema SQL. Drizzle cannot express the folio/house-account/request
   // target invariant here without reintroducing the payments ↔ request module
   // cycle; the PostgreSQL vertical contract verifies the live constraint.
+  //
+  // Request-only unique indexes/checks on `bookingRequestId`
+  // (payments_property_request_id_unique, payments_property_request_parent_id_unique,
+  // payments_booking_request_parent_positive_check, payments_booking_request_child_shape_check)
+  // are declared and owned by packages/booking-requests migrations, not here —
+  // core's schema only needs the plain `bookingRequestId`/`idempotencyKey` columns.
   propertyIdempotencyKeyUnique: uniqueIndex('payments_property_idempotency_key_unique')
     .on(table.propertyId, table.idempotencyKey),
-  propertyRequestIdUnique: uniqueIndex('payments_property_request_id_unique')
-    .on(table.propertyId, table.bookingRequestId, table.id),
-  propertyRequestParentIdUnique: uniqueIndex('payments_property_request_parent_id_unique')
-    .on(table.propertyId, table.bookingRequestId, table.originalPaymentId, table.id),
-  bookingRequestParentPositiveCheck: check(
-    'payments_booking_request_parent_positive_check',
-    sql`${table.bookingRequestId} is null or ${table.originalPaymentId} is not null or ${table.amount} > 0`,
-  ),
-  bookingRequestChildShapeCheck: check(
-    'payments_booking_request_child_shape_check',
-    sql`${table.bookingRequestId} is null or ${table.originalPaymentId} is null or (${table.amount} < 0 and ${table.status} = 'captured')`,
-  ),
 }));

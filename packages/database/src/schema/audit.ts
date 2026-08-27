@@ -49,7 +49,6 @@ export const auditRuns = pgTable('audit_runs', {
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
   propertyId: uuid('property_id').references(() => properties.id), // Null for system-level events
-  bookingRequestId: uuid('booking_request_id'),
 
   // What happened
   action: varchar('action', { length: 50 }).notNull(), // "create", "update", "delete", "access", "export"
@@ -72,8 +71,10 @@ export const auditLogs = pgTable('audit_logs', {
 }, (table) => ({
   propertyEntityTimeline: index('audit_logs_property_entity_timeline_idx')
     .on(table.propertyId, table.entityType, table.entityId, table.occurredAt, table.id),
-  bookingRequestTimeline: index('audit_logs_booking_request_timeline_idx')
-    .on(table.propertyId, table.bookingRequestId, table.timelineSequence.desc()),
+  // `booking_request_id` and its `audit_logs_booking_request_timeline_idx`
+  // index are request-only DDL owned by packages/booking-requests migrations
+  // (0029/0032) — the package declares its own local extension of this table
+  // (schema/audit.ts) for that column instead of core polluting this schema.
   timelineSequenceUnique: uniqueIndex('audit_logs_timeline_sequence_unique')
     .on(table.timelineSequence),
 }));

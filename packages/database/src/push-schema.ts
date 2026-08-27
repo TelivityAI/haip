@@ -1121,9 +1121,10 @@ export async function pushSchema(databaseUrl: string = DATABASE_URL) {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
-    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS booking_mode varchar(10) NOT NULL DEFAULT 'instant'`,
-    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS payment_method_collection varchar(10) NOT NULL DEFAULT 'disabled'`,
-    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS form_questions jsonb NOT NULL DEFAULT '[]'::jsonb`,
+    // `booking_mode` / `payment_method_collection` / `form_questions` on
+    // booking_engine_config are request-mode-only DDL owned by the optional
+    // `@telivityhaip/booking-requests` package (its migration 0022 adds them).
+    // Core deliberately does not create these columns here.
     `CREATE UNIQUE INDEX IF NOT EXISTS bookings_property_external_channel_unique ON bookings (property_id, external_confirmation, channel_code) WHERE external_confirmation IS NOT NULL AND channel_code IS NOT NULL`,
     // Stay extras / packages
     `CREATE TABLE IF NOT EXISTS services (
@@ -1462,7 +1463,6 @@ export async function pushSchema(databaseUrl: string = DATABASE_URL) {
     `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS accepted_pricing_snapshot jsonb`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS booking_request_id uuid`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS idempotency_key varchar(255)`,
-    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS booking_request_id uuid`,
     `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timeline_sequence bigserial`,
     `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_timeline_sequence_unique ON audit_logs (timeline_sequence)`,
     // Commercial profile billing fields + links (KB 14.3 standing accounts)

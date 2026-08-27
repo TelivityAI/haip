@@ -95,15 +95,13 @@ export const bookingEngineConfig = pgTable('booking_engine_config', {
   logoMediaId: uuid('logo_media_id'),
   primaryColor: varchar('primary_color', { length: 9 }),
   accentColor: varchar('accent_color', { length: 9 }),
-  bookingMode: varchar('booking_mode', { length: 10 }).$type<BookingMode>().notNull().default('instant'),
-  paymentMethodCollection: varchar('payment_method_collection', { length: 10 })
-    .$type<PaymentMethodCollection>()
-    .notNull()
-    .default('disabled'),
-  formQuestions: jsonb('form_questions')
-    .$type<BookingFormQuestionDefinition[]>()
-    .notNull()
-    .default([]),
+  // `booking_mode` / `payment_method_collection` / `form_questions` are
+  // request-mode-only DDL owned by the optional `@telivityhaip/booking-requests`
+  // package (see its `database/schema/booking-engine.ts` extension table +
+  // migration 0022). Core intentionally does NOT declare these columns here or
+  // in push-schema — `BookingEngineConfigService` reads/writes them through the
+  // optional `BOOKING_REQUEST_CONFIG_FIELDS_PORT`, defaulting to
+  // instant/disabled/[] when the package isn't wired in.
   // Allow-lists: only these room types / rate plans are publicly sellable. Empty
   // = nothing is sold (fail-closed) until the operator opts inventory in.
   sellableRoomTypeIds: jsonb('sellable_room_type_ids').$type<string[]>().notNull().default([]),
