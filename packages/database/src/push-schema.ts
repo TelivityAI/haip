@@ -1473,8 +1473,6 @@ async function main() {
     `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS provider_channel_id varchar(255)`,
     `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS last_synced_at timestamptz`,
     `CREATE UNIQUE INDEX IF NOT EXISTS guest_reviews_property_source_external_unique ON guest_reviews (property_id, source, external_id)`,
-    `ALTER TABLE webhook_deliveries ADD COLUMN IF NOT EXISTS logical_event_id uuid`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS webhook_deliveries_property_subscription_logical_event_unique ON webhook_deliveries (property_id, subscription_id, logical_event_id)`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));
