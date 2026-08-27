@@ -4,24 +4,45 @@ export interface EmailMessage {
   html: string;
   text: string;
   from?: string;
-  /** Stable caller identity for providers/gateways that support deduplication. */
+  /**
+   * Correlation key forwarded to providers as custom metadata
+   * (e.g. Mailgun `v:haip-idempotency-key`, SendGrid custom_args). Useful for
+   * log/trace correlation across retries — NOT an exactly-once or deduplication
+   * guarantee in Mailgun, SendGrid, SES, or SMTP.
+   */
   idempotencyKey?: string;
-  /** Stable RFC Message-ID reused when an at-least-once transport is retried. */
+  /**
+   * Stable RFC Message-ID reused across retries for correlation when the
+   * provider supports setting it. Does not prevent duplicate delivery.
+   */
   messageId?: string;
 }
 
+/** Provider-confirmed acceptance vs definite failure vs ambiguous response. */
+export type EmailDeliveryStatus = 'sent' | 'notSent' | 'outcomeUnknown';
+
 export interface EmailResult {
+  /** `sent` = provider confirmed; `notSent` = safe to auto-retry; `outcomeUnknown` = do not auto-retry. */
+  status: EmailDeliveryStatus;
+  /** Convenience mirror of `status === 'sent'`. */
   sent: boolean;
   messageId?: string;
   provider?: string;
   error?: string;
-  /** True when the transport may have accepted mail before timing out. */
-  outcomeUnknown?: boolean;
 }
 
 export interface EmailSendOptions {
-  /** Hard upper bound requested by the caller for transport settlement. */
+  /**
+   * Hard send deadline in milliseconds. HTTP transports return at the deadline
+   * even when the underlying fetch ignores abort; SMTP hard-closes owned sockets
+   * and returns via `Promise.race` even if `sendMail` is still settling.
+   */
   timeoutMs?: number;
+  /**
+   * Max send attempts for definitely-not-sent failures (`status: 'notSent'`).
+   * Does not retry `outcomeUnknown` (ambiguous acceptance).
+   */
+  maxAttempts?: number;
 }
 
 export interface EmailProvider {

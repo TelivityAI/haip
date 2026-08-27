@@ -41,9 +41,9 @@ describe('SmtpEmailProvider bounded send', () => {
 
       expect(result).not.toBe(didNotSettle);
       expect(result).toMatchObject({
+        status: 'outcomeUnknown',
         sent: false,
         provider: 'smtp',
-        outcomeUnknown: true,
         error: 'Email transport timed out',
       });
       await vi.waitFor(() => expect(sockets.size).toBe(0), { timeout: 500 });
@@ -75,9 +75,6 @@ describe('SmtpEmailProvider bounded send', () => {
           input = input.slice(dataEnd + 5);
           readingData = false;
           sessionsAtData += 1;
-          // Keep TCP traffic flowing without completing the SMTP DATA reply.
-          // This defeats Nodemailer's socket-inactivity timeout so only the
-          // provider's owned hard deadline can end the live transaction.
           const heartbeat = setInterval(() => {
             if (!socket.destroyed && socket.writable) socket.write(' ');
           }, 5);
@@ -142,9 +139,9 @@ describe('SmtpEmailProvider bounded send', () => {
 
         expect(result).not.toBe(didNotSettle);
         expect(result).toMatchObject({
+          status: 'outcomeUnknown',
           sent: false,
           provider: 'smtp',
-          outcomeUnknown: true,
           error: 'Email transport timed out',
         });
         await vi.waitFor(() => expect(sockets.size).toBe(0), { timeout: 500 });
@@ -153,6 +150,65 @@ describe('SmtpEmailProvider bounded send', () => {
       expect(maxConcurrentConnections).toBe(1);
     } finally {
       for (const heartbeat of heartbeats.values()) clearInterval(heartbeat);
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  });
+
+  it('returns at the deadline without cancelling the scheduled late close', async () => {
+    const sockets = new Set<Socket>();
+    const server = createServer({ allowHalfOpen: true }, (socket) => {
+      sockets.add(socket);
+      let input = '';
+      let readingData = false;
+
+      socket.write('220 smtp.test ESMTP ready\r\n');
+      socket.on('data', (chunk) => {
+        input += chunk.toString('utf8');
+        if (readingData) return;
+
+        let lineEnd: number;
+        while ((lineEnd = input.indexOf('\r\n')) >= 0) {
+          const command = input.slice(0, lineEnd);
+          input = input.slice(lineEnd + 2);
+          if (/^EHLO /i.test(command)) {
+            socket.write('250-smtp.test\r\n250 PIPELINING\r\n');
+          } else if (/^MAIL FROM:/i.test(command) || /^RCPT TO:/i.test(command)) {
+            socket.write('250 2.1.0 Ok\r\n');
+          } else if (/^DATA$/i.test(command)) {
+            readingData = true;
+            socket.write('354 End data with <CR><LF>.<CR><LF>\r\n');
+            break;
+          }
+        }
+      });
+      socket.on('error', () => undefined);
+      socket.on('close', () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('SMTP test server did not bind');
+    process.env['SMTP_HOST'] = '127.0.0.1';
+    process.env['SMTP_PORT'] = String(address.port);
+    delete process.env['SMTP_USER'];
+    delete process.env['SMTP_PASS'];
+
+    const provider = new SmtpEmailProvider();
+    const clearImmediateSpy = vi.spyOn(global, 'clearImmediate');
+
+    try {
+      const result = await provider.send({
+        to: 'guest@example.com',
+        subject: 'Hi',
+        html: '<p>Hi</p>',
+        text: 'Hi',
+      }, { timeoutMs: 50 });
+      expect(result.status).toBe('outcomeUnknown');
+      expect(clearImmediateSpy).not.toHaveBeenCalled();
+    } finally {
+      clearImmediateSpy.mockRestore();
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => error ? reject(error) : resolve());

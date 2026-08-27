@@ -1,12 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EmailService } from './email.service';
-import type { EmailProvider } from './email-provider.interface';
+import type { EmailProvider, EmailResult } from './email-provider.interface';
 
 describe('EmailService', () => {
   const consoleProvider: EmailProvider = {
     name: 'console',
     isConfigured: () => true,
-    send: vi.fn().mockResolvedValue({ sent: false, provider: 'console', error: 'logged' }),
+    send: vi.fn().mockResolvedValue({
+      status: 'notSent',
+      sent: false,
+      provider: 'console',
+      error: 'logged',
+    } satisfies EmailResult),
   };
 
   beforeEach(() => {
@@ -17,7 +22,12 @@ describe('EmailService', () => {
     const sendgrid = {
       name: 'sendgrid',
       isConfigured: () => true,
-      send: vi.fn().mockResolvedValue({ sent: true, provider: 'sendgrid', messageId: 'sg-1' }),
+      send: vi.fn().mockResolvedValue({
+        status: 'sent',
+        sent: true,
+        provider: 'sendgrid',
+        messageId: 'sg-1',
+      } satisfies EmailResult),
     };
     const smtp = {
       name: 'smtp',
@@ -32,7 +42,8 @@ describe('EmailService', () => {
       text: 'Hi',
     });
     expect(result.sent).toBe(true);
-    expect(sendgrid.send).toHaveBeenCalled();
+    expect(result.status).toBe('sent');
+    expect(sendgrid.send).toHaveBeenCalledTimes(1);
     expect(smtp.send).not.toHaveBeenCalled();
   });
 
@@ -40,7 +51,11 @@ describe('EmailService', () => {
     const provider = {
       name: 'sendgrid',
       isConfigured: () => true,
-      send: vi.fn().mockResolvedValue({ sent: true, messageId: 'provider-id' }),
+      send: vi.fn().mockResolvedValue({
+        status: 'sent',
+        sent: true,
+        messageId: 'provider-id',
+      } satisfies EmailResult),
     };
     const service = new EmailService([provider]);
     const message = {
@@ -71,6 +86,87 @@ describe('EmailService', () => {
     });
     expect(consoleProvider.send).toHaveBeenCalled();
   });
+
+  it('retries definitely-not-sent failures but not outcomeUnknown', async () => {
+    const provider = {
+      name: 'sendgrid',
+      isConfigured: () => true,
+      send: vi.fn()
+        .mockResolvedValueOnce({
+          status: 'notSent',
+          sent: false,
+          provider: 'sendgrid',
+          error: 'SendGrid HTTP 503',
+        } satisfies EmailResult)
+        .mockResolvedValueOnce({
+          status: 'outcomeUnknown',
+          sent: false,
+          provider: 'sendgrid',
+          error: 'Email transport timed out',
+        } satisfies EmailResult),
+    };
+    const service = new EmailService([provider]);
+    const message = {
+      to: 'guest@example.com',
+      subject: 'Hi',
+      html: '<p>Hi</p>',
+      text: 'Hi',
+      idempotencyKey: 'delivery-1',
+      messageId: '<delivery-1@haip.local>',
+    };
+
+    const result = await service.send(message, { maxAttempts: 3 });
+    expect(result.status).toBe('outcomeUnknown');
+    expect(provider.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry outcomeUnknown on the first attempt', async () => {
+    const provider = {
+      name: 'sendgrid',
+      isConfigured: () => true,
+      send: vi.fn().mockResolvedValue({
+        status: 'outcomeUnknown',
+        sent: false,
+        provider: 'sendgrid',
+        error: 'Email transport timed out',
+      } satisfies EmailResult),
+    };
+    const service = new EmailService([provider]);
+    const result = await service.send({
+      to: 'guest@example.com',
+      subject: 'Hi',
+      html: '<p>Hi</p>',
+      text: 'Hi',
+    }, { maxAttempts: 3 });
+    expect(result.status).toBe('outcomeUnknown');
+    expect(provider.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries up to maxAttempts for notSent then stops', async () => {
+    vi.useFakeTimers();
+    const provider = {
+      name: 'sendgrid',
+      isConfigured: () => true,
+      send: vi.fn().mockResolvedValue({
+        status: 'notSent',
+        sent: false,
+        provider: 'sendgrid',
+        error: 'SendGrid HTTP 503',
+      } satisfies EmailResult),
+    };
+    const service = new EmailService([provider]);
+    const sending = service.send({
+      to: 'guest@example.com',
+      subject: 'Hi',
+      html: '<p>Hi</p>',
+      text: 'Hi',
+    }, { maxAttempts: 3 });
+    await vi.runAllTimersAsync();
+    const result = await sending;
+    expect(result.status).toBe('notSent');
+    expect(provider.send).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
 });
 
 describe('SendgridEmailProvider', () => {
@@ -96,6 +192,7 @@ describe('SendgridEmailProvider', () => {
       html: 'h',
       text: 't',
     });
+    expect(result.status).toBe('notSent');
     expect(result.sent).toBe(false);
   });
 
@@ -118,6 +215,7 @@ describe('SendgridEmailProvider', () => {
       idempotencyKey: 'stable-delivery-1',
       messageId: '<stable-delivery-1@haip.local>',
     });
+    expect(result.status).toBe('sent');
     expect(result.sent).toBe(true);
     expect(global.fetch).toHaveBeenCalledWith(
       'https://api.sendgrid.com/v3/mail/send',
@@ -131,19 +229,12 @@ describe('SendgridEmailProvider', () => {
     });
   });
 
-  it('aborts and awaits settlement of a bounded SendGrid request', async () => {
+  it('returns at the hard HTTP deadline even when fetch ignores abort', async () => {
     vi.useFakeTimers();
     process.env['SENDGRID_API_KEY'] = 'SG.test';
     process.env['SENDGRID_FROM'] = 'hotel@example.com';
-    let fetchSettled = false;
-    global.fetch = vi.fn((_url, init) => new Promise((_resolve, reject) => {
-      const signal = init?.signal;
-      signal?.addEventListener('abort', () => {
-        queueMicrotask(() => {
-          fetchSettled = true;
-          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
-        });
-      }, { once: true });
+    global.fetch = vi.fn((_url, init) => new Promise((_resolve, _reject) => {
+      init?.signal?.addEventListener('abort', () => undefined, { once: true });
     })) as any;
 
     const { SendgridEmailProvider } = await import('./providers/sendgrid-email.provider');
@@ -160,11 +251,78 @@ describe('SendgridEmailProvider', () => {
 
     await vi.advanceTimersByTimeAsync(100);
     await expect(sending).resolves.toMatchObject({
+      status: 'outcomeUnknown',
       sent: false,
-      outcomeUnknown: true,
       error: 'Email transport timed out',
     });
     expect(signal?.aborted).toBe(true);
-    expect(fetchSettled).toBe(true);
+  });
+
+  it('swallows detached fetch rejection after the hard deadline', async () => {
+    vi.useFakeTimers();
+    process.env['SENDGRID_API_KEY'] = 'SG.test';
+    process.env['SENDGRID_FROM'] = 'hotel@example.com';
+    global.fetch = vi.fn((_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        queueMicrotask(() => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      }, { once: true });
+    })) as any;
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    const { SendgridEmailProvider } = await import('./providers/sendgrid-email.provider');
+    const provider = new SendgridEmailProvider();
+    const sending = provider.send({
+      to: 'guest@example.com',
+      subject: 'Confirm',
+      html: '<p>Hi</p>',
+      text: 'Hi',
+    }, { timeoutMs: 100 });
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(sending).resolves.toMatchObject({ status: 'outcomeUnknown' });
+    await vi.advanceTimersByTimeAsync(100);
+    await Promise.resolve();
+    expect(unhandled).toEqual([]);
+    process.off('unhandledRejection', onUnhandled);
+  });
+});
+
+describe('boundedEmailFetch', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    vi.useRealTimers();
+    global.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('returns at timeout without waiting for a hanging response body', async () => {
+    vi.useFakeTimers();
+    let bodySettled = false;
+    global.fetch = vi.fn((_url, init) => Promise.resolve({
+      ok: true,
+      json: () => new Promise((_resolve, _reject) => {
+        init?.signal?.addEventListener('abort', () => undefined, { once: true });
+      }),
+    })) as any;
+
+    const { boundedEmailFetch, EmailTransportTimeoutError } = await import('./providers/bounded-email-transport');
+    const work = boundedEmailFetch(
+      'https://example.test/send',
+      { method: 'POST' },
+      { timeoutMs: 100 },
+      async (response) => {
+        await response.json();
+        bodySettled = true;
+        return 'done';
+      },
+    );
+    const expectation = expect(work).rejects.toBeInstanceOf(EmailTransportTimeoutError);
+    await vi.advanceTimersByTimeAsync(100);
+    await expectation;
+    expect(bodySettled).toBe(false);
   });
 });

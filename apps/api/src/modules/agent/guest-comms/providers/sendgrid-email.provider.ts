@@ -8,6 +8,8 @@ import type {
 import {
   boundedEmailFetch,
   EmailTransportTimeoutError,
+  notSentEmailResult,
+  sentEmailResult,
   unknownTimeoutResult,
 } from './bounded-email-transport';
 
@@ -44,7 +46,7 @@ export class SendgridEmailProvider implements EmailProvider {
 
   async send(message: EmailMessage, options?: EmailSendOptions): Promise<EmailResult> {
     if (!this.isConfigured()) {
-      return { sent: false, provider: this.name, error: 'SendGrid not configured' };
+      return notSentEmailResult(this.name, 'SendGrid not configured');
     }
 
     const from = message.from ?? this.defaultFrom!;
@@ -87,18 +89,18 @@ export class SendgridEmailProvider implements EmailProvider {
 
       if (!res.ok) {
         this.logger.error(`SendGrid send failed (${res.status}): ${failureBody ?? ''}`);
-        return { sent: false, provider: this.name, error: `SendGrid HTTP ${res.status}` };
+        return notSentEmailResult(this.name, `SendGrid HTTP ${res.status}`);
       }
 
       const messageId = res.headers.get('x-message-id') ?? undefined;
       this.logger.log(`Email sent via SendGrid to ${message.to}`);
-      return { sent: true, provider: this.name, messageId };
+      return sentEmailResult(this.name, messageId);
     } catch (error: any) {
       if (error instanceof EmailTransportTimeoutError) {
         return unknownTimeoutResult(this.name);
       }
       this.logger.error(`SendGrid send failed: ${error.message}`);
-      return { sent: false, provider: this.name, error: error.message };
+      return notSentEmailResult(this.name, error.message);
     }
   }
 }

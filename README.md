@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-<img src="https://img.shields.io/badge/Tests-2120%20passing-brightgreen" alt="2120 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+  <img src="https://img.shields.io/badge/Tests-1591%20passing-brightgreen" alt="1591 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -510,7 +510,7 @@ Operator notes for activating existing adapters, metasearch landings on the dire
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (2120 tests across 252 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
+| Testing | Vitest (1591 tests across 220 test files) | Unit and integration tests || Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
 
@@ -608,19 +608,6 @@ pnpm --filter @telivityhaip/booking dev             # booking widget dev server 
 | Booking widget (dev) | `http://localhost:5174` |
 | Keycloak (`--profile auth`) | `http://localhost:8080` |
 
-### Optional packages
-
-`@telivityhaip/booking-requests` adds request-first direct booking (guest submits a request; property accepts or denies before confirming). It is disabled by default so core instant booking stays unchanged.
-
-To enable:
-
-1. `pnpm db:migrate:booking-requests` (after core `pnpm db:migrate`)
-2. `HAIP_BOOKING_REQUESTS=true` in `apps/api/.env`
-3. `VITE_HAIP_BOOKING_REQUESTS=true` for dashboard/booking UI
-4. Set property `bookingMode=request` in booking engine admin settings
-
-See [`packages/booking-requests/README.md`](./packages/booking-requests/README.md) for details.
-
 > **Local dev dashboard is `:5173`, not `:3000`.** The API at `:3000` serves Swagger
 > and the REST API only unless you set `SERVE_DASHBOARD=true` on the API process.
 
@@ -655,7 +642,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# All tests (2120 tests across 252 test files)
+# All tests (1591 tests across 220 test files)
 
 # API tests only
 pnpm --filter @telivityhaip/api test
@@ -755,10 +742,9 @@ haip/
 │       ├── tailwind.config.ts
 │       └── vite.config.ts
 ├── packages/
-│   ├── database/                   # Core Drizzle schema + migrations (instant booking)
+│   ├── database/                   # Drizzle ORM schema + migrations
 │   │   └── src/schema/             # Table files (property, room, guest, agent, etc.)
-│   ├── shared/                     # Shared types, enums, webhook events
-│   └── booking-requests/           # Optional request-first booking (HAIP_BOOKING_REQUESTS=true)
+│   └── shared/                     # Shared types, enums, webhook events
 ├── tools/
 │   └── haip-connect-gpt/           # ChatGPT Custom GPT gateway over the Connect API (Vercel)
 ├── docker-compose.yml              # PostgreSQL + Redis + Keycloak + API
@@ -1204,7 +1190,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (2120 tests, 252 files)
+pnpm test             # Run all tests (1591 tests, 220 files)
 pnpm lint             # ESLint
 ```
 

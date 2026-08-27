@@ -7,6 +7,8 @@ import type {
 } from '../email-provider.interface';
 import {
   emailSendTimeoutMs,
+  notSentEmailResult,
+  sentEmailResult,
   unknownTimeoutResult,
 } from './bounded-email-transport';
 
@@ -81,7 +83,7 @@ export class SmtpEmailProvider implements EmailProvider {
 
   async send(message: EmailMessage, options?: EmailSendOptions): Promise<EmailResult> {
     if (!this.isConfigured()) {
-      return { sent: false, provider: this.name, error: 'SMTP not configured' };
+      return notSentEmailResult(this.name, 'SMTP not configured');
     }
 
     const timeoutMs = emailSendTimeoutMs(options);
@@ -97,52 +99,62 @@ export class SmtpEmailProvider implements EmailProvider {
       dnsTimeout: timeoutMs,
     }) as OwnedSmtpTransport;
     let timedOut = false;
-    let lateClose: ReturnType<typeof setImmediate> | undefined;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      this.closeOwnedTransport(transport);
-      // Pool resource setup itself is asynchronous. Re-close on the next turn
-      // so a resource created at the deadline cannot outlive this send.
-      lateClose = setImmediate(() => this.closeOwnedTransport(transport));
-      lateClose.unref?.();
-    }, timeoutMs);
-    timeout.unref?.();
-    try {
-      const from = message.from ?? process.env['SMTP_FROM'] ?? 'noreply@haip.dev';
-      const info = await transport.sendMail({
-        from,
-        to: message.to,
-        subject: message.subject,
-        html: message.html,
-        text: message.text,
-        messageId: message.messageId,
-        headers: message.idempotencyKey
-          ? { 'X-HAIP-Idempotency-Key': message.idempotencyKey }
-          : undefined,
-      });
+    const from = message.from ?? process.env['SMTP_FROM'] ?? 'noreply@haip.dev';
+    const mailPayload = {
+      from,
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      messageId: message.messageId,
+      headers: message.idempotencyKey
+        ? { 'X-HAIP-Idempotency-Key': message.idempotencyKey }
+        : undefined,
+    };
 
-      if (timedOut) return unknownTimeoutResult(this.name);
-      this.logger.log(`Email sent via SMTP to ${message.to}: ${info.messageId}`);
-      return { sent: true, provider: this.name, messageId: info.messageId };
-    } catch (error: any) {
-      if (
-        timedOut
-        || error?.code === 'ETIMEDOUT'
-        || /timed?\s*out|greeting never received/i.test(String(error?.message))
-      ) {
-        return unknownTimeoutResult(this.name);
-      }
-      this.logger.error(`SMTP send failed to ${message.to}: ${error.message}`);
-      return { sent: false, provider: this.name, error: error.message };
-    } finally {
-      clearTimeout(timeout);
-      if (lateClose) clearImmediate(lateClose);
-      // This runs only after sendMail has settled. Destroying again here makes
-      // return from send() the ownership boundary for every per-send socket.
+    const sendMailPromise = transport.sendMail(mailPayload).then(
+      (info) => {
+        if (timedOut) return unknownTimeoutResult(this.name);
+        this.logger.log(`Email sent via SMTP to ${message.to}: ${info.messageId}`);
+        return sentEmailResult(this.name, info.messageId);
+      },
+      (error: any) => {
+        if (
+          timedOut
+          || error?.code === 'ETIMEDOUT'
+          || /timed?\s*out|greeting never received/i.test(String(error?.message))
+        ) {
+          return unknownTimeoutResult(this.name);
+        }
+        this.logger.error(`SMTP send failed to ${message.to}: ${error.message}`);
+        return notSentEmailResult(this.name, error.message);
+      },
+    );
+
+    sendMailPromise.finally(() => {
       this.closeOwnedTransport(transport);
-    }
+    });
+
+    const deadlinePromise = new Promise<EmailResult>((resolve) => {
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        this.closeOwnedTransport(transport);
+        const lateClose = setImmediate(() => this.closeOwnedTransport(transport));
+        lateClose.unref?.();
+        resolve(unknownTimeoutResult(this.name));
+      }, timeoutMs);
+      timeout.unref?.();
+      sendMailPromise.finally(() => clearTimeout(timeout));
+    });
+
+    return await Promise.race([sendMailPromise, deadlinePromise]);
   }
 
+  /**
+   * Hard-close helper for per-send Nodemailer pools. Uses Nodemailer-internal
+   * pool/socket fields (`_connections`, `_socket`) — version-sensitive; covered
+   * by smtp-email.provider.spec integration tests.
+   */
   private closeOwnedTransport(transport: OwnedSmtpTransport): void {
     const resources = [...(transport.transporter?._connections ?? [])];
     const sockets = resources.map((resource) => {
@@ -150,11 +162,8 @@ export class SmtpEmailProvider implements EmailProvider {
       return wrappedSocket?.socket ?? wrappedSocket;
     });
 
-    // Marks the pool closed and fails any work that has not acquired a resource.
     transport.close?.();
     for (const resource of resources) resource.close?.();
-    // SMTPConnection.close() is graceful after greeting. A hard deadline also
-    // destroys the owned socket so an active half-open transaction cannot live.
     for (const socket of sockets) {
       if (!socket?.destroyed) socket?.destroy?.();
     }
