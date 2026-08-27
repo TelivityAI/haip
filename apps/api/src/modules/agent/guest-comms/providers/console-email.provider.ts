@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { EmailMessage, EmailProvider, EmailResult } from '../email-provider.interface';
+import { notSentEmailResult } from './bounded-email-transport';
 
 /**
  * Development fallback — logs the message instead of sending.
@@ -18,10 +19,8 @@ export class ConsoleEmailProvider implements EmailProvider {
       `[Email:console] → ${message.to} | ${message.subject}\n${message.text.slice(0, 200)}`,
     );
     return {
-      sent: false,
-      provider: this.name,
-      messageId: `console-${Date.now()}`,
-      error: 'No email provider configured — message logged only',
+      ...notSentEmailResult(this.name, 'No email provider configured — message logged only'),
+      messageId: message.messageId ?? `console-${Date.now()}`,
     };
   }
 }
