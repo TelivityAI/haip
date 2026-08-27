@@ -1,5 +1,9 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 
+/** Simple ownership label used by core instant-booking PaymentIntent resolution. */
+export type HaipMetadataOwnership = 'external' | 'owned-valid' | 'owned-malformed';
+
+/** Parsed ownership result used by booking-request Stripe correlation. */
 export type HaipMetadataClassification<T> =
   | { ownership: 'external' }
   | { ownership: 'owned-valid'; correlation: T }
@@ -12,13 +16,30 @@ export function hasHaipFinancialMetadata(
 }
 
 /**
- * Separates Stripe-account traffic from HAIP-owned traffic before any ledger lookup.
- * Event-specific correlation parsers remain responsible for exact required fields.
+ * Classifies PaymentIntent / refund metadata ownership.
+ *
+ * - One-arg form: used by core `resolvePaymentForIntent` after the
+ *   legacy-compatible gateway transaction lookup misses.
+ * - Two-arg form: used by booking-request handlers to parse exact correlation
+ *   fields for intents that carry `haip_*` keys.
  */
+export function classifyHaipMetadata(
+  metadata: Record<string, string> | null | undefined,
+): HaipMetadataOwnership;
 export function classifyHaipMetadata<T>(
   metadata: Record<string, string> | null | undefined,
   parseCorrelation: (metadata: Record<string, string> | null | undefined) => T,
-): HaipMetadataClassification<T> {
+): HaipMetadataClassification<T>;
+export function classifyHaipMetadata<T>(
+  metadata: Record<string, string> | null | undefined,
+  parseCorrelation?: (metadata: Record<string, string> | null | undefined) => T,
+): HaipMetadataOwnership | HaipMetadataClassification<T> {
+  if (!parseCorrelation) {
+    if (!hasHaipFinancialMetadata(metadata)) return 'external';
+    return Object.entries(metadata ?? {}).some(([key, value]) => key.startsWith('haip_') && !value)
+      ? 'owned-malformed'
+      : 'owned-valid';
+  }
   if (!hasHaipFinancialMetadata(metadata)) return { ownership: 'external' };
   try {
     return { ownership: 'owned-valid', correlation: parseCorrelation(metadata) };

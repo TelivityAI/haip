@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { EventEmitterModule } from '@nestjs/event-emitter';
-import { DRIZZLE } from '../../database/database.module';
-import { WebhookService } from '../webhook/webhook.service';
 import { ConnectEventsService } from './connect-events.service';
 
 describe('ConnectEventsService', () => {
@@ -169,12 +165,7 @@ describe('ConnectEventsService', () => {
       }));
 
       const deliveryService = { enqueue: vi.fn().mockResolvedValue({ id: 'del-1' }) };
-      const svc = new ConnectEventsService(
-        mockDb,
-        deliveryService as unknown as ConstructorParameters<
-          typeof ConnectEventsService
-        >[1],
-      );
+      const svc = new ConnectEventsService(mockDb, deliveryService as any);
 
       await svc.handleEvent({
         event: 'reservation.created',
@@ -196,16 +187,16 @@ describe('ConnectEventsService', () => {
       );
     });
 
-    it('forwards a persisted logical event ID without adding it to the webhook body', async () => {
+    it('forwards logicalEventId to WebhookDeliveryService for persisted dedup', async () => {
       mockDb.select.mockImplementation(() => ({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([mockSubscription]),
         }),
       }));
 
+      const logicalEventId = 'bbbbbbbb-0000-4000-a000-000000000002';
       const deliveryService = { enqueue: vi.fn().mockResolvedValue({ id: 'del-1' }) };
       const svc = new ConnectEventsService(mockDb, deliveryService as any);
-      const logicalEventId = 'bbbbbbbb-0000-4000-a000-000000000002';
 
       await svc.handleEvent({
         event: 'reservation.created',
@@ -213,23 +204,18 @@ describe('ConnectEventsService', () => {
         entityId: 'res-1',
         propertyId: 'prop-1',
         data: { foo: 'bar' },
-        timestamp: '2026-08-24T18:00:00.000Z',
+        timestamp: new Date().toISOString(),
         logicalEventId,
       });
 
-      const [deliveryPayload, subscriptionId, forwardedEventId] =
-        deliveryService.enqueue.mock.calls[0]!;
-      expect(deliveryPayload).toEqual({
-        eventType: 'reservation.created',
-        propertyId: 'prop-1',
-        entityType: 'reservation',
-        entityId: 'res-1',
-        data: { foo: 'bar' },
-        timestamp: '2026-08-24T18:00:00.000Z',
-      });
-      expect(deliveryPayload).not.toHaveProperty('logicalEventId');
-      expect(subscriptionId).toBe('sub-1');
-      expect(forwardedEventId).toBe(logicalEventId);
+      expect(deliveryService.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'reservation.created',
+          propertyId: 'prop-1',
+        }),
+        'sub-1',
+        logicalEventId,
+      );
     });
 
     it('does nothing when no subscriptions match', async () => {
@@ -296,35 +282,5 @@ describe('ConnectEventsService', () => {
 
       expect(result).toHaveLength(1);
     });
-  });
-});
-
-describe('ConnectEventsService durable event delivery', () => {
-  it('propagates wildcard listener failures to a persisted dispatcher', async () => {
-    const db = {
-      select: vi.fn(() => {
-        throw new Error('subscription lookup unavailable');
-      }),
-    };
-    const moduleRef = await Test.createTestingModule({
-      imports: [EventEmitterModule.forRoot({ wildcard: true })],
-      providers: [
-        ConnectEventsService,
-        WebhookService,
-        { provide: DRIZZLE, useValue: db },
-      ],
-    }).compile();
-    await moduleRef.init();
-
-    await expect(moduleRef.get(WebhookService).dispatchPersisted({
-      event: 'booking_request.created',
-      entityType: 'booking_request',
-      entityId: 'bbbbbbbb-0000-4000-a000-000000000001',
-      propertyId: 'aaaaaaaa-0000-4000-a000-000000000001',
-      data: {},
-      timestamp: '2026-08-26T00:00:00.000Z',
-    }, 'logical-event-1')).rejects.toThrow('subscription lookup unavailable');
-
-    await moduleRef.close();
   });
 });

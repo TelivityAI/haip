@@ -111,4 +111,11 @@ describe('Stripe financial webhook state', () => {
       },
     });
   });
+
+  it('classifies HAIP-owned vs external PaymentIntent metadata (core one-arg form)', () => {
+    expect(classifyHaipMetadata({})).toBe('external');
+    expect(classifyHaipMetadata({ unrelated: 'value' })).toBe('external');
+    expect(classifyHaipMetadata({ haip_payment_id: 'payment-1' })).toBe('owned-valid');
+    expect(classifyHaipMetadata({ haip_payment_id: '' })).toBe('owned-malformed');
+  });
 });

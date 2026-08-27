@@ -10,7 +10,7 @@ import { RatePlanService } from '../rate-plan/rate-plan.service';
 import { PolicyService } from '../policy/policy.service';
 import type { AgentBookDto } from './dto/agent-book.dto';
 import type { AgentModifyDto } from './dto/agent-modify.dto';
-import { generateConfirmationNumber } from '../../common/crypto/confirmation-number';
+import { generateConfirmationToken } from '../../common/crypto/confirmation-number';
 
 @Injectable()
 export class ConnectBookingService {
@@ -80,7 +80,7 @@ export class ConnectBookingService {
     // 5. Generate confirmation number. High-entropy (128 bits from randomBytes,
     // Crockford base32, no ambiguous chars) so it can't be enumerated/guessed —
     // the confirmation number is itself a bearer credential for the booking.
-    const confirmationNumber = generateConfirmationNumber();
+    const confirmationNumber = `HAIP-${generateConfirmationToken()}`;
 
     // 6. Create booking
     const [booking] = await this.db
@@ -553,12 +553,4 @@ export class ConnectBookingService {
   }
 }
 
-/**
- * 128 bits of cryptographic randomness (16 random bytes) rendered in Crockford
- * base32. Unguessable — the confirmation number is a bearer credential for the
- * booking, so it must not be enumerable (the old `timestamp-4hex` form had only
- * ~16 bits of randomness).
- */
-export function generateConfirmationToken(): string {
-  return generateConfirmationNumber().slice('HAIP-'.length);
-}
+export { generateConfirmationToken } from '../../common/crypto/confirmation-number';

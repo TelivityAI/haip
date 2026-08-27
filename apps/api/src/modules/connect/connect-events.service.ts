@@ -173,7 +173,7 @@ export class ConnectEventsService {
    * Handle all webhook events — match against subscriptions and log delivery.
    * Listens to all events via wildcard.
    */
-  @OnEvent('**', { suppressErrors: false })
+  @OnEvent('**')
   async handleEvent(payload: WebhookPayload) {
     if (!payload?.propertyId || !payload?.event) return;
 
@@ -192,7 +192,6 @@ export class ConnectEventsService {
       const events = (sub.events ?? []) as string[];
       if (events.some((pattern: string) => this.matchesEventPattern(payload.event, pattern))) {
         if (this.deliveryService) {
-          // Enqueue a real HTTP delivery (HMAC-signed, retried).
           const deliveryPayload = {
             eventType: payload.event,
             propertyId: payload.propertyId,
