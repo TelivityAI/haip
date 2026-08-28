@@ -6,7 +6,6 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { securityHeaders } from './common/http/security-headers';
 import { assertSecureConfig } from './common/config/assert-secure-config';
 import { preloadBookingRequestsModules } from './booking-requests.bootstrap';
-import { AppModule } from './app.module';
 
 function corsOrigins(): boolean | string[] {
   const raw = process.env['CORS_ORIGINS'];
@@ -22,6 +21,11 @@ function corsOrigins(): boolean | string[] {
 async function bootstrap() {
   assertSecureConfig();
   await preloadBookingRequestsModules();
+
+  // AppModule calls bookingRequestsModules() while its imports array is
+  // evaluated — that requires preload above to have run first when the flag
+  // is on. Dynamic import keeps AppModule from loading before preload.
+  const { AppModule } = await import('./app.module.js');
 
   const app = await NestFactory.create(AppModule);
 
