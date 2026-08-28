@@ -35,10 +35,21 @@
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage"
   },
+  "dependencies": {
+    "class-validator": "^0.14.1",
+    "decimal.js": "^10.4.3"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.4.0",
+    "stripe": "^22.0.0"
+  },
   "devDependencies": {
+    "@nestjs/common": "^10.4.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "stripe": "^22.0.0",
     "tsup": "^8.3.0",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0",
-    "eslint": "^9.0.0"
+    "vitest": "^2.1.0"
   }
 }

@@ -19,6 +19,37 @@ function availabilityDb(stages: Array<{ rows: any[]; groupBy?: boolean; innerJoi
 }
 
 describe('AvailabilityService', () => {
+  it('excludes only the explicitly scoped current reservation from the complete window', async () => {
+    const db = availabilityDb([
+      { rows: [{ id: 'prop-1', overbookingPercentage: 0 }] },
+      { rows: [{ id: 'rt-1', name: 'Standard', maxOccupancy: 2 }] },
+      {
+        rows: [
+          { id: 'res-current', propertyId: 'prop-1', roomTypeId: 'rt-1', arrivalDate: '2026-09-01', departureDate: '2026-09-03' },
+          { id: 'res-other', propertyId: 'prop-1', roomTypeId: 'rt-1', arrivalDate: '2026-09-01', departureDate: '2026-09-03' },
+        ],
+      },
+      { rows: [{ roomTypeId: 'rt-1', count: 2 }], groupBy: true },
+      { rows: [], innerJoin: true },
+    ]);
+    const service = new AvailabilityService(db as any);
+
+    const results = await service.searchAvailability(
+      'prop-1',
+      '2026-09-01',
+      '2026-09-03',
+      'rt-1',
+      undefined,
+      { excludeReservationId: 'res-current' },
+    );
+
+    expect(results.map((row) => ({ date: row.date, sold: row.sold, available: row.available })))
+      .toEqual([
+        { date: '2026-09-01', sold: 1, available: 1 },
+        { date: '2026-09-02', sold: 1, available: 1 },
+      ]);
+  });
+
   it('reduces availability with active imported iCal blocks per distinct feed/date', async () => {
     const db = availabilityDb([
       { rows: [{ id: 'prop-1', overbookingPercentage: 0 }] },

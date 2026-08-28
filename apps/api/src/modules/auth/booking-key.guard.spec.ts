@@ -3,6 +3,14 @@ import { UnauthorizedException } from '@nestjs/common';
 import { BookingKeyGuard, hashBookingKey } from './booking-key.guard';
 
 vi.mock('@telivityhaip/database', () => ({
+  // `database.module.ts` (imported transitively via `../auth/api-key.guard`
+  // → `DRIZZLE`) now re-exports these two from `@telivityhaip/database`
+  // itself (a single canonical `DRIZZLE` symbol shared across the optional
+  // `@telivityhaip/booking-requests` package boundary) instead of defining
+  // its own local symbol — this narrow mock must supply both so that static
+  // import doesn't throw, even though this test never uses either value.
+  DRIZZLE: Symbol('DRIZZLE-test-mock'),
+  postgresOptionsFromEnv: vi.fn(() => ({})),
   bookingEngineCredentials: { keyHash: 'keyHash' },
 }));
 

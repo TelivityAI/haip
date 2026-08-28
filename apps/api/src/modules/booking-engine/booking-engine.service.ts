@@ -5,9 +5,13 @@ import { bookings, reservations } from '@telivityhaip/database';
 import type { DepositPolicy } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { ConnectSearchService } from '../connect/connect-search.service';
-import { ConnectBookingService, generateConfirmationToken } from '../connect/connect-booking.service';
+import { ConnectBookingService } from '../connect/connect-booking.service';
+import { generateConfirmationNumber } from '../../common/crypto/confirmation-number';
 import { ReservationService } from '../reservation/reservation.service';
-import { AvailabilityService } from '../reservation/availability.service';
+import {
+  assertFullStayAvailability,
+  AvailabilityService,
+} from '../reservation/availability.service';
 import { RatePlanService } from '../rate-plan/rate-plan.service';
 import { TaxService } from '../tax/tax.service';
 import { GuestService } from '../guest/guest.service';
@@ -130,8 +134,16 @@ export class BookingEngineService {
 
   // --- Quote ---
 
-  async quote(propertyId: string, dto: BeQuoteDto) {
-    const config = await this.configService.getPublicConfig(propertyId);
+  async quote(
+    propertyId: string,
+    dto: BeQuoteDto,
+    db?: any,
+    options?: { lockForUpdate?: boolean; excludeReservationId?: string },
+  ) {
+    this.assertUniqueServiceIds(dto.serviceIds);
+    const config = options?.lockForUpdate
+      ? await this.configService.getPublicConfig(propertyId, db, true)
+      : await this.configService.getPublicConfig(propertyId, db);
     this.assertSellable(config, dto.roomTypeId, dto.ratePlanId);
 
     // Price-tampering guard: `roomTypeId` and `ratePlanId` arrive as two
@@ -139,7 +151,9 @@ export class BookingEngineService {
     // individually sellable, so a caller could pair a pricey room type with a
     // cheap room's rate plan and be charged the cheap rate. Each rate plan is
     // bound to exactly one room type — enforce that they match.
-    const ratePlanRow = await this.ratePlanService.findById(dto.ratePlanId, propertyId);
+    const ratePlanRow = options?.lockForUpdate
+      ? await this.ratePlanService.findById(dto.ratePlanId, propertyId, db, true)
+      : await this.ratePlanService.findById(dto.ratePlanId, propertyId, db);
     if (ratePlanRow.roomTypeId !== dto.roomTypeId) {
       throw new BadRequestException('Rate plan does not apply to the selected room type');
     }
@@ -147,23 +161,50 @@ export class BookingEngineService {
     const nights = this.nightsBetween(dto.checkIn, dto.checkOut);
 
     // Re-confirm availability for the requested room type.
-    const availability = await this.availabilityService.searchAvailability(
-      propertyId,
+    const availability = options?.excludeReservationId
+      ? await this.availabilityService.searchAvailability(
+        propertyId,
+        dto.checkIn,
+        dto.checkOut,
+        dto.roomTypeId,
+        db,
+        { excludeReservationId: options.excludeReservationId },
+      )
+      : await this.availabilityService.searchAvailability(
+        propertyId,
+        dto.checkIn,
+        dto.checkOut,
+        dto.roomTypeId,
+        db,
+      );
+    assertFullStayAvailability(
+      availability,
+      dto.roomTypeId,
       dto.checkIn,
       dto.checkOut,
-      dto.roomTypeId,
     );
-    const avail = availability.find((a: any) => a.roomTypeId === dto.roomTypeId);
-    if (!avail || avail.available <= 0) {
-      throw new BadRequestException('No availability for the requested room type and dates');
-    }
 
     // Authoritative nightly rate via the rate-plan engine (handles derived rates).
-    const { effectiveRate, currency } = await this.ratePlanService.calculateDerivedRate(
-      dto.ratePlanId,
-      propertyId,
-      { nights, checkIn: dto.checkIn, checkOut: dto.checkOut, stayDate: dto.checkIn },
-    );
+    const rateContext = {
+      nights,
+      checkIn: dto.checkIn,
+      checkOut: dto.checkOut,
+      stayDate: dto.checkIn,
+    };
+    const { effectiveRate, currency } = options?.lockForUpdate
+      ? await this.ratePlanService.calculateDerivedRate(
+          dto.ratePlanId,
+          propertyId,
+          rateContext,
+          db,
+          true,
+        )
+      : await this.ratePlanService.calculateDerivedRate(
+          dto.ratePlanId,
+          propertyId,
+          rateContext,
+          db,
+        );
 
     // Per-night tax via the real tax engine (not a flat property rate).
     const nightlyRate = new Decimal(effectiveRate);
@@ -182,6 +223,7 @@ export class BookingEngineService {
         propertyId,
         serviceDate,
         { numberOfNights: nights, nightNumber: i + 1 },
+        db,
       );
       const nightTax = taxes.reduce((acc, t) => acc.plus(new Decimal(t.amount)), new Decimal(0));
       roomTotal = roomTotal.plus(nightlyRate);
@@ -195,10 +237,13 @@ export class BookingEngineService {
       code: string;
       name: string;
       postingRule: string;
+      chargeType: string;
+      currencyCode: string;
       unitPrice: string;
       quantity: number;
       lineTotal: string;
       taxTotal: string;
+      lineItems: Array<{ date: string; amount: string; tax: string }>;
     }> = [];
     let servicesTotal = new Decimal(0);
     let servicesTaxTotal = new Decimal(0);
@@ -209,7 +254,7 @@ export class BookingEngineService {
         if (seen.has(serviceId)) continue;
         seen.add(serviceId);
 
-        const service = await this.ancillaryService.findServiceById(serviceId, propertyId);
+        const service = await this.ancillaryService.findServiceById(serviceId, propertyId, db);
         if (!service.isActive) {
           throw new BadRequestException(`Service ${service.code} is not available`);
         }
@@ -227,10 +272,13 @@ export class BookingEngineService {
             code: service.code,
             name: service.name,
             postingRule,
+            chargeType: service.chargeType,
+            currencyCode: service.currencyCode,
             unitPrice: unitPrice.toFixed(2),
             quantity: 1,
             lineTotal: '0.00',
             taxTotal: '0.00',
+            lineItems: [],
           });
           continue;
         }
@@ -239,6 +287,11 @@ export class BookingEngineService {
         const quantity = postingRule === 'per_night' ? nights : 1;
         const lineTotal = unitPrice.times(quantity);
         let lineTax = new Decimal(0);
+        const serviceLineItems: Array<{
+          date: string;
+          amount: string;
+          tax: string;
+        }> = [];
 
         if (postingRule === 'per_night') {
           for (let i = 0; i < nights; i++) {
@@ -251,10 +304,18 @@ export class BookingEngineService {
               propertyId,
               serviceDate,
               { numberOfNights: nights, nightNumber: i + 1 },
+              db,
             );
-            lineTax = lineTax.plus(
-              taxes.reduce((acc, t) => acc.plus(new Decimal(t.amount)), new Decimal(0)),
+            const nightTax = taxes.reduce(
+              (acc, t) => acc.plus(new Decimal(t.amount)),
+              new Decimal(0),
             );
+            lineTax = lineTax.plus(nightTax);
+            serviceLineItems.push({
+              date: serviceDate,
+              amount: unitPrice.toFixed(2),
+              tax: nightTax.toFixed(2),
+            });
           }
         } else {
           const taxes = await this.taxService.calculateTaxes(
@@ -262,8 +323,15 @@ export class BookingEngineService {
             service.chargeType,
             propertyId,
             dto.checkIn,
+            undefined,
+            db,
           );
           lineTax = taxes.reduce((acc, t) => acc.plus(new Decimal(t.amount)), new Decimal(0));
+          serviceLineItems.push({
+            date: dto.checkIn,
+            amount: lineTotal.toFixed(2),
+            tax: lineTax.toFixed(2),
+          });
         }
 
         servicesTotal = servicesTotal.plus(lineTotal);
@@ -273,10 +341,13 @@ export class BookingEngineService {
           code: service.code,
           name: service.name,
           postingRule,
+          chargeType: service.chargeType,
+          currencyCode: service.currencyCode,
           unitPrice: unitPrice.toFixed(2),
-          quantity: 1,
+          quantity,
           lineTotal: lineTotal.toFixed(2),
           taxTotal: lineTax.toFixed(2),
+          lineItems: serviceLineItems,
         });
       }
     }
@@ -293,6 +364,7 @@ export class BookingEngineService {
     const cancellationPolicy = await this.policyService.getPolicySummary(
       propertyId,
       dto.ratePlanId,
+      db,
     );
 
     return {
@@ -327,6 +399,11 @@ export class BookingEngineService {
     if (!config.isEnabled) {
       throw new ForbiddenException('Direct booking is not enabled for this property');
     }
+    if (config.bookingMode !== 'instant') {
+      throw new ForbiddenException(
+        'Instant booking is unavailable while booking requests require staff review',
+      );
+    }
     this.assertSellable(config, dto.roomTypeId, dto.ratePlanId);
     // Enforce rate restrictions (stop-sell / CTA / CTD / min-max LOS). SEARCH only
     // surfaces these — the BOOK path is the real gate against booking a closed date.
@@ -360,7 +437,7 @@ export class BookingEngineService {
     // 3. Reservation via the canonical path (DNR + FK-ownership + TOCTOU
     //    availability + emits `reservation.created`). High-entropy confirmation
     //    number because the guest uses it as a bearer credential.
-    const confirmationNumber = `HAIP-${generateConfirmationToken()}`;
+    const confirmationNumber = generateConfirmationNumber();
     const reservation = await this.reservationService.create(
       {
         propertyId,
@@ -540,6 +617,12 @@ export class BookingEngineService {
   }
 
   // --- Helpers ---
+
+  private assertUniqueServiceIds(serviceIds: string[] | undefined): void {
+    if (serviceIds && new Set(serviceIds).size !== serviceIds.length) {
+      throw new BadRequestException('Selected services must not contain duplicates');
+    }
+  }
 
   private assertSellable(config: { sellableRoomTypeIds: string[]; sellableRatePlanIds: string[] }, roomTypeId: string, ratePlanId: string) {
     if (!config.sellableRoomTypeIds.includes(roomTypeId)) {

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, jsonb, date, boolean, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigserial, pgTable, uuid, varchar, text, timestamp, jsonb, date, numeric, pgEnum, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 
 /**
@@ -67,4 +67,14 @@ export const auditLogs = pgTable('audit_logs', {
 
   // Immutable timestamp — this is the audit trail
   occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
-});
+  timelineSequence: bigserial('timeline_sequence', { mode: 'bigint' }).notNull(),
+}, (table) => ({
+  propertyEntityTimeline: index('audit_logs_property_entity_timeline_idx')
+    .on(table.propertyId, table.entityType, table.entityId, table.occurredAt, table.id),
+  // `booking_request_id` and its `audit_logs_booking_request_timeline_idx`
+  // index are request-only DDL owned by packages/booking-requests migrations
+  // (0029/0032) — the package declares its own local extension of this table
+  // (schema/audit.ts) for that column instead of core polluting this schema.
+  timelineSequenceUnique: uniqueIndex('audit_logs_timeline_sequence_unique')
+    .on(table.timelineSequence),
+}));

@@ -53,13 +53,18 @@ import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { IcalModule } from './modules/ical/ical.module';
 import { FiscalModule } from './modules/fiscal/fiscal.module';
+import { bookingRequestsModules } from './booking-requests.bootstrap';
 
 const imports: any[] = [
   ConfigModule.forRoot({
     isGlobal: true,
     envFilePath: ['.env.local', '.env'],
   }),
-  EventEmitterModule.forRoot(),
+  // `wildcard: true` is required for ConnectEventsService/EventsService's
+  // `@OnEvent('**')` catch-all listeners (webhook fan-out + the live dashboard
+  // event feed) to receive every emitted event — eventemitter2 defaults to
+  // `wildcard: false`, under which '**' listeners never match anything.
+  EventEmitterModule.forRoot({ wildcard: true, delimiter: '.' }),
   DatabaseModule,
   HealthModule,
   PropertyModule,
@@ -70,6 +75,7 @@ const imports: any[] = [
   FolioModule,
   RatePlanModule,
   PaymentModule,
+  ...bookingRequestsModules(),
   HousekeepingModule,
   LostAndFoundModule,
   ServiceRequestsModule,

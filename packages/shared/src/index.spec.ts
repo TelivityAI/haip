@@ -1,5 +1,35 @@
 import { describe, it, expect } from 'vitest';
-import { validateCpf, formatCpf, calculateAge, checkFnrhComplete } from './index.js';
+import {
+  validateCpf,
+  formatCpf,
+  calculateAge,
+  checkFnrhComplete,
+  WEBHOOK_EVENTS,
+  type BookingRequestAcceptedWebhook,
+  type WebhookEvent,
+} from './index.js';
+
+describe('Booking Request webhook contracts', () => {
+  it('keeps accepted currency and canonical financial dispatch names typed', () => {
+    const accepted: BookingRequestAcceptedWebhook = {
+      event: 'booking_request.accepted',
+      entityType: 'booking_request',
+      entityId: 'request-1',
+      propertyId: 'property-1',
+      data: {
+        requestId: 'request-1',
+        reservationId: 'reservation-1',
+        folioId: 'folio-1',
+        priceSource: 'submitted',
+        acceptedTotal: '100.00',
+        currencyCode: 'EUR',
+      },
+      timestamp: '2026-08-25T00:00:00.000Z',
+    };
+    const events: WebhookEvent[] = [accepted.event, 'payment.refunded'];
+    expect(events.every((event) => WEBHOOK_EVENTS[event] === event)).toBe(true);
+  });
+});
 
 describe('CPF validation and formatting helpers', () => {
   it('should validate valid CPF numbers', () => {

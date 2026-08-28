@@ -190,9 +190,67 @@ describe('StripeGateway', () => {
 
       expect(result.success).toBe(true);
       expect(result.transactionId).toBe('re_test_123');
+      expect(result.providerStatus).toBe('succeeded');
       expect(stripeInstance.refunds.create).toHaveBeenCalledWith({
         payment_intent: 'pi_test_123',
       }, undefined);
+    });
+
+    it.each([
+      ['pending', 'pending'],
+      ['requires_action', 'requires_action'],
+      ['failed', 'failed'],
+      ['canceled', 'canceled'],
+      ['provider_specific_future_status', 'unknown'],
+    ] as const)(
+      'reports a %s refund as %s without treating it as completed',
+      async (status, expectedStatus) => {
+      stripeInstance.refunds.create.mockResolvedValue({
+        id: `re_${status}`,
+        status,
+        failure_reason: status === 'failed' ? 'lost_or_stolen_card' : null,
+      });
+
+      const result = await gateway.refund('pi_test_123', 25, {
+        currencyCode: 'USD',
+        idempotencyKey: 'refund:claim-1',
+      });
+
+      expect(result).toEqual(expect.objectContaining({
+        success: false,
+        transactionId: `re_${status}`,
+        providerStatus: expectedStatus,
+      }));
+      },
+    );
+
+    it('attaches exact durable claim correlation metadata and stable idempotency', async () => {
+      stripeInstance.refunds.create.mockResolvedValue({
+        id: 're_correlated',
+        status: 'succeeded',
+      });
+
+      await gateway.refund('pi_test_123', 25, {
+        currencyCode: 'USD',
+        idempotencyKey: 'booking-request-refund:claim-uuid',
+        metadata: {
+          claimId: 'claim-uuid',
+          propertyId: 'property-uuid',
+          bookingRequestId: 'request-uuid',
+          paymentId: 'payment-uuid',
+        },
+      });
+
+      expect(stripeInstance.refunds.create).toHaveBeenCalledWith({
+        payment_intent: 'pi_test_123',
+        amount: 2500,
+        metadata: {
+          haip_claim_id: 'claim-uuid',
+          haip_property_id: 'property-uuid',
+          haip_booking_request_id: 'request-uuid',
+          haip_payment_id: 'payment-uuid',
+        },
+      }, { idempotencyKey: 'booking-request-refund:claim-uuid' });
     });
 
     it('should create a partial refund with amount in cents', async () => {
@@ -209,15 +267,50 @@ describe('StripeGateway', () => {
       }, undefined);
     });
 
+    it('uses the ISO currency exponent for a JPY partial refund', async () => {
+      stripeInstance.refunds.create.mockResolvedValue({
+        id: 're_jpy',
+        status: 'succeeded',
+      });
+
+      await gateway.refund('pi_jpy', 51, { currencyCode: 'JPY' });
+
+      expect(stripeInstance.refunds.create).toHaveBeenCalledWith({
+        payment_intent: 'pi_jpy',
+        amount: 51,
+      }, undefined);
+    });
+
+    it('rejects a currency beyond ledger precision before calling Stripe', async () => {
+      const result = await gateway.refund('pi_bhd', 1, { currencyCode: 'BHD' });
+
+      expect(result.success).toBe(false);
+      expect(result.errorMessage).toMatch(/ledger.*precision/i);
+      expect(stripeInstance.refunds.create).not.toHaveBeenCalled();
+    });
+
     it('should handle refund failure', async () => {
-      stripeInstance.refunds.create.mockRejectedValue(
-        new Error('Charge has already been refunded'),
-      );
+      stripeInstance.refunds.create.mockRejectedValue({
+        type: 'StripeInvalidRequestError',
+        message: 'Charge has already been refunded',
+      });
 
       const result = await gateway.refund('pi_test_123');
 
       expect(result.success).toBe(false);
       expect(result.errorMessage).toContain('already been refunded');
+    });
+
+    it('propagates an unknown transport result for durable same-key retry', async () => {
+      stripeInstance.refunds.create.mockRejectedValue(
+        new Error('connection reset after refund submission'),
+      );
+
+      await expect(gateway.refund(
+        'pi_test_123',
+        50,
+        { idempotencyKey: 'refund-same-key', currencyCode: 'USD' },
+      )).rejects.toThrow(/connection reset/i);
     });
   });
 });

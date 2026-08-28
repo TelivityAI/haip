@@ -89,7 +89,7 @@ describe('ReportsService', () => {
         { type: 'food_beverage', total: '500.00' },
       ],
       // adjustments (reversals)
-      [{ total: '50.00' }],
+      [{ total: '-50.00' }],
       // payments by method
       [
         { method: 'credit_card', total: '3500.00' },
@@ -111,6 +111,29 @@ describe('ReportsService', () => {
     expect(result.revenue.total).toBe(3800);
     expect(result.adjustments).toBe(50);
     expect(result.netRevenue).toBe(3750);
+  });
+
+  it('nets a fully reversed signed accepted-pricing group to zero revenue', async () => {
+    const db = createMockDb([
+      // Original 100 plus a -20 amendment correction remain immutable revenue.
+      [{ type: 'room', total: '80.00' }],
+      // Drizzle returns the signed sum: -100 plus +20.
+      [{ total: '-80.00' }],
+      [],
+    ]);
+    const module = await Test.createTestingModule({
+      providers: [
+        ReportsService,
+        { provide: DRIZZLE, useValue: db },
+      ],
+    }).compile();
+
+    const result = await module.get(ReportsService)
+      .getDailyRevenue('prop-001', '2026-04-06');
+
+    expect(result.revenue.room).toBe(80);
+    expect(result.adjustments).toBe(80);
+    expect(result.netRevenue).toBe(0);
   });
 
   it('should sum payments by method', async () => {

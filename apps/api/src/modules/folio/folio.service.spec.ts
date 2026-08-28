@@ -4,6 +4,7 @@ import { FolioService } from './folio.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { TaxService } from '../tax/tax.service';
 import { DRIZZLE } from '../../database/database.module';
+import { charges, folios, payments } from '@telivityhaip/database';
 
 const mockFolio = {
   id: 'folio-001',
@@ -73,6 +74,19 @@ function createMockDb(returnData: any[] = [mockFolio]) {
 
 const mockWebhookService = { emit: vi.fn() };
 const mockTaxService = { calculateTaxes: vi.fn().mockResolvedValue([]) };
+
+function sqlPredicateParts(value: any, parts = {
+  columns: [] as string[],
+  params: [] as unknown[],
+}) {
+  if (!value || typeof value !== 'object') return parts;
+  if (typeof value.name === 'string') parts.columns.push(value.name);
+  if (value.constructor?.name === 'Param') parts.params.push(value.value);
+  if (Array.isArray(value.queryChunks)) {
+    for (const chunk of value.queryChunks) sqlPredicateParts(chunk, parts);
+  }
+  return parts;
+}
 
 describe('FolioService', () => {
   let service: FolioService;
@@ -249,6 +263,79 @@ describe('FolioService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('rejects transferring an internal accepted-pricing correction', async () => {
+      let selectCallCount = 0;
+      const targetFolio = { ...mockFolio, id: 'folio-002' };
+      const correction = {
+        ...mockCharge,
+        id: 'correction-1',
+        amount: '-20.00',
+        adjustsChargeId: mockCharge.id,
+        parentChargeId: mockCharge.id,
+      };
+      const resolveRows = () => {
+        selectCallCount++;
+        if (selectCallCount === 1) return [mockFolio];
+        if (selectCallCount === 2) return [targetFolio];
+        return [correction];
+      };
+      const db: any = {
+        transaction: vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db)),
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => ({
+              for: vi.fn(async () => resolveRows()),
+              then: (resolve: (rows: unknown[]) => unknown) => resolve(resolveRows()),
+            })),
+          })),
+        })),
+        update: vi.fn(),
+      };
+      const svc = new FolioService(db, mockWebhookService as any, mockTaxService as any);
+
+      await expect(svc.transferCharge('folio-001', 'prop-001', {
+        chargeId: correction.id,
+        targetFolioId: targetFolio.id,
+      })).rejects.toThrow(/accepted-pricing correction/i);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects transferring a child of an accepted-pricing group', async () => {
+      const targetFolio = { ...mockFolio, id: 'folio-002' };
+      const base = {
+        ...mockCharge,
+        id: 'accepted-base',
+        sourceKey: 'accepted-pricing:reservation:res-1:night:2026-04-04',
+      };
+      const taxChild = {
+        ...mockCharge,
+        id: 'accepted-tax',
+        type: 'tax',
+        parentChargeId: base.id,
+      };
+      const rows = [[mockFolio], [targetFolio], [taxChild], [base]];
+      let call = 0;
+      const db: any = {
+        transaction: vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db)),
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => ({
+              for: vi.fn(async () => rows[call++] ?? []),
+              then: (resolve: (value: unknown[]) => unknown) => resolve(rows[call++] ?? []),
+            })),
+          })),
+        })),
+        update: vi.fn(),
+      };
+      const svc = new FolioService(db, mockWebhookService as any, mockTaxService as any);
+
+      await expect(svc.transferCharge('folio-001', 'prop-001', {
+        chargeId: taxChild.id,
+        targetFolioId: targetFolio.id,
+      })).rejects.toThrow(/accepted-pricing group/i);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
     it('should transfer charge between folios', async () => {
       let selectCallCount = 0;
       const targetFolio = { ...mockFolio, id: 'folio-002' };
@@ -364,7 +451,234 @@ describe('FolioService', () => {
     });
   });
 
+  describe('postChargeFromSnapshot', () => {
+    it('posts the frozen base, tax, and custom adjustment exactly once after commit', async () => {
+      const tx = { marker: 'snapshot-transaction' };
+      const db = {
+        transaction: vi.fn(async (callback: (transaction: unknown) => Promise<unknown>) =>
+          callback(tx)),
+      };
+      const webhook = { emit: vi.fn().mockResolvedValue(undefined) };
+      const tax = { calculateTaxes: vi.fn() };
+      const snapshotService = new FolioService(db as any, webhook as any, tax as any);
+      const postCharge = vi.spyOn(snapshotService, 'postCharge').mockImplementation(async (
+        _folioId: string,
+        dto: any,
+        _tx?: unknown,
+        metadata?: { parentChargeId?: string },
+      ) => ({
+        id: `charge-${dto.type}`,
+        ...dto,
+        parentChargeId: metadata?.parentChargeId ?? null,
+        taxCharges: [],
+      }));
+
+      const result = await snapshotService.postChargeFromSnapshot(
+        'folio-001',
+        {
+          propertyId: 'prop-001',
+          type: 'room',
+          description: 'Room tariff - 2026-04-04',
+          amount: '123.00',
+          currencyCode: 'USD',
+          serviceDate: '2026-04-04T00:00:00.000Z',
+        },
+        '12.00',
+        { amount: '-15.00', reason: 'Loyalty recovery' },
+      );
+
+      expect(db.transaction).toHaveBeenCalledOnce();
+      expect(postCharge).toHaveBeenCalledTimes(3);
+      expect(postCharge.mock.calls.map((call) => ({
+        type: call[1].type,
+        amount: call[1].amount,
+        transaction: call[2],
+      }))).toEqual([
+        { type: 'room', amount: '123.00', transaction: tx },
+        { type: 'tax', amount: '12.00', transaction: tx },
+        { type: 'adjustment', amount: '-15.00', transaction: tx },
+      ]);
+      expect(tax.calculateTaxes).not.toHaveBeenCalled();
+      expect(webhook.emit).toHaveBeenCalledTimes(3);
+      expect(result.adjustmentCharges).toHaveLength(1);
+      expect(result.taxCharges).toEqual([
+        expect.objectContaining({ parentChargeId: result.id }),
+      ]);
+      expect(result.adjustmentCharges).toEqual([
+        expect.objectContaining({ parentChargeId: result.id }),
+      ]);
+    });
+
+    it('posts one frozen base/tax group under concurrent attempts with the same source key', async () => {
+      const ledger: Array<Record<string, any>> = [];
+      let sequence = 1;
+      let transactionQueue = Promise.resolve();
+      const db: any = {
+        transaction: vi.fn(async (callback: (tx: any) => Promise<unknown>) => {
+          const previous = transactionQueue;
+          let release = () => undefined;
+          transactionQueue = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          await previous;
+          try {
+            return await callback(db);
+          } finally {
+            release();
+          }
+        }),
+        select: vi.fn((projection?: Record<string, unknown>) => ({
+          from: vi.fn((table: unknown) => ({
+            where: vi.fn(async (predicate: unknown) => {
+              if (table === folios) return [{ ...mockFolio, status: 'open' }];
+              if (projection?.['total']) return [{ total: '0' }];
+              if (table === payments) return [{ total: '0' }];
+              const parts = sqlPredicateParts(predicate);
+              if (parts.columns.includes('source_key')) {
+                const sourceKey = parts.params.find((param) =>
+                  typeof param === 'string' && param.startsWith('accepted-pricing:'));
+                return ledger.filter((row) => row.sourceKey === sourceKey);
+              }
+              if (parts.columns.includes('parent_charge_id')) {
+                const parentId = parts.params.find((param) =>
+                  typeof param === 'string' && param.startsWith('charge-'));
+                return ledger.filter((row) =>
+                  row.parentChargeId === parentId && !row.isReversal);
+              }
+              return [];
+            }),
+          })),
+        })),
+        insert: vi.fn((table: unknown) => ({
+          values: vi.fn((values: Record<string, unknown>) => {
+            const insert = async (conflictSafe: boolean) => {
+              if (
+                conflictSafe
+                && values.sourceKey
+                && ledger.some((row) =>
+                  row.propertyId === values.propertyId
+                  && row.folioId === values.folioId
+                  && row.sourceKey === values.sourceKey)
+              ) {
+                return [];
+              }
+              const row = { id: `charge-${sequence++}`, ...values };
+              if (table === charges) ledger.push(row);
+              return [row];
+            };
+            return {
+              returning: vi.fn(() => insert(false)),
+              onConflictDoNothing: vi.fn(() => ({
+                returning: vi.fn(() => insert(true)),
+              })),
+            };
+          }),
+        })),
+        update: vi.fn(() => ({
+          set: vi.fn(() => ({ where: vi.fn(async () => []) })),
+        })),
+      };
+      const webhook = { emit: vi.fn().mockResolvedValue(undefined) };
+      const svc = new FolioService(db, webhook as any, { calculateTaxes: vi.fn() } as any);
+      const input = {
+        propertyId: 'prop-001',
+        type: 'parking',
+        description: 'Frozen parking',
+        amount: '15.00',
+        currencyCode: 'USD',
+        serviceDate: '2026-04-04T00:00:00.000Z',
+      };
+      const sourceKey = 'accepted-pricing:reservation-service:rs-1:once';
+
+      const outcomes = await Promise.all([
+        (svc as any).postChargeFromSnapshotWithOutcome(
+          'folio-001', input, '2.00', undefined, sourceKey,
+        ),
+        (svc as any).postChargeFromSnapshotWithOutcome(
+          'folio-001', input, '2.00', undefined, sourceKey,
+        ),
+      ]);
+
+      expect(ledger.map((row) => row.type)).toEqual(['parking', 'tax']);
+      expect(outcomes.map((outcome) => outcome.wasCreated).sort()).toEqual([false, true]);
+      expect(outcomes[0].charge.id).toBe(outcomes[1].charge.id);
+      expect(outcomes[0].charge.taxCharges).toEqual(outcomes[1].charge.taxCharges);
+      expect(webhook.emit).toHaveBeenCalledTimes(2);
+
+      const publicReplay = await svc.postChargeFromSnapshot(
+        'folio-001', input as any, '2.00', undefined, sourceKey,
+      );
+      expect(publicReplay).not.toHaveProperty('wasCreated');
+      expect(JSON.parse(JSON.stringify(publicReplay))).not.toHaveProperty('wasCreated');
+    });
+  });
+
   describe('reverseCharge', () => {
+    it('rejects reversing an internal accepted-pricing correction', async () => {
+      const correction = {
+        ...mockCharge,
+        id: 'correction-1',
+        amount: '-20.00',
+        adjustsChargeId: mockCharge.id,
+        parentChargeId: mockCharge.id,
+      };
+      const db: any = {
+        transaction: vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db)),
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => ({
+              for: vi.fn(async () => [correction]),
+              then: (resolve: (rows: unknown[]) => unknown) => resolve([correction]),
+            })),
+          })),
+        })),
+        insert: vi.fn(),
+      };
+      const svc = new FolioService(db, mockWebhookService as any, mockTaxService as any);
+
+      await expect(
+        svc.reverseCharge('folio-001', correction.id, 'prop-001'),
+      ).rejects.toThrow(/accepted-pricing correction/i);
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it('requires an accepted-pricing group reversal to start from its canonical base', async () => {
+      const base = {
+        ...mockCharge,
+        id: 'accepted-base',
+        sourceKey: 'accepted-pricing:reservation:res-1:night:2026-04-04',
+      };
+      const taxChild = {
+        ...mockCharge,
+        id: 'accepted-tax',
+        type: 'tax',
+        amount: '10.00',
+        parentChargeId: base.id,
+      };
+      let selectCount = 0;
+      const db: any = {
+        transaction: vi.fn(async (work: (tx: any) => Promise<unknown>) => work(db)),
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => {
+              const rows = selectCount++ === 0 ? [taxChild] : [base];
+              return {
+                for: vi.fn(async () => rows),
+                then: (resolve: (value: unknown[]) => unknown) => resolve(rows),
+              };
+            }),
+          })),
+        })),
+        insert: vi.fn(),
+      };
+      const svc = new FolioService(db, mockWebhookService as any, mockTaxService as any);
+
+      await expect(
+        svc.reverseCharge('folio-001', taxChild.id, 'prop-001'),
+      ).rejects.toThrow(/reverse the accepted-pricing group from its base/i);
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
     it('should create a negated charge for reversal', async () => {
       const reversalCharge = {
         ...mockCharge,
@@ -455,6 +769,112 @@ describe('FolioService', () => {
       );
       expect(db.insert).not.toHaveBeenCalled();
     });
+
+    it('reverses frozen tax and accepted adjustment children with the base exactly once', async () => {
+      const base = {
+        ...mockCharge,
+        id: 'base-charge',
+        taxAmount: '0.00',
+        serviceDate: new Date('2026-04-04T00:00:00.000Z'),
+        sourceKey: 'accepted-pricing:reservation:res-1:night:2026-04-04',
+      };
+      const taxChild = {
+        ...base,
+        id: 'tax-child',
+        type: 'tax',
+        amount: '12.00',
+        parentChargeId: base.id,
+      };
+      const adjustmentChild = {
+        ...base,
+        id: 'adjustment-child',
+        type: 'adjustment',
+        amount: '-15.00',
+        parentChargeId: base.id,
+        adjustsChargeId: base.id,
+      };
+      const inserted: Array<Record<string, any>> = [];
+      const chargeLookupPredicates: Array<{ columns: string[]; params: unknown[] }> = [];
+      let nextId = 1;
+      const db: any = {
+        transaction: vi.fn(async (callback: (tx: any) => Promise<unknown>) => callback(db)),
+        select: vi.fn((projection?: Record<string, unknown>) => ({
+          from: vi.fn((table: unknown) => ({
+            where: vi.fn(async (predicate: unknown) => {
+              if (projection?.['total']) return [{ total: '0' }];
+              if (table === payments) return [{ total: '0' }];
+              const parts = sqlPredicateParts(predicate);
+              if (table === charges) {
+                chargeLookupPredicates.push({
+                  columns: [...parts.columns],
+                  params: [...parts.params],
+                });
+              }
+              if (parts.columns.includes('parent_charge_id')) {
+                const children = [taxChild, adjustmentChild];
+                return parts.params.includes('tax')
+                  ? children.filter((child) => child.type === 'tax')
+                  : children;
+              }
+              if (parts.columns.includes('original_charge_id')) {
+                const originalId = parts.params.find((param) =>
+                  ['base-charge', 'tax-child', 'adjustment-child'].includes(String(param)));
+                return inserted.filter((row) =>
+                  row.originalChargeId === originalId && row.isReversal);
+              }
+              return [base];
+            }),
+          })),
+        })),
+        insert: vi.fn(() => ({
+          values: vi.fn((values: Record<string, unknown>) => ({
+            returning: vi.fn(async () => {
+              const row = { id: `reversal-${nextId++}`, ...values };
+              inserted.push(row);
+              return [row];
+            }),
+          })),
+        })),
+        update: vi.fn((table: unknown) => ({
+          set: vi.fn(() => ({
+            where: vi.fn(async () => table === folios ? [] : []),
+          })),
+        })),
+      };
+      const svc = new FolioService(
+        db,
+        { emit: vi.fn().mockResolvedValue(undefined) } as any,
+        { calculateTaxes: vi.fn() } as any,
+      );
+
+      await svc.reverseCharge('folio-001', base.id, 'prop-001');
+
+      expect(db.transaction).toHaveBeenCalledOnce();
+      expect(inserted.map((row) => ({
+        type: row.type,
+        originalChargeId: row.originalChargeId,
+        parentChargeId: row.parentChargeId ?? null,
+      }))).toEqual([
+        { type: 'room', originalChargeId: base.id, parentChargeId: null },
+        { type: 'tax', originalChargeId: taxChild.id, parentChargeId: 'reversal-1' },
+        {
+          type: 'adjustment',
+          originalChargeId: adjustmentChild.id,
+          parentChargeId: 'reversal-1',
+        },
+      ]);
+      await expect(
+        svc.reverseCharge('folio-001', base.id, 'prop-001'),
+      ).rejects.toThrow(/already been reversed/i);
+      expect(inserted).toHaveLength(3);
+      const signedGroupTotal = [base, taxChild, adjustmentChild, ...inserted]
+        .reduce((total, row) => total + Number(row.amount), 0);
+      expect(signedGroupTotal).toBe(0);
+      expect(chargeLookupPredicates.length).toBeGreaterThan(0);
+      expect(chargeLookupPredicates.every((predicate) =>
+        predicate.columns.includes('property_id')
+        && predicate.params.includes('prop-001'))).toBe(true);
+    });
   });
 
   describe('close', () => {
@@ -512,25 +932,40 @@ describe('FolioService', () => {
   });
 
   describe('getCharges', () => {
-    it('should return paginated charges with filters', async () => {
+    function getChargesDb(
+      pageRows: any[],
+      metadataRows: any[] = [],
+      total = pageRows.length,
+    ) {
       let selectCall = 0;
-      const db = {
-        select: vi.fn().mockImplementation(() => ({
-          from: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({
-              limit: vi.fn().mockReturnValue({
-                offset: vi.fn().mockReturnValue({
-                  orderBy: vi.fn().mockResolvedValue([mockCharge]),
-                }),
+      return {
+        select: vi.fn().mockImplementation(() => {
+          selectCall += 1;
+          const currentCall = selectCall;
+          return {
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockImplementation(() => {
+                if (currentCall === 1) {
+                  return {
+                    limit: vi.fn().mockReturnValue({
+                      offset: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockResolvedValue(pageRows),
+                      }),
+                    }),
+                  };
+                }
+                return Promise.resolve(
+                  currentCall === 2 ? [{ count: total }] : metadataRows,
+                );
               }),
-              then: (resolve: any) => {
-                selectCall++;
-                resolve([{ count: 1 }]);
-              },
             }),
-          }),
-        })),
+          };
+        }),
       };
+    }
+
+    it('should return paginated charges with filters', async () => {
+      const db = getChargesDb([mockCharge]);
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           FolioService,
@@ -547,9 +982,100 @@ describe('FolioService', () => {
         page: 1,
         limit: 10,
       });
-      expect(result.data).toEqual([mockCharge]);
+      expect(result.data).toEqual([{
+        ...mockCharge,
+        canMove: true,
+        canReverse: true,
+      }]);
       expect(result.total).toBe(1);
       expect(result.page).toBe(1);
+    });
+
+    it('marks a paginated accepted-pricing child non-operable from its off-page base', async () => {
+      const taxChild = {
+        ...mockCharge,
+        id: 'tax-child-on-page-two',
+        type: 'tax',
+        parentChargeId: 'accepted-base-on-page-one',
+      };
+      const db = getChargesDb([taxChild], [{
+        id: taxChild.parentChargeId,
+        sourceKey: 'accepted-pricing:reservation:res-1:night:2026-06-02',
+      }], 21);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+
+      const result = await module.get(FolioService).getCharges('folio-001', {
+        propertyId: 'prop-001',
+        page: 2,
+        limit: 20,
+      });
+
+      expect(result.data).toEqual([{
+        ...taxChild,
+        canMove: false,
+        canReverse: false,
+      }]);
+    });
+
+    it('preserves generic tax-child operations when its off-page base is not accepted pricing', async () => {
+      const taxChild = {
+        ...mockCharge,
+        id: 'generic-tax-child-on-page-two',
+        type: 'tax',
+        parentChargeId: 'generic-base-on-page-one',
+      };
+      const db = getChargesDb([taxChild], [{
+        id: taxChild.parentChargeId,
+        sourceKey: null,
+      }], 21);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+
+      const result = await module.get(FolioService).getCharges('folio-001', {
+        propertyId: 'prop-001',
+        page: 2,
+        limit: 20,
+      });
+
+      expect(result.data[0]).toMatchObject({ canMove: true, canReverse: true });
+    });
+
+    it('marks an original non-reversible when its reversal is outside the current page', async () => {
+      const original = { ...mockCharge, id: 'original-on-page-two' };
+      const db = getChargesDb([original], [{
+        id: 'reversal-on-page-one',
+        isReversal: true,
+        originalChargeId: original.id,
+      }], 21);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          FolioService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
+        ],
+      }).compile();
+
+      const result = await module.get(FolioService).getCharges('folio-001', {
+        propertyId: 'prop-001',
+        page: 2,
+        limit: 20,
+      });
+
+      expect(result.data[0]).toMatchObject({ canReverse: false });
     });
   });
 

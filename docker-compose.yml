@@ -71,11 +71,18 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      args:
+        # Kept in sync with the api service's HAIP_BOOKING_REQUESTS below so the
+        # UI build and the API's module-loading flag never disagree.
+        VITE_HAIP_BOOKING_REQUESTS: ${HAIP_BOOKING_REQUESTS:-false}
     image: haip-api
     container_name: haip-init
-    command: sh -c "node packages/database/dist/run-migrations.js && node packages/database/dist/seed.js"
+    # Also applies the optional booking-requests package migrations when the
+    # deployment flag is on (see packages/booking-requests/README.md).
+    command: sh -c "node packages/database/dist/run-migrations.js && node packages/database/dist/seed.js && if [ \"$$HAIP_BOOKING_REQUESTS\" = 'true' ]; then node packages/booking-requests/dist/database/migrate.js; fi"
     environment:
       DATABASE_URL: postgresql://haip:haip@postgres:5432/haip
+      HAIP_BOOKING_REQUESTS: ${HAIP_BOOKING_REQUESTS:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,6 +93,8 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      args:
+        VITE_HAIP_BOOKING_REQUESTS: ${HAIP_BOOKING_REQUESTS:-false}
     image: haip-api
     container_name: haip-api
     environment:
@@ -102,6 +111,11 @@ services:
       # STRIPE_WEBHOOK_SECRET:
       AUTH_ENABLED: 'false'
       DEMO_PROPERTY_ID: 'a0000001-0000-4000-a000-000000000001'
+      # Optional booking-requests module (STR / request-first direct booking).
+      # Set `HAIP_BOOKING_REQUESTS=true docker compose up --build` to opt in;
+      # this also drives the matching VITE_HAIP_BOOKING_REQUESTS build-arg above
+      # and the booking-requests migration in the init service.
+      HAIP_BOOKING_REQUESTS: ${HAIP_BOOKING_REQUESTS:-false}
       # Local demo intentionally runs auth-off + mock payments. The prod boot
       # check only fires when NODE_ENV=production; this opt-in keeps the lean
       # demo green even if someone flips NODE_ENV.

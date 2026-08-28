@@ -1,22 +1,21 @@
-export type HaipMetadataClassification = 'external' | 'owned-valid' | 'owned-malformed';
-
-export function hasHaipFinancialMetadata(
-  metadata: Record<string, string> | null | undefined,
-): boolean {
-  return Object.keys(metadata ?? {}).some((key) => key.startsWith('haip_'));
-}
-
 /**
- * Classifies PaymentIntent metadata for intents that remain unmatched after the
- * legacy-compatible gateway transaction lookup. Separates Stripe-account noise
- * from HAIP-owned traffic; event-specific correlation parsers remain responsible
- * for exact required fields.
+ * Canonical definition lives in @telivityhaip/shared — this logic is shared
+ * between core's `resolvePaymentForIntent` (stripe-webhook.controller.ts) and
+ * @telivityhaip/booking-requests' Stripe handler, so it cannot live only in
+ * apps/api without the package importing apps/api.
  */
-export function classifyHaipMetadata(
-  metadata: Record<string, string> | null | undefined,
-): HaipMetadataClassification {
-  if (!hasHaipFinancialMetadata(metadata)) return 'external';
-  return Object.entries(metadata ?? {}).some(([key, value]) => key.startsWith('haip_') && !value)
-    ? 'owned-malformed'
-    : 'owned-valid';
-}
+export {
+  type HaipMetadataClassification,
+  type HaipMetadataOwnership,
+  type PaymentIntentCorrelation,
+  type PaymentIntentEvent,
+  type PaymentIntentLedgerStatus,
+  type RefundCorrelation,
+  type RefundProviderStatus,
+  classifyHaipMetadata,
+  decidePaymentIntentTransition,
+  decideRefundTransition,
+  hasHaipFinancialMetadata,
+  paymentIntentCorrelation,
+  refundCorrelation,
+} from '@telivityhaip/shared';

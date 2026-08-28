@@ -15,11 +15,17 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
       sellableRoomTypeIds: [RT],
       sellableRatePlanIds: [RP],
       depositPolicy: { type: 'first_night', refundable: true },
+      bookingMode: 'instant',
+      paymentMethodCollection: 'disabled',
+      formQuestions: [],
     }),
     getConfig: vi.fn().mockResolvedValue({ autoConfirm: false }),
   };
   const availability = {
-    searchAvailability: vi.fn().mockResolvedValue([{ roomTypeId: RT, available: 5 }]),
+    searchAvailability: vi.fn().mockResolvedValue([
+      { roomTypeId: RT, date: '2026-07-01', available: 5 },
+      { roomTypeId: RT, date: '2026-07-02', available: 5 },
+    ]),
   };
   const ratePlan = {
     calculateDerivedRate: vi.fn().mockResolvedValue({ effectiveRate: 100, currency: 'USD' }),
@@ -95,6 +101,126 @@ describe('BookingEngineService.quote', () => {
     // first_night policy → total / nights
     expect(q.depositDue).toBe('110.00');
   });
+
+  it('rejects a stay when any canonical night is absent or sold out', async () => {
+    const { svc, availability } = makeService();
+    availability.searchAvailability.mockResolvedValue([
+      { roomTypeId: RT, date: '2026-07-01', available: 1 },
+      { roomTypeId: RT, date: '2026-07-03', available: 1 },
+    ]);
+
+    await expect(svc.quote(PROP, {
+      roomTypeId: RT,
+      ratePlanId: RP,
+      checkIn: '2026-07-01',
+      checkOut: '2026-07-04',
+      adults: 2,
+    })).rejects.toThrow(/availability/i);
+  });
+
+  it('captures exact per-night service, tax, currency, and posting metadata', async () => {
+    const { svc, ancillary, tax } = makeService();
+    ancillary.findServiceById.mockResolvedValue({
+      id: 'service-parking',
+      code: 'PARK',
+      name: 'Parking',
+      price: '15.00',
+      currencyCode: 'USD',
+      chargeType: 'parking',
+      postingRule: 'per_night',
+      sellChannels: ['booking_engine'],
+      isActive: true,
+    });
+    tax.calculateTaxes.mockImplementation(async (
+      _amount: string,
+      chargeType: string,
+    ) => [{ amount: chargeType === 'room' ? '10.00' : '2.00' }]);
+
+    const quote = await svc.quote(PROP, {
+      roomTypeId: RT,
+      ratePlanId: RP,
+      checkIn: '2026-07-01',
+      checkOut: '2026-07-03',
+      adults: 2,
+      serviceIds: ['service-parking'],
+    });
+
+    expect(quote.services[0]).toMatchObject({
+      serviceId: 'service-parking',
+      chargeType: 'parking',
+      currencyCode: 'USD',
+      postingRule: 'per_night',
+      unitPrice: '15.00',
+      quantity: 2,
+      lineTotal: '30.00',
+      taxTotal: '4.00',
+      lineItems: [
+        { date: '2026-07-01', amount: '15.00', tax: '2.00' },
+        { date: '2026-07-02', amount: '15.00', tax: '2.00' },
+      ],
+    });
+  });
+
+  it('reads the complete authoritative quote through a caller transaction', async () => {
+    const { svc, config, availability, ratePlan, tax, policy } = makeService();
+    const tx = { marker: 'acceptance-transaction' };
+
+    await svc.quote(PROP, {
+      roomTypeId: RT,
+      ratePlanId: RP,
+      checkIn: '2026-07-01',
+      checkOut: '2026-07-03',
+      adults: 2,
+    }, tx);
+
+    expect(config.getPublicConfig).toHaveBeenCalledWith(PROP, tx);
+    expect(ratePlan.findById).toHaveBeenCalledWith(RP, PROP, tx);
+    expect(ratePlan.calculateDerivedRate).toHaveBeenCalledWith(
+      RP,
+      PROP,
+      expect.any(Object),
+      tx,
+    );
+    expect(availability.searchAvailability).toHaveBeenCalledWith(
+      PROP,
+      '2026-07-01',
+      '2026-07-03',
+      RT,
+      tx,
+    );
+    expect(tax.calculateTaxes).toHaveBeenCalledWith(
+      '100.00',
+      'room',
+      PROP,
+      '2026-07-01',
+      expect.any(Object),
+      tx,
+    );
+    expect(policy.getPolicySummary).toHaveBeenCalledWith(PROP, RP, tx);
+  });
+
+  it('locks mutable config and rate inputs for an acceptance quote', async () => {
+    const { svc, config, ratePlan } = makeService();
+    const tx = { marker: 'locked-acceptance-transaction' };
+
+    await svc.quote(PROP, {
+      roomTypeId: RT,
+      ratePlanId: RP,
+      checkIn: '2026-07-01',
+      checkOut: '2026-07-03',
+      adults: 2,
+    }, tx, { lockForUpdate: true });
+
+    expect(config.getPublicConfig).toHaveBeenCalledWith(PROP, tx, true);
+    expect(ratePlan.findById).toHaveBeenCalledWith(RP, PROP, tx, true);
+    expect(ratePlan.calculateDerivedRate).toHaveBeenCalledWith(
+      RP,
+      PROP,
+      expect.any(Object),
+      tx,
+      true,
+    );
+  });
 });
 
 describe('BookingEngineService.book', () => {
@@ -148,6 +274,7 @@ describe('BookingEngineService.book', () => {
     const { svc, config } = makeService();
     config.getPublicConfig.mockResolvedValue({
       isEnabled: true,
+      bookingMode: 'instant',
       sellableRoomTypeIds: [],
       sellableRatePlanIds: [RP],
       depositPolicy: { type: 'first_night', refundable: true },
@@ -164,6 +291,25 @@ describe('BookingEngineService.book', () => {
       depositPolicy: { type: 'first_night', refundable: true },
     });
     await expect(svc.book(PROP, bookDto as any)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects request mode before creating a guest, reservation, folio, or payment', async () => {
+    const { svc, config, guest, reservation, folio, payment } = makeService();
+    config.getPublicConfig.mockResolvedValue({
+      isEnabled: true,
+      bookingMode: 'request',
+      paymentMethodCollection: 'disabled',
+      formQuestions: [],
+      sellableRoomTypeIds: [RT],
+      sellableRatePlanIds: [RP],
+      depositPolicy: { type: 'first_night', refundable: true },
+    });
+
+    await expect(svc.book(PROP, bookDto as any)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(guest.create).not.toHaveBeenCalled();
+    expect(reservation.create).not.toHaveBeenCalled();
+    expect(folio.createAutoFolio).not.toHaveBeenCalled();
+    expect(payment.authorizePayment).not.toHaveBeenCalled();
   });
 
   it('requires a payment token when a deposit is due', async () => {
@@ -188,5 +334,18 @@ describe('BookingEngineService.quote — rate/room pairing', () => {
     await expect(
       svc.quote(PROP, { roomTypeId: RT, ratePlanId: RP, checkIn: '2026-07-01', checkOut: '2026-07-03', adults: 2 } as any),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects duplicate ancillary service IDs before pricing them', async () => {
+    const { svc, ancillary } = makeService();
+    await expect(svc.quote(PROP, {
+      roomTypeId: RT,
+      ratePlanId: RP,
+      checkIn: '2026-07-01',
+      checkOut: '2026-07-03',
+      adults: 2,
+      serviceIds: ['service-parking', 'service-parking'],
+    } as any)).rejects.toThrow(/services.*duplicates/i);
+    expect(ancillary.findServiceById).not.toHaveBeenCalled();
   });
 });

@@ -60,12 +60,13 @@ export class GuestService {
     }
   }
 
-  async create(dto: CreateGuestDto) {
+  async create(dto: CreateGuestDto, tx?: any) {
+    const db = tx ?? this.db;
     const values: Record<string, unknown> = { ...dto };
     if (dto.gdprConsentMarketing) {
       values['gdprConsentDate'] = new Date();
     }
-    const [guest] = await this.db.insert(guests).values(values).returning();
+    const [guest] = await db.insert(guests).values(values).returning();
     return guest;
   }
 

@@ -54,6 +54,7 @@ export {
   reservationGuests,
   reservationNotes,
 } from './reservation.js';
+export type { AcceptedPricingSnapshot } from './reservation.js';
 
 // Cancellation policies (rate-plan money outcomes)
 export {
@@ -239,6 +240,17 @@ export {
   bookingEngineConfig,
 } from './booking-engine.js';
 export type { DepositPolicy } from './booking-engine.js';
+export type {
+  BookingFormQuestion,
+  BookingFormQuestionDefinition,
+  BookingFormQuestionType,
+  BookingMode,
+  PaymentMethodCollection,
+} from './booking-engine.js';
+export type {
+  AcceptedPricingService,
+  AcceptedPricingServiceNight,
+} from './reservation.js';
 
 // Stay extras / packages (upsells & ancillaries)
 export {

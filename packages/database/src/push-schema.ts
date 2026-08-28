@@ -2,6 +2,7 @@
  * Push schema to database using drizzle-orm's migrate API.
  * Workaround for drizzle-kit CJS/.js extension issue.
  */
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -1120,6 +1121,9 @@ export async function pushSchema(databaseUrl: string = DATABASE_URL) {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS booking_mode varchar(10) NOT NULL DEFAULT 'instant'`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS payment_method_collection varchar(10) NOT NULL DEFAULT 'disabled'`,
+    `ALTER TABLE booking_engine_config ADD COLUMN IF NOT EXISTS form_questions jsonb NOT NULL DEFAULT '[]'::jsonb`,
     `CREATE UNIQUE INDEX IF NOT EXISTS bookings_property_external_channel_unique ON bookings (property_id, external_confirmation, channel_code) WHERE external_confirmation IS NOT NULL AND channel_code IS NOT NULL`,
     // Stay extras / packages
     `CREATE TABLE IF NOT EXISTS services (
@@ -1446,12 +1450,20 @@ export async function pushSchema(databaseUrl: string = DATABASE_URL) {
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS house_account_id uuid`,
     // Split-component tax charges link to their parent charge (self-FK).
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS parent_charge_id uuid`,
+    `ALTER TABLE charges ADD COLUMN IF NOT EXISTS adjusts_charge_id uuid`,
+    `ALTER TABLE charges ADD COLUMN IF NOT EXISTS source_key varchar(255)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS charges_property_folio_source_key_unique ON charges (property_id, folio_id, source_key)`,
     `ALTER TABLE payments ALTER COLUMN folio_id DROP NOT NULL`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS house_account_id uuid`,
     // Group linkage on reservations (KB 14.3) — added via ALTER to avoid a
     // circular FK at table-create time (group_profiles references nothing of
     // reservations, but reservations is created before group_profiles).
     `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS group_profile_id uuid`,
+    `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS accepted_pricing_snapshot jsonb`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS booking_request_id uuid`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS idempotency_key varchar(255)`,
+    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timeline_sequence bigserial`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_timeline_sequence_unique ON audit_logs (timeline_sequence)`,
     // Commercial profile billing fields + links (KB 14.3 standing accounts)
     `ALTER TABLE group_profiles ADD COLUMN IF NOT EXISTS billing_address text`,
     `ALTER TABLE group_profiles ADD COLUMN IF NOT EXISTS payment_terms_days varchar(10)`,
@@ -1486,7 +1498,7 @@ async function main() {
   await pushSchema();
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((err) => {
     console.error('Push failed:', err);
     process.exit(1);

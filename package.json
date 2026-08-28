@@ -20,6 +20,7 @@
     "seed": "pnpm --filter @telivityhaip/database run seed",
     "db:generate": "pnpm --filter @telivityhaip/database run db:generate",
     "db:migrate": "pnpm --filter @telivityhaip/database run db:migrate",
+    "db:migrate:booking-requests": "pnpm --filter @telivityhaip/booking-requests run db:migrate",
     "db:studio": "pnpm --filter @telivityhaip/database run db:studio",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
@@ -34,5 +35,10 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^9.0.0",
     "typescript-eslint": "^8.58.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/node": "^22.0.0"
+    }
   }
 }

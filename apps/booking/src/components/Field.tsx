@@ -10,12 +10,21 @@ export function Field({ label, htmlFor, children, required }: FieldProps) {
     <label htmlFor={htmlFor} className="block">
       <span className="mb-1 block text-sm font-medium text-gray-700">
         {label}
-        {required && <span className="text-red-500"> *</span>}
+        {required && <RequiredIndicator />}
       </span>
       {children}
     </label>
   );
 }
 
+export function RequiredIndicator() {
+  return (
+    <>
+      <span aria-hidden="true" className="text-red-500"> *</span>
+      <span className="sr-only"> required</span>
+    </>
+  );
+}
+
 export const inputClass =
-  'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-400';
+  'w-full rounded-brand border border-[#D0D5DD] px-3 py-2 text-sm focus-visible:border-[var(--haip-primary,#0D9488)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--haip-primary,#0D9488)]/30';

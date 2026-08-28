@@ -1,4 +1,5 @@
 export * from './schema/index.js';
+export { DRIZZLE } from './drizzle-token.js';
 export {
   postgresOptionsFromEnv,
   type PostgresOptionsFromEnv,

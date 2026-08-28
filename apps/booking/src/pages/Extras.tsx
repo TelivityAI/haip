@@ -7,6 +7,7 @@ import { PriceBreakdown } from '../components/PriceBreakdown';
 import { useBookingFlow } from '../context/BookingFlowContext';
 import { money } from '../lib/format';
 import type { SellableService } from '../api/types';
+import { useConfig } from '../context/ConfigContext';
 
 function postingLabel(rule: string, nights: number): string {
   switch (rule) {
@@ -21,6 +22,7 @@ function postingLabel(rule: string, nights: number): string {
 
 export function Extras() {
   const navigate = useNavigate();
+  const { config } = useConfig();
   const {
     criteria,
     roomType,
@@ -140,10 +142,14 @@ export function Extras() {
 
       <Button
         className="w-full"
-        onClick={() => navigate('/guest')}
+        onClick={() =>
+          navigate(config?.bookingMode === 'request' ? '/request/application' : '/guest')
+        }
         disabled={quoteMutation.isPending}
       >
-        Continue to guest details
+        {config?.bookingMode === 'request'
+          ? 'Continue to your details'
+          : 'Continue to guest details'}
       </Button>
     </div>
   );

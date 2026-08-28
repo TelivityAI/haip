@@ -6,6 +6,7 @@ import {
   Logger,
   BadRequestException,
   Inject,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
@@ -17,6 +18,12 @@ import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
 import { sumRefundChildren } from './payment-ledger';
+import {
+  BOOKING_REQUEST_STRIPE_HANDLER,
+  paymentHasBookingRequestId,
+  type BookingRequestStripeHandler,
+  type BookingRequestStripePaymentRow,
+} from './booking-request-stripe-handler.interface';
 import { classifyHaipMetadata } from './stripe-financial-state';
 import Stripe from 'stripe';
 
@@ -44,6 +51,9 @@ export class StripeWebhookController {
     private readonly webhookService: WebhookService,
     private readonly folioService: FolioService,
     private readonly configService: ConfigService,
+    @Optional()
+    @Inject(BOOKING_REQUEST_STRIPE_HANDLER)
+    private readonly bookingRequestStripeHandler?: BookingRequestStripeHandler,
   ) {
     const secretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     this.webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET') ?? null;
@@ -110,6 +120,20 @@ export class StripeWebhookController {
           await this.handlePaymentIntentCanceled(event.data.object as Stripe.PaymentIntent);
           break;
 
+        case 'payment_intent.processing':
+          await this.handlePaymentIntentProcessing(event.data.object as Stripe.PaymentIntent);
+          break;
+
+        case 'payment_intent.requires_action':
+          await this.handlePaymentIntentRequiresAction(event.data.object as Stripe.PaymentIntent);
+          break;
+
+        case 'refund.created':
+        case 'refund.updated':
+        case 'refund.failed':
+          await this.handleRefundUpdated(event.data.object as Stripe.Refund);
+          break;
+
         case 'charge.refunded':
           await this.handleChargeRefunded(event.data.object as Stripe.Charge);
           break;
@@ -130,6 +154,11 @@ export class StripeWebhookController {
     const payment = await this.resolvePaymentForIntent(pi);
     if (!payment) return;
 
+    if (this.shouldDelegateToBookingRequestHandler(payment)) {
+      await this.bookingRequestStripeHandler!.handlePaymentIntentSucceeded(pi, payment);
+      return;
+    }
+
     if (payment.status === 'captured') {
       this.logger.debug(`Payment ${payment.id} already captured, skipping`);
       return;
@@ -141,7 +170,9 @@ export class StripeWebhookController {
       .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
 
     // Recalculate folio balance after payment state change
-    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    if (payment.folioId) {
+      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    }
 
     await this.webhookService.emit(
       'payment.received',
@@ -158,6 +189,11 @@ export class StripeWebhookController {
     const payment = await this.resolvePaymentForIntent(pi);
     if (!payment) return;
 
+    if (this.shouldDelegateToBookingRequestHandler(payment)) {
+      await this.bookingRequestStripeHandler!.handlePaymentIntentFailed(pi, payment);
+      return;
+    }
+
     if (payment.status === 'failed') return;
 
     const errorMessage = pi.last_payment_error?.message ?? 'Payment failed';
@@ -168,7 +204,9 @@ export class StripeWebhookController {
       .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
 
     // Recalculate folio balance after payment state change
-    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    if (payment.folioId) {
+      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    }
 
     await this.webhookService.emit(
       'payment.failed',
@@ -185,6 +223,11 @@ export class StripeWebhookController {
     const payment = await this.resolvePaymentForIntent(pi);
     if (!payment) return;
 
+    if (this.shouldDelegateToBookingRequestHandler(payment)) {
+      await this.bookingRequestStripeHandler!.handlePaymentIntentCanceled(pi, payment);
+      return;
+    }
+
     if (payment.status === 'voided') return;
 
     await this.db
@@ -193,7 +236,9 @@ export class StripeWebhookController {
       .where(and(eq(payments.id, payment.id), eq(payments.propertyId, payment.propertyId)));
 
     // Recalculate folio balance after payment state change
-    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    if (payment.folioId) {
+      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    }
 
     await this.webhookService.emit(
       'payment.failed',
@@ -206,6 +251,45 @@ export class StripeWebhookController {
     this.logger.log(`Payment ${payment.id} updated to voided via webhook`);
   }
 
+  private async handlePaymentIntentProcessing(pi: Stripe.PaymentIntent) {
+    if (!this.bookingRequestStripeHandler) return;
+    const payment = await this.findPaymentByGatewayTransactionId(pi.id);
+    if (payment && !this.shouldDelegateToBookingRequestHandler(payment)) return;
+    await this.bookingRequestStripeHandler.handlePaymentIntentProcessing(
+      pi,
+      payment ?? this.placeholderPaymentRow(),
+    );
+  }
+
+  private async handlePaymentIntentRequiresAction(pi: Stripe.PaymentIntent) {
+    if (!this.bookingRequestStripeHandler) return;
+    const payment = await this.findPaymentByGatewayTransactionId(pi.id);
+    if (payment && !this.shouldDelegateToBookingRequestHandler(payment)) return;
+    await this.bookingRequestStripeHandler.handlePaymentIntentRequiresAction(
+      pi,
+      payment ?? this.placeholderPaymentRow(),
+    );
+  }
+
+  private async handleRefundUpdated(refund: Stripe.Refund) {
+    if (!this.bookingRequestStripeHandler) return;
+    await this.bookingRequestStripeHandler.handleRefundUpdated(refund);
+  }
+
+  private placeholderPaymentRow(): BookingRequestStripePaymentRow {
+    return {
+      id: '',
+      propertyId: '',
+      folioId: null,
+      status: 'pending',
+      amount: '0.00',
+      currencyCode: 'USD',
+      method: 'credit_card',
+      gatewayProvider: 'stripe',
+      gatewayTransactionId: null,
+    };
+  }
+
   private async handleChargeRefunded(charge: Stripe.Charge) {
     const piId = typeof charge.payment_intent === 'string'
       ? charge.payment_intent
@@ -215,6 +299,11 @@ export class StripeWebhookController {
 
     const payment = await this.findPaymentByGatewayTransactionId(piId);
     if (!payment) return;
+
+    if (this.shouldDelegateToBookingRequestHandler(payment)) {
+      await this.bookingRequestStripeHandler!.handleChargeRefunded(charge, payment);
+      return;
+    }
 
     const stripeRefundedDec = new Decimal(charge.amount_refunded).div(100);
     const ledgerKey = `stripe_refund:${charge.id}:${stripeRefundedDec.toFixed(2)}`;
@@ -324,6 +413,12 @@ export class StripeWebhookController {
       .select()
       .from(payments)
       .where(eq(payments.gatewayTransactionId, transactionId));
-    return payment ?? null;
+    return (payment ?? null) as BookingRequestStripePaymentRow | null;
+  }
+
+  private shouldDelegateToBookingRequestHandler(
+    payment: BookingRequestStripePaymentRow,
+  ): payment is BookingRequestStripePaymentRow & { bookingRequestId: string } {
+    return paymentHasBookingRequestId(payment) && !!this.bookingRequestStripeHandler;
   }
 }

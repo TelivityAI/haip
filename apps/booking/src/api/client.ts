@@ -8,9 +8,13 @@ import type {
   CancelResponse,
   QuoteRequest,
   QuoteResponse,
+  RequestPaymentMethodSetupRequest,
+  RequestPaymentMethodSetupResponse,
   SearchRequest,
   SearchResponse,
   SellableServicesResponse,
+  SubmitBookingRequest,
+  BookingRequestAcknowledgement,
 } from './types';
 
 /**
@@ -66,6 +70,23 @@ export const bookingApi = {
 
   book: async (body: BookRequest): Promise<BookResponse> => {
     const { data } = await api.post<BookResponse>('/book', body);
+    return data;
+  },
+
+  createRequestPaymentMethodSetup: async (
+    body: RequestPaymentMethodSetupRequest,
+  ): Promise<RequestPaymentMethodSetupResponse> => {
+    const { data } = await api.post<RequestPaymentMethodSetupResponse>(
+      '/request-payment-method-setup',
+      body,
+    );
+    return data;
+  },
+
+  submitRequest: async (
+    body: SubmitBookingRequest,
+  ): Promise<BookingRequestAcknowledgement> => {
+    const { data } = await api.post<BookingRequestAcknowledgement>('/requests', body);
     return data;
   },
 

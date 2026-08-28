@@ -1,6 +1,8 @@
 import { and, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import { payments } from '@telivityhaip/database';
-import Decimal from 'decimal.js';
+
+/** Canonical definitions live in @telivityhaip/shared (used by @telivityhaip/booking-requests too). */
+export { remainingCapturedAmount, sumRefundChildren } from '@telivityhaip/shared';
 
 /**
  * Net folio / cash-report payment ledger:
@@ -42,6 +44,24 @@ export function folioPaymentSumWhere(
   )!;
 }
 
+/** Payment rows that count toward a pre/post-acceptance Booking Request net. */
+export function bookingRequestPaymentSumWhere(
+  bookingRequestId: string,
+  propertyId: string,
+): SQL {
+  return and(
+    eq(payments.bookingRequestId, bookingRequestId),
+    eq(payments.propertyId, propertyId),
+    or(
+      eq(payments.status, 'captured'),
+      and(
+        isNull(payments.originalPaymentId),
+        inArray(payments.status, [...FOLIO_PARENT_PAYMENT_STATUSES]),
+      ),
+    ),
+  )!;
+}
+
 /** Payment rows that count toward property-scoped cash reports (same net model). */
 export function reportPaymentSumWhere(propertyId: string): SQL {
   return and(
@@ -54,14 +74,4 @@ export function reportPaymentSumWhere(propertyId: string): SQL {
       ),
     ),
   )!;
-}
-
-/** Sum refund / correction child rows already posted against a parent payment. */
-export function sumRefundChildren(
-  rows: Array<{ amount: string | number }>,
-): Decimal {
-  return rows.reduce(
-    (sum, r) => sum.plus(new Decimal(r.amount).abs()),
-    new Decimal(0),
-  );
 }

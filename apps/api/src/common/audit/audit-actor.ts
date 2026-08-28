@@ -1,25 +1,13 @@
 import { createParamDecorator, type ExecutionContext } from '@nestjs/common';
+import type { AuditActor } from '@telivityhaip/shared';
 import type { AuthUser } from '../../modules/auth/current-user.decorator';
 
-/** Who performed an audited action + from where. All optional (null in AUTH-off demo). */
-export interface AuditActor {
-  userId?: string | null;
-  userEmail?: string | null;
-  ipAddress?: string | null;
-}
-
-/** Map an AuditActor to the auditLogs actor columns (always defined, possibly null). */
-export function actorFields(actor?: AuditActor): {
-  userId: string | null;
-  userEmail: string | null;
-  ipAddress: string | null;
-} {
-  return {
-    userId: actor?.userId ?? null,
-    userEmail: actor?.userEmail ?? null,
-    ipAddress: actor?.ipAddress ?? null,
-  };
-}
+/**
+ * Canonical definitions live in @telivityhaip/shared so
+ * @telivityhaip/booking-requests can use the same actor shape without
+ * importing apps/api.
+ */
+export { type AuditActor, actorFields } from '@telivityhaip/shared';
 
 /**
  * Controller param decorator — builds an AuditActor from the authenticated

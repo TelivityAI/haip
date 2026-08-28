@@ -77,6 +77,13 @@ const mockGateway = {
 
 const mockWebhookService = { emit: vi.fn() };
 
+function expectSafePublicPayment(value: Record<string, unknown>) {
+  expect(value).not.toHaveProperty('gatewayPaymentToken');
+  expect(value).not.toHaveProperty('gatewayTransactionId');
+  expect(value).not.toHaveProperty('idempotencyKey');
+  expect(value).not.toHaveProperty('fingerprint');
+}
+
 describe('PaymentService', () => {
   let service: PaymentService;
   let mockDb: ReturnType<typeof createMockDb>;
@@ -109,7 +116,8 @@ describe('PaymentService', () => {
         currencyCode: 'USD',
       });
 
-      expect(result).toEqual(mockPayment);
+      expect(result).toMatchObject({ id: mockPayment.id, status: mockPayment.status });
+      expectSafePublicPayment(result);
       expect(mockFolioService.recalculateBalance).toHaveBeenCalledWith('folio-001', 'prop-001');
       expect(mockWebhookService.emit).toHaveBeenCalledWith(
         'payment.received',
@@ -129,7 +137,7 @@ describe('PaymentService', () => {
         currencyCode: 'BRL',
       });
 
-      expect(result).toEqual(mockPayment);
+      expect(result).toMatchObject({ id: mockPayment.id, status: mockPayment.status });
       expect(mockFolioService.recalculateBalance).toHaveBeenCalledWith('folio-001', 'prop-001');
     });
 
@@ -142,7 +150,7 @@ describe('PaymentService', () => {
         currencyCode: 'BRL',
       });
 
-      expect(result).toEqual(mockPayment);
+      expect(result).toMatchObject({ id: mockPayment.id, status: mockPayment.status });
       expect(mockWebhookService.emit).toHaveBeenCalledWith(
         'payment.received',
         'payment',
@@ -300,6 +308,7 @@ describe('PaymentService', () => {
 
       expect(mockGateway.authorize).toHaveBeenCalledWith('tok_test_123', 500, 'USD');
       expect(result.status).toBe('authorized');
+      expectSafePublicPayment(result);
       // Pre-auth does NOT recalculate balance
       expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
     });
@@ -387,6 +396,7 @@ describe('PaymentService', () => {
 
       const result = await svc.capturePayment('pay-001', 'prop-001');
       expect(result.status).toBe('captured');
+      expectSafePublicPayment(result);
       expect(mockGateway.capture).toHaveBeenCalled();
       expect(mockFolioService.recalculateBalance).toHaveBeenCalled();
     });
@@ -467,6 +477,7 @@ describe('PaymentService', () => {
 
       const result = await svc.voidPayment('pay-001', 'prop-001');
       expect(result.status).toBe('voided');
+      expectSafePublicPayment(result);
       expect(mockGateway.void).toHaveBeenCalled();
     });
   });
@@ -526,7 +537,107 @@ describe('PaymentService', () => {
         expect.any(Object),
         'prop-001',
       );
-      expect(result).toEqual(refundPayment);
+      expect(result).toMatchObject({ id: refundPayment.id, amount: refundPayment.amount });
+      expectSafePublicPayment(result);
+    });
+
+    it('rejects a Booking Request refund through the generic service', async () => {
+      const requestPayment = {
+        ...mockPayment,
+        folioId: null,
+        bookingRequestId: 'request-001',
+        status: 'captured',
+      };
+      const insert = vi.fn();
+      const makeTx = () => {
+        let selectCall = 0;
+        return {
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => {
+                selectCall += 1;
+                return selectCall === 1
+                  ? { for: vi.fn().mockResolvedValue([requestPayment]) }
+                  : { then: (resolve: any) => resolve([]) };
+              }),
+            })),
+          })),
+          insert,
+        };
+      };
+      const db = {
+        transaction: vi.fn(async (fn: any) => fn(makeTx())),
+      };
+      const module = await Test.createTestingModule({
+        providers: [
+          PaymentService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+
+      await expect(module.get(PaymentService).refundPayment(
+        'pay-001',
+        'prop-001',
+        '25.00',
+      )).rejects.toThrow(/Booking Request payment endpoint/i);
+
+      expect(insert).not.toHaveBeenCalled();
+      expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
+    });
+
+    it('replays an explicitly idempotent refund without another gateway call', async () => {
+      const original = {
+        ...mockPayment,
+        amount: '100.00',
+        status: 'captured',
+      };
+      const existingRefund = {
+        ...mockPayment,
+        id: 'refund-existing',
+        amount: '-30.00',
+        originalPaymentId: 'pay-001',
+        idempotencyKey: 'booking-request-refund:stable',
+      };
+      const tx = {
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(() => ({
+              for: vi.fn().mockResolvedValue([original]),
+              then: (resolve: any) => resolve([existingRefund]),
+            })),
+          })),
+        })),
+      };
+      const db = {
+        transaction: vi.fn(async (fn: any) => fn(tx)),
+      };
+      const module = await Test.createTestingModule({
+        providers: [
+          PaymentService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+
+      const result = await (module.get(PaymentService).refundPayment as any)(
+        'pay-001',
+        'prop-001',
+        '30.00',
+        { idempotencyKey: 'booking-request-refund:stable' },
+      );
+
+      expect(result).toMatchObject({
+        id: existingRefund.id,
+        amount: existingRefund.amount,
+        originalPaymentId: existingRefund.originalPaymentId,
+      });
+      expectSafePublicPayment(result);
+      expect(mockGateway.refund).not.toHaveBeenCalled();
     });
 
     // Partial refunds: parent stays captured; negative children net the folio balance.
@@ -679,7 +790,12 @@ describe('PaymentService', () => {
         const db = buildRefundTxDb(capturedOriginal, [], [webhookChild], webhookChild);
         const svc = await svcWith(db);
         const result = await svc.refundPayment('pay-001', 'prop-001', '50.00');
-        expect(result).toEqual(webhookChild);
+        expect(result).toMatchObject({
+          id: webhookChild.id,
+          amount: webhookChild.amount,
+          originalPaymentId: webhookChild.originalPaymentId,
+        });
+        expectSafePublicPayment(result);
         expect(mockWebhookService.emit).not.toHaveBeenCalled();
         expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
       });

@@ -19,17 +19,16 @@ describe('Modal', () => {
   it('calls onClose when X button clicked', async () => {
     const onClose = vi.fn();
     render(<Modal open={true} onClose={onClose} title="Test">Body</Modal>);
-    await userEvent.click(screen.getByRole('button'));
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledOnce();
   });
 
   it('calls onClose when backdrop clicked', async () => {
     const onClose = vi.fn();
-    const { container } = render(
+    render(
       <Modal open={true} onClose={onClose} title="Test">Body</Modal>,
     );
-    const backdrop = container.querySelector('.bg-black\\/40');
-    if (backdrop) await userEvent.click(backdrop);
+    await userEvent.click(screen.getByLabelText('Close Test'));
     expect(onClose).toHaveBeenCalledOnce();
   });
 
