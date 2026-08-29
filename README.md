@@ -616,6 +616,11 @@ pnpm --filter @telivityhaip/booking dev             # booking widget dev server 
 > Stripe or SMTP credentials are required. Set real keys in `.env` only when you
 > want live payments/email.
 
+> **Optional: request-first booking** — STR / coliving properties that need staff
+> approval before a reservation can enable `@telivityhaip/booking-requests`
+> (`pnpm db:migrate:booking-requests`, then `HAIP_BOOKING_REQUESTS=true`). See
+> [`packages/booking-requests/README.md`](./packages/booking-requests/README.md).
+
 ### Deploy to the cloud
 
 One-click deploy a hosted demo (provisions Postgres + Redis, builds, migrates, and
@@ -745,7 +750,8 @@ haip/
 ├── packages/
 │   ├── database/                   # Drizzle ORM schema + migrations
 │   │   └── src/schema/             # Table files (property, room, guest, agent, etc.)
-│   └── shared/                     # Shared types, enums, webhook events
+│   ├── shared/                     # Shared types, enums, webhook events
+│   └── booking-requests/           # Optional request-first booking (flag-gated)
 ├── tools/
 │   └── haip-connect-gpt/           # ChatGPT Custom GPT gateway over the Connect API (Vercel)
 ├── docker-compose.yml              # PostgreSQL + Redis + Keycloak + API
