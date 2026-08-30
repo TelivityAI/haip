@@ -1462,7 +1462,17 @@ export async function pushSchema(databaseUrl: string = DATABASE_URL) {
     `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS accepted_pricing_snapshot jsonb`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS booking_request_id uuid`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS idempotency_key varchar(255)`,
-    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timeline_sequence bigserial`,
+    // NOT `bigserial` -- Postgres expands that pseudo-type into a CREATE
+    // SEQUENCE during statement transformation, BEFORE the ADD COLUMN IF NOT
+    // EXISTS existence check runs, so re-running push-schema.js throws
+    // 'relation "audit_logs_timeline_sequence_seq" already exists' even
+    // though the column itself is a no-op. Found running push-schema.js
+    // twice against the same database (once via run-migrations.js, once
+    // standalone, in the same session) -- explicit sequence + bigint
+    // default is unambiguously idempotent either way.
+    `CREATE SEQUENCE IF NOT EXISTS audit_logs_timeline_sequence_seq`,
+    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timeline_sequence bigint NOT NULL DEFAULT nextval('audit_logs_timeline_sequence_seq')`,
+    `ALTER SEQUENCE audit_logs_timeline_sequence_seq OWNED BY audit_logs.timeline_sequence`,
     `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_timeline_sequence_unique ON audit_logs (timeline_sequence)`,
     // Commercial profile billing fields + links (KB 14.3 standing accounts)
     `ALTER TABLE group_profiles ADD COLUMN IF NOT EXISTS billing_address text`,
