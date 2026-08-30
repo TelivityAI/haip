@@ -2,8 +2,6 @@
  * Push schema to database using drizzle-orm's migrate API.
  * Workaround for drizzle-kit CJS/.js extension issue.
  */
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { sql } from 'drizzle-orm';
@@ -1462,7 +1460,17 @@ export async function pushSchema(databaseUrl: string = DATABASE_URL) {
     `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS accepted_pricing_snapshot jsonb`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS booking_request_id uuid`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS idempotency_key varchar(255)`,
-    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timeline_sequence bigserial`,
+    // NOT `bigserial` -- Postgres expands that pseudo-type into a CREATE
+    // SEQUENCE during statement transformation, BEFORE the ADD COLUMN IF NOT
+    // EXISTS existence check runs, so re-running push-schema.js throws
+    // 'relation "audit_logs_timeline_sequence_seq" already exists' even
+    // though the column itself is a no-op. Found running push-schema.js
+    // twice against the same database (once via run-migrations.js, once
+    // standalone, in the same session) -- explicit sequence + bigint
+    // default is unambiguously idempotent either way.
+    `CREATE SEQUENCE IF NOT EXISTS audit_logs_timeline_sequence_seq`,
+    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timeline_sequence bigint NOT NULL DEFAULT nextval('audit_logs_timeline_sequence_seq')`,
+    `ALTER SEQUENCE audit_logs_timeline_sequence_seq OWNED BY audit_logs.timeline_sequence`,
     `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_timeline_sequence_unique ON audit_logs (timeline_sequence)`,
     // Commercial profile billing fields + links (KB 14.3 standing accounts)
     `ALTER TABLE group_profiles ADD COLUMN IF NOT EXISTS billing_address text`,
@@ -1498,7 +1506,34 @@ async function main() {
   await pushSchema();
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// NOT an import.meta.url comparison (tried realpathSync AND plain
+// path.resolve, both wrong for the same reason): tsup's ESM output code-
+// splits this file's top-level statements into a SHARED CHUNK
+// (dist/chunk-*.js), so import.meta.url here resolves to that chunk's own
+// URL, not to push-schema.js's -- confirmed with debug logging, which
+// showed import.meta.url pointing at the chunk file on BOTH the direct
+// `node push-schema.js` invocation and run-migrations.js's import, with
+// process.argv[1] correctly showing 'push-schema.js' each time. Any
+// import.meta.url-based "am I the entry point" check is fundamentally
+// unreliable once a bundler is free to move module code into a shared
+// chunk. Checking argv[1]'s own filename instead sidesteps chunking
+// entirely -- it only asks what script node was told to run, never where
+// the executing code happens to live.
+//
+// WHY THIS MATTERS: run-migrations.ts imports and calls pushSchema()
+// directly (migration-runner.ts), so it never depended on this guard and
+// always worked. permission-smoke.integration.spec.ts's beforeAll runs
+// `node packages/database/dist/push-schema.js` standalone a second time in
+// the same CI job (to prove role_permissions grants survive a re-run
+// against already-seeded data) -- with the guard false, main() was never
+// called, so nothing ran: no thrown error, no output, exit code 0, and
+// integration_service came back with zero grants.
+function isDirectlyExecuted(): boolean {
+  const entry = process.argv[1];
+  return !!entry && /(^|[\\/])push-schema\.(m?js|cjs)$/.test(entry);
+}
+
+if (isDirectlyExecuted()) {
   main().catch((err) => {
     console.error('Push failed:', err);
     process.exit(1);
