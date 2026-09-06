@@ -3,7 +3,10 @@ import { eq, and, ne } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
-import { AvailabilityService } from '../reservation/availability.service';
+import {
+  assertFullStayAvailability,
+  AvailabilityService,
+} from '../reservation/availability.service';
 import { ReservationService } from '../reservation/reservation.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { RatePlanService } from '../rate-plan/rate-plan.service';
@@ -82,39 +85,62 @@ export class ConnectBookingService {
     // the confirmation number is itself a bearer credential for the booking.
     const confirmationNumber = `HAIP-${generateConfirmationToken()}`;
 
-    // 6. Create booking
-    const [booking] = await this.db
-      .insert(bookings)
-      .values({
-        propertyId: dto.propertyId,
-        guestId: guest.id,
-        confirmationNumber,
-        externalConfirmation: dto.externalReference,
-        source: 'agent',
-        channelCode: dto.agentId ?? 'otaip',
-      })
-      .returning();
+    // 6-7. Create the booking and auto-confirmed reservation atomically under
+    // the same room-type mutex used by ReservationService.create/modify. The
+    // early availability check above is only a fast rejection; this locked
+    // re-check is the authoritative guard against two agents consuming the
+    // final room concurrently under READ COMMITTED.
+    const reservation = await this.db.transaction(async (tx: any) => {
+      await this.reservationService.lockInventory(dto.propertyId, dto.roomTypeId, tx);
 
-    // 7. Create reservation — auto-confirm for agent bookings
-    const [reservation] = await this.db
-      .insert(reservations)
-      .values({
-        propertyId: dto.propertyId,
-        bookingId: booking.id,
-        guestId: guest.id,
-        arrivalDate: dto.checkIn,
-        departureDate: dto.checkOut,
-        nights,
-        roomTypeId: dto.roomTypeId,
-        ratePlanId: dto.ratePlanId,
-        totalAmount: totalAmountDec.toFixed(2),
-        currencyCode: ratePlan.currencyCode,
-        adults: dto.adults,
-        children: dto.children ?? 0,
-        specialRequests: dto.specialRequests,
-        status: 'confirmed', // Agent bookings skip pending
-      })
-      .returning();
+      const lockedAvailability = await this.availabilityService.searchAvailability(
+        dto.propertyId,
+        dto.checkIn,
+        dto.checkOut,
+        dto.roomTypeId,
+        tx,
+      );
+      assertFullStayAvailability(
+        lockedAvailability,
+        dto.roomTypeId,
+        dto.checkIn,
+        dto.checkOut,
+      );
+
+      const [booking] = await tx
+        .insert(bookings)
+        .values({
+          propertyId: dto.propertyId,
+          guestId: guest.id,
+          confirmationNumber,
+          externalConfirmation: dto.externalReference,
+          source: 'agent',
+          channelCode: dto.agentId ?? 'otaip',
+        })
+        .returning();
+
+      const [createdReservation] = await tx
+        .insert(reservations)
+        .values({
+          propertyId: dto.propertyId,
+          bookingId: booking.id,
+          guestId: guest.id,
+          arrivalDate: dto.checkIn,
+          departureDate: dto.checkOut,
+          nights,
+          roomTypeId: dto.roomTypeId,
+          ratePlanId: dto.ratePlanId,
+          totalAmount: totalAmountDec.toFixed(2),
+          currencyCode: ratePlan.currencyCode,
+          adults: dto.adults,
+          children: dto.children ?? 0,
+          specialRequests: dto.specialRequests,
+          status: 'confirmed', // Agent bookings skip pending
+        })
+        .returning();
+
+      return createdReservation;
+    });
 
     // 8. Build nightly breakdown
     const settings = await this.getPropertySettings(dto.propertyId);
