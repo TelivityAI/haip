@@ -7,6 +7,7 @@ describe('ConnectBookingService', () => {
   let mockDb: any;
   let mockAvailabilityService: any;
   let mockWebhookService: any;
+  let mockReservationService: any;
 
   const mockRatePlan = {
     id: 'rp-1',
@@ -20,6 +21,7 @@ describe('ConnectBookingService', () => {
   beforeEach(() => {
     let insertCallCount = 0;
     mockDb = {
+      transaction: vi.fn().mockImplementation(async (callback) => callback(mockDb)),
       select: vi.fn().mockImplementation(() => ({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -54,7 +56,8 @@ describe('ConnectBookingService', () => {
 
     mockWebhookService = { emit: vi.fn().mockResolvedValue(undefined) };
     const mockRatePlanService = { assertSellable: vi.fn().mockResolvedValue(undefined) };
-    const mockReservationService = {
+    mockReservationService = {
+      lockInventory: vi.fn().mockResolvedValue(undefined),
       cancel: vi.fn().mockResolvedValue({
         id: 'res-1',
         status: 'cancelled',
@@ -119,6 +122,74 @@ describe('ConnectBookingService', () => {
       expect(result.confirmationNumber).toBeDefined();
       expect(result.confirmationCodes.external).toBe('OTAIP-123');
       expect(result.nightlyBreakdown).toHaveLength(2);
+    });
+
+    it('should lock inventory and re-check availability inside the booking transaction', async () => {
+      let selectCallCount = 0;
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            if (selectCallCount === 1) return Promise.resolve([mockRatePlan]);
+            if (selectCallCount === 2) return Promise.resolve([]);
+            if (selectCallCount === 3) return Promise.resolve([{ settings: {} }]);
+            return Promise.resolve([]);
+          }),
+        }),
+      }));
+
+      await service.book({
+        propertyId: 'prop-1',
+        roomTypeId: 'rt-1',
+        ratePlanId: 'rp-1',
+        checkIn: '2024-06-01',
+        checkOut: '2024-06-03',
+        guestFirstName: 'John',
+        guestLastName: 'Smith',
+        adults: 2,
+      });
+
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+      expect(mockReservationService.lockInventory).toHaveBeenCalledWith('prop-1', 'rt-1', mockDb);
+      expect(mockAvailabilityService.searchAvailability).toHaveBeenLastCalledWith(
+        'prop-1',
+        '2024-06-01',
+        '2024-06-03',
+        'rt-1',
+        mockDb,
+      );
+    });
+
+    it('should reject when locked availability is consumed after the early check', async () => {
+      mockAvailabilityService.searchAvailability
+        .mockResolvedValueOnce([
+          { roomTypeId: 'rt-1', date: '2024-06-01', totalRooms: 1, sold: 0, available: 1, overbookingBuffer: 0 },
+        ])
+        .mockResolvedValueOnce([
+          { roomTypeId: 'rt-1', date: '2024-06-01', totalRooms: 1, sold: 1, available: 0, overbookingBuffer: 0 },
+        ]);
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValueOnce([mockRatePlan]),
+        }),
+      }));
+
+      await expect(service.book({
+        propertyId: 'prop-1',
+        roomTypeId: 'rt-1',
+        ratePlanId: 'rp-1',
+        checkIn: '2024-06-01',
+        checkOut: '2024-06-02',
+        guestFirstName: 'Jane',
+        guestLastName: 'Doe',
+        adults: 1,
+      })).rejects.toThrow(BadRequestException);
+
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+      // The guest may be created before inventory contention is resolved, but
+      // neither a booking nor a reservation is inserted after the locked
+      // availability check fails.
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
     });
 
     it('should reuse existing guest matched by email', async () => {
