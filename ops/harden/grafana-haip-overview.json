@@ -1,0 +1,65 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP requests / second",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum by (route) (rate(haip_http_requests_total[5m]))", "legendFormat": "{{route}}" }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "title": "HTTP 5xx / second",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum by (route) (rate(haip_http_request_errors_total[5m]))", "legendFormat": "{{route}}" }],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "id": 3,
+      "title": "Average request latency",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum by (route) (rate(haip_http_request_duration_seconds_sum[5m])) / clamp_min(sum by (route) (rate(haip_http_request_duration_seconds_count[5m])), 0.001)", "legendFormat": "{{route}}" }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "id": 4,
+      "title": "Booking create outcomes",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum by (outcome) (rate(haip_booking_create_total[5m]))", "legendFormat": "{{outcome}}" }],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+    },
+    {
+      "id": 5,
+      "title": "Channel sync outcomes",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum by (outcome) (increase(haip_channel_sync_total[15m]))", "legendFormat": "{{outcome}}" }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+    },
+    {
+      "id": 6,
+      "title": "Last night-audit business date",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "dateTimeAsIso" }, "overrides": [] },
+      "targets": [{ "expr": "haip_night_audit_last_business_date_timestamp_seconds * 1000", "legendFormat": "business date" }],
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 16 }
+    },
+    {
+      "id": 7,
+      "title": "Exhausted webhooks",
+      "type": "stat",
+      "targets": [{ "expr": "sum(increase(haip_webhook_delivery_failures_total[24h]))", "legendFormat": "24h" }],
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 16 }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["haip", "hotel", "operations"],
+  "templating": { "list": [] },
+  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "browser",
+  "title": "HAIP Production Overview",
+  "uid": "haip-production",
+  "version": 1
+}

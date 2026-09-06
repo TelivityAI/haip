@@ -25,7 +25,7 @@ cp .env.production.example .env.production
 # Edit .env.production — AUTH_ENABLED=true, Stripe, CONNECT_API_KEY, etc.
 
 # 2. Bring up the prod overlay (auth on)
-docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
+docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
 
 # 3. Static + HTTP local checks
 pnpm harden:local

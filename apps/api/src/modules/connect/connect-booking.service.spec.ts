@@ -58,6 +58,16 @@ describe('ConnectBookingService', () => {
     const mockRatePlanService = { assertSellable: vi.fn().mockResolvedValue(undefined) };
     mockReservationService = {
       lockInventory: vi.fn().mockResolvedValue(undefined),
+      modify: vi.fn().mockImplementation(async (_id, propertyId, dto, internal) => ({
+        reservation: {
+          id: 'res-1',
+          propertyId,
+          status: 'confirmed',
+          totalAmount: dto.totalAmount ?? '399.98',
+          currencyCode: internal?.currencyCode ?? 'USD',
+          updatedAt: new Date(),
+        },
+      })),
       cancel: vi.fn().mockResolvedValue({
         id: 'res-1',
         status: 'cancelled',
@@ -122,6 +132,7 @@ describe('ConnectBookingService', () => {
       expect(result.confirmationNumber).toBeDefined();
       expect(result.confirmationCodes.external).toBe('OTAIP-123');
       expect(result.nightlyBreakdown).toHaveLength(2);
+      expect(mockDb.insert).toHaveBeenCalledTimes(4); // guest + booking + reservation + roster
     });
 
     it('should lock inventory and re-check availability inside the booking transaction', async () => {
@@ -234,7 +245,8 @@ describe('ConnectBookingService', () => {
       });
 
       expect(result.success).toBe(true);
-      // Only 2 inserts (booking + reservation), not 3 (guest skipped)
+      // Only booking + reservation use returning(); the roster insert is also
+      // issued, while a new guest insert is skipped.
       expect(insertCount).toBe(2);
     });
 
@@ -280,8 +292,8 @@ describe('ConnectBookingService', () => {
       });
 
       expect(result.success).toBe(true);
-      // A fresh guest row is created (guest + booking + reservation = 3 inserts),
-      // NOT linked to the foreign-property guest.
+      // A fresh guest row is created (three returning inserts); the roster insert
+      // is issued separately and the foreign-property guest is never reused.
       expect(insertCount).toBe(3);
     });
 
@@ -485,7 +497,7 @@ describe('ConnectBookingService', () => {
       expect(result.costDifference).toBe(0);
     });
 
-    it('should re-check availability for date changes', async () => {
+    it('should delegate date changes to the locked canonical modification path', async () => {
       let selectCallCount = 0;
       mockDb.select.mockImplementation(() => ({
         from: vi.fn().mockReturnValue({
@@ -509,7 +521,19 @@ describe('ConnectBookingService', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(mockAvailabilityService.searchAvailability).toHaveBeenCalled();
+      expect(mockReservationService.modify).toHaveBeenCalledWith(
+        'res-1',
+        'prop-1',
+        expect.objectContaining({
+          arrivalDate: '2024-06-01',
+          departureDate: '2024-06-04',
+          roomTypeId: 'rt-1',
+          ratePlanId: 'rp-1',
+          totalAmount: '599.97',
+        }),
+        { currencyCode: 'USD' },
+      );
+      expect(mockAvailabilityService.searchAvailability).not.toHaveBeenCalled();
     });
 
     it('forks a property-local guest on name change when the guest is shared with another property', async () => {

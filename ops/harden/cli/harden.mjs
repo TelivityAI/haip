@@ -14,6 +14,7 @@ import { runLocalFileProbes } from './probes/local.mjs';
 import { runHealthProbes } from './probes/health.mjs';
 import { runAuthOnProbes } from './probes/auth-on.mjs';
 import { runTenantIsolationProbes } from './probes/tenant-isolation.mjs';
+import { runOwnerIsolationProbes } from './probes/owner-isolation.mjs';
 
 function usage() {
   console.log(`Usage: haip-harden <local|live|all>
@@ -32,6 +33,7 @@ async function runLive() {
   results.push(...(await runHealthProbes()));
   results.push(...(await runAuthOnProbes()));
   results.push(...(await runTenantIsolationProbes()));
+  results.push(...(await runOwnerIsolationProbes()));
   return results;
 }
 
@@ -56,6 +58,7 @@ async function runLocal() {
         detail: 'TOKEN_A/B + PROPERTY_A/B not all set — skipped live tenant probes',
       });
     }
+    results.push(...(await runOwnerIsolationProbes()));
   } else {
     results.push({
       id: 'http-optional',

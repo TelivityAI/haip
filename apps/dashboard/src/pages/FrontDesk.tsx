@@ -11,6 +11,7 @@ import Modal from '../components/ui/Modal';
 import FindGuest from '../components/guests/FindGuest';
 import IdSwipeCapture from '../components/guests/IdSwipeCapture';
 import GuestDetailsModal from '../components/front-desk/GuestDetailsModal';
+import { useToast } from '../components/ui/Toast';
 import type { ParsedIdDocument } from '../lib/id-document-swipe';
 import type { Guest } from '../types/guest';
 import { formatMoney } from '../lib/money';
@@ -128,6 +129,7 @@ export default function FrontDesk() {
   const { t } = useTranslation();
   const { propertyId, currencyCode } = useProperty();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const today = format(new Date(), 'yyyy-MM-dd');
   const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
 
@@ -334,7 +336,7 @@ export default function FrontDesk() {
           params: { propertyId },
         });
       }
-      await api.patch(
+      const checkInResponse = await api.patch(
         `/v1/reservations/${data.id}/check-in`,
         {
           roomId: data.roomId || undefined,
@@ -361,11 +363,17 @@ export default function FrontDesk() {
           { params: { propertyId } },
         );
       }
+      return checkInResponse.data as {
+        depositAuth?: { status?: 'ok' | 'skipped' | 'failed'; message?: string };
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       invalidateAll();
       setCheckInModal(null);
       resetCheckInForm();
+      if (result?.depositAuth?.status === 'failed') {
+        toast('error', t('frontDesk.depositAuthFailed'));
+      }
     },
   });
 

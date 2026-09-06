@@ -30,8 +30,9 @@ function mkDb() {
     select: vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
         where: vi.fn()
-          // guest → roomType FK → ratePlan FK
+          // guest → guest property links → roomType FK → ratePlan FK
           .mockResolvedValueOnce([{ id: 'g', isDnr: false }])
+          .mockResolvedValueOnce([])
           .mockResolvedValueOnce([{ id: ROOM_TYPE }])
           .mockResolvedValueOnce([{ id: RATE_PLAN }]),
       }),
@@ -186,6 +187,48 @@ describe('ReservationService.create — assertSellable (BOOK path)', () => {
     await expect(svc.modify('res-1', PROPERTY, {
       departureDate: '2026-07-04',
     } as any)).rejects.toThrow(/2026-07-03/);
+  });
+
+  it('re-checks rate-plan sellability inside the modification transaction', async () => {
+    const assertSellable = vi.fn().mockResolvedValue(undefined);
+    const updated = {
+      id: 'res-1',
+      propertyId: PROPERTY,
+      status: 'confirmed',
+      arrivalDate: '2026-07-01',
+      departureDate: '2026-07-03',
+      roomTypeId: ROOM_TYPE,
+      ratePlanId: 'rp-002',
+      totalAmount: '320.00',
+    };
+    const update = vi.fn().mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([updated]) }),
+      }),
+    });
+    const tx = { update };
+    const db = mkDb();
+    db.transaction.mockImplementation(async (callback: (conn: any) => Promise<unknown>) =>
+      callback(tx));
+    const { svc } = await mkService(assertSellable, db);
+    vi.spyOn(svc as any, 'findByIdRaw').mockResolvedValue({
+      ...updated,
+      ratePlanId: RATE_PLAN,
+      totalAmount: '300.00',
+    });
+
+    await svc.modify('res-1', PROPERTY, {
+      ratePlanId: 'rp-002',
+      totalAmount: '320.00',
+    });
+
+    expect(assertSellable).toHaveBeenCalledWith(
+      PROPERTY,
+      'rp-002',
+      '2026-07-01',
+      '2026-07-03',
+      tx,
+    );
   });
 
   it.each([

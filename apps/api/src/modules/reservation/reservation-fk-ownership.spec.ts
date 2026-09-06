@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ReservationService } from './reservation.service';
 import { DRIZZLE } from '../../database/database.module';
@@ -26,8 +26,9 @@ const A = 'aaaaaaaa-0000-4000-a000-000000000001';
 /**
  * Sequenced-select mock. `create()` runs:
  *   1) guest lookup (NotFoundException if empty)
- *   2) roomTypes FK ownership check (BadRequestException if empty) ← the audit fix
- *   3) ratePlans FK ownership check (BadRequestException if empty) ← the audit fix
+ *   2) guest property-link lookup
+ *   3) roomTypes FK ownership check (BadRequestException if empty) ← the audit fix
+ *   4) ratePlans FK ownership check (BadRequestException if empty) ← the audit fix
  * `modify()` runs:
  *   1) findByIdRaw on reservations
  *   2) roomTypes FK ownership (only if dto.roomTypeId)
@@ -73,7 +74,8 @@ describe('ReservationService — cross-tenant FK ownership (audit #4)', () => {
     // selects in order: guest (found), roomTypes FK check (empty = foreign).
     const db = mkDbSeq([
       [{ id: 'g', isDnr: false }],   // 1) guest lookup OK
-      [],                             // 2) FK check on roomTypes → not in this property
+      [],                             // 2) fresh guest has no property links yet
+      [],                             // 3) FK check on roomTypes → not in this property
     ]);
     const svc = await mkService(db);
 
@@ -95,8 +97,9 @@ describe('ReservationService — cross-tenant FK ownership (audit #4)', () => {
   it('create() rejects when dto.ratePlanId belongs to another property (roomType OK)', async () => {
     const db = mkDbSeq([
       [{ id: 'g', isDnr: false }],   // 1) guest lookup OK
-      [{ id: 'rt-1' }],               // 2) FK check on roomTypes OK
-      [],                             // 3) FK check on ratePlans → not in this property
+      [],                             // 2) fresh guest has no property links yet
+      [{ id: 'rt-1' }],               // 3) FK check on roomTypes OK
+      [],                             // 4) FK check on ratePlans → not in this property
     ]);
     const svc = await mkService(db);
 
@@ -112,6 +115,28 @@ describe('ReservationService — cross-tenant FK ownership (audit #4)', () => {
         guestId: 'g',
       } as any),
     ).rejects.toBeInstanceOf(BadRequestException);
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it('create() hides a guest linked only to another property', async () => {
+    const db = mkDbSeq([
+      [{ id: 'guest-b', isDnr: false }],
+      [{ propertyId: 'bbbbbbbb-0000-4000-a000-000000000002' }],
+    ]);
+    const svc = await mkService(db);
+
+    await expect(
+      svc.create({
+        propertyId: A,
+        roomTypeId: 'rt-1',
+        ratePlanId: 'plan-1',
+        arrivalDate: '2026-07-01',
+        departureDate: '2026-07-03',
+        totalAmount: '300.00',
+        currencyCode: 'USD',
+        guestId: 'guest-b',
+      } as any),
+    ).rejects.toThrow(NotFoundException);
     expect(db.insert).not.toHaveBeenCalled();
   });
 

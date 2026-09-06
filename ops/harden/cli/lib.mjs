@@ -30,7 +30,7 @@ export function timeoutMs() {
 
 /**
  * @param {string} path - path under API base, e.g. `/v1/health`
- * @param {{ method?: string, token?: string | null, headers?: Record<string,string> }} [opts]
+ * @param {{ method?: string, token?: string | null, headers?: Record<string,string>, body?: unknown }} [opts]
  */
 export async function request(path, opts = {}) {
   const base = apiBase();
@@ -39,9 +39,17 @@ export async function request(path, opts = {}) {
   if (opts.token) {
     headers.Authorization = `Bearer ${opts.token}`;
   }
+  if (opts.body !== undefined && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
   const res = await fetch(url, {
     method: opts.method ?? 'GET',
     headers,
+    body: opts.body === undefined
+      ? undefined
+      : typeof opts.body === 'string'
+        ? opts.body
+        : JSON.stringify(opts.body),
     signal: AbortSignal.timeout(timeoutMs()),
   });
   let bodyText = '';

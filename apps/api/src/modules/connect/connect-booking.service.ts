@@ -1,7 +1,16 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and, ne } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@telivityhaip/database';
+import {
+  bookings,
+  reservations,
+  reservationGuests,
+  guests,
+  ratePlans,
+  roomTypes,
+  folios,
+  rooms,
+} from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import {
   assertFullStayAvailability,
@@ -139,6 +148,13 @@ export class ConnectBookingService {
         })
         .returning();
 
+      await tx.insert(reservationGuests).values({
+        propertyId: dto.propertyId,
+        reservationId: createdReservation.id,
+        guestId: guest.id,
+        role: 'primary',
+      });
+
       return createdReservation;
     });
 
@@ -274,8 +290,6 @@ export class ConnectBookingService {
       throw new BadRequestException(`Cannot modify reservation in ${reservation.status} status`);
     }
 
-    const updateFields: Record<string, any> = { updatedAt: new Date() };
-    let costDifferenceDec = new Decimal(0);
     const previousAmountDec = new Decimal(reservation.totalAmount);
     const previousAmount = previousAmountDec.toNumber();
 
@@ -332,10 +346,11 @@ export class ConnectBookingService {
       }
     }
 
-    // Handle simple field updates
-    if (dto.specialRequests !== undefined) updateFields['specialRequests'] = dto.specialRequests;
-    if (dto.adults !== undefined) updateFields['adults'] = dto.adults;
-    if (dto.children !== undefined) updateFields['children'] = dto.children;
+    const reservationChanges: Record<string, any> = {};
+    if (dto.specialRequests !== undefined) reservationChanges['specialRequests'] = dto.specialRequests;
+    if (dto.adults !== undefined) reservationChanges['adults'] = dto.adults;
+    if (dto.children !== undefined) reservationChanges['children'] = dto.children;
+    let currencyCode: string | undefined;
 
     // Handle date/room/rate changes (triggers re-calculation)
     if (dto.checkIn || dto.checkOut || dto.roomTypeId || dto.ratePlanId) {
@@ -356,22 +371,6 @@ export class ConnectBookingService {
         if (!rt) throw new BadRequestException(`room type ${newRoomTypeId} not found in this property`);
       }
 
-      // Re-check availability
-      const availability = await this.availabilityService.searchAvailability(
-        booking.propertyId,
-        newCheckIn,
-        newCheckOut,
-        newRoomTypeId,
-      );
-
-      const minAvailable = availability.length > 0
-        ? Math.min(...availability.map((a) => a.available))
-        : 0;
-
-      if (minAvailable <= 0) {
-        throw new BadRequestException('No availability for modified dates/room type');
-      }
-
       // Re-calculate rate — same-property scoped (was bare-id before).
       const [ratePlan] = await this.db
         .select()
@@ -387,28 +386,26 @@ export class ConnectBookingService {
       const nights = Math.ceil((departure.getTime() - arrival.getTime()) / (1000 * 60 * 60 * 24));
       const newTotalDec = new Decimal(ratePlan.baseAmount).times(nights);
 
-      updateFields['arrivalDate'] = newCheckIn;
-      updateFields['departureDate'] = newCheckOut;
-      updateFields['nights'] = nights;
-      updateFields['roomTypeId'] = newRoomTypeId;
-      updateFields['ratePlanId'] = newRatePlanId;
-      updateFields['totalAmount'] = newTotalDec.toFixed(2);
-      updateFields['currencyCode'] = ratePlan.currencyCode;
-
-      costDifferenceDec = newTotalDec.minus(previousAmountDec);
+      reservationChanges['arrivalDate'] = newCheckIn;
+      reservationChanges['departureDate'] = newCheckOut;
+      reservationChanges['roomTypeId'] = newRoomTypeId;
+      reservationChanges['ratePlanId'] = newRatePlanId;
+      reservationChanges['totalAmount'] = newTotalDec.toFixed(2);
+      currencyCode = ratePlan.currencyCode;
     }
 
-    // Apply update
-    const [updated] = await this.db
-      .update(reservations)
-      .set(updateFields)
-      .where(
-        and(
-          eq(reservations.id, reservation.id),
-          eq(reservations.propertyId, booking.propertyId),
-        ),
-      )
-      .returning();
+    // Use the canonical reservation mutation path. It owns the inventory lock,
+    // full-stay availability check, rate restriction check, tenant scoping, and
+    // accepted-pricing safeguards, so Connect modifications cannot race a
+    // dashboard/API modification for the final room.
+    const amendment = await this.reservationService.modify(
+      reservation.id,
+      booking.propertyId,
+      reservationChanges,
+      currencyCode === undefined ? undefined : { currencyCode },
+    );
+    const updated = amendment.reservation;
+    const costDifferenceDec = new Decimal(updated.totalAmount).minus(previousAmountDec);
 
     // Emit webhook
     await this.webhookService.emit(

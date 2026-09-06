@@ -623,6 +623,7 @@
     "confirmation": "Confirmation",
     "createWalkIn": "Create & assign",
     "departure": "Departure",
+    "depositAuthFailed": "Deposit authorization failed. The guest was checked in; retry payment authorization immediately.",
     "departures": "Departures",
     "dnm": "DNM",
     "doorPin": "Door PIN",

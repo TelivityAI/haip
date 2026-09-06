@@ -76,6 +76,50 @@ export class StaffNotificationListener {
     });
   }
 
+  @OnEvent('reservation.checked_in')
+  async onReservationCheckedIn(payload: WebhookPayload) {
+    if (!payload.propertyId) return;
+
+    const depositAuth = payload.data?.['depositAuth'] as Record<string, unknown> | undefined;
+    if (depositAuth?.['status'] !== 'failed') return;
+
+    await this.staffNotifications.create({
+      propertyId: payload.propertyId,
+      type: 'deposit_authorization_failed',
+      title: 'Deposit authorization failed after check-in',
+      message:
+        'The guest was checked in without a successful deposit authorization. ' +
+        'Retry the authorization now or record an approved override for shift handover.',
+      severity: 'critical',
+      sourceEvent: 'reservation.checked_in',
+      sourceEntityType: 'reservation',
+      sourceEntityId: payload.entityId,
+    });
+  }
+
+  @OnEvent('channel.sync_failed')
+  async onChannelSyncFailed(payload: WebhookPayload) {
+    if (!payload.propertyId) return;
+
+    const data = payload.data ?? {};
+    const channel = String(data['channelName'] ?? data['channelCode'] ?? 'channel');
+    const adapter = String(data['adapterType'] ?? 'unknown adapter');
+    const error = String(data['error'] ?? 'No error detail').slice(0, 500);
+
+    await this.staffNotifications.create({
+      propertyId: payload.propertyId,
+      type: 'channel_sync_failed',
+      title: `Channel sync failed: ${channel}`,
+      message:
+        `${adapter}: ${error}. Inventory or rates may be stale on the OTA; ` +
+        'open Channels, verify the connection, and retry the sync.',
+      severity: 'critical',
+      sourceEvent: 'channel.sync_failed',
+      sourceEntityType: 'channel_connection',
+      sourceEntityId: payload.entityId,
+    });
+  }
+
   @OnEvent('audit.completed')
   async onAuditCompleted(payload: WebhookPayload) {
     if (!payload.propertyId) return;

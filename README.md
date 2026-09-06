@@ -574,7 +574,7 @@ Quick start:
 cp .env.production.example .env.production
 # Edit .env.production — set DATABASE_URL, Stripe keys, Keycloak, CONNECT_API_KEY, etc.
 
-docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
+docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
 ```
 
 Auth is on (`AUTH_ENABLED=true`); do not set `HAIP_ALLOW_INSECURE`.

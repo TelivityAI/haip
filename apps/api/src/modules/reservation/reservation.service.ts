@@ -50,6 +50,23 @@ export type ReservationAmendmentResult = {
   newTotalAmount: string;
 };
 
+export type DepositAuthorizationOutcome =
+  | {
+      status: 'ok';
+      paymentId: string | null;
+      amount: string;
+      currencyCode: string;
+    }
+  | {
+      status: 'skipped';
+      reason: 'explicitly_skipped' | 'payment_token_missing';
+    }
+  | {
+      status: 'failed';
+      code: 'DEPOSIT_AUTHORIZATION_FAILED';
+      message: string;
+    };
+
 @Injectable()
 export class ReservationService {
   constructor(
@@ -87,6 +104,23 @@ export class ReservationService {
       throw new BadRequestException(
         `Guest ${dto.guestId} is on the Do Not Rent list: ${guest.dnrReason ?? 'No reason given'}`,
       );
+    }
+
+    // Guests are global rows, but once linked to a property their PII must not
+    // be reused by another tenant merely because an id was supplied. A fresh
+    // guest (no roster links yet) remains valid for the walk-in create flow.
+    const guestPropertyLinks = await db
+      .select({ propertyId: reservationGuests.propertyId })
+      .from(reservationGuests)
+      .where(eq(reservationGuests.guestId, dto.guestId));
+    const linkedPropertyIds = guestPropertyLinks
+      .map((row: { propertyId?: unknown }) => row.propertyId)
+      .filter((value: unknown): value is string => typeof value === 'string');
+    if (
+      linkedPropertyIds.length > 0
+      && !linkedPropertyIds.includes(dto.propertyId)
+    ) {
+      throw new NotFoundException(`Guest ${dto.guestId} not found`);
     }
 
     // Calculate nights
@@ -677,13 +711,15 @@ export class ReservationService {
     // Deposit authorization (if token provided and not skipped)
     // Accept paymentMethodId (Stripe Elements) as alias for gatewayPaymentToken
     const paymentToken = dto.paymentMethodId ?? dto.gatewayPaymentToken;
-    let depositAuth: unknown = null;
+    let depositAuth: DepositAuthorizationOutcome = dto.skipDepositAuth
+      ? { status: 'skipped', reason: 'explicitly_skipped' }
+      : { status: 'skipped', reason: 'payment_token_missing' };
     if (!dto.skipDepositAuth && paymentToken) {
       const depositAmount = dto.depositAmount
         ? String(dto.depositAmount)
         : new Decimal(reservation.totalAmount).times('1.2').toFixed(2);
       try {
-        depositAuth = await this.paymentService.authorizePayment({
+        const authorization = await this.paymentService.authorizePayment({
           folioId: folio.id,
           propertyId: reservation.propertyId,
           amount: depositAmount,
@@ -693,8 +729,20 @@ export class ReservationService {
           cardLastFour: dto.cardLastFour,
           cardBrand: dto.cardBrand,
         });
+        depositAuth = {
+          status: 'ok',
+          paymentId: (authorization as { id?: string } | null)?.id ?? null,
+          amount: depositAmount,
+          currencyCode: reservation.currencyCode,
+        };
       } catch {
-        // Deposit auth failure does not block check-in
+        // Check-in remains non-blocking by policy, but the API response and the
+        // reservation.checked_in event must make the financial risk explicit.
+        depositAuth = {
+          status: 'failed',
+          code: 'DEPOSIT_AUTHORIZATION_FAILED',
+          message: 'Deposit authorization failed. Retry authorization or record an approved override.',
+        };
       }
     }
 
@@ -721,7 +769,7 @@ export class ReservationService {
       'reservation.checked_in',
       'reservation',
       updated.id,
-      { roomId, folioId: folio.id, isEarlyCheckin },
+      { roomId, folioId: folio.id, isEarlyCheckin, depositAuth },
       reservation.propertyId,
     );
 
@@ -1075,7 +1123,12 @@ export class ReservationService {
     return { data, total: Number(countResult[0]?.count ?? 0) };
   }
 
-  async modify(id: string, propertyId: string, dto: ModifyReservationDto) {
+  async modify(
+    id: string,
+    propertyId: string,
+    dto: ModifyReservationDto,
+    internal?: { currencyCode?: string },
+  ) {
     const reservation = await this.findByIdRaw(id, propertyId);
 
     // Booking Request acceptance freezes the operational tariff. Until the
@@ -1110,9 +1163,14 @@ export class ReservationService {
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
-    const arrivalChanged = dto.arrivalDate && dto.arrivalDate !== reservation.arrivalDate;
-    const departureChanged = dto.departureDate && dto.departureDate !== reservation.departureDate;
-    const roomTypeChanged = dto.roomTypeId && dto.roomTypeId !== reservation.roomTypeId;
+    const arrivalChanged = dto.arrivalDate !== undefined
+      && dto.arrivalDate !== reservation.arrivalDate;
+    const departureChanged = dto.departureDate !== undefined
+      && dto.departureDate !== reservation.departureDate;
+    const roomTypeChanged = dto.roomTypeId !== undefined
+      && dto.roomTypeId !== reservation.roomTypeId;
+    const ratePlanChanged = dto.ratePlanId !== undefined
+      && dto.ratePlanId !== reservation.ratePlanId;
 
     if (dto.arrivalDate || dto.departureDate) {
       const arrival = dto.arrivalDate ?? reservation.arrivalDate;
@@ -1134,7 +1192,8 @@ export class ReservationService {
       await this.assertSamePropertyFk(ratePlans, dto.ratePlanId, propertyId, 'rate plan');
       updates['ratePlanId'] = dto.ratePlanId;
     }
-    if (dto.totalAmount) updates['totalAmount'] = dto.totalAmount;
+    if (dto.totalAmount !== undefined) updates['totalAmount'] = dto.totalAmount;
+    if (internal?.currencyCode !== undefined) updates['currencyCode'] = internal.currencyCode;
     if (dto.adults !== undefined) updates['adults'] = dto.adults;
     if (dto.children !== undefined) updates['children'] = dto.children;
     if (dto.specialRequests !== undefined)
@@ -1148,6 +1207,16 @@ export class ReservationService {
     // Use the same room-type inventory mutex as canonical creation so a modify
     // cannot race another create/modify for the final unit.
     const updated: ReservationRow = await this.db.transaction(async (tx: any) => {
+      if (arrivalChanged || departureChanged || roomTypeChanged || ratePlanChanged) {
+        await this.ratePlanService.assertSellable(
+          propertyId,
+          (dto.ratePlanId ?? reservation.ratePlanId) as string,
+          (dto.arrivalDate ?? reservation.arrivalDate) as string,
+          (dto.departureDate ?? reservation.departureDate) as string,
+          tx,
+        );
+      }
+
       if (arrivalChanged || departureChanged || roomTypeChanged) {
         const newArrival = (dto.arrivalDate ?? reservation.arrivalDate) as string;
         const newDeparture = (dto.departureDate ?? reservation.departureDate) as string;

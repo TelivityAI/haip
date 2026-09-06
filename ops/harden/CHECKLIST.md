@@ -9,12 +9,14 @@ Details: [`docs/deployment.md`](../../docs/deployment.md) and
 - [ ] Copied `.env.production.example` → `.env.production` and filled secrets
 - [ ] Started with prod overlay + auth profile:
   ```bash
-  docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
+  docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
   ```
 - [ ] `AUTH_ENABLED=true` (required in production)
 - [ ] `HAIP_ALLOW_INSECURE` is **unset / empty** (never `true` in production)
 - [ ] `STRIPE_MODE` is `test` until ready for real charges; then `live` with live keys
 - [ ] API boots cleanly; `GET /api/v1/health` returns `status: ok`
+- [ ] Prometheus scrapes `GET /api/v1/metrics`; reverse proxy blocks public access to that path
+- [ ] Grafana dashboard and alert rules from `ops/harden/` are loaded
 
 ## Auth (Keycloak)
 

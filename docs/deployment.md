@@ -43,7 +43,7 @@ curl -s -o /dev/null -w "%{http_code}" \
 cp .env.production.example .env.production
 # Edit .env.production — fill Stripe keys, CONNECT_API_KEY, CORS, storage, etc.
 
-docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
+docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
 ```
 
 Services: **postgres**, **redis**, **keycloak** (`--profile auth`), **init** (migrate + seed), **api**.
@@ -53,7 +53,7 @@ The API refuses to boot in `NODE_ENV=production` when `AUTH_ENABLED=false` or `S
 Validate compose config before deploying:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml config
+docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml config
 ```
 
 ## Required environment variables
@@ -66,8 +66,11 @@ Copy [`.env.production.example`](../.env.production.example) to `.env.production
 | `REDIS_URL` | Yes | Redis for cache, queues, pub/sub |
 | `AUTH_ENABLED` | Yes | Must be `true` in production |
 | `KEYCLOAK_URL` | Yes | Internal URL (`http://keycloak:8080` in compose) |
+| `KEYCLOAK_PUBLIC_URL` | Yes | Public HTTPS origin used by browsers and Keycloak, e.g. `https://auth.example.com` |
 | `KEYCLOAK_REALM` | Yes | Default `haip` |
 | `KEYCLOAK_CLIENT_ID` | Yes | API client, default `haip-api` |
+| `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD` | Yes | Unique bootstrap administrator credentials |
+| `POSTGRES_PASSWORD` | Yes | Unique database password shared with the compose-managed Postgres service |
 | `CONNECT_API_KEY` | Yes when auth on | Comma-separated keys for OTAIP Connect API |
 | `STRIPE_MODE` | Yes | `test` for staging, `live` for real charges |
 | `STRIPE_SECRET_KEY` | Yes | Stripe secret key matching mode |
@@ -77,11 +80,15 @@ Copy [`.env.production.example`](../.env.production.example) to `.env.production
 | `CORS_ORIGINS` | If cross-origin | Comma-separated browser origins; omit for same-origin |
 | `STORAGE_DRIVER` | If uploads | `s3` with bucket credentials, or `local` |
 
-**Keycloak (production notes):** The base compose file runs Keycloak in `start-dev` mode for local exploration. For real deployments, run Keycloak in production mode with TLS, strong admin credentials, and a managed Postgres database — do not expose port 8080 publicly without a reverse proxy.
+**Keycloak (production notes):** The production overlay replaces the base file's `start-dev` command with `start`, requires a public HTTPS hostname and strong bootstrap credentials, and expects TLS termination at a reverse proxy. The proxy must overwrite `X-Forwarded-*` headers. Keep Keycloak port 8080 private; expose only the required authentication paths through the proxy.
 
-**Stripe:** Production overlay sets `STRIPE_MODE=test` by default. Switch to `live` and live keys only when ready to accept real payments.
+**Stripe:** Set `STRIPE_MODE=test` for staging. Switch to `live` with matching live keys only when ready to accept real payments; the production overlay no longer overrides this value.
 
 ## TLS termination
+
+Production metrics and alerting are documented in
+[`docs/observability.md`](./observability.md). Restrict `/api/v1/metrics` to the
+monitoring network at the reverse proxy.
 
 Terminate TLS at a reverse proxy in front of the API container (port 3000). Example **Caddy** site block:
 
@@ -136,7 +143,7 @@ pg_restore -d "$STAGING_DATABASE_URL" --clean --if-exists haip-YYYYMMDD.dump
 2. Pull the new image (or rebuild).
 3. Run schema migration **before** switching traffic:
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm init \
+   docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml run --rm init \
      sh -c "node packages/database/dist/push-schema.js"
    ```
 4. Restart the API: `docker compose ... up -d api`.
@@ -178,7 +185,7 @@ Minimal path for a single VM (Hetzner, DigitalOcean, Linode, AWS EC2, etc.).
 4. **Firewall:** allow `22`, `80`, `443` only. Do **not** expose Postgres (`5432`), Redis (`6379`), or Keycloak (`8080`) publicly — terminate TLS on the host and proxy to the API on `127.0.0.1:3000` (or a private Docker network).
 5. **Start production stack:**
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
+   docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
    ```
 6. **TLS:** point DNS at the VPS and put Caddy or nginx in front (see [TLS termination](#tls-termination)). Set `CORS_ORIGINS=https://pms.example.com` if the browser origin differs from the API host.
 7. **Cron:** schedule night audit / group cutoffs from the host using [`scripts/cron/`](../scripts/cron/) and [`docs/operations/cron.md`](./operations/cron.md).

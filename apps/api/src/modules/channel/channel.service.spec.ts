@@ -161,6 +161,11 @@ describe('ChannelService', () => {
 
   describe('updateSyncStatus', () => {
     it('should update sync status fields', async () => {
+      mockDb.where.mockResolvedValueOnce([{
+        id: 'conn-1',
+        propertyId: 'prop-1',
+        lastSyncStatus: 'success',
+      }]);
       const updateChain = { where: vi.fn().mockResolvedValue(undefined) };
       mockDb.chain.set.mockReturnValue(updateChain);
 
@@ -170,6 +175,14 @@ describe('ChannelService', () => {
     });
 
     it('should include error message when provided', async () => {
+      mockDb.where.mockResolvedValueOnce([{
+        id: 'conn-1',
+        propertyId: 'prop-1',
+        channelCode: 'booking_com',
+        channelName: 'Booking.com',
+        adapterType: 'booking_com',
+        lastSyncStatus: 'success',
+      }]);
       const updateChain = { where: vi.fn().mockResolvedValue(undefined) };
       mockDb.chain.set.mockReturnValue(updateChain);
 
@@ -177,6 +190,54 @@ describe('ChannelService', () => {
 
       expect(mockDb.chain.set).toHaveBeenCalledWith(
         expect.objectContaining({ lastSyncError: 'Timeout' }),
+      );
+      expect(mockWebhookService.emit).toHaveBeenCalledWith(
+        'channel.sync_failed',
+        'channel_connection',
+        'conn-1',
+        expect.objectContaining({
+          connectionId: 'conn-1',
+          adapterType: 'booking_com',
+          error: 'Timeout',
+        }),
+        'prop-1',
+      );
+    });
+
+    it('should not emit another failure event while the connection remains failed', async () => {
+      mockDb.where.mockResolvedValueOnce([{
+        id: 'conn-1',
+        propertyId: 'prop-1',
+        lastSyncStatus: 'failed',
+      }]);
+      const updateChain = { where: vi.fn().mockResolvedValue(undefined) };
+      mockDb.chain.set.mockReturnValue(updateChain);
+
+      await service.updateSyncStatus('conn-1', 'prop-1', 'failed', 'Still timing out');
+
+      expect(mockWebhookService.emit).not.toHaveBeenCalled();
+    });
+
+    it('should emit a recovery event after a failed connection succeeds', async () => {
+      mockDb.where.mockResolvedValueOnce([{
+        id: 'conn-1',
+        propertyId: 'prop-1',
+        channelCode: 'booking_com',
+        channelName: 'Booking.com',
+        adapterType: 'booking_com',
+        lastSyncStatus: 'failed',
+      }]);
+      const updateChain = { where: vi.fn().mockResolvedValue(undefined) };
+      mockDb.chain.set.mockReturnValue(updateChain);
+
+      await service.updateSyncStatus('conn-1', 'prop-1', 'success');
+
+      expect(mockWebhookService.emit).toHaveBeenCalledWith(
+        'channel.sync_completed',
+        'channel_connection',
+        'conn-1',
+        expect.objectContaining({ recoveredFromFailure: true }),
+        'prop-1',
       );
     });
   });

@@ -328,7 +328,7 @@ describe('ReservationService — checkIn', () => {
   it('should call paymentService.authorizePayment when token provided', async () => {
     const db = createCheckInDb();
     const svc = await createService(db);
-    await svc.checkIn('res-001', 'prop-001', {
+    const result = await svc.checkIn('res-001', 'prop-001', {
       gatewayPaymentToken: 'tok_test_123',
       gatewayProvider: 'stripe',
     });
@@ -338,16 +338,30 @@ describe('ReservationService — checkIn', () => {
         gatewayPaymentToken: 'tok_test_123',
       }),
     );
+    expect(result.depositAuth).toEqual({
+      status: 'ok',
+      paymentId: 'pay-001',
+      amount: '600.00',
+      currencyCode: 'USD',
+    });
   });
 
   it('should skip deposit auth when skipDepositAuth is true', async () => {
     const db = createCheckInDb();
     const svc = await createService(db);
-    await svc.checkIn('res-001', 'prop-001', {
+    const result = await svc.checkIn('res-001', 'prop-001', {
       skipDepositAuth: true,
       gatewayPaymentToken: 'tok_test_123',
     });
     expect(mockPaymentService.authorizePayment).not.toHaveBeenCalled();
+    expect(result.depositAuth).toEqual({ status: 'skipped', reason: 'explicitly_skipped' });
+  });
+
+  it('should report a missing payment token as an explicit skip', async () => {
+    const db = createCheckInDb();
+    const svc = await createService(db);
+    const result = await svc.checkIn('res-001', 'prop-001');
+    expect(result.depositAuth).toEqual({ status: 'skipped', reason: 'payment_token_missing' });
   });
 
   it('should not block check-in when deposit auth fails', async () => {
@@ -361,7 +375,23 @@ describe('ReservationService — checkIn', () => {
       gatewayProvider: 'stripe',
     });
     expect(result.reservation.status).toBe('checked_in');
-    expect(result.depositAuth).toBeNull();
+    expect(result.depositAuth).toEqual({
+      status: 'failed',
+      code: 'DEPOSIT_AUTHORIZATION_FAILED',
+      message: 'Deposit authorization failed. Retry authorization or record an approved override.',
+    });
+    expect(mockWebhookService.emit).toHaveBeenCalledWith(
+      'reservation.checked_in',
+      'reservation',
+      'res-001',
+      expect.objectContaining({
+        depositAuth: expect.objectContaining({
+          status: 'failed',
+          code: 'DEPOSIT_AUTHORIZATION_FAILED',
+        }),
+      }),
+      'prop-001',
+    );
   });
 
   it('should set early check-in flag when before standard time', async () => {

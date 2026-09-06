@@ -52,6 +52,16 @@ export async function runLocalFileProbes() {
         id: 'env:REDIS_URL',
         re: /^\s*REDIS_URL\s*=\s*.+/m,
       },
+      {
+        id: 'env:KEYCLOAK_PUBLIC_URL',
+        re: /^\s*KEYCLOAK_PUBLIC_URL\s*=\s*https:\/\/.+/m,
+      },
+      {
+        id: 'env:no-placeholders',
+        re: null,
+        ok: !/REPLACE_(WITH_|ME)/.test(text),
+        detailFail: 'replace every example secret placeholder before production',
+      },
     ];
     for (const c of checks) {
       if (c.re) {
@@ -90,6 +100,24 @@ export async function runLocalFileProbes() {
       detail: authOn
         ? 'docker-compose.prod.yml sets AUTH_ENABLED=true'
         : 'docker-compose.prod.yml should set AUTH_ENABLED=true',
+    });
+    const keycloakProduction = /^\s*command:\s*start\s+--import-realm\s*$/m.test(text);
+    results.push({
+      id: 'compose:keycloak-production',
+      ok: keycloakProduction,
+      detail: keycloakProduction
+        ? 'production overlay replaces Keycloak start-dev'
+        : 'production overlay must set Keycloak command: start --import-realm',
+    });
+    const publicAuthIsConfigurable =
+      /VITE_KEYCLOAK_URL:\s*\$\{KEYCLOAK_PUBLIC_URL:/.test(text)
+      && !/VITE_KEYCLOAK_URL:\s*http:\/\/localhost/.test(text);
+    results.push({
+      id: 'compose:keycloak-public-url',
+      ok: publicAuthIsConfigurable,
+      detail: publicAuthIsConfigurable
+        ? 'dashboard auth origin comes from KEYCLOAK_PUBLIC_URL'
+        : 'production dashboard must not bake a localhost Keycloak URL',
     });
   }
 

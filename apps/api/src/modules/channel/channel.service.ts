@@ -170,6 +170,10 @@ export class ChannelService {
     status: string,
     error?: string,
   ) {
+    const connection = await this.findById(id, propertyId);
+    const previousStatus = connection.lastSyncStatus as string | null | undefined;
+    const safeError = error?.slice(0, 500);
+
     // propertyId is part of the WHERE (not just the caller's responsibility): every
     // property-scoped write must filter by propertyId so this stays safe even if a
     // future caller passes a client-supplied connection id.
@@ -178,10 +182,42 @@ export class ChannelService {
       .set({
         lastSyncAt: new Date(),
         lastSyncStatus: status,
-        lastSyncError: error ?? null,
+        lastSyncError: safeError ?? null,
         updatedAt: new Date(),
       })
       .where(and(eq(channelConnections.id, id), eq(channelConnections.propertyId, propertyId)));
+
+    // Emit only on state transitions. Retries that keep a connection in
+    // `failed` update diagnostics but do not create notification storms.
+    if (status === 'failed' && previousStatus !== 'failed') {
+      await this.webhookService.emit(
+        'channel.sync_failed',
+        'channel_connection',
+        id,
+        {
+          connectionId: id,
+          channelCode: connection.channelCode,
+          channelName: connection.channelName,
+          adapterType: connection.adapterType,
+          error: safeError ?? 'Channel sync failed without an adapter error message',
+        },
+        propertyId,
+      );
+    } else if (status === 'success') {
+      await this.webhookService.emit(
+        'channel.sync_completed',
+        'channel_connection',
+        id,
+        {
+          connectionId: id,
+          channelCode: connection.channelCode,
+          channelName: connection.channelName,
+          adapterType: connection.adapterType,
+          recoveredFromFailure: previousStatus === 'failed',
+        },
+        propertyId,
+      );
+    }
   }
 
   /**

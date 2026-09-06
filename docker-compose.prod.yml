@@ -4,23 +4,39 @@
 #   cp .env.production.example .env.production   # fill credentials
 #
 # Start (Keycloak is on the `auth` profile in the base file):
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
+#   docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml --profile auth up -d --build
 #
 # Services: postgres, redis, keycloak (--profile auth), init, api.
 # Mock channel adapters and MinIO stay on optional profiles (channels, storage).
 
 services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+
+  keycloak:
+    # Override the base compose's demo-only start-dev command. TLS terminates at
+    # the reverse proxy; Keycloak remains HTTP-only on the private compose network.
+    command: start --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:?Set KEYCLOAK_ADMIN in .env.production}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in .env.production}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:?Set KEYCLOAK_PUBLIC_URL in .env.production}
+      KC_HTTP_ENABLED: 'true'
+      KC_PROXY_HEADERS: ${KEYCLOAK_PROXY_HEADERS:-xforwarded}
+
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
       args:
         VITE_AUTH_ENABLED: 'true'
-        VITE_KEYCLOAK_URL: http://localhost:8080
-        VITE_KEYCLOAK_REALM: haip
-        VITE_KEYCLOAK_CLIENT_ID: haip-dashboard
+        VITE_KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_URL:?Set KEYCLOAK_PUBLIC_URL in .env.production}
+        VITE_KEYCLOAK_REALM: ${KEYCLOAK_REALM:-haip}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-haip-dashboard}
         # Must match the api service's HAIP_BOOKING_REQUESTS below.
-        VITE_HAIP_BOOKING_REQUESTS: 'false'
+        VITE_HAIP_BOOKING_REQUESTS: ${HAIP_BOOKING_REQUESTS:-false}
     env_file:
       - .env.production
     environment:
@@ -28,12 +44,13 @@ services:
       AUTH_ENABLED: 'true'
       SERVE_DASHBOARD: 'true'
       SERVE_BOOKING: 'true'
-      STRIPE_MODE: test
+      STRIPE_MODE: ${STRIPE_MODE:?Set STRIPE_MODE in .env.production}
       # Override demo-only opt-out; must not be 'true' in production.
       HAIP_ALLOW_INSECURE: ''
-      KEYCLOAK_URL: http://keycloak:8080
-      DATABASE_URL: postgresql://haip:haip@postgres:5432/haip
-      REDIS_URL: redis://redis:6379
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://keycloak:8080}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.production}
+      REDIS_URL: ${REDIS_URL:?Set REDIS_URL in .env.production}
+      HAIP_BOOKING_REQUESTS: ${HAIP_BOOKING_REQUESTS:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,11 +67,12 @@ services:
       dockerfile: apps/api/Dockerfile
       args:
         VITE_AUTH_ENABLED: 'true'
-        VITE_KEYCLOAK_URL: http://localhost:8080
-        VITE_KEYCLOAK_REALM: haip
-        VITE_KEYCLOAK_CLIENT_ID: haip-dashboard
-        VITE_HAIP_BOOKING_REQUESTS: 'false'
+        VITE_KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_URL:?Set KEYCLOAK_PUBLIC_URL in .env.production}
+        VITE_KEYCLOAK_REALM: ${KEYCLOAK_REALM:-haip}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-haip-dashboard}
+        VITE_HAIP_BOOKING_REQUESTS: ${HAIP_BOOKING_REQUESTS:-false}
     env_file:
       - .env.production
     environment:
-      DATABASE_URL: postgresql://haip:haip@postgres:5432/haip
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.production}
+      HAIP_BOOKING_REQUESTS: ${HAIP_BOOKING_REQUESTS:-false}

@@ -16,6 +16,10 @@ Run before enabling real hotel tenants. Uses two Keycloak users / properties.
 | `TOKEN_A` / `TOKEN_B` | Bearer JWTs for users A and B |
 | `PROPERTY_A` / `PROPERTY_B` | Property UUIDs |
 | `RESERVATION_IN_B` | Optional — reservation id that belongs only to B |
+| `OWNER_TOKEN` | Optional — owner JWT whose `property_ids` contains both A and B |
+| `OWNER_PROPERTY_A` / `OWNER_PROPERTY_B` | Two properties available to that same owner |
+| `OWNER_RESERVATION_IN_B` / `OWNER_GUEST_IN_B` | Entities linked only to property B |
+| `OWNER_ROOM_TYPE_IN_A` / `OWNER_RATE_PLAN_IN_A` | Valid property-A ids used to exercise reservation creation |
 
 ## Automated probe
 
@@ -41,8 +45,11 @@ An owner JWT may hold `property_ids=[A, B]`. Still required:
 2. `POST /reservations` with `propertyId=A` and a `guestId` only linked at B → **404**
 3. SPA property switch clears cached detail data; detail routes key by `propertyId`
 
-These owner invariants are checklist items in v1 (exercise manually or with your own scripts).
-The CLI covers the two-user cross-tenant deny path above.
+The CLI executes these probes automatically when all `OWNER_*` variables are
+set. When they are absent it reports one clean `SKIP`, leaving the existing
+two-user tenant probes unchanged. The create probe uses configurable future
+dates (`OWNER_TEST_ARRIVAL` / `OWNER_TEST_DEPARTURE`) and must return **404**
+before any booking or reservation is inserted.
 
 ## After changes
 
