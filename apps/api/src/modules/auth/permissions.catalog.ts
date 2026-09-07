@@ -38,6 +38,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { key: 'houseaccounts.read', label: 'View house accounts', group: 'House Accounts', navKey: '/house-accounts' },
   { key: 'houseaccounts.manage', label: 'Manage house accounts', group: 'House Accounts' },
   { key: 'accounting.view', label: 'Accounting & deposits', group: 'Accounting', navKey: '/accounting' },
+  { key: 'accounting.manage', label: 'Post deposits, A/R ledgers & accounting codes', group: 'Accounting' },
   { key: 'tax.manage', label: 'Tax profiles & rules', group: 'Tax', navKey: '/tax' },
   { key: 'rateplans.read', label: 'View rate plans', group: 'Rate Plans', navKey: '/rate-plans' },
   { key: 'rateplans.manage', label: 'Manage rate plans', group: 'Rate Plans' },
@@ -97,6 +98,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
     'reviews.manage',
     'ops.read',
     'ops.manage',
+    'cashier.access',
+    'accounting.manage',
   ],
   housekeeping: ['dashboard.view', 'rooms.read', 'housekeeping.read', 'ops.read'],
   housekeeping_manager: [
@@ -112,11 +115,15 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
     'dashboard.view',
     'reservations.read',
     'folios.read',
+    'folios.manage',
     'nightaudit.run',
     'reports.view',
     'cashier.access',
     'houseaccounts.read',
+    'houseaccounts.manage',
     'accounting.view',
+    'accounting.manage',
+    'communications.manage',
     'commercial.read',
   ],
   readonly: [
@@ -162,12 +169,21 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
     'houseaccounts.manage',
     'cashier.access',
     'accounting.view',
+    'accounting.manage',
     'tax.manage',
     'nightaudit.run',
+    'communications.manage',
     'reports.view',
     'commercial.read',
   ],
-  /** Booking desk — reservations without cashier / folio posting. */
+  /**
+   * Booking desk. The doc comment used to read "reservations without cashier /
+   * folio posting", but the legacy @Roles() gate never enforced that split:
+   * `reservations` was already in the allow-list of every billing controller
+   * below. These keys record the access the realm-role gate was granting in
+   * practice, so migrating to permissions preserves behaviour rather than
+   * silently narrowing it.
+   */
   reservations: [
     'dashboard.view',
     'frontdesk.access',
@@ -178,6 +194,10 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
     'rooms.read',
     'media.manage',
     'folios.read',
+    'folios.manage',
+    'houseaccounts.manage',
+    'cashier.access',
+    'accounting.manage',
     'groups.read',
     'groups.manage',
     'commercial.read',

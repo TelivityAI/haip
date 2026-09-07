@@ -1,6 +1,6 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { NotificationService } from './notification.service';
 import { SendSmsDto } from './dto/send-sms.dto';
 import { SendWhatsAppDto } from './dto/send-whatsapp.dto';
@@ -12,7 +12,7 @@ export class NotificationsController {
   constructor(private readonly notificationService: NotificationService) {}
 
   @Post('sms')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('communications.manage')
   @ApiOperation({ summary: 'Send an SMS to a guest via the configured provider' })
   @ApiResponse({ status: 201, description: 'Dispatch result (sent flag + provider + messageId/error)' })
   sendSms(@Body() dto: SendSmsDto) {
@@ -20,7 +20,7 @@ export class NotificationsController {
   }
 
   @Post('whatsapp')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('communications.manage')
   @ApiOperation({ summary: 'Send a WhatsApp template/body via the configured provider' })
   @ApiResponse({ status: 201, description: 'Dispatch result (sent flag + provider + messageId/error)' })
   sendWhatsApp(@Body() dto: SendWhatsAppDto) {
@@ -40,7 +40,7 @@ export class NotificationsController {
   }
 
   @Post('telegram')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('communications.manage')
   @ApiOperation({ summary: 'Send a Telegram message to a guest via the configured bot' })
   @ApiResponse({ status: 201, description: 'Dispatch result (sent flag + provider + messageId/error)' })
   sendTelegram(@Body() dto: SendTelegramDto) {

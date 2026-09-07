@@ -9,7 +9,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { HouseAccountService } from './house-account.service';
 import { OpenHouseAccountDto } from './dto/open-house-account.dto';
 import { ListHouseAccountsDto } from './dto/list-house-accounts.dto';
@@ -29,7 +29,7 @@ export class HouseAccountController {
   // Declared before :id house-account routes so '/products' is not shadowed.
 
   @Post('products')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('houseaccounts.manage')
   @ApiOperation({ summary: 'Create a retail product (catalog item)' })
   @ApiResponse({ status: 201, description: 'Product created' })
   createProduct(@Body() dto: CreateProductDto) {
@@ -56,7 +56,7 @@ export class HouseAccountController {
   }
 
   @Patch('products/:id')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('houseaccounts.manage')
   @ApiOperation({ summary: 'Update a product' })
   @ApiResponse({ status: 200, description: 'Product updated' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -71,7 +71,7 @@ export class HouseAccountController {
   // --- House accounts (KB 13) ---
 
   @Post('house-accounts')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('houseaccounts.manage')
   @ApiOperation({ summary: 'Open a house account (KB 13.2)' })
   @ApiResponse({ status: 201, description: 'House account opened' })
   openHouseAccount(@Body() dto: OpenHouseAccountDto) {
@@ -98,7 +98,7 @@ export class HouseAccountController {
   }
 
   @Post('house-accounts/:id/close')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('houseaccounts.manage')
   @ApiOperation({ summary: 'Close a house account (read-only after, KB 13.2)' })
   @ApiResponse({ status: 200, description: 'House account closed' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -110,7 +110,7 @@ export class HouseAccountController {
   }
 
   @Post('house-accounts/:id/charges')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('houseaccounts.manage')
   @ApiOperation({ summary: 'Post a charge to a house account' })
   @ApiResponse({ status: 201, description: 'Charge posted' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -123,7 +123,7 @@ export class HouseAccountController {
   }
 
   @Post('house-accounts/:id/payments')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('houseaccounts.manage')
   @ApiOperation({ summary: 'Record a payment on a house account' })
   @ApiResponse({ status: 201, description: 'Payment recorded' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -136,7 +136,7 @@ export class HouseAccountController {
   }
 
   @Post('house-accounts/:id/sell')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('houseaccounts.manage')
   @ApiOperation({ summary: 'Sell a catalog product to a house account (KB 13.3)' })
   @ApiResponse({ status: 201, description: 'Product sold; charge (and optional payment) posted' })
   @ApiQuery({ name: 'propertyId', type: String })

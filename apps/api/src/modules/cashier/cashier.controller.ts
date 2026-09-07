@@ -8,7 +8,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../auth/permissions.decorator';
 import { CashierService } from './cashier.service';
 import { CreateDrawerDto } from './dto/create-drawer.dto';
 import { OpenSessionDto } from './dto/open-session.dto';
@@ -28,7 +28,7 @@ export class CashierController {
   }
 
   @Post('drawers')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('cashier.access')
   @ApiOperation({ summary: 'Create a cash drawer (KB 12.1)' })
   @ApiResponse({ status: 201, description: 'Cash drawer created' })
   createDrawer(@Body() dto: CreateDrawerDto) {
@@ -61,7 +61,7 @@ export class CashierController {
   }
 
   @Post('sessions')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('cashier.access')
   @ApiOperation({ summary: 'Open a cash drawer session/shift (KB 12.2)' })
   @ApiResponse({ status: 201, description: 'Session opened' })
   openSession(@Body() dto: OpenSessionDto) {
@@ -98,7 +98,7 @@ export class CashierController {
   }
 
   @Post('sessions/:id/movements')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('cashier.access')
   @ApiOperation({ summary: 'Record a cash movement (KB 12.3)' })
   @ApiResponse({ status: 201, description: 'Movement recorded' })
   recordMovement(
@@ -109,7 +109,7 @@ export class CashierController {
   }
 
   @Post('sessions/:id/close')
-  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'night_auditor', 'accounting')
+  @RequirePermissions('cashier.access')
   @ApiOperation({ summary: 'Close a session and compute variance (KB 12.4)' })
   @ApiResponse({ status: 200, description: 'Session closed' })
   closeSession(
