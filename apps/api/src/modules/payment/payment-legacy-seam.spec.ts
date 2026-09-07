@@ -1,6 +1,6 @@
 import { Reflector } from '@nestjs/core';
 import { describe, expect, it, vi } from 'vitest';
-import { ROLES_KEY } from '../auth/roles.decorator';
+import { PERMISSIONS_KEY } from '../auth/permissions.decorator';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 
@@ -72,7 +72,11 @@ function serviceWith(db: ReturnType<typeof dbReturning>) {
 }
 
 describe('legacy payment HTTP seam', () => {
-  it('uses role guards for generic payment mutations', () => {
+  it('requires folios.manage for generic payment mutations', () => {
+    // Updated in the same change that migrates PaymentController's mutation
+    // routes off @Roles() onto @RequirePermissions('folios.manage'). The
+    // route set and who can reach it are unchanged -- only the mechanism the
+    // guard reads is.
     const reflector = new Reflector();
     for (const method of [
       'recordPayment',
@@ -83,9 +87,9 @@ describe('legacy payment HTTP seam', () => {
       'correctPayment',
     ] as const) {
       expect(reflector.get(
-        ROLES_KEY,
+        PERMISSIONS_KEY,
         PaymentController.prototype[method],
-      )).toEqual(['admin', 'general_manager', 'front_desk', 'reservations']);
+      )).toEqual(['folios.manage']);
     }
   });
 
