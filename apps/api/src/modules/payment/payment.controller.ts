@@ -68,7 +68,7 @@ export class PaymentController {
   }
 
   @Post(':id/void')
-  @RequirePermissions('folios.manage')
+  @RequirePermissions('payments.refund')
   @ApiOperation({ summary: 'Void authorized payment' })
   @ApiResponse({ status: 200, description: 'Payment voided' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -80,7 +80,7 @@ export class PaymentController {
   }
 
   @Post(':id/refund')
-  @RequirePermissions('folios.manage')
+  @RequirePermissions('payments.refund')
   @ApiOperation({ summary: 'Refund captured payment' })
   @ApiResponse({ status: 200, description: 'Payment refunded' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -93,7 +93,7 @@ export class PaymentController {
   }
 
   @Post(':id/correct')
-  @RequirePermissions('folios.manage')
+  @RequirePermissions('payments.refund')
   @ApiOperation({ summary: 'Correct a payment via the void/refund/adjust matrix (KB 14.1)' })
   @ApiResponse({ status: 200, description: 'Payment corrected' })
   correctPayment(

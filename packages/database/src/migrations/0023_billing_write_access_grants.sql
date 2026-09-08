@@ -1,19 +1,16 @@
--- The 6 billing-adjacent controllers (folio's charge/settle/close routes,
--- payment, notifications, house-account, cashier, accounting) used to gate
--- every route -- read and write alike -- with one Keycloak realm-role list:
--- admin, general_manager, front_desk, reservations, night_auditor,
--- accounting. Moving those routes onto local @RequirePermissions() (see the
--- RBAC migration continuing #340) surfaced that four of those six roles were missing
--- permission keys the old realm-role gate had been granting them all along.
--- The rule applied is to preserve what the realm-role gate was granting in
--- practice rather than narrow it silently: reservations-desk staff keep the
--- ability to record payments and post charges, and night_auditor/accounting
--- get the keys the old list already gave them.
+-- Billing controllers left behind by #340 move onto @RequirePermissions().
+-- Folio / cashier / house-account / accounting / notifications used to share
+-- one realm-role list (admin, GM, front_desk, reservations, night_auditor,
+-- accounting). PaymentController did NOT — its mutation routes were only
+-- admin / GM / front_desk / reservations. This migration preserves folio-side
+-- write access for the roles that already had it, grants accounting the
+-- payment-refund access FO already had, and deliberately omits payments.refund
+-- from night_auditor (overnight posting yes; guest refunds / voids no).
 --
 -- admin and general_manager need no grant here: admin holds every key via
 -- ALL_PERMISSIONS, and general_manager holds every key except the two
--- admin.* ones, so a brand-new key like accounting.manage is automatic for
--- both the moment it exists in the code catalog -- see permissions.catalog.ts.
+-- admin.* ones, so brand-new keys (accounting.manage, payments.refund) are
+-- automatic for both the moment they exist in the code catalog.
 
 WITH role_ids AS (
   SELECT key, id AS role_id
@@ -26,16 +23,19 @@ grants(role_key, permission_key) AS (
   VALUES
     ('front_desk', 'cashier.access'),
     ('front_desk', 'accounting.manage'),
+    ('front_desk', 'payments.refund'),
     ('night_auditor', 'folios.manage'),
     ('night_auditor', 'houseaccounts.manage'),
     ('night_auditor', 'communications.manage'),
     ('night_auditor', 'accounting.manage'),
     ('accounting', 'communications.manage'),
     ('accounting', 'accounting.manage'),
+    ('accounting', 'payments.refund'),
     ('reservations', 'folios.manage'),
     ('reservations', 'houseaccounts.manage'),
     ('reservations', 'cashier.access'),
-    ('reservations', 'accounting.manage')
+    ('reservations', 'accounting.manage'),
+    ('reservations', 'payments.refund')
 ),
 resolved AS (
   SELECT r.role_id, g.permission_key

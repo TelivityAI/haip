@@ -3,6 +3,16 @@
  */
 
 export { Public, IS_PUBLIC_KEY, RequirePermissions, PERMISSIONS_KEY } from './access-decorators.js';
+export {
+  type PermissionDef,
+  PERMISSIONS,
+  PERMISSION_KEYS,
+  ALL_PERMISSIONS,
+  ROLE_DEFAULT_PERMISSIONS,
+  SYSTEM_ROLE_LABELS,
+  SYSTEM_ROLE_KEYS,
+  isPermissionKey,
+} from './permissions-catalog.js';
 export { IsMoneyString, type MoneyStringOptions } from './is-money-string.validator.js';
 export {
   IsAfterCheckIn,
