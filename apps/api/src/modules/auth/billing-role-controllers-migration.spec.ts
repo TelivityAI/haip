@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from './roles.decorator';
 import { PERMISSIONS_KEY } from './permissions.decorator';
+import { ROLE_DEFAULT_PERMISSIONS } from './permissions.catalog';
 import { PaymentController } from '../payment/payment.controller';
 import { FolioController } from '../folio/folio.controller';
 import { NotificationsController } from '../notifications/notifications.controller';
@@ -10,25 +11,16 @@ import { CashierController } from '../cashier/cashier.controller';
 import { AccountingController } from '../accounting/accounting.controller';
 
 /**
- * The six billing-adjacent controllers left behind by #340, which migrated
- * eighteen others off the legacy @Roles() decorator. These were deferred
- * because they gated every route -- read and write alike -- with one identical
- * realm-role list, so no existing permission key matched it without either
- * widening or narrowing who could record a payment or post a charge.
+ * Continues #340 / #361 (Charles @ modernitconsultants): billing controllers
+ * off legacy @Roles() onto @RequirePermissions().
  *
- * The rule applied here is to PRESERVE the access the realm-role gate was
- * granting in practice: reservations, night_auditor and accounting keep the
- * billing-write ability the old list already gave them, and the matching
- * ROLE_DEFAULT_PERMISSIONS entries plus migration
- * 0023_billing_write_access_grants.sql backfill the keys for properties that
- * already have RBAC rows.
+ * Folio / cashier / house-account / accounting / notifications used to share
+ * one realm-role list. PaymentController did not (admin/GM/front_desk/
+ * reservations only). Refunds / voids / corrections / deposit refunds use
+ * payments.refund so night_auditor can post overnight without refunding.
  *
- * One side effect worth disclosing rather than burying: communications.manage
- * (notifications.controller.ts) is already held by revenue_manager for an
- * unrelated existing route (groups.controller.ts), so reusing that key here
- * also lets revenue_manager send guest SMS/WhatsApp/Telegram messages, which
- * the old gate did not. Reusing the existing key seemed better than inventing
- * a near-duplicate one, but say the word and it can be split.
+ * Side effect retained from #361: communications.manage on notifications also
+ * lets revenue_manager send guest SMS (already held that key via groups).
  */
 const reflector = new Reflector();
 
@@ -44,7 +36,11 @@ function permsOf(target: Function) {
 describe('billing-write routes migrated off @Roles() onto @RequirePermissions', () => {
   it.each([
     [PaymentController.prototype.recordPayment, 'folios.manage'],
-    [PaymentController.prototype.voidPayment, 'folios.manage'],
+    [PaymentController.prototype.authorizePayment, 'folios.manage'],
+    [PaymentController.prototype.capturePayment, 'folios.manage'],
+    [PaymentController.prototype.voidPayment, 'payments.refund'],
+    [PaymentController.prototype.refundPayment, 'payments.refund'],
+    [PaymentController.prototype.correctPayment, 'payments.refund'],
     [FolioController.prototype.createFolio, 'folios.manage'],
     [FolioController.prototype.settleFolio, 'folios.manage'],
     [FolioController.prototype.postCharge, 'folios.manage'],
@@ -54,10 +50,19 @@ describe('billing-write routes migrated off @Roles() onto @RequirePermissions', 
     [CashierController.prototype.createDrawer, 'cashier.access'],
     [CashierController.prototype.closeSession, 'cashier.access'],
     [AccountingController.prototype.recordDeposit, 'accounting.manage'],
+    [AccountingController.prototype.refundDeposit, 'payments.refund'],
     [AccountingController.prototype.createArLedger, 'accounting.manage'],
     [AccountingController.prototype.createAccountingCode, 'accounting.manage'],
   ])('%s: no leftover @Roles, gated on @RequirePermissions(%s)', (method, expectedKey) => {
     expect(rolesOf(method)).toBeUndefined();
     expect(permsOf(method)).toEqual([expectedKey]);
+  });
+
+  it('night_auditor can post but cannot refund; accounting / FO / reservations can refund', () => {
+    expect(ROLE_DEFAULT_PERMISSIONS.night_auditor).toContain('folios.manage');
+    expect(ROLE_DEFAULT_PERMISSIONS.night_auditor).not.toContain('payments.refund');
+    for (const role of ['accounting', 'front_desk', 'reservations'] as const) {
+      expect(ROLE_DEFAULT_PERMISSIONS[role], role).toContain('payments.refund');
+    }
   });
 });

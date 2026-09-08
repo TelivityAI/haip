@@ -82,7 +82,7 @@ export class AccountingController {
   }
 
   @Post('deposits/:id/refund')
-  @RequirePermissions('accounting.manage')
+  @RequirePermissions('payments.refund')
   @ApiOperation({ summary: 'Refund a held refundable deposit (KB 10.4)' })
   @ApiResponse({ status: 200, description: 'Deposit refunded' })
   @ApiQuery({ name: 'propertyId', type: String })

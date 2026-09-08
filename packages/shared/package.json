@@ -24,6 +24,12 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs",
       "default": "./dist/index.js"
+    },
+    "./permissions-catalog": {
+      "types": "./dist/permissions-catalog.d.ts",
+      "import": "./dist/permissions-catalog.js",
+      "require": "./dist/permissions-catalog.cjs",
+      "default": "./dist/permissions-catalog.js"
     }
   },
   "scripts": {

@@ -1,0 +1,254 @@
+/**
+ * Permission catalog — single source of truth for authorization keys and
+ * default system-role grants. Used by the API (guards / admin UI) and by
+ * packages/database seed so demo RBAC cannot drift from ROLE_DEFAULT_PERMISSIONS.
+ *
+ * Permissions are CODE-DEFINED (not a DB table) because each key maps 1:1 to an
+ * API capability and/or a dashboard nav item that only exists in code. Roles and
+ * their grants are DB-managed; a role may only be granted keys that exist here.
+ * `navKey` (a dashboard route) ties a permission to sidebar visibility so the UI
+ * and the API stay in lockstep.
+ */
+export interface PermissionDef {
+  key: string;
+  label: string;
+  group: string;
+  /** Dashboard route this permission gates in the sidebar, if any. */
+  navKey?: string;
+}
+
+export const PERMISSIONS: readonly PermissionDef[] = [
+  { key: 'dashboard.view', label: 'View dashboard', group: 'General', navKey: '/' },
+  { key: 'frontdesk.access', label: 'Use front desk', group: 'Front Desk', navKey: '/front-desk' },
+  { key: 'reservations.read', label: 'View reservations', group: 'Reservations', navKey: '/reservations' },
+  { key: 'reservations.write', label: 'Create / modify reservations', group: 'Reservations' },
+  { key: 'guests.read', label: 'View guests', group: 'Guests', navKey: '/guests' },
+  { key: 'guests.write', label: 'Create / modify guests', group: 'Guests' },
+  { key: 'rooms.read', label: 'View rooms', group: 'Rooms', navKey: '/rooms' },
+  { key: 'rooms.write', label: 'Manage rooms / room types', group: 'Rooms' },
+  { key: 'media.manage', label: 'Manage photos', group: 'Rooms' },
+  { key: 'housekeeping.read', label: 'View housekeeping', group: 'Housekeeping', navKey: '/housekeeping' },
+  { key: 'housekeeping.manage', label: 'Assign / inspect housekeeping', group: 'Housekeeping' },
+  { key: 'ops.read', label: 'View property ops (lost & found, discrepancies, service requests)', group: 'Housekeeping' },
+  { key: 'ops.manage', label: 'Manage property ops (lost & found, service requests)', group: 'Housekeeping' },
+  { key: 'folios.read', label: 'View folios & billing', group: 'Billing', navKey: '/folios' },
+  { key: 'folios.manage', label: 'Post charges / payments', group: 'Billing' },
+  {
+    key: 'payments.refund',
+    label: 'Refund / void / correct payments & deposits',
+    group: 'Billing',
+  },
+  { key: 'groups.read', label: 'View groups', group: 'Groups', navKey: '/groups' },
+  { key: 'groups.manage', label: 'Manage groups & blocks', group: 'Groups' },
+  { key: 'commercial.read', label: 'View commercial profiles', group: 'Groups', navKey: '/commercial' },
+  { key: 'cashier.access', label: 'Cash drawer operations', group: 'Cashier', navKey: '/cashier' },
+  { key: 'houseaccounts.read', label: 'View house accounts', group: 'House Accounts', navKey: '/house-accounts' },
+  { key: 'houseaccounts.manage', label: 'Manage house accounts', group: 'House Accounts' },
+  { key: 'accounting.view', label: 'Accounting & deposits', group: 'Accounting', navKey: '/accounting' },
+  { key: 'accounting.manage', label: 'Post deposits, A/R ledgers & accounting codes', group: 'Accounting' },
+  { key: 'tax.manage', label: 'Tax profiles & rules', group: 'Tax', navKey: '/tax' },
+  { key: 'rateplans.read', label: 'View rate plans', group: 'Rate Plans', navKey: '/rate-plans' },
+  { key: 'rateplans.manage', label: 'Manage rate plans', group: 'Rate Plans' },
+  { key: 'services.read', label: 'View stay services', group: 'Services', navKey: '/services' },
+  { key: 'services.manage', label: 'Manage stay services & package components', group: 'Services' },
+  { key: 'policies.read', label: 'View cancellation policies', group: 'Rate Plans' },
+  { key: 'policies.manage', label: 'Manage cancellation policies', group: 'Rate Plans' },
+  { key: 'revenue.manage', label: 'Revenue management', group: 'Revenue', navKey: '/revenue' },
+  { key: 'nightaudit.run', label: 'Run night audit', group: 'Night Audit', navKey: '/night-audit' },
+  { key: 'reports.view', label: 'View reports', group: 'Reports', navKey: '/reports' },
+  { key: 'channels.manage', label: 'Manage channels', group: 'Channels', navKey: '/channels' },
+  { key: 'communications.manage', label: 'Guest communications', group: 'Communications', navKey: '/communications' },
+  { key: 'reviews.manage', label: 'Manage reviews', group: 'Reviews', navKey: '/reviews' },
+  { key: 'settings.manage', label: 'Manage property settings', group: 'Settings', navKey: '/settings' },
+  { key: 'bookingengine.manage', label: 'Manage the direct booking engine', group: 'Settings' },
+  { key: 'admin.users.manage', label: 'Manage users', group: 'Administration', navKey: '/admin/users' },
+  { key: 'admin.roles.manage', label: 'Manage roles & permissions', group: 'Administration' },
+] as const;
+
+export const PERMISSION_KEYS: readonly string[] = PERMISSIONS.map((p) => p.key);
+const PERMISSION_KEY_SET = new Set(PERMISSION_KEYS);
+
+export function isPermissionKey(key: string): boolean {
+  return PERMISSION_KEY_SET.has(key);
+}
+
+/** Every permission key — used for the `admin` superuser role. */
+export const ALL_PERMISSIONS: readonly string[] = PERMISSION_KEYS;
+
+/**
+ * Default grants for the built-in (system) roles. These mirror the realm
+ * roles Keycloak ships (keycloak/haip-realm.json). Existing six role keys are
+ * unchanged; leadership roles are additive.
+ */
+export const ROLE_DEFAULT_PERMISSIONS: Record<string, readonly string[]> = {
+  admin: ALL_PERMISSIONS,
+  front_desk: [
+    'dashboard.view',
+    'frontdesk.access',
+    'reservations.read',
+    'reservations.write',
+    'guests.read',
+    'guests.write',
+    'rooms.read',
+    'media.manage',
+    'folios.read',
+    'folios.manage',
+    'groups.read',
+    'commercial.read',
+    'houseaccounts.read',
+    'houseaccounts.manage',
+    'rateplans.read',
+    'services.read',
+    'services.manage',
+    'policies.read',
+    'communications.manage',
+    'reviews.manage',
+    'ops.read',
+    'ops.manage',
+    'cashier.access',
+    'accounting.manage',
+    'payments.refund',
+  ],
+  housekeeping: ['dashboard.view', 'rooms.read', 'housekeeping.read', 'ops.read'],
+  housekeeping_manager: [
+    'dashboard.view',
+    'rooms.read',
+    'rooms.write',
+    'housekeeping.read',
+    'housekeeping.manage',
+    'ops.read',
+    'ops.manage',
+  ],
+  /**
+   * Overnight FO + day balance. Folio/cashier/accounting.manage cover posting
+   * and balancing; payments.refund is intentionally omitted so refunds /
+   * voids / payment corrections stay with FO, reservations, and accounting.
+   */
+  night_auditor: [
+    'dashboard.view',
+    'reservations.read',
+    'folios.read',
+    'folios.manage',
+    'nightaudit.run',
+    'reports.view',
+    'cashier.access',
+    'houseaccounts.read',
+    'houseaccounts.manage',
+    'accounting.view',
+    'accounting.manage',
+    'communications.manage',
+    'commercial.read',
+  ],
+  readonly: [
+    'dashboard.view',
+    'reservations.read',
+    'guests.read',
+    'rooms.read',
+    'folios.read',
+    'rateplans.read',
+    'services.read',
+    'policies.read',
+    'reports.view',
+    'commercial.read',
+  ],
+  /** Property GM — full ops; owner keeps user/role admin. */
+  general_manager: ALL_PERMISSIONS.filter(
+    (k) => k !== 'admin.users.manage' && k !== 'admin.roles.manage',
+  ),
+  revenue_manager: [
+    'dashboard.view',
+    'reservations.read',
+    'guests.read',
+    'rooms.read',
+    'groups.read',
+    'groups.manage',
+    'commercial.read',
+    'rateplans.read',
+    'rateplans.manage',
+    'policies.read',
+    'policies.manage',
+    'revenue.manage',
+    'channels.manage',
+    'reports.view',
+    'communications.manage',
+  ],
+  accounting: [
+    'dashboard.view',
+    'reservations.read',
+    'guests.read',
+    'folios.read',
+    'folios.manage',
+    'payments.refund',
+    'houseaccounts.read',
+    'houseaccounts.manage',
+    'cashier.access',
+    'accounting.view',
+    'accounting.manage',
+    'tax.manage',
+    'nightaudit.run',
+    'communications.manage',
+    'reports.view',
+    'commercial.read',
+  ],
+  /**
+   * Booking desk. Folio / cashier / house-account / accounting controllers used
+   * to list `reservations` on every write route, so the old "no cashier / folio
+   * posting" doc was never enforced there. PaymentController was narrower
+   * (admin / GM / front_desk / reservations only) — reservations already had
+   * payment + refund access; night_auditor and accounting did not. Migrating
+   * preserves that payment-refund split via payments.refund.
+   */
+  reservations: [
+    'dashboard.view',
+    'frontdesk.access',
+    'reservations.read',
+    'reservations.write',
+    'guests.read',
+    'guests.write',
+    'rooms.read',
+    'media.manage',
+    'folios.read',
+    'folios.manage',
+    'payments.refund',
+    'houseaccounts.manage',
+    'cashier.access',
+    'accounting.manage',
+    'groups.read',
+    'groups.manage',
+    'commercial.read',
+    'rateplans.read',
+    'services.read',
+    'services.manage',
+    'policies.read',
+    'communications.manage',
+    'reviews.manage',
+  ],
+  /** Server integration — room / room-type inventory tooling (narrower than GM). */
+  integration_inventory: ['rooms.read', 'rooms.write', 'ops.manage'],
+  /** Server integration — enquiry / booking-desk style pipelines. */
+  integration_reservations: [
+    'reservations.read',
+    'reservations.write',
+    'guests.read',
+    'guests.write',
+    'rooms.read',
+  ],
+};
+
+/** Friendly display names for the system roles. */
+export const SYSTEM_ROLE_LABELS: Record<string, string> = {
+  admin: 'Administrator',
+  front_desk: 'Front Desk',
+  housekeeping: 'Housekeeping',
+  housekeeping_manager: 'Housekeeping Manager',
+  night_auditor: 'Night Auditor',
+  readonly: 'Read Only',
+  general_manager: 'General Manager',
+  revenue_manager: 'Revenue Manager',
+  accounting: 'Accounting',
+  reservations: 'Reservations',
+  integration_inventory: 'Integration — Inventory',
+  integration_reservations: 'Integration — Reservations',
+};
+
+export const SYSTEM_ROLE_KEYS = Object.keys(ROLE_DEFAULT_PERMISSIONS);

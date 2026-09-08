@@ -2,7 +2,7 @@
  * Link a Keycloak service-account JWT subject to a local HAIP user + role grants.
  * Used by server-to-server integrations that call staff REST routes (@RequirePermissions).
  *
- * Permission keys mirror apps/api/src/modules/auth/permissions.catalog.ts — keep
+ * Permission keys come from `@telivityhaip/shared/permissions-catalog` — keep
  * INTEGRATION_PROFILES in sync when adding profiles.
  */
 import { and, eq, isNull } from 'drizzle-orm';

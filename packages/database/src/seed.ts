@@ -12,6 +12,11 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
+import {
+  ROLE_DEFAULT_PERMISSIONS,
+  SYSTEM_ROLE_LABELS,
+  SYSTEM_ROLE_KEYS,
+} from '@telivityhaip/shared/permissions-catalog';
 import * as schema from './schema/index.js';
 import { postgresOptionsFromEnv } from './postgres-options.js';
 
@@ -163,36 +168,14 @@ async function main() {
 
   // -----------------------------------------------------------------------
   // 2c. RBAC — system roles, permission grants, demo users (local authz).
-  //     Permission keys MIRROR apps/api/src/modules/auth/permissions.catalog.ts
-  //     (the API is the source of truth; kept in sync intentionally).
+  //     Grants come from ROLE_DEFAULT_PERMISSIONS in @telivityhaip/shared
+  //     (same catalog the API guards read) so seed cannot drift.
   // -----------------------------------------------------------------------
-  const ALL_PERMS = [
-    'dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write',
-    'guests.read', 'guests.write', 'rooms.read', 'rooms.write', 'media.manage',
-    'housekeeping.read', 'housekeeping.manage', 'ops.read', 'ops.manage',
-    'folios.read', 'folios.manage',
-    'groups.read', 'groups.manage', 'cashier.access', 'houseaccounts.read', 'houseaccounts.manage',
-    'accounting.view', 'tax.manage',
-    'rateplans.read', 'rateplans.manage', 'services.read', 'services.manage', 'policies.read', 'policies.manage', 'revenue.manage', 'nightaudit.run',
-    'reports.view', 'channels.manage', 'communications.manage', 'reviews.manage',
-    'settings.manage', 'bookingengine.manage', 'admin.users.manage', 'admin.roles.manage',
-    'commercial.read',
-  ];
-  const GM_PERMS = ALL_PERMS.filter((k) => k !== 'admin.users.manage' && k !== 'admin.roles.manage');
-  const ROLE_DEFS: { key: string; name: string; perms: string[] }[] = [
-    { key: 'admin', name: 'Administrator', perms: ALL_PERMS },
-    { key: 'front_desk', name: 'Front Desk', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'folios.manage', 'groups.read', 'commercial.read', 'houseaccounts.read', 'houseaccounts.manage', 'rateplans.read', 'services.read', 'services.manage', 'policies.read', 'communications.manage', 'reviews.manage', 'ops.read', 'ops.manage'] },
-    { key: 'housekeeping', name: 'Housekeeping', perms: ['dashboard.view', 'rooms.read', 'housekeeping.read', 'ops.read'] },
-    { key: 'housekeeping_manager', name: 'Housekeeping Manager', perms: ['dashboard.view', 'rooms.read', 'rooms.write', 'housekeeping.read', 'housekeeping.manage', 'ops.read', 'ops.manage'] },
-    { key: 'night_auditor', name: 'Night Auditor', perms: ['dashboard.view', 'reservations.read', 'folios.read', 'nightaudit.run', 'reports.view', 'cashier.access', 'houseaccounts.read', 'accounting.view', 'commercial.read'] },
-    { key: 'readonly', name: 'Read Only', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'folios.read', 'rateplans.read', 'services.read', 'policies.read', 'reports.view', 'commercial.read'] },
-    { key: 'general_manager', name: 'General Manager', perms: GM_PERMS },
-    { key: 'revenue_manager', name: 'Revenue Manager', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'rooms.read', 'groups.read', 'groups.manage', 'commercial.read', 'rateplans.read', 'rateplans.manage', 'policies.read', 'policies.manage', 'revenue.manage', 'channels.manage', 'reports.view', 'communications.manage'] },
-    { key: 'accounting', name: 'Accounting', perms: ['dashboard.view', 'reservations.read', 'guests.read', 'folios.read', 'folios.manage', 'houseaccounts.read', 'houseaccounts.manage', 'cashier.access', 'accounting.view', 'tax.manage', 'nightaudit.run', 'reports.view', 'commercial.read'] },
-    { key: 'reservations', name: 'Reservations', perms: ['dashboard.view', 'frontdesk.access', 'reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read', 'media.manage', 'folios.read', 'groups.read', 'groups.manage', 'commercial.read', 'rateplans.read', 'services.read', 'services.manage', 'policies.read', 'communications.manage', 'reviews.manage'] },
-    { key: 'integration_inventory', name: 'Integration — Inventory', perms: ['rooms.read', 'rooms.write', 'ops.manage'] },
-    { key: 'integration_reservations', name: 'Integration — Reservations', perms: ['reservations.read', 'reservations.write', 'guests.read', 'guests.write', 'rooms.read'] },
-  ];
+  const ROLE_DEFS = SYSTEM_ROLE_KEYS.map((key) => ({
+    key,
+    name: SYSTEM_ROLE_LABELS[key] ?? key,
+    perms: [...(ROLE_DEFAULT_PERMISSIONS[key] ?? [])],
+  }));
 
   const roleIdByKey: Record<string, string> = {};
   await db.insert(schema.roles).values(

@@ -48,6 +48,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@telivityhaip/shared": "workspace:*",
     "drizzle-orm": "^0.39.0",
     "postgres": "^3.4.5"
   },

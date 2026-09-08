@@ -72,16 +72,26 @@ function serviceWith(db: ReturnType<typeof dbReturning>) {
 }
 
 describe('legacy payment HTTP seam', () => {
-  it('requires folios.manage for generic payment mutations', () => {
-    // Updated in the same change that migrates PaymentController's mutation
-    // routes off @Roles() onto @RequirePermissions('folios.manage'). The
-    // route set and who can reach it are unchanged -- only the mechanism the
-    // guard reads is.
+  it('requires folios.manage for tender / capture mutations', () => {
+    // PaymentController used to gate these with @Roles(admin, GM, front_desk,
+    // reservations). Folios.manage preserves that posting path for those roles
+    // plus accounting / night_auditor (who already posted via folio routes).
     const reflector = new Reflector();
     for (const method of [
       'recordPayment',
       'authorizePayment',
       'capturePayment',
+    ] as const) {
+      expect(reflector.get(
+        PERMISSIONS_KEY,
+        PaymentController.prototype[method],
+      )).toEqual(['folios.manage']);
+    }
+  });
+
+  it('requires payments.refund for void / refund / correct (night_auditor excluded)', () => {
+    const reflector = new Reflector();
+    for (const method of [
       'voidPayment',
       'refundPayment',
       'correctPayment',
@@ -89,7 +99,7 @@ describe('legacy payment HTTP seam', () => {
       expect(reflector.get(
         PERMISSIONS_KEY,
         PaymentController.prototype[method],
-      )).toEqual(['folios.manage']);
+      )).toEqual(['payments.refund']);
     }
   });
 

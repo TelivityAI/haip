@@ -55,12 +55,10 @@ describe('permissions catalog', () => {
     expect(ROLE_DEFAULT_PERMISSIONS.general_manager).toContain('revenue.manage');
   });
 
-  // Was 'reservations can book but not post folios or run cashier' -- that
-  // split was never real. The legacy @Roles() gate on every billing controller
-  // (folio / payment / cashier / house-account / accounting) already included
-  // 'reservations'; only the newer @RequirePermissions catalog enforced the
-  // split, and only by omission. Migrating those controllers preserves the
-  // access the realm-role gate was granting rather than narrowing it silently.
+  // Folio / cashier / house-account / accounting used to list `reservations`
+  // on every write route — that split was never real there. PaymentController
+  // already included reservations (and excluded night_auditor); payments.refund
+  // keeps refunds with FO / reservations / accounting only.
   it('reservations can book and post folios/cashier -- matches what the old realm-role gate already granted', () => {
     expect(ROLE_DEFAULT_PERMISSIONS.reservations).toContain('reservations.write');
     expect(ROLE_DEFAULT_PERMISSIONS.reservations).toContain('folios.read');
@@ -68,9 +66,10 @@ describe('permissions catalog', () => {
     expect(ROLE_DEFAULT_PERMISSIONS.reservations).toContain('cashier.access');
     expect(ROLE_DEFAULT_PERMISSIONS.reservations).toContain('houseaccounts.manage');
     expect(ROLE_DEFAULT_PERMISSIONS.reservations).toContain('accounting.manage');
+    expect(ROLE_DEFAULT_PERMISSIONS.reservations).toContain('payments.refund');
   });
 
-  it('night_auditor and accounting also gained the billing-write access the old realm-role gate granted', () => {
+  it('night_auditor and accounting gained billing-write access; only accounting gets payments.refund', () => {
     for (const role of ['night_auditor', 'accounting']) {
       expect(ROLE_DEFAULT_PERMISSIONS[role], role).toContain('folios.manage');
       expect(ROLE_DEFAULT_PERMISSIONS[role], role).toContain('houseaccounts.manage');
@@ -78,11 +77,14 @@ describe('permissions catalog', () => {
       expect(ROLE_DEFAULT_PERMISSIONS[role], role).toContain('communications.manage');
     }
     expect(ROLE_DEFAULT_PERMISSIONS.night_auditor).toContain('cashier.access');
+    expect(ROLE_DEFAULT_PERMISSIONS.night_auditor).not.toContain('payments.refund');
+    expect(ROLE_DEFAULT_PERMISSIONS.accounting).toContain('payments.refund');
   });
 
-  it('front_desk gained cashier.access and accounting.manage', () => {
+  it('front_desk gained cashier.access, accounting.manage, and payments.refund', () => {
     expect(ROLE_DEFAULT_PERMISSIONS.front_desk).toContain('cashier.access');
     expect(ROLE_DEFAULT_PERMISSIONS.front_desk).toContain('accounting.manage');
+    expect(ROLE_DEFAULT_PERMISSIONS.front_desk).toContain('payments.refund');
   });
 
   it('revenue_manager cannot view folios (nav and list API gated)', () => {

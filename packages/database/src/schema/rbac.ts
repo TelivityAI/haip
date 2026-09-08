@@ -23,7 +23,7 @@ import { properties } from './property.js';
  * fully managed through the admin console.
  *
  * Permissions themselves are NOT a table — they are a code-defined catalog
- * (apps/api/src/modules/auth/permissions.catalog.ts) because each key maps 1:1
+ * (`@telivityhaip/shared` permissions-catalog, re-exported by the API) because each key maps 1:1
  * to an API capability / nav item that only exists in code. Roles, role→
  * permission grants, and user→role assignments ARE database-managed.
  */
