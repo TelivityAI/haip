@@ -1,4 +1,5 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { money } from '../lib/format';
 import type { BookResponse } from '../api/types';
@@ -8,10 +9,45 @@ interface ConfirmationState {
   email?: string;
 }
 
+const PENDING_KEY = 'haip.booking.pendingConfirmation';
+
+function readPendingConfirmation(): ConfirmationState | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ConfirmationState;
+    if (!parsed?.booking) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function Confirmation() {
   const navigate = useNavigate();
   const { state } = useLocation();
-  const { booking, email } = (state ?? {}) as ConfirmationState;
+  const [searchParams] = useSearchParams();
+  const fromState = (state ?? {}) as ConfirmationState;
+
+  const resolved = useMemo(() => {
+    if (fromState.booking) {
+      sessionStorage.removeItem(PENDING_KEY);
+      return fromState;
+    }
+    // Browser return from Redsys loses location.state — restore the book response.
+    if (searchParams.get('redsys') === 'ok') {
+      const pending = readPendingConfirmation();
+      if (pending?.booking) {
+        sessionStorage.removeItem(PENDING_KEY);
+        return pending;
+      }
+    }
+    return fromState;
+  }, [fromState, searchParams]);
+
+  const { booking, email } = resolved;
+  const awaitingNotification =
+    Boolean(booking) && searchParams.get('redsys') === 'ok';
 
   if (!booking) {
     return (
@@ -25,12 +61,16 @@ export function Confirmation() {
   return (
     <div className="space-y-6">
       <div className="rounded-md border border-green-200 bg-green-50 p-6 text-center">
-        <p className="text-sm font-medium text-green-700">Booking confirmed</p>
+        <p className="text-sm font-medium text-green-700">
+          {awaitingNotification ? 'Booking received — confirming payment' : 'Booking confirmed'}
+        </p>
         <p className="mt-2 text-3xl font-bold tracking-wide text-gray-900">
           {booking.confirmationNumber}
         </p>
         <p className="mt-1 text-sm text-gray-600">
-          Keep this confirmation number to manage your booking.
+          {awaitingNotification
+            ? 'Redsys is notifying the hotel of your payment. Keep this confirmation number.'
+            : 'Keep this confirmation number to manage your booking.'}
         </p>
       </div>
 
@@ -39,8 +79,10 @@ export function Confirmation() {
         <Row label="Total" value={money(booking.grandTotal, booking.currencyCode)} />
         {booking.deposit && (
           <Row
-            label="Deposit paid"
-            value={money(booking.deposit.amount, booking.currencyCode)}
+            label={awaitingNotification ? 'Deposit' : 'Deposit paid'}
+            value={`${money(booking.deposit.amount, booking.currencyCode)}${
+              awaitingNotification ? ` (${booking.deposit.status})` : ''
+            }`}
           />
         )}
         <Row label="Cancellation" value={booking.cancellationPolicy} />

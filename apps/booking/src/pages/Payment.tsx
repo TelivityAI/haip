@@ -55,9 +55,14 @@ export function Payment() {
     onSuccess: (res: BookResponse) => {
       const nextAction = res.deposit?.nextAction;
       if (nextAction?.type === 'redirect') {
+        sessionStorage.setItem(
+          'haip.booking.pendingConfirmation',
+          JSON.stringify({ booking: res, email: guest!.email }),
+        );
         submitRedirectNextAction(nextAction);
         return;
       }
+      sessionStorage.removeItem('haip.booking.pendingConfirmation');
       navigate('/confirmation', { state: { booking: res, email: guest!.email } });
     },
   });
