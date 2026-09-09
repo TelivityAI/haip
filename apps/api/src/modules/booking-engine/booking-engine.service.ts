@@ -495,6 +495,7 @@ export class BookingEngineService {
     } | null = null;
     if (depositDue.greaterThan(0) && dto.paymentToken) {
       const provider = resolvePaymentGatewayProvider(this.runtimeConfig);
+      const policy = config.depositPolicy as DepositPolicy;
       const payment = await this.paymentService.authorizePayment({
         folioId: folio.id,
         propertyId,
@@ -506,22 +507,32 @@ export class BookingEngineService {
         cardBrand: dto.cardBrand,
         redirectUrlOk: dto.redirectUrlOk,
         redirectUrlKo: dto.redirectUrlKo,
-      } as any);
+      } as any, {
+        deposit: {
+          reservationId: reservation.id,
+          isRefundable: policy.refundable,
+          autoConfirm: config.isEnabled && await this.shouldAutoConfirm(propertyId),
+        },
+      });
 
-      const policy = config.depositPolicy as DepositPolicy;
-      await this.depositService.recordDeposit({
-        propertyId,
-        reservationId: reservation.id,
-        paymentId: payment.id,
-        amount: depositDue.toFixed(2),
-        currencyCode: quote.currencyCode,
-        isRefundable: policy.refundable,
-      } as any);
+      // A redirect is still awaiting authorization; its saved intent is finalized
+      // by the verified provider notification. Synchronous gateways keep this path.
+      const authorized = payment.status === 'authorized' || payment.status === 'captured';
+      if (authorized) {
+        await this.depositService.recordDeposit({
+          propertyId,
+          reservationId: reservation.id,
+          paymentId: payment.id,
+          amount: depositDue.toFixed(2),
+          currencyCode: quote.currencyCode,
+          isRefundable: policy.refundable,
+        } as any);
+      }
 
       depositInfo = {
         paymentId: payment.id,
         amount: depositDue.toFixed(2),
-        status: payment.nextAction ? 'pending_redirect' : 'held',
+        status: authorized ? 'held' : payment.nextAction ? 'pending_redirect' : payment.status,
         ...(payment.nextAction ? { nextAction: payment.nextAction } : {}),
       };
     }
@@ -532,7 +543,7 @@ export class BookingEngineService {
     if (
       config.isEnabled &&
       depositInfo &&
-      depositInfo.status !== 'pending_redirect' &&
+      depositInfo.status === 'held' &&
       (await this.shouldAutoConfirm(propertyId))
     ) {
       const confirmed = await this.reservationService.confirm(reservation.id, propertyId);
