@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional, IsEnum, IsInt, Min, Max } from 'class-validator';
+import { IsUUID, IsOptional, IsIn, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -11,7 +11,7 @@ export class ListGroupProfilesDto {
 
   @ApiPropertyOptional({ enum: GROUP_TYPES })
   @IsOptional()
-  @IsEnum(GROUP_TYPES)
+  @IsIn(GROUP_TYPES)
   type?: string;
 
   @ApiPropertyOptional({ default: 1 })

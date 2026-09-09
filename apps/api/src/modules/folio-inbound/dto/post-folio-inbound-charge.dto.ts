@@ -1,6 +1,6 @@
 import {
   IsDateString,
-  IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -30,7 +30,7 @@ export class PostFolioInboundChargeDto {
   roomNumber!: string;
 
   @ApiProperty({ enum: INBOUND_CHARGE_TYPES, example: 'minibar' })
-  @IsEnum(INBOUND_CHARGE_TYPES)
+  @IsIn(INBOUND_CHARGE_TYPES)
   type!: (typeof INBOUND_CHARGE_TYPES)[number];
 
   @ApiProperty({ example: '18.50' })

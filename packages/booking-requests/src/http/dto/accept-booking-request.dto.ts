@@ -1,12 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { IsMoneyString } from '@telivityhaip/shared';
 
 const BOOKING_REQUEST_PRICE_SOURCES = ['submitted', 'current', 'custom'] as const;
 
 export class AcceptBookingRequestDto {
   @ApiProperty({ enum: BOOKING_REQUEST_PRICE_SOURCES })
-  @IsEnum(BOOKING_REQUEST_PRICE_SOURCES)
+  @IsIn(BOOKING_REQUEST_PRICE_SOURCES)
   priceSource!: (typeof BOOKING_REQUEST_PRICE_SOURCES)[number];
 
   @ApiProperty({ description: 'Opaque fingerprint returned by the latest acceptance preview' })

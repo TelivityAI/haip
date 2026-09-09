@@ -4,7 +4,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsEmail,
-  IsEnum,
+  IsIn,
   IsArray,
   MaxLength,
 } from 'class-validator';
@@ -30,7 +30,7 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({ enum: USER_STATUSES, default: 'active' })
   @IsOptional()
-  @IsEnum(USER_STATUSES)
+  @IsIn(USER_STATUSES)
   status?: (typeof USER_STATUSES)[number];
 
   @ApiPropertyOptional({ format: 'uuid', description: 'Keycloak subject (link real login — LATER)' })

@@ -1,7 +1,7 @@
 import {
   IsString,
   IsOptional,
-  IsEnum,
+  IsIn,
   IsBoolean,
   IsInt,
   IsDateString,
@@ -75,6 +75,6 @@ export class UpdateBlockDto {
 
   @ApiPropertyOptional({ enum: BLOCK_STATUSES })
   @IsOptional()
-  @IsEnum(BLOCK_STATUSES)
+  @IsIn(BLOCK_STATUSES)
   status?: string;
 }

@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID, IsEnum, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsUUID, IsIn, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -9,7 +9,7 @@ export class ListArLedgersDto {
 
   @ApiPropertyOptional({ enum: ['open', 'closed'] })
   @IsOptional()
-  @IsEnum(['open', 'closed'])
+  @IsIn(['open', 'closed'])
   status?: string;
 
   @ApiPropertyOptional({ default: 1 })

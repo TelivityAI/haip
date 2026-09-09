@@ -1,7 +1,7 @@
 import {
   IsBoolean,
   IsDateString,
-  IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -22,7 +22,7 @@ export class CreateIcalFeedDto {
   roomTypeId!: string;
 
   @ApiProperty({ enum: ICAL_FEED_DIRECTIONS })
-  @IsEnum(ICAL_FEED_DIRECTIONS)
+  @IsIn(ICAL_FEED_DIRECTIONS)
   direction!: (typeof ICAL_FEED_DIRECTIONS)[number];
 
   @ApiProperty({ example: 'Airbnb Standard King calendar' })
@@ -66,7 +66,7 @@ export class ListIcalFeedsDto {
 
   @ApiPropertyOptional({ enum: ICAL_FEED_DIRECTIONS })
   @IsOptional()
-  @IsEnum(ICAL_FEED_DIRECTIONS)
+  @IsIn(ICAL_FEED_DIRECTIONS)
   direction?: (typeof ICAL_FEED_DIRECTIONS)[number];
 }
 

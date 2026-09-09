@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsInt, Min, Max } from 'class-validator';
+import { IsIn, IsNumber, IsInt, Min, Max } from 'class-validator';
 
 export class RateAdjustmentRuleDto {
   @ApiProperty({ enum: ['percentage', 'fixed'] })
-  @IsEnum(['percentage', 'fixed'])
+  @IsIn(['percentage', 'fixed'])
   adjustmentType!: 'percentage' | 'fixed';
 
   @ApiProperty({ description: 'Negative = discount, positive = surcharge' })

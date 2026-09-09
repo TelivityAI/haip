@@ -2,7 +2,7 @@ import {
   IsUUID,
   IsString,
   IsOptional,
-  IsEnum,
+  IsIn,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -18,7 +18,7 @@ export class UploadMediaDto {
   propertyId!: string;
 
   @ApiProperty({ enum: MEDIA_OWNER_TYPES })
-  @IsEnum(MEDIA_OWNER_TYPES)
+  @IsIn(MEDIA_OWNER_TYPES)
   ownerType!: (typeof MEDIA_OWNER_TYPES)[number];
 
   @ApiProperty({ format: 'uuid' })
@@ -27,7 +27,7 @@ export class UploadMediaDto {
 
   @ApiPropertyOptional({ enum: MEDIA_CATEGORIES, default: 'other' })
   @IsOptional()
-  @IsEnum(MEDIA_CATEGORIES)
+  @IsIn(MEDIA_CATEGORIES)
   category?: (typeof MEDIA_CATEGORIES)[number];
 
   @ApiPropertyOptional()

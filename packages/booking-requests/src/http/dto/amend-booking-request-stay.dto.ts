@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 import { IsMoneyString } from '@telivityhaip/shared';
 import { IsCanonicalCalendarDate } from '@telivityhaip/shared';
 
@@ -23,7 +23,7 @@ export class PreviewBookingRequestStayAmendmentDto extends BookingRequestStayAme
 
 export class AmendBookingRequestStayDto extends BookingRequestStayAmendmentDatesDto {
   @ApiProperty({ enum: STAY_AMENDMENT_PRICE_SOURCES })
-  @IsEnum(STAY_AMENDMENT_PRICE_SOURCES)
+  @IsIn(STAY_AMENDMENT_PRICE_SOURCES)
   priceSource!: (typeof STAY_AMENDMENT_PRICE_SOURCES)[number];
 
   @ApiProperty({ description: 'Opaque fingerprint returned by the latest amendment preview' })

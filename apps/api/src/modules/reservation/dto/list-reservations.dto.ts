@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional, IsEnum, IsDateString, IsInt, Min, Max, IsString } from 'class-validator';
+import { IsUUID, IsOptional, IsIn, IsDateString, IsInt, Min, Max, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -21,7 +21,7 @@ export class ListReservationsDto {
 
   @ApiPropertyOptional({ enum: RESERVATION_STATUSES })
   @IsOptional()
-  @IsEnum(RESERVATION_STATUSES)
+  @IsIn(RESERVATION_STATUSES)
   status?: string;
 
   @ApiPropertyOptional({

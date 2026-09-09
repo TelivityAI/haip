@@ -2,7 +2,7 @@ import {
   IsUUID,
   IsString,
   IsOptional,
-  IsEnum,
+  IsIn,
   IsBoolean,
   IsInt,
   IsDateString,
@@ -80,6 +80,6 @@ export class CreateBlockDto {
 
   @ApiPropertyOptional({ enum: BLOCK_STATUSES, default: 'tentative' })
   @IsOptional()
-  @IsEnum(BLOCK_STATUSES)
+  @IsIn(BLOCK_STATUSES)
   status?: string;
 }

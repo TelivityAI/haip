@@ -1,4 +1,4 @@
-import { IsUUID, IsString, IsOptional, IsNumber, IsDateString, IsEnum, ValidateNested } from 'class-validator';
+import { IsUUID, IsString, IsOptional, IsNumber, IsDateString, IsIn, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ChannelReservationDto {
@@ -51,7 +51,7 @@ export class ChannelReservationDto {
   @IsString()
   specialRequests?: string;
 
-  @IsEnum(['new', 'modified', 'cancelled'])
+  @IsIn(['new', 'modified', 'cancelled'])
   status!: 'new' | 'modified' | 'cancelled';
 }
 

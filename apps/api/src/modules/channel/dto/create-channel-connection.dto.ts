@@ -1,4 +1,4 @@
-import { IsUUID, IsString, IsOptional, IsArray, ValidateNested, IsEnum } from 'class-validator';
+import { IsUUID, IsString, IsOptional, IsArray, ValidateNested, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class RatePlanMappingDto {
@@ -31,7 +31,7 @@ export class CreateChannelConnectionDto {
   adapterType!: string;
 
   @IsOptional()
-  @IsEnum(['push', 'pull', 'bidirectional'])
+  @IsIn(['push', 'pull', 'bidirectional'])
   syncDirection?: string;
 
   @IsOptional()

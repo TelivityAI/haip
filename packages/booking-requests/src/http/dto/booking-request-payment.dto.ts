@@ -4,7 +4,7 @@ import {
   ArrayUnique,
   IsArray,
   IsDateString,
-  IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -55,7 +55,7 @@ export class CreateBookingRequestInstallmentDto {
   percentage?: string;
 
   @ApiProperty({ enum: BOOKING_REQUEST_INSTALLMENT_MILESTONES })
-  @IsEnum(BOOKING_REQUEST_INSTALLMENT_MILESTONES)
+  @IsIn(BOOKING_REQUEST_INSTALLMENT_MILESTONES)
   dueMilestone!: (typeof BOOKING_REQUEST_INSTALLMENT_MILESTONES)[number];
 
   @ApiPropertyOptional({ example: '2026-09-01' })
@@ -111,7 +111,7 @@ export class RecordBookingRequestExternalPaymentDto {
   currencyCode!: string;
 
   @ApiProperty({ enum: BOOKING_REQUEST_EXTERNAL_PAYMENT_METHODS })
-  @IsEnum(BOOKING_REQUEST_EXTERNAL_PAYMENT_METHODS)
+  @IsIn(BOOKING_REQUEST_EXTERNAL_PAYMENT_METHODS)
   method!: (typeof BOOKING_REQUEST_EXTERNAL_PAYMENT_METHODS)[number];
 
   @ApiProperty({ description: 'When the externally collected money moved' })

@@ -2,7 +2,7 @@ import {
   IsUUID,
   IsString,
   IsOptional,
-  IsEnum,
+  IsIn,
   IsBoolean,
   IsEmail,
   MaxLength,
@@ -23,7 +23,7 @@ export class CreateGroupProfileDto {
 
   @ApiProperty({ enum: GROUP_TYPES, default: 'corporate' })
   @IsOptional()
-  @IsEnum(GROUP_TYPES)
+  @IsIn(GROUP_TYPES)
   type?: string;
 
   @ApiPropertyOptional()
