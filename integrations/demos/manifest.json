@@ -48,6 +48,24 @@
       "maturity": "shipped"
     },
     {
+      "slug": "redsys",
+      "title": "Redsys",
+      "kind": "payment",
+      "env": [
+        "PAYMENT_GATEWAY=redsys"
+      ],
+      "liveEnv": [
+        "REDSYS_MERCHANT_CODE=...",
+        "REDSYS_TERMINAL=001",
+        "REDSYS_SECRET_KEY=...",
+        "REDSYS_ENV=test",
+        "PUBLIC_API_BASE_URL=https://..."
+      ],
+      "docs": "docs/integrations/payments-redsys.md",
+      "smoke": "payment_console",
+      "maturity": "shipped"
+    },
+    {
       "slug": "square",
       "title": "Square",
       "kind": "payment",

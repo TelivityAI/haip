@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Routes, Route, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -464,6 +464,7 @@ function FolioDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [chargeOpen, setChargeOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [arTransferOpen, setArTransferOpen] = useState(false);
@@ -517,6 +518,21 @@ function FolioDetail() {
   });
   const paymentClientMode = clientConfigData?.clientMode ?? 'stripe';
   const isRedsysClient = paymentClientMode === 'redsys';
+
+  useEffect(() => {
+    const redsysReturn = searchParams.get('redsys');
+    if (!redsysReturn) return;
+    if (redsysReturn === 'ok') {
+      toast('success', 'Returned from Redsys. Payment status updates when the bank notification arrives.');
+      invalidate();
+    } else if (redsysReturn === 'ko') {
+      toast('error', 'Redsys payment was cancelled or declined.');
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('redsys');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot return handling
+  }, [searchParams]);
 
   const folio: Folio | null = folioData?.data ?? folioData ?? null;
   const charges: Charge[] = chargesData?.data ?? chargesData ?? [];
