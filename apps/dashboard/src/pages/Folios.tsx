@@ -531,7 +531,6 @@ function FolioDetail() {
     const next = new URLSearchParams(searchParams);
     next.delete('redsys');
     setSearchParams(next, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot return handling
   }, [searchParams]);
 
   const folio: Folio | null = folioData?.data ?? folioData ?? null;
