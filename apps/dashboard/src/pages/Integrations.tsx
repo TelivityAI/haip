@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, Fragment } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plug, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -19,6 +19,15 @@ interface CatalogRow {
   connectionId: string | null;
 }
 
+type RedsysEnvironment = 'test' | 'live';
+
+interface RedsysFormState {
+  merchantCode: string;
+  terminal: string;
+  secretKey: string;
+  environment: RedsysEnvironment;
+}
+
 function statusColor(status: string) {
   switch (status) {
     case 'shipped':
@@ -33,6 +42,175 @@ function statusColor(status: string) {
   }
 }
 
+function stringConfig(config: Record<string, unknown>, key: string): string {
+  const value = config[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function hasStoredSecret(config: Record<string, unknown>): boolean {
+  return Boolean(
+    stringConfig(config, 'secretKeyMasked')
+    || stringConfig(config, 'secretKey'),
+  );
+}
+
+function maskSecretDisplay(config: Record<string, unknown>): string {
+  const masked = stringConfig(config, 'secretKeyMasked');
+  if (masked) return masked;
+  if (stringConfig(config, 'secretKey')) return '••••••';
+  return '';
+}
+
+function redsysFormFromConfig(config: Record<string, unknown>): RedsysFormState {
+  const envRaw = stringConfig(config, 'environment').toLowerCase();
+  return {
+    merchantCode: stringConfig(config, 'merchantCode'),
+    terminal: stringConfig(config, 'terminal') || '001',
+    secretKey: '',
+    environment: envRaw === 'live' ? 'live' : 'test',
+  };
+}
+
+function RedsysCredentialsForm({
+  row,
+  propertyId,
+  onSaved,
+}: {
+  row: CatalogRow;
+  propertyId: string;
+  onSaved: () => void;
+}) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const [form, setForm] = useState<RedsysFormState>(() => redsysFormFromConfig(row.config ?? {}));
+
+  const cfg = row.config ?? {};
+  const configMerchantCode = stringConfig(cfg, 'merchantCode');
+  const configTerminal = stringConfig(cfg, 'terminal');
+  const configEnvironment = stringConfig(cfg, 'environment');
+  const configSecretMasked = stringConfig(cfg, 'secretKeyMasked');
+  const configSecretKey = stringConfig(cfg, 'secretKey');
+
+  useEffect(() => {
+    setForm(redsysFormFromConfig(cfg));
+  }, [
+    row.connectionId,
+    configMerchantCode,
+    configTerminal,
+    configEnvironment,
+    configSecretMasked,
+    configSecretKey,
+  ]);
+
+  const secretPlaceholder = hasStoredSecret(cfg)
+    ? (maskSecretDisplay(cfg) || '••••••')
+    : '';
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const config: Record<string, string> = {
+        merchantCode: form.merchantCode.trim(),
+        terminal: form.terminal.trim() || '001',
+        environment: form.environment,
+      };
+      const typedSecret = form.secretKey.trim();
+      if (typedSecret) {
+        config.secretKey = typedSecret;
+      }
+      return api.put(
+        `/v1/admin/integrations/${row.slug}`,
+        { enabled: true, config },
+        { params: { propertyId } },
+      );
+    },
+    onSuccess: () => {
+      setForm((prev) => ({ ...prev, secretKey: '' }));
+      toast('success', t('integrations.saved'));
+      onSaved();
+    },
+    onError: () => {
+      toast('error', t('integrations.saveFailed', { defaultValue: 'Failed to save integration' }));
+    },
+  });
+
+  return (
+    <div className="mt-3 space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-left">
+      <p className="text-xs font-medium text-gray-700">Redsys credentials (FUC / TPV)</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs text-gray-600" htmlFor={`redsys-fuc-${row.slug}`}>
+            Merchant code (FUC)
+          </label>
+          <input
+            id={`redsys-fuc-${row.slug}`}
+            type="text"
+            value={form.merchantCode}
+            onChange={(e) => setForm((f) => ({ ...f, merchantCode: e.target.value }))}
+            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            autoComplete="off"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-600" htmlFor={`redsys-terminal-${row.slug}`}>
+            Terminal
+          </label>
+          <input
+            id={`redsys-terminal-${row.slug}`}
+            type="text"
+            value={form.terminal}
+            onChange={(e) => setForm((f) => ({ ...f, terminal: e.target.value }))}
+            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            autoComplete="off"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-600" htmlFor={`redsys-secret-${row.slug}`}>
+            Secret key
+          </label>
+          <input
+            id={`redsys-secret-${row.slug}`}
+            type="password"
+            value={form.secretKey}
+            onChange={(e) => setForm((f) => ({ ...f, secretKey: e.target.value }))}
+            placeholder={secretPlaceholder || undefined}
+            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            autoComplete="new-password"
+          />
+          {secretPlaceholder && !form.secretKey && (
+            <p className="mt-1 text-[11px] text-gray-500">Leave blank to keep the existing secret.</p>
+          )}
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-600" htmlFor={`redsys-env-${row.slug}`}>
+            Environment
+          </label>
+          <select
+            id={`redsys-env-${row.slug}`}
+            value={form.environment}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                environment: e.target.value === 'live' ? 'live' : 'test',
+              }))
+            }
+            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="test">test</option>
+            <option value="live">live</option>
+          </select>
+        </div>
+      </div>
+      <button
+        type="button"
+        disabled={saveMutation.isPending || !form.merchantCode.trim()}
+        onClick={() => saveMutation.mutate()}
+        className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+      >
+        {saveMutation.isPending ? t('common.saving', { defaultValue: 'Saving…' }) : t('common.save', { defaultValue: 'Save' })}
+      </button>
+    </div>
+  );
+}
 
 export default function Integrations() {
   const { t } = useTranslation();
@@ -40,6 +218,7 @@ export default function Integrations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['property-integrations', propertyId],
@@ -66,11 +245,18 @@ export default function Integrations() {
         { enabled: !row.enabled, config: row.config ?? {} },
         { params: { propertyId } },
       ),
-    onSuccess: () => {
+    onSuccess: (_data, row) => {
       queryClient.invalidateQueries({ queryKey: ['property-integrations', propertyId] });
       toast('success', t('integrations.saved'));
+      if (row.slug === 'redsys' && !row.enabled) {
+        setExpandedSlug('redsys');
+      }
     },
   });
+
+  const invalidateIntegrations = () => {
+    queryClient.invalidateQueries({ queryKey: ['property-integrations', propertyId] });
+  };
 
   if (!propertyId) {
     return (
@@ -132,34 +318,76 @@ export default function Integrations() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((row) => (
-                <tr key={row.slug} className="hover:bg-gray-50/80">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{row.name}</div>
-                    <div className="text-xs text-gray-500 line-clamp-2">{row.description}</div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">{row.category}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={statusColor(row.status)} label={row.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge
-                      status={row.enabled ? 'success' : 'default'}
-                      label={row.enabled ? t('integrations.enabled') : t('integrations.disabled')}
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      disabled={toggleMutation.isPending}
-                      onClick={() => toggleMutation.mutate(row)}
-                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                    >
-                      {row.enabled ? t('integrations.disable') : t('integrations.enable')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((row) => {
+                const isRedsys = row.slug === 'redsys';
+                const showRedsysForm =
+                  isRedsys && (row.enabled || expandedSlug === 'redsys');
+                return (
+                  <Fragment key={row.slug}>
+                    <tr className="hover:bg-gray-50/80">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{row.name}</div>
+                        <div className="text-xs text-gray-500 line-clamp-2">{row.description}</div>
+                        {isRedsys && !row.enabled && (
+                          <button
+                            type="button"
+                            className="mt-1 text-xs font-medium text-indigo-600 hover:underline"
+                            onClick={() =>
+                              setExpandedSlug((s) => (s === 'redsys' ? null : 'redsys'))
+                            }
+                          >
+                            {expandedSlug === 'redsys'
+                              ? 'Hide credentials'
+                              : 'Configure credentials'}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">{row.category}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={statusColor(row.status)} label={row.status} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge
+                          status={row.enabled ? 'success' : 'default'}
+                          label={row.enabled ? t('integrations.enabled') : t('integrations.disabled')}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          disabled={toggleMutation.isPending}
+                          onClick={() => toggleMutation.mutate(row)}
+                          className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                        >
+                          {row.enabled ? t('integrations.disable') : t('integrations.enable')}
+                        </button>
+                      </td>
+                    </tr>
+                    {showRedsysForm && propertyId && (
+                      <tr className="bg-gray-50/60">
+                        <td colSpan={5} className="px-4 pb-4">
+                          <RedsysCredentialsForm
+                            row={{
+                              ...row,
+                              config: {
+                                ...row.config,
+                                secretKey: undefined,
+                                secretKeyMasked:
+                                  stringConfig(row.config ?? {}, 'secretKeyMasked')
+                                  || (stringConfig(row.config ?? {}, 'secretKey')
+                                    ? '••••••'
+                                    : ''),
+                              },
+                            }}
+                            propertyId={propertyId}
+                            onSaved={invalidateIntegrations}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
           {filtered.length === 0 && (

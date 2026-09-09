@@ -10,7 +10,13 @@ import { StripeCard, type PaymentResult } from '../components/StripeCard';
 import { useConfig } from '../context/ConfigContext';
 import { useBookingFlow } from '../context/BookingFlowContext';
 import { money } from '../lib/format';
-import type { BookResponse } from '../api/types';
+import { submitRedirectNextAction } from '../lib/submit-redirect-next-action';
+import type { BookRequest, BookResponse } from '../api/types';
+
+type BookPaymentInput = PaymentResult & {
+  redirectUrlOk?: string;
+  redirectUrlKo?: string;
+};
 
 export function Payment() {
   const navigate = useNavigate();
@@ -24,8 +30,8 @@ export function Payment() {
   }, [criteria, roomType, rate, quote, guest, navigate]);
 
   const bookMutation = useMutation({
-    mutationFn: (payment?: PaymentResult) =>
-      bookingApi.book({
+    mutationFn: (payment?: BookPaymentInput) => {
+      const body: BookRequest = {
         roomTypeId: roomType!.roomTypeId,
         ratePlanId: rate!.ratePlanId,
         checkIn: criteria!.checkIn,
@@ -41,8 +47,17 @@ export function Payment() {
         cardLastFour: payment?.cardLastFour,
         cardBrand: payment?.cardBrand,
         serviceIds: serviceIds.length ? serviceIds : undefined,
-      }),
+        redirectUrlOk: payment?.redirectUrlOk,
+        redirectUrlKo: payment?.redirectUrlKo,
+      };
+      return bookingApi.book(body);
+    },
     onSuccess: (res: BookResponse) => {
+      const nextAction = res.deposit?.nextAction;
+      if (nextAction?.type === 'redirect') {
+        submitRedirectNextAction(nextAction);
+        return;
+      }
       navigate('/confirmation', { state: { booking: res, email: guest!.email } });
     },
   });
@@ -57,10 +72,17 @@ export function Payment() {
 
   const depositDue = Number(quote.depositDue);
   const needsPayment = depositDue > 0;
+  const isRedsys = config?.paymentMethodClientMode === 'redsys';
 
   // Mock / demo mode (no Stripe key): submit the well-known MockGateway token.
   const payDemo = () => bookMutation.mutate({ paymentToken: 'tok_demo' });
   const payNoDeposit = () => bookMutation.mutate(undefined);
+  const payRedsys = () =>
+    bookMutation.mutate({
+      paymentToken: 'redsys_redirect',
+      redirectUrlOk: `${window.location.origin}/confirmation?redsys=ok`,
+      redirectUrlKo: `${window.location.origin}/payment?redsys=ko`,
+    });
 
   return (
     <div className="space-y-4">
@@ -83,6 +105,18 @@ export function Payment() {
             </p>
             <Button className="w-full" onClick={payNoDeposit} disabled={bookMutation.isPending}>
               {bookMutation.isPending ? 'Confirming…' : 'Confirm booking'}
+            </Button>
+          </>
+        ) : isRedsys ? (
+          <>
+            <p className="mb-4 text-sm text-gray-600">
+              Deposit due now: <strong>{money(quote.depositDue, quote.currencyCode)}</strong>
+            </p>
+            <p className="mb-4 text-sm text-gray-600">
+              You will be redirected to Redsys to complete payment securely.
+            </p>
+            <Button className="w-full" onClick={payRedsys} disabled={bookMutation.isPending}>
+              {bookMutation.isPending ? 'Redirecting…' : 'Pay deposit securely via Redsys'}
             </Button>
           </>
         ) : stripePromise ? (
