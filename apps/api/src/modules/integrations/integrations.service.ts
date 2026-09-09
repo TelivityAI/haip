@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, eq } from 'drizzle-orm';
 import {
   auditLogs,
@@ -8,6 +8,7 @@ import {
 import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { DRIZZLE } from '../../database/database.module';
 import { ListIntegrationsDto, UpsertPropertyIntegrationDto } from './dto/integration-registry.dto';
+import { encryptCredentialPlaintext, loadMigrationCredentialKeyRingFromEnv } from '../../common/crypto/credential-encryption';
 
 
 export function maskSecret(secret: string): string {
@@ -22,36 +23,61 @@ export function sanitizeIntegrationConfig(
 ): Record<string, unknown> {
   const raw = { ...(config ?? {}) };
   if (slug !== 'redsys') return raw;
-  const secret = raw['secretKey'];
-  delete raw['secretKey'];
-  if (typeof secret === 'string' && secret.trim()) {
-    raw['secretKeyMasked'] = maskSecret(secret);
-  }
+  const configured = Boolean(raw['secretKeyEncrypted']) || Boolean(redsysSecret(raw));
+  for (const key of REDSYS_SECRET_FIELDS) delete raw[key];
+  delete raw['secretKeyEncrypted'];
+  delete raw['secretKeyMasked'];
+  if (configured) raw['secretKeyMasked'] = '••••••••';
   return raw;
+}
+
+const REDSYS_SECRET_FIELDS = ['secretKey', 'secret_key', 'clave'] as const;
+
+function redsysSecret(config: Record<string, unknown>): string | undefined {
+  for (const field of REDSYS_SECRET_FIELDS) {
+    const value = config[field];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
 }
 
 export function mergeRedsysConfig(
   incoming: Record<string, unknown>,
   existing: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> {
-  const merged = { ...incoming };
-  const nextSecret = merged['secretKey'];
-  if (typeof nextSecret !== 'string' || !nextSecret.trim()) {
-    const prev = existing?.['secretKey'];
-    if (typeof prev === 'string' && prev.trim()) {
-      merged['secretKey'] = prev;
-    } else {
-      delete merged['secretKey'];
-    }
+  if (Object.hasOwn(incoming, 'secretKeyEncrypted')) {
+    throw new BadRequestException('Credential ciphertext cannot be supplied through integration config');
   }
+  const merged = { ...existing, ...incoming };
+  const secret = redsysSecret(incoming) ?? (!existing?.['secretKeyEncrypted'] ? redsysSecret(existing ?? {}) : undefined);
+  for (const key of REDSYS_SECRET_FIELDS) delete merged[key];
   // Never persist UI-only masked values.
   delete merged['secretKeyMasked'];
+  if (secret) merged['secretKeyEncrypted'] = encryptCredentialPlaintext(secret, loadMigrationCredentialKeyRingFromEnv());
   return merged;
 }
 
 @Injectable()
 export class IntegrationsService {
   constructor(@Inject(DRIZZLE) private readonly db: any) {}
+
+  /** Tenant-scoped, idempotent data migration; ciphertext uses the existing key ring. */
+  async protectRedsysCredentials(propertyId: string): Promise<void> {
+    await this.db.transaction(async (tx: any) => {
+      const [row] = await tx.select().from(propertyIntegrations)
+        .where(and(eq(propertyIntegrations.propertyId, propertyId), eq(propertyIntegrations.catalogSlug, 'redsys')))
+        .limit(1).for('update');
+      if (!row || !REDSYS_SECRET_FIELDS.some((key) => Object.hasOwn(row.config, key))) return;
+      const config = mergeRedsysConfig({}, row.config);
+      await tx.update(propertyIntegrations).set({ config, updatedAt: new Date() })
+        .where(and(eq(propertyIntegrations.id, row.id), eq(propertyIntegrations.propertyId, propertyId)));
+      await tx.insert(auditLogs).values({
+        propertyId, entityType: 'property_integration', entityId: row.id,
+        action: 'property_integration.credentials_protected',
+        newValue: { catalogSlug: 'redsys', protected: Boolean(config['secretKeyEncrypted']) },
+      });
+    });
+  }
 
   async listCatalog(filters: ListIntegrationsDto = {}) {
     const conditions: any[] = [];

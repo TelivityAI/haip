@@ -40,7 +40,10 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
     cancel: vi.fn(),
   };
   const folio = { createAutoFolio: vi.fn().mockResolvedValue({ id: 'folio-1' }) };
-  const payment = { authorizePayment: vi.fn().mockResolvedValue({ id: 'pay-1', status: 'authorized' }) };
+  const payment = {
+    assertAuthorizationAvailable: vi.fn().mockResolvedValue(undefined),
+    authorizePayment: vi.fn().mockResolvedValue({ id: 'pay-1', status: 'authorized' }),
+  };
   const deposit = { recordDeposit: vi.fn().mockResolvedValue({ id: 'dep-1', status: 'held' }) };
   const search = { search: vi.fn() };
   const bookingSvc = { verify: vi.fn() };
@@ -111,6 +114,16 @@ const bookDto = {
 };
 
 describe('BookingEngineService.quote', () => {
+  it('rejects unavailable Redsys credentials before any provisional booking writes', async () => {
+    const { svc, runtimeConfig, payment, guest, reservation, folio, deposit } = makeService();
+    runtimeConfig.get.mockImplementation((key: string) => ({ PAYMENT_GATEWAY: 'redsys', BOOKING_RETURN_ORIGINS: 'https://hotel.example' })[key]);
+    payment.assertAuthorizationAvailable.mockRejectedValue(new BadRequestException('Redsys credentials are not configured'));
+    await expect(svc.book(PROP, { ...bookDto, returnUrl: 'https://hotel.example/book' } as any)).rejects.toThrow(/credentials/);
+    expect(guest.create).not.toHaveBeenCalled();
+    expect(reservation.create).not.toHaveBeenCalled();
+    expect(folio.createAutoFolio).not.toHaveBeenCalled();
+    expect(deposit.recordDeposit).not.toHaveBeenCalled();
+  });
   it('rejects an untrusted Redsys return before creating a guest or reservation', async () => {
     const { svc, runtimeConfig, guest, reservation } = makeService();
     runtimeConfig.get.mockImplementation((key: string) => key === 'PAYMENT_GATEWAY' ? 'redsys' : undefined);

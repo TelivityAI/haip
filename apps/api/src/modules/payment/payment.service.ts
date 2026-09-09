@@ -23,6 +23,7 @@ import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
 import { sumRefundChildren, parentCountsTowardFolioBalance } from './payment-ledger';
 import { RedsysCredentialsService } from './redsys-credentials.service';
+import { redsysAmountString } from './gateways/redsys-crypto';
 import {
   resolvePaymentGatewayProvider,
 } from './payment-gateway.factory';
@@ -219,6 +220,19 @@ export class PaymentService {
     };
   }
 
+  /** Preflight also used by checkout before guest/reservation/folio writes. */
+  async assertAuthorizationAvailable(propertyId: string, provider: string, amount: string, currency: string) {
+    if (provider.toLowerCase() !== 'redsys') return;
+    const credentials = await this.redsysCredentials.resolveForProperty(propertyId);
+    if (!credentials) throw new BadRequestException('Redsys credentials are not configured');
+    try {
+      redsysAmountString(amount, currency);
+    } catch {
+      throw new BadRequestException('Amount or currency has unsupported Redsys minor units');
+    }
+    return credentials;
+  }
+
   private async buildAuthorizeGatewayOptions(
     dto: AuthorizePaymentDto,
   ): Promise<PaymentGatewayCallOptions | undefined> {
@@ -233,7 +247,7 @@ export class PaymentService {
       );
     }
 
-    const creds = await this.redsysCredentials.resolveForProperty(dto.propertyId);
+    const creds = await this.assertAuthorizationAvailable(dto.propertyId, provider, dto.amount, dto.currencyCode);
     const options: PaymentGatewayCallOptions = {
       propertyId: dto.propertyId,
       currencyCode: dto.currencyCode,
@@ -260,7 +274,7 @@ export class PaymentService {
     if (payment.gatewayProvider?.toLowerCase() !== 'redsys') {
       return undefined;
     }
-    const creds = await this.redsysCredentials.resolveForProperty(payment.propertyId);
+    const creds = await this.assertAuthorizationAvailable(payment.propertyId, 'redsys', payment.amount, payment.currencyCode);
     const options: PaymentGatewayCallOptions = {
       propertyId: payment.propertyId,
       currencyCode: payment.currencyCode,
@@ -292,6 +306,7 @@ export class PaymentService {
   async capturePayment(id: string, propertyId: string) {
     const target = await this.findPaymentRow(id, propertyId);
     this.assertGenericAccessAllowed(target);
+    const lifecycleOptions = await this.buildLifecycleGatewayOptions(target);
     // Phase 1: atomically claim the payment (authorized → captured)
     const [claimed] = await this.db
       .update(payments)
@@ -325,7 +340,6 @@ export class PaymentService {
     }
 
     // Phase 2: call gateway outside the DB tx with an idempotency key
-    const lifecycleOptions = await this.buildLifecycleGatewayOptions(claimed);
     const result = await this.gateway.capture(
       claimed.gatewayTransactionId,
       new Decimal(claimed.amount).toNumber(),
@@ -364,6 +378,7 @@ export class PaymentService {
   async voidPayment(id: string, propertyId: string) {
     const target = await this.findPaymentRow(id, propertyId);
     this.assertGenericAccessAllowed(target);
+    const lifecycleOptions = await this.buildLifecycleGatewayOptions(target);
     // Phase 1: atomically claim the payment (authorized → voided)
     const [claimed] = await this.db
       .update(payments)
@@ -390,10 +405,11 @@ export class PaymentService {
       );
     }
 
-    const lifecycleOptions = await this.buildLifecycleGatewayOptions(claimed);
     const result = await this.gateway.void(claimed.gatewayTransactionId, {
       idempotencyKey: `void_${id}`,
       ...lifecycleOptions,
+      currencyCode: claimed.currencyCode,
+      authorizedAmount: new Decimal(claimed.amount).toNumber(),
     });
 
     if (!result.success) {

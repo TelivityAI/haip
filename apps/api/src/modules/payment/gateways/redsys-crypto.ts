@@ -1,4 +1,6 @@
 import { createCipheriv, createHmac, timingSafeEqual } from 'crypto';
+import { Decimal } from 'decimal.js';
+import { assertLedgerCurrencySupported } from '@telivityhaip/booking-requests';
 
 export const REDSYS_SIGNATURE_VERSION = 'HMAC_SHA512_V2';
 
@@ -36,8 +38,14 @@ export function redsysCurrencyCode(currency: string): string {
 }
 
 /** Amount in minor units as a decimal-less string (e.g. 12.34 EUR → "1234"). */
-export function redsysAmountString(amountMajor: number): string {
-  return String(Math.round(amountMajor * 100));
+export function redsysAmountString(amountMajor: number | string, currency = 'EUR'): string {
+  redsysCurrencyCode(currency);
+  const exponent = assertLedgerCurrencySupported(currency);
+  const minor = new Decimal(amountMajor).times(new Decimal(10).pow(exponent));
+  if (!minor.isFinite() || minor.lte(0) || !minor.isInteger()) {
+    throw new Error(`Amount must be positive and use ${currency} minor units`);
+  }
+  return minor.toFixed(0);
 }
 
 /** Redsys order numbers: 4–12 chars, first 4 numeric. */

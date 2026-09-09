@@ -5,7 +5,6 @@ import type {
   PaymentGatewayCallOptions,
   PaymentGatewayResult,
 } from '../interfaces/payment-gateway.interface';
-import { createConsolePaymentGateway } from './console-payment-gateway';
 import { gatewayJsonRequest, type GatewayFetchFn } from './payment-gateway-http';
 import {
   REDSYS_REDIRECT_URLS,
@@ -15,7 +14,6 @@ import {
   decodeMerchantParameters,
   encodeMerchantParameters,
   generateRedsysOrderId,
-  isRedsysSuccessResponse,
   redsysAmountString,
   redsysCurrencyCode,
   signMerchantParameters,
@@ -47,21 +45,19 @@ interface RedsysRestResponse {
  *
  * Credentials: `options.merchantCredentials` (per-property Integrations config),
  * else env `REDSYS_MERCHANT_CODE` / `REDSYS_TERMINAL` / `REDSYS_SECRET_KEY` /
- * `REDSYS_ENV`. Missing credentials → console (mock) mode.
+ * `REDSYS_ENV`. Missing credentials fail closed; demos must select the mock gateway.
  */
 @Injectable()
 export class RedsysGateway implements PaymentGateway {
   private readonly logger = new Logger(RedsysGateway.name);
   private readonly envCredentials: RedsysMerchantCredentials | null;
   private readonly fetchFn: GatewayFetchFn;
-  private readonly consoleDelegate: PaymentGateway;
 
   constructor(
     configService: ConfigService,
     deps?: { fetchFn?: GatewayFetchFn },
   ) {
     this.fetchFn = deps?.fetchFn ?? fetch;
-    this.consoleDelegate = createConsolePaymentGateway('Redsys');
 
     const merchantCode = configService.get<string>('REDSYS_MERCHANT_CODE')?.trim();
     const terminal = configService.get<string>('REDSYS_TERMINAL')?.trim() || '001';
@@ -111,7 +107,7 @@ export class RedsysGateway implements PaymentGateway {
   ): Promise<PaymentGatewayResult> {
     const creds = this.resolveCredentials(options);
     if (!creds) {
-      return this.consoleDelegate.authorize(token, amount, currency, options);
+      return Promise.resolve({ success: false, transactionId: '', errorMessage: 'Redsys credentials are not configured' });
     }
     return Promise.resolve(
       this.buildRedirectAuthorize(amount, currency, creds, options),
@@ -125,7 +121,7 @@ export class RedsysGateway implements PaymentGateway {
   ): Promise<PaymentGatewayResult> {
     const creds = this.resolveCredentials(options);
     if (!creds) {
-      return this.consoleDelegate.capture(transactionId, amount, options);
+      return Promise.resolve({ success: false, transactionId, errorMessage: 'Redsys credentials are not configured' });
     }
     return this.restOperation({
       creds,
@@ -143,12 +139,13 @@ export class RedsysGateway implements PaymentGateway {
   ): Promise<PaymentGatewayResult> {
     const creds = this.resolveCredentials(options);
     if (!creds) {
-      return this.consoleDelegate.void(transactionId, options);
+      return Promise.resolve({ success: false, transactionId, errorMessage: 'Redsys credentials are not configured' });
     }
     return this.restOperation({
       creds,
       orderId: transactionId,
       transactionType: '9',
+      amount: options?.authorizedAmount,
       currency: options?.currencyCode ?? 'EUR',
       options,
     });
@@ -161,7 +158,7 @@ export class RedsysGateway implements PaymentGateway {
   ): Promise<PaymentGatewayResult> {
     const creds = this.resolveCredentials(options);
     if (!creds) {
-      return this.consoleDelegate.refund(transactionId, amount, options);
+      return Promise.resolve({ success: false, transactionId, errorMessage: 'Redsys credentials are not configured' });
     }
     return this.restOperation({
       creds,
@@ -210,7 +207,7 @@ export class RedsysGateway implements PaymentGateway {
 
     const orderId = generateRedsysOrderId();
     const params: Record<string, string> = {
-      DS_MERCHANT_AMOUNT: redsysAmountString(amount),
+      DS_MERCHANT_AMOUNT: redsysAmountString(amount, currency),
       DS_MERCHANT_ORDER: orderId,
       DS_MERCHANT_MERCHANTCODE: creds.merchantCode,
       DS_MERCHANT_CURRENCY: redsysCurrencyCode(currency),
@@ -256,16 +253,21 @@ export class RedsysGateway implements PaymentGateway {
     options?: PaymentGatewayCallOptions;
   }): Promise<PaymentGatewayResult> {
     const { creds, orderId, transactionType, amount, currency, options } = input;
+    let amountMinor: string;
+    try {
+      if (amount === undefined) throw new Error();
+      amountMinor = redsysAmountString(amount, currency ?? 'EUR');
+    } catch {
+      return { success: false, transactionId: orderId, errorMessage: 'Redsys requires an amount in supported currency minor units' };
+    }
     const params: Record<string, string> = {
       DS_MERCHANT_ORDER: orderId,
       DS_MERCHANT_MERCHANTCODE: creds.merchantCode,
       DS_MERCHANT_TERMINAL: creds.terminal,
       DS_MERCHANT_TRANSACTIONTYPE: transactionType,
       DS_MERCHANT_CURRENCY: redsysCurrencyCode(currency ?? 'EUR'),
+      DS_MERCHANT_AMOUNT: amountMinor,
     };
-    if (amount !== undefined) {
-      params['DS_MERCHANT_AMOUNT'] = redsysAmountString(amount);
-    }
 
     const merchantParameters = encodeMerchantParameters(params);
     const signature = signMerchantParameters(
@@ -292,7 +294,7 @@ export class RedsysGateway implements PaymentGateway {
       this.fetchFn,
     );
 
-    if (!res.ok || !res.data?.Ds_MerchantParameters) {
+    if (!res.ok || typeof res.data?.Ds_MerchantParameters !== 'string' || !res.data.Ds_MerchantParameters) {
       return {
         success: false,
         transactionId: orderId,
@@ -305,7 +307,8 @@ export class RedsysGateway implements PaymentGateway {
     }
 
     if (
-      res.data.Ds_Signature &&
+      res.data.Ds_SignatureVersion !== REDSYS_SIGNATURE_VERSION ||
+      typeof res.data.Ds_Signature !== 'string' ||
       !verifyMerchantParametersSignature(
         res.data.Ds_MerchantParameters,
         res.data.Ds_Signature,
@@ -320,13 +323,31 @@ export class RedsysGateway implements PaymentGateway {
       };
     }
 
-    const decoded = decodeMerchantParameters(res.data.Ds_MerchantParameters);
-    const dsResponse = decoded['Ds_Response'] ?? decoded['DS_RESPONSE'];
-    if (!isRedsysSuccessResponse(dsResponse)) {
+    let decoded: Record<string, string>;
+    try {
+      decoded = decodeMerchantParameters(res.data.Ds_MerchantParameters);
+      if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error();
+    } catch {
+      return { success: false, transactionId: orderId, errorMessage: 'Malformed Redsys response' };
+    }
+    const field = (name: string): string => {
+      const value = decoded[name] ?? decoded[name.toUpperCase()];
+      return typeof value === 'string' ? value : '';
+    };
+    const dsResponse = field('Ds_Response');
+    const terminal = field('Ds_Terminal');
+    const responseAmount = field('Ds_Amount');
+    if (field('Ds_Order') !== orderId
+      || field('Ds_MerchantCode') !== creds.merchantCode
+      || !/^\d+$/.test(terminal) || Number(terminal) !== Number(creds.terminal)
+      || field('Ds_Currency') !== params['DS_MERCHANT_CURRENCY']
+      || field('Ds_TransactionType') !== transactionType
+      || !/^\d+$/.test(responseAmount) || BigInt(responseAmount) !== BigInt(amountMinor)
+      || dsResponse !== (transactionType === '9' ? '0400' : '0900')) {
       return {
         success: false,
         transactionId: orderId,
-        errorMessage: `Redsys declined with Ds_Response=${dsResponse ?? 'unknown'}`,
+        errorMessage: 'Redsys response does not confirm the requested operation',
       };
     }
 

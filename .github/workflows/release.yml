@@ -71,6 +71,7 @@ jobs:
         run: pnpm test
         env:
           DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_test
+          REDSYS_TEST_DATABASE_URL: postgresql://haip:haip@localhost:5432/haip_test
           REDIS_URL: redis://localhost:6379
 
   ci-booking-requests:
