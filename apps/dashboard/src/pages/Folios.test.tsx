@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -58,12 +58,12 @@ function mockGet(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function renderDetail() {
+function renderDetail(entry = '/folio-1') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
   return render(
-    <MemoryRouter initialEntries={['/folio-1']}>
+    <MemoryRouter initialEntries={[entry]}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <Folios />
@@ -143,10 +143,41 @@ describe('Folios — split folios', () => {
 });
 
 describe('Folios — payment corrections', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
   beforeEach(() => {
     vi.clearAllMocks();
     mockGet();
     (api.post as any).mockResolvedValue({ data: { op: 'refund' } });
+  });
+
+  it.each(['ok', 'ko'])('recovers a hosted %s return without treating the browser flag as authorization', async (outcome) => {
+    mockGet({ '/v1/payments': [{ ...PAYMENT, status: 'pending' }], '/v1/payments/client-config': { provider: 'redsys', clientMode: 'redsys' } });
+    renderDetail(`/folio-1?redsys=${outcome}`);
+    expect(await screen.findByText(outcome === 'ok'
+      ? 'Returned from Redsys. Payment status updates when the bank notification arrives.'
+      : 'Redsys payment was cancelled or declined.')).toBeInTheDocument();
+    expect(await screen.findByText('F-0001')).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+    expect(screen.queryByText('Capture')).not.toBeInTheDocument();
+    expect(screen.queryByText('Void')).not.toBeInTheDocument();
+  });
+
+  it('submits the hosted authorization form returned by the property-scoped API', async () => {
+    mockGet({ '/v1/payments/client-config': { provider: 'redsys', clientMode: 'redsys' } });
+    const nextAction = { type: 'redirect', method: 'POST', url: 'https://bank.example/checkout', formFields: { Ds_MerchantParameters: 'test-parameters', Ds_Signature: 'test-signature' } };
+    vi.mocked(api.post).mockResolvedValue({ data: { status: 'pending', nextAction } });
+    const submit = vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => undefined);
+    renderDetail();
+    await userEvent.click(await screen.findByRole('button', { name: /Authorize Card/i }));
+    await userEvent.type(screen.getByRole('spinbutton'), '100');
+    await userEvent.click(screen.getByRole('button', { name: 'Authorize with Redsys' }));
+    await waitFor(() => expect(submit).toHaveBeenCalledOnce());
+    const submitted = submit.mock.contexts[0] as HTMLFormElement;
+    expect(api.post).toHaveBeenCalledWith('/v1/payments/authorize', expect.objectContaining({ propertyId: 'prop-1', folioId: 'folio-1', amount: '100.00', currencyCode: 'USD', gatewayProvider: 'redsys' }));
+    expect(submitted.method).toBe('post');
+    expect(submitted.action).toBe(nextAction.url);
+    expect(new FormData(submitted).get('Ds_MerchantParameters')).toBe('test-parameters');
+    submitted.remove();
   });
 
   it('lets the API pick the legal op when none is chosen', async () => {

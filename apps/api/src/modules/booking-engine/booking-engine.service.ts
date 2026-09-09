@@ -433,6 +433,9 @@ export class BookingEngineService {
     const bookingReturn = provider === 'redsys' && depositDue.greaterThan(0)
       ? new BookingReturnService(this.db, this.runtimeConfig).prepare(propertyId, dto.returnUrl)
       : undefined;
+    if (bookingReturn) {
+      await this.paymentService.assertAuthorizationAvailable(propertyId, provider, quote.depositDue, quote.currencyCode);
+    }
 
     // 2. Guest — walk-in exception (no prior reservation; one is created next).
     //    We intentionally do NOT do an unscoped email lookup (cross-tenant PII leak).

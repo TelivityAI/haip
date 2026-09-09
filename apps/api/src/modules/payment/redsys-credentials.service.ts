@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IntegrationsService } from '../integrations/integrations.service';
 import type { RedsysMerchantCredentials } from './gateways/redsys-gateway';
+import { decryptCredentialPlaintext, deserializeEncryptedBlob, loadMigrationCredentialKeyRingFromEnv } from '../../common/crypto/credential-encryption';
 
 /**
  * Resolves Redsys FUC / terminal / secret for a property.
@@ -18,6 +19,7 @@ export class RedsysCredentialsService {
     propertyId: string,
   ): Promise<RedsysMerchantCredentials | null> {
     try {
+      await this.integrationsService.protectRedsysCredentials(propertyId);
       const connection = await this.integrationsService.getPropertyIntegration(
         propertyId,
         'redsys',
@@ -30,7 +32,9 @@ export class RedsysCredentialsService {
           'merchant_code',
           'fuc',
         );
-        const secretKey = stringField(cfg, 'secretKey', 'secret_key', 'clave');
+        const secretKey = cfg['secretKeyEncrypted']
+          ? decryptCredentialPlaintext(deserializeEncryptedBlob(JSON.stringify(cfg['secretKeyEncrypted'])), loadMigrationCredentialKeyRingFromEnv())
+          : stringField(cfg, 'secretKey', 'secret_key', 'clave');
         const terminal = stringField(cfg, 'terminal') || '001';
         const environmentRaw = (
           stringField(cfg, 'environment', 'env') || 'test'
@@ -44,8 +48,12 @@ export class RedsysCredentialsService {
           };
         }
       }
-    } catch {
-      // Catalog row may be missing before seed — fall through to env.
+    } catch (error) {
+      // Only a missing catalog permits env fallback. Invalid ciphertext, missing
+      // encryption keys or database errors must never select a different merchant.
+      if (!(error instanceof NotFoundException)) {
+        throw new ServiceUnavailableException('Redsys credentials are unavailable');
+      }
     }
 
     const merchantCode = this.configService

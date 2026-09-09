@@ -6,7 +6,6 @@ import type {
   BookingConfig,
   BookingDetails,
   CancelResponse,
-  CheckoutStatus,
   QuoteRequest,
   QuoteResponse,
   RequestPaymentMethodSetupRequest,
@@ -95,13 +94,6 @@ export const bookingApi = {
     body: SubmitBookingRequest,
   ): Promise<BookingRequestAcknowledgement> => {
     const { data } = await api.post<BookingRequestAcknowledgement>('/requests', body);
-    return data;
-  },
-
-  getCheckout: async (checkoutToken: string): Promise<CheckoutStatus> => {
-    const { data } = await api.get<CheckoutStatus>(
-      `/checkouts/${encodeURIComponent(checkoutToken)}`,
-    );
     return data;
   },
 
