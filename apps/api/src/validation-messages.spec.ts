@@ -32,8 +32,17 @@ import { getMetadataStorage } from 'class-validator';
 // contributes no metadata, which would make this test pass by not looking.
 // `!**/*.spec.ts` matters: one DTO directory holds its own spec, and pulling
 // it in here would run that file's `describe` blocks inside this one.
-const dtoModules = import.meta.glob(['./modules/**/dto/**/*.ts', '!**/*.spec.ts'], { eager: true });
-
+// Booking-requests lives in packages/ but its HTTP DTOs are still staff API
+// 400 surfaces — include them so a future @IsEnum([...]) there cannot sneak
+// past this guardrail.
+const dtoModules = import.meta.glob(
+  [
+    './modules/**/dto/**/*.ts',
+    '../../../packages/booking-requests/src/http/dto/**/*.ts',
+    '!**/*.spec.ts',
+  ],
+  { eager: true },
+);
 interface Meta {
   // `type` is 'customValidation' for EVERY decorator built on ValidateBy,
   // which is all of them here. `name` is the discriminator. Filtering on
@@ -59,11 +68,17 @@ const describeSite = (m: Meta) => `${m.target?.name ?? '?'}.${m.propertyName ?? 
 
 describe('enum validation messages', () => {
   it('loaded the DTOs it is meant to be checking', () => {
-    expect(Object.keys(dtoModules).length).toBeGreaterThan(50);
+    const loaded = Object.keys(dtoModules);
+    expect(loaded.length).toBeGreaterThan(50);
+    expect(loaded.some((path) => path.includes('booking-requests'))).toBe(true);
     expect(allMetadata().length).toBeGreaterThan(1000);
     // And is looking at constraints that exist: a filter that matches nothing
     // is the way this file fails silently, so assert it matches plenty.
     expect(allMetadata().filter((m) => m.name === 'isIn').length).toBeGreaterThan(50);
+    // Booking-requests list DTO must be in the registry (not only on disk).
+    expect(
+      allMetadata().some((m) => m.target?.name === 'ListBookingRequestsDto' && m.name === 'isIn'),
+    ).toBe(true);
   });
 
   it('never uses IsEnum with an array, whose message comes out empty', () => {
