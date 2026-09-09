@@ -1211,12 +1211,24 @@ For example: `https://hotel.example,https://www.hotel.example`. Production requi
 HTTPS. Local development can explicitly allow `http://localhost:5174`. Configure
 the corresponding CORS origins for cross-origin widgets as usual.
 
-Apply database migration `0025_payment_booking_return_reference.sql` before
-deploying the API changes. The widget sends its full embedding-page URL as
+Apply database migrations `0025_payment_booking_return_reference.sql` and
+`0026_payment_booking_return_destination.sql` before deploying the API changes.
+The widget sends its full embedding-page URL as
 `returnUrl` to `POST /api/v1/booking-engine/book`. The API validates the origin
 before creating a guest or reservation, preserves the host path/query/fragment,
 and binds both provider outcomes to the same randomly generated return reference.
 The booking endpoint no longer accepts separate browser success/failure URLs.
+
+Both provider URLs use the compact API relay
+`/api/v1/booking-return/:reference?propertyId=:propertyId`, including for short
+hotel URLs. It shares the `PUBLIC_API_BASE_URL` configuration used by Redsys
+notifications (with the existing `API_BASE_URL` fallback). The server checks the
+provider's 250-character URL limit before creating booking records. Full hotel
+URLs are stored without the capability and are never truncated. The relay looks
+up the capability hash together with the supplied tenant scope, checks expiry and
+the destination allowlist again, and issues a non-cacheable 303 to that saved
+page with the original reference appended. It accepts no redirect destination or
+payment outcome from the browser.
 
 On return, the widget boots directly into its payment-status view without saved
 router state or browser storage. It polls
@@ -1228,8 +1240,9 @@ Only server payment state determines the result; browser flags are ignored.
 The reference expires seven days after payment creation and cannot retrieve guest
 details, retrieve a confirmation credential, or cancel a booking.
 
-Keep return references out of application, proxy, and analytics logs; the host
-page's `haip_payment_return` query parameter is a limited bearer capability.
+Keep return references out of application, proxy, and analytics logs; the relay
+path reference and the host page's `haip_payment_return` query parameter are
+limited bearer capabilities. The relay sets `Referrer-Policy: no-referrer`.
 Failed, cancelled, or unverified returns direct guests to contact the hotel before
 trying again, because an earlier booking or payment may already exist.
 

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BookingEngineController } from './booking-engine.controller';
 import { BookingEngineAdminController } from './booking-engine-admin.controller';
+import { BookingReturnController } from './booking-return.controller';
 import { BookingEngineService } from './booking-engine.service';
 import { BookingEngineConfigService } from './booking-engine-config.service';
 import { BookingThrottleGuard } from './booking-throttle.guard';
@@ -32,7 +33,7 @@ import { PolicyModule } from '../policy/policy.module';
     AncillaryModule,
     PolicyModule,
   ],
-  controllers: [BookingEngineController, BookingEngineAdminController],
+  controllers: [BookingEngineController, BookingEngineAdminController, BookingReturnController],
   providers: [
     BookingEngineService,
     BookingEngineConfigService,
