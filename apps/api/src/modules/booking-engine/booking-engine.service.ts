@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, ForbiddenException, Inject } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { eq, and } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import { bookings, reservations } from '@telivityhaip/database';
@@ -17,6 +18,7 @@ import { TaxService } from '../tax/tax.service';
 import { GuestService } from '../guest/guest.service';
 import { FolioService } from '../folio/folio.service';
 import { PaymentService } from '../payment/payment.service';
+import { resolvePaymentGatewayProvider } from '../payment/payment-gateway.factory';
 import { DepositService } from '../accounting/deposit.service';
 import { AncillaryService } from '../ancillary/ancillary.service';
 import { PolicyService } from '../policy/policy.service';
@@ -47,7 +49,8 @@ export class BookingEngineService {
     private readonly folioService: FolioService,
     private readonly paymentService: PaymentService,
     private readonly depositService: DepositService,
-    private readonly configService: BookingEngineConfigService,
+    private readonly bookingEngineConfig: BookingEngineConfigService,
+    private readonly runtimeConfig: ConfigService,
     private readonly ancillaryService: AncillaryService,
     private readonly policyService: PolicyService,
   ) {}
@@ -55,7 +58,7 @@ export class BookingEngineService {
   // --- Search ---
 
   async search(propertyId: string, dto: BeSearchDto) {
-    const config = await this.configService.getPublicConfig(propertyId);
+    const config = await this.bookingEngineConfig.getPublicConfig(propertyId);
     if (!config.isEnabled) {
       throw new ForbiddenException('Direct booking is not enabled for this property');
     }
@@ -104,7 +107,7 @@ export class BookingEngineService {
   // --- Sellable extras ---
 
   async listSellableServices(propertyId: string) {
-    const config = await this.configService.getPublicConfig(propertyId);
+    const config = await this.bookingEngineConfig.getPublicConfig(propertyId);
     if (!config.isEnabled) {
       throw new ForbiddenException('Direct booking is not enabled for this property');
     }
@@ -142,8 +145,8 @@ export class BookingEngineService {
   ) {
     this.assertUniqueServiceIds(dto.serviceIds);
     const config = options?.lockForUpdate
-      ? await this.configService.getPublicConfig(propertyId, db, true)
-      : await this.configService.getPublicConfig(propertyId, db);
+      ? await this.bookingEngineConfig.getPublicConfig(propertyId, db, true)
+      : await this.bookingEngineConfig.getPublicConfig(propertyId, db);
     this.assertSellable(config, dto.roomTypeId, dto.ratePlanId);
 
     // Price-tampering guard: `roomTypeId` and `ratePlanId` arrive as two
@@ -395,7 +398,7 @@ export class BookingEngineService {
   // --- Book (the heart) ---
 
   async book(propertyId: string, dto: BeCreateBookingDto) {
-    const config = await this.configService.getPublicConfig(propertyId);
+    const config = await this.bookingEngineConfig.getPublicConfig(propertyId);
     if (!config.isEnabled) {
       throw new ForbiddenException('Direct booking is not enabled for this property');
     }
@@ -484,17 +487,25 @@ export class BookingEngineService {
     }
 
     // 5 + 6. Take the deposit (hold) and classify it as a deposit liability.
-    let depositInfo: { paymentId: string; amount: string; status: string } | null = null;
+    let depositInfo: {
+      paymentId: string;
+      amount: string;
+      status: string;
+      nextAction?: unknown;
+    } | null = null;
     if (depositDue.greaterThan(0) && dto.paymentToken) {
+      const provider = resolvePaymentGatewayProvider(this.runtimeConfig);
       const payment = await this.paymentService.authorizePayment({
         folioId: folio.id,
         propertyId,
         amount: depositDue.toFixed(2),
         currencyCode: quote.currencyCode,
-        gatewayProvider: 'stripe',
+        gatewayProvider: provider === 'mock' ? 'stripe' : provider,
         gatewayPaymentToken: dto.paymentToken,
         cardLastFour: dto.cardLastFour,
         cardBrand: dto.cardBrand,
+        redirectUrlOk: dto.redirectUrlOk,
+        redirectUrlKo: dto.redirectUrlKo,
       } as any);
 
       const policy = config.depositPolicy as DepositPolicy;
@@ -507,12 +518,23 @@ export class BookingEngineService {
         isRefundable: policy.refundable,
       } as any);
 
-      depositInfo = { paymentId: payment.id, amount: depositDue.toFixed(2), status: 'held' };
+      depositInfo = {
+        paymentId: payment.id,
+        amount: depositDue.toFixed(2),
+        status: payment.nextAction ? 'pending_redirect' : 'held',
+        ...(payment.nextAction ? { nextAction: payment.nextAction } : {}),
+      };
     }
 
-    // 7. Auto-confirm only if configured (otherwise leave 'pending').
+    // 7. Auto-confirm only if configured and deposit is already held
+    // (skip while the guest is still on the Redsys redirect).
     let status = reservation.status;
-    if (config.isEnabled && depositInfo && (await this.shouldAutoConfirm(propertyId))) {
+    if (
+      config.isEnabled &&
+      depositInfo &&
+      depositInfo.status !== 'pending_redirect' &&
+      (await this.shouldAutoConfirm(propertyId))
+    ) {
       const confirmed = await this.reservationService.confirm(reservation.id, propertyId);
       status = confirmed.status;
     }
@@ -634,7 +656,7 @@ export class BookingEngineService {
   }
 
   private async shouldAutoConfirm(propertyId: string): Promise<boolean> {
-    const cfg = await this.configService.getConfig(propertyId);
+    const cfg = await this.bookingEngineConfig.getConfig(propertyId);
     return cfg.autoConfirm === true;
   }
 
