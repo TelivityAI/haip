@@ -292,6 +292,21 @@ describe('PaymentService', () => {
   });
 
   describe('authorizePayment', () => {
+    it('persists internal deposit finalization settings only for a pending authorization', async () => {
+      mockFolioService.findById.mockResolvedValue({ ...mockFolio, reservationId: 'res-001' } as any);
+      mockGateway.authorize.mockResolvedValueOnce({ success: true, transactionId: 'order-001', providerStatus: 'requires_action', nextAction: { type: 'redirect' } } as any);
+      const finalization = { deposit: { reservationId: 'res-001', isRefundable: false, autoConfirm: true } };
+      await (service.authorizePayment as any)({ folioId: 'folio-001', propertyId: 'prop-001', amount: '150.00', currencyCode: 'USD', gatewayProvider: 'stripe', gatewayPaymentToken: 'token' }, finalization);
+      const inserted = (mockDb.insert as any).mock.results[0].value.values.mock.calls[0][0];
+      expect(inserted).toMatchObject({ status: 'pending', authorizationFinalization: finalization });
+    });
+
+    it('rejects an internal deposit linked to a different reservation than the folio', async () => {
+      mockFolioService.findById.mockResolvedValue({ ...mockFolio, reservationId: 'res-001' } as any);
+      await expect((service.authorizePayment as any)({ folioId: 'folio-001', propertyId: 'prop-001', amount: '150.00', currencyCode: 'USD', gatewayProvider: 'stripe', gatewayPaymentToken: 'token' }, { deposit: { reservationId: 'other', isRefundable: false, autoConfirm: true } })).rejects.toThrow(BadRequestException);
+      expect(mockGateway.authorize).not.toHaveBeenCalled();
+    });
+
     it('should call gateway and create authorized payment', async () => {
       const authPayment = { ...mockPayment, status: 'authorized', isPreAuthorization: true };
       const db = createMockDb([authPayment]);

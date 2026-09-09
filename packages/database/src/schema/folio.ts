@@ -1,4 +1,4 @@
-import { foreignKey, pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
+import { foreignKey, pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum, uniqueIndex, jsonb } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 import { reservations, bookings } from './reservation.js';
 import { guests } from './guest.js';
@@ -185,6 +185,15 @@ export const payments = pgTable('payments', {
   // NEVER store raw card data. Stripe/Adyen tokenization only.
   gatewayProvider: varchar('gateway_provider', { length: 20 }), // "stripe", "adyen"
   gatewayTransactionId: varchar('gateway_transaction_id', { length: 255 }),
+  // Server-owned snapshot for authorization that completes asynchronously.
+  // Nullable for synchronous/legacy payments; never populated from public DTOs.
+  authorizationFinalization: jsonb('authorization_finalization').$type<{
+    deposit: {
+      reservationId: string;
+      isRefundable: boolean;
+      autoConfirm: boolean;
+    };
+  }>(),
   gatewayPaymentToken: varchar('gateway_payment_token', { length: 255 }), // Tokenized card reference
   cardLastFour: varchar('card_last_four', { length: 4 }),
   cardBrand: varchar('card_brand', { length: 20 }), // "visa", "mastercard", "amex"
