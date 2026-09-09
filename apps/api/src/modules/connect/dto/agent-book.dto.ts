@@ -5,7 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsEmail,
-  IsEnum,
+  IsIn,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -75,7 +75,7 @@ export class AgentBookDto {
   // Payment
   @ApiPropertyOptional({ enum: ['pay_at_property', 'prepaid', 'virtual_card'] })
   @IsOptional()
-  @IsEnum(['pay_at_property', 'prepaid', 'virtual_card'])
+  @IsIn(['pay_at_property', 'prepaid', 'virtual_card'])
   paymentMethod?: 'pay_at_property' | 'prepaid' | 'virtual_card';
 
   @ApiPropertyOptional()

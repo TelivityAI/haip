@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsUUID, IsInt, Min, Max } from 'class-validator';
+import { IsIn, IsOptional, IsUUID, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -9,7 +9,7 @@ export class ListDoorLockCredentialsDto {
 
   @ApiPropertyOptional({ enum: ['active', 'revoked'] })
   @IsOptional()
-  @IsEnum(['active', 'revoked'])
+  @IsIn(['active', 'revoked'])
   status?: 'active' | 'revoked';
 
   @ApiPropertyOptional({ default: 1 })

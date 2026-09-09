@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -35,7 +35,7 @@ export class AddHouseAccountChargeDto {
     description: 'House-account charges post to non-room revenue categories (KB 13.4)',
   })
   @IsOptional()
-  @IsEnum(CHARGE_TYPES)
+  @IsIn(CHARGE_TYPES)
   type?: string;
 
   @ApiProperty({ example: 'Bottle of water' })

@@ -1,7 +1,7 @@
 import {
   IsArray,
   IsUUID,
-  IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   ArrayMinSize,
@@ -19,7 +19,7 @@ export class BulkActionDto {
     description: 'Action to apply to each reservation',
     enum: ['check_in', 'check_out', 'cancel'],
   })
-  @IsEnum(['check_in', 'check_out', 'cancel'])
+  @IsIn(['check_in', 'check_out', 'cancel'])
   action!: 'check_in' | 'check_out' | 'cancel';
 
   @ApiPropertyOptional({ description: 'Reason — used as cancellation reason for the cancel action' })

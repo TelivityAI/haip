@@ -1,7 +1,7 @@
 import {
   IsString,
   IsOptional,
-  IsEnum,
+  IsIn,
   IsEmail,
   MaxLength,
 } from 'class-validator';
@@ -18,7 +18,7 @@ export class UpdateGroupProfileDto {
 
   @ApiPropertyOptional({ enum: GROUP_TYPES })
   @IsOptional()
-  @IsEnum(GROUP_TYPES)
+  @IsIn(GROUP_TYPES)
   type?: string;
 
   @ApiPropertyOptional()

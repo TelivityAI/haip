@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID, IsEnum, IsBoolean, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsUUID, IsIn, IsBoolean, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -9,7 +9,7 @@ export class ListAccountingCodesDto {
 
   @ApiPropertyOptional({ enum: ['transaction', 'gl'] })
   @IsOptional()
-  @IsEnum(['transaction', 'gl'])
+  @IsIn(['transaction', 'gl'])
   kind?: string;
 
   @ApiPropertyOptional({ description: 'Include archived codes', default: false })

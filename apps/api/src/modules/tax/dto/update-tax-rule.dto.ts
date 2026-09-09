@@ -6,7 +6,7 @@ import {
   IsArray,
   IsDateString,
   IsObject,
-  IsEnum,
+  IsIn,
   IsInt,
   ValidateIf,
   Min,
@@ -22,7 +22,7 @@ export class UpdateTaxRuleDto {
   @IsOptional()
   code?: string;
 
-  @IsEnum(['percentage', 'flat_per_night', 'flat_per_stay', 'split_component'])
+  @IsIn(['percentage', 'flat_per_night', 'flat_per_stay', 'split_component'])
   @IsOptional()
   type?: 'percentage' | 'flat_per_night' | 'flat_per_stay' | 'split_component';
 

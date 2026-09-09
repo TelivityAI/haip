@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -26,7 +26,7 @@ export class AddHouseAccountPaymentDto {
   propertyId!: string;
 
   @ApiProperty({ enum: PAYMENT_METHODS, example: 'cash' })
-  @IsEnum(PAYMENT_METHODS)
+  @IsIn(PAYMENT_METHODS)
   method!: string;
 
   @ApiProperty({ example: '12.50' })

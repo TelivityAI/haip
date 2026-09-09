@@ -2,7 +2,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
   IsInt,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -38,7 +38,7 @@ export class CreateRoutingRuleDto {
   reservationId!: string;
 
   @ApiProperty({ enum: CHARGE_TYPES })
-  @IsEnum(CHARGE_TYPES)
+  @IsIn(CHARGE_TYPES)
   chargeType!: string;
 
   @ApiProperty({ description: 'Folio that charges of this type post to' })

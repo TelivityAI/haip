@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -15,7 +15,7 @@ export class CreateAccountingCodeDto {
   propertyId!: string;
 
   @ApiProperty({ enum: ['transaction', 'gl'], description: 'Code kind (KB 5)' })
-  @IsEnum(['transaction', 'gl'])
+  @IsIn(['transaction', 'gl'])
   kind!: string;
 
   @ApiProperty({ example: 'ROOM-REV', description: 'Code' })

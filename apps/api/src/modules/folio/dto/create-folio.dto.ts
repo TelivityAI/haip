@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -30,7 +30,7 @@ export class CreateFolioDto {
   guestId!: string;
 
   @ApiProperty({ enum: ['guest', 'master', 'city_ledger'], default: 'guest' })
-  @IsEnum(['guest', 'master', 'city_ledger'])
+  @IsIn(['guest', 'master', 'city_ledger'])
   type!: string;
 
   @ApiProperty({ example: 'USD', description: 'ISO 4217 currency code' })

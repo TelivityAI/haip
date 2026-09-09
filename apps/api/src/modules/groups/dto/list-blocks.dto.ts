@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional, IsEnum, IsInt, Min, Max } from 'class-validator';
+import { IsUUID, IsOptional, IsIn, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -16,7 +16,7 @@ export class ListBlocksDto {
 
   @ApiPropertyOptional({ enum: BLOCK_STATUSES })
   @IsOptional()
-  @IsEnum(BLOCK_STATUSES)
+  @IsIn(BLOCK_STATUSES)
   status?: string;
 
   @ApiPropertyOptional({ default: 1 })

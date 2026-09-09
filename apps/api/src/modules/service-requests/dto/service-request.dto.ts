@@ -2,7 +2,7 @@ import {
   IsUUID,
   IsOptional,
   IsString,
-  IsEnum,
+  IsIn,
   IsInt,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -36,7 +36,7 @@ export class CreateServiceRequestDto {
   reservationId?: string;
 
   @ApiProperty({ enum: TYPES })
-  @IsEnum(TYPES)
+  @IsIn(TYPES)
   type!: string;
 
   @ApiPropertyOptional({ default: 0 })
@@ -73,7 +73,7 @@ export class UpdateServiceRequestDto {
 
   @ApiPropertyOptional({ enum: TYPES })
   @IsOptional()
-  @IsEnum(TYPES)
+  @IsIn(TYPES)
   type?: string;
 
   @ApiPropertyOptional()
@@ -84,7 +84,7 @@ export class UpdateServiceRequestDto {
 
   @ApiPropertyOptional({ enum: STATUSES })
   @IsOptional()
-  @IsEnum(STATUSES)
+  @IsIn(STATUSES)
   status?: string;
 
   @ApiPropertyOptional()
@@ -105,12 +105,12 @@ export class ListServiceRequestsDto {
 
   @ApiPropertyOptional({ enum: STATUSES })
   @IsOptional()
-  @IsEnum(STATUSES)
+  @IsIn(STATUSES)
   status?: string;
 
   @ApiPropertyOptional({ enum: TYPES })
   @IsOptional()
-  @IsEnum(TYPES)
+  @IsIn(TYPES)
   type?: string;
 }
 

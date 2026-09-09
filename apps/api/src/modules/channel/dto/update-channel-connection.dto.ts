@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, ValidateNested, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RatePlanMappingDto, RoomTypeMappingDto } from './create-channel-connection.dto';
 
@@ -8,11 +8,11 @@ export class UpdateChannelConnectionDto {
   channelName?: string;
 
   @IsOptional()
-  @IsEnum(['active', 'inactive', 'pending_setup'])
+  @IsIn(['active', 'inactive', 'pending_setup'])
   status?: string;
 
   @IsOptional()
-  @IsEnum(['push', 'pull', 'bidirectional'])
+  @IsIn(['push', 'pull', 'bidirectional'])
   syncDirection?: string;
 
   @IsOptional()

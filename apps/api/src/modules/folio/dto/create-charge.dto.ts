@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
   IsBoolean,
   IsDateString,
   MaxLength,
@@ -20,7 +20,7 @@ export class CreateChargeDto {
   @ApiProperty({
     enum: ['room', 'tax', 'food_beverage', 'minibar', 'phone', 'laundry', 'parking', 'spa', 'incidental', 'fee', 'adjustment', 'package'],
   })
-  @IsEnum(['room', 'tax', 'food_beverage', 'minibar', 'phone', 'laundry', 'parking', 'spa', 'incidental', 'fee', 'adjustment', 'package'])
+  @IsIn(['room', 'tax', 'food_beverage', 'minibar', 'phone', 'laundry', 'parking', 'spa', 'incidental', 'fee', 'adjustment', 'package'])
   type!: string;
 
   @ApiProperty({ example: 'Room charge - Standard King' })

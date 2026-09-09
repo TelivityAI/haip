@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
   IsInt,
   Min,
 } from 'class-validator';
@@ -43,6 +43,6 @@ export class SellProductDto {
     description: 'If provided, take payment for the sale immediately (KB 13.3)',
   })
   @IsOptional()
-  @IsEnum(PAYMENT_METHODS)
+  @IsIn(PAYMENT_METHODS)
   paymentMethod?: string;
 }

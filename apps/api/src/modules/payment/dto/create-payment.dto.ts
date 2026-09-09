@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
   IsDateString,
   MaxLength,
 } from 'class-validator';
@@ -35,7 +35,7 @@ export class CreatePaymentDto {
     description:
       'Manual settle tender. Use credit_card/debit_card here for offline card machines (no gateway). Gateway cards must use POST /payments/authorize. pix = Brazil PIX paid direct to the property.',
   })
-  @IsEnum([
+  @IsIn([
     'credit_card',
     'debit_card',
     'cash',

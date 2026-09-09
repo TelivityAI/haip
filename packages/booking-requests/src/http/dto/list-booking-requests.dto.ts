@@ -2,7 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
-  IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -30,7 +30,7 @@ export class ListBookingRequestsDto {
 
   @ApiPropertyOptional({ enum: BOOKING_REQUEST_STATUSES })
   @IsOptional()
-  @IsEnum(BOOKING_REQUEST_STATUSES)
+  @IsIn(BOOKING_REQUEST_STATUSES)
   status?: (typeof BOOKING_REQUEST_STATUSES)[number];
 
   @ApiPropertyOptional()
@@ -67,12 +67,12 @@ export class ListBookingRequestsDto {
 
   @ApiPropertyOptional({ enum: BOOKING_REQUEST_SORT_FIELDS, default: 'createdAt' })
   @IsOptional()
-  @IsEnum(BOOKING_REQUEST_SORT_FIELDS)
+  @IsIn(BOOKING_REQUEST_SORT_FIELDS)
   sortBy?: (typeof BOOKING_REQUEST_SORT_FIELDS)[number] = 'createdAt';
 
   @ApiPropertyOptional({ enum: BOOKING_REQUEST_SORT_ORDERS, default: 'desc' })
   @IsOptional()
-  @IsEnum(BOOKING_REQUEST_SORT_ORDERS)
+  @IsIn(BOOKING_REQUEST_SORT_ORDERS)
   sortOrder?: (typeof BOOKING_REQUEST_SORT_ORDERS)[number] = 'desc';
 
   @ApiPropertyOptional({ default: 1 })

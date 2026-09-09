@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsUUID, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsUUID, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -16,6 +16,6 @@ export class CorrectPaymentDto {
     description: 'Optional op override; must be the legal op for the payment state',
   })
   @IsOptional()
-  @IsEnum(['void', 'refund', 'adjust'])
+  @IsIn(['void', 'refund', 'adjust'])
   op?: 'void' | 'refund' | 'adjust';
 }

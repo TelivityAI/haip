@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEnum, IsBoolean, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsIn, IsBoolean, IsInt, Min, Max } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 
@@ -22,7 +22,7 @@ export class SearchGuestsDto {
 
   @ApiPropertyOptional({ enum: ['none', 'silver', 'gold', 'platinum', 'diamond'] })
   @IsOptional()
-  @IsEnum(['none', 'silver', 'gold', 'platinum', 'diamond'])
+  @IsIn(['none', 'silver', 'gold', 'platinum', 'diamond'])
   vipLevel?: string;
 
   @ApiPropertyOptional()

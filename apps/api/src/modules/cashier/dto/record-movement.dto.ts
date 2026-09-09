@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -17,7 +17,7 @@ export class RecordMovementDto {
   propertyId!: string;
 
   @ApiProperty({ enum: ['payment', 'refund', 'paid_out', 'drop'], description: 'Movement type (KB 12.3)' })
-  @IsEnum(['payment', 'refund', 'paid_out', 'drop'])
+  @IsIn(['payment', 'refund', 'paid_out', 'drop'])
   type!: string;
 
   @ApiProperty({ example: '50.00', description: 'Movement amount' })
