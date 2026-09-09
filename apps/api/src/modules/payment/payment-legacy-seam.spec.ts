@@ -68,6 +68,11 @@ function serviceWith(db: ReturnType<typeof dbReturning>) {
       refund: vi.fn().mockResolvedValue({ success: true, transactionId: 'refund' }),
     },
     { emit: vi.fn() },
+    { get: vi.fn() },
+    {
+      resolveForProperty: vi.fn().mockResolvedValue(null),
+      merchantNotificationUrl: vi.fn().mockReturnValue('http://localhost:3000/api/v1/webhooks/redsys'),
+    },
   ) as PaymentService;
 }
 

@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PaymentService } from './payment.service';
 import { FolioService } from '../folio/folio.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { DRIZZLE } from '../../database/database.module';
 import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
+import { RedsysCredentialsService } from './redsys-credentials.service';
 
 const mockFolio = {
   id: 'folio-001',
@@ -76,6 +78,11 @@ const mockGateway = {
 };
 
 const mockWebhookService = { emit: vi.fn() };
+const mockConfigService = { get: vi.fn() };
+const mockRedsysCredentials = {
+  resolveForProperty: vi.fn().mockResolvedValue(null),
+  merchantNotificationUrl: vi.fn().mockReturnValue('http://localhost:3000/api/v1/webhooks/redsys'),
+};
 
 function expectSafePublicPayment(value: Record<string, unknown>) {
   expect(value).not.toHaveProperty('gatewayPaymentToken');
@@ -100,6 +107,8 @@ describe('PaymentService', () => {
         { provide: FolioService, useValue: mockFolioService },
         { provide: PAYMENT_GATEWAY, useValue: mockGateway },
         { provide: WebhookService, useValue: mockWebhookService },
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
       ],
     }).compile();
 
@@ -293,7 +302,9 @@ describe('PaymentService', () => {
           { provide: FolioService, useValue: mockFolioService },
           { provide: PAYMENT_GATEWAY, useValue: mockGateway },
           { provide: WebhookService, useValue: mockWebhookService },
-        ],
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+      ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
 
@@ -306,7 +317,7 @@ describe('PaymentService', () => {
         gatewayPaymentToken: 'tok_test_123',
       });
 
-      expect(mockGateway.authorize).toHaveBeenCalledWith('tok_test_123', 500, 'USD');
+      expect(mockGateway.authorize).toHaveBeenCalledWith('tok_test_123', 500, 'USD', undefined);
       expect(result.status).toBe('authorized');
       expectSafePublicPayment(result);
       // Pre-auth does NOT recalculate balance
@@ -331,7 +342,9 @@ describe('PaymentService', () => {
           { provide: FolioService, useValue: mockFolioService },
           { provide: PAYMENT_GATEWAY, useValue: failedGateway },
           { provide: WebhookService, useValue: mockWebhookService },
-        ],
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+      ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
 
@@ -390,7 +403,9 @@ describe('PaymentService', () => {
           { provide: FolioService, useValue: mockFolioService },
           { provide: PAYMENT_GATEWAY, useValue: mockGateway },
           { provide: WebhookService, useValue: mockWebhookService },
-        ],
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+      ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
 
@@ -430,7 +445,9 @@ describe('PaymentService', () => {
           { provide: FolioService, useValue: mockFolioService },
           { provide: PAYMENT_GATEWAY, useValue: mockGateway },
           { provide: WebhookService, useValue: mockWebhookService },
-        ],
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+      ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
 
@@ -471,7 +488,9 @@ describe('PaymentService', () => {
           { provide: FolioService, useValue: mockFolioService },
           { provide: PAYMENT_GATEWAY, useValue: mockGateway },
           { provide: WebhookService, useValue: mockWebhookService },
-        ],
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+      ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
 
@@ -522,7 +541,9 @@ describe('PaymentService', () => {
           { provide: FolioService, useValue: mockFolioService },
           { provide: PAYMENT_GATEWAY, useValue: mockGateway },
           { provide: WebhookService, useValue: mockWebhookService },
-        ],
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+      ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
 
@@ -575,7 +596,9 @@ describe('PaymentService', () => {
           { provide: FolioService, useValue: mockFolioService },
           { provide: PAYMENT_GATEWAY, useValue: mockGateway },
           { provide: WebhookService, useValue: mockWebhookService },
-        ],
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+      ],
       }).compile();
 
       await expect(module.get(PaymentService).refundPayment(
@@ -621,7 +644,9 @@ describe('PaymentService', () => {
           { provide: FolioService, useValue: mockFolioService },
           { provide: PAYMENT_GATEWAY, useValue: mockGateway },
           { provide: WebhookService, useValue: mockWebhookService },
-        ],
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+      ],
       }).compile();
 
       const result = await (module.get(PaymentService).refundPayment as any)(
@@ -691,7 +716,9 @@ describe('PaymentService', () => {
             { provide: FolioService, useValue: mockFolioService },
             { provide: PAYMENT_GATEWAY, useValue: mockGateway },
             { provide: WebhookService, useValue: mockWebhookService },
-          ],
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+      ],
         }).compile();
         return module.get<PaymentService>(PaymentService);
       }
