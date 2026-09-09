@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { json, raw } from 'express';
+import { json, raw, urlencoded } from 'express';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { securityHeaders } from './common/http/security-headers';
 import { assertSecureConfig } from './common/config/assert-secure-config';
@@ -37,6 +37,11 @@ async function bootstrap() {
   // parser so req.body is a Buffer for that route; every other route still
   // receives parsed JSON.
   app.use('/api/v1/webhooks/stripe', raw({ type: 'application/json' }));
+  // Redsys MerchantURL posts application/x-www-form-urlencoded.
+  app.use(
+    '/api/v1/webhooks/redsys',
+    urlencoded({ extended: false, limit: '256kb' }),
+  );
   app.use(json());
 
   // Global prefix for all routes

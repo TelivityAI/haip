@@ -5,6 +5,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
 import { payments } from '@telivityhaip/database';
@@ -12,11 +13,19 @@ import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
 import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
-import type { PaymentGateway } from './interfaces/payment-gateway.interface';
+import type {
+  PaymentGateway,
+  PaymentGatewayCallOptions,
+  PaymentGatewayNextAction,
+} from './interfaces/payment-gateway.interface';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
 import { sumRefundChildren, parentCountsTowardFolioBalance } from './payment-ledger';
+import { RedsysCredentialsService } from './redsys-credentials.service';
+import {
+  resolvePaymentGatewayProvider,
+} from './payment-gateway.factory';
 
 const CARD_METHODS = ['credit_card', 'debit_card', 'vcc'];
 
@@ -32,6 +41,8 @@ export class PaymentService {
     private readonly folioService: FolioService,
     @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
     private readonly webhookService: WebhookService,
+    private readonly configService: ConfigService,
+    private readonly redsysCredentials: RedsysCredentialsService,
   ) {}
 
   async recordPayment(dto: CreatePaymentDto) {
@@ -111,12 +122,15 @@ export class PaymentService {
       throw new BadRequestException('Cannot authorize payment on a folio that is not open');
     }
 
+    const gatewayOptions = await this.buildAuthorizeGatewayOptions(dto);
+
     // Gateway expects a number; keep the canonical stored value as the string.
     // Decimal keeps precision through the conversion boundary.
     const result = await this.gateway.authorize(
       dto.gatewayPaymentToken,
       new Decimal(dto.amount).toNumber(),
       dto.currencyCode,
+      gatewayOptions,
     );
 
     if (!result.success) {
@@ -131,7 +145,7 @@ export class PaymentService {
           status: 'failed',
           gatewayProvider: dto.gatewayProvider,
           gatewayPaymentToken: dto.gatewayPaymentToken,
-          gatewayTransactionId: result.transactionId,
+          gatewayTransactionId: result.transactionId || null,
           cardLastFour: dto.cardLastFour,
           cardBrand: dto.cardBrand,
           notes: result.errorMessage,
@@ -149,6 +163,7 @@ export class PaymentService {
       throw new BadRequestException(`Authorization failed: ${result.errorMessage}`);
     }
 
+    const requiresAction = result.providerStatus === 'requires_action' && result.nextAction;
     const preAuthExpiry = dto.preAuthExpiresAt
       ? new Date(dto.preAuthExpiresAt)
       : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // Default 7 days
@@ -161,7 +176,7 @@ export class PaymentService {
         method: 'credit_card',
         amount: dto.amount,
         currencyCode: dto.currencyCode,
-        status: 'authorized',
+        status: requiresAction ? 'pending' : 'authorized',
         isPreAuthorization: true,
         preAuthExpiresAt: preAuthExpiry,
         gatewayProvider: dto.gatewayProvider,
@@ -173,16 +188,78 @@ export class PaymentService {
       })
       .returning();
 
-    // Do NOT recalculate balance — pre-auth is a hold, not a capture
-    await this.webhookService.emit(
-      'payment.received',
-      'payment',
-      payment.id,
-      { folioId: dto.folioId, status: 'authorized', amount: payment.amount },
-      dto.propertyId,
-    );
+    if (!requiresAction) {
+      // Do NOT recalculate balance — pre-auth is a hold, not a capture
+      await this.webhookService.emit(
+        'payment.received',
+        'payment',
+        payment.id,
+        { folioId: dto.folioId, status: 'authorized', amount: payment.amount },
+        dto.propertyId,
+      );
+    }
 
-    return this.safePaymentResponse(payment);
+    return {
+      ...this.safePaymentResponse(payment),
+      ...(requiresAction ? { nextAction: result.nextAction as PaymentGatewayNextAction } : {}),
+    };
+  }
+
+  private async buildAuthorizeGatewayOptions(
+    dto: AuthorizePaymentDto,
+  ): Promise<PaymentGatewayCallOptions | undefined> {
+    const provider = dto.gatewayProvider?.toLowerCase();
+    if (provider !== 'redsys') {
+      return undefined;
+    }
+
+    if (!dto.redirectUrlOk || !dto.redirectUrlKo) {
+      throw new BadRequestException(
+        'Redsys authorize requires redirectUrlOk and redirectUrlKo',
+      );
+    }
+
+    const creds = await this.redsysCredentials.resolveForProperty(dto.propertyId);
+    const options: PaymentGatewayCallOptions = {
+      propertyId: dto.propertyId,
+      currencyCode: dto.currencyCode,
+      redirect: {
+        merchantUrl: this.redsysCredentials.merchantNotificationUrl(),
+        urlOk: dto.redirectUrlOk,
+        urlKo: dto.redirectUrlKo,
+      },
+    };
+    if (creds) {
+      options.merchantCredentials = {
+        merchantCode: creds.merchantCode,
+        terminal: creds.terminal,
+        secretKey: creds.secretKey,
+        environment: creds.environment,
+      };
+    }
+    return options;
+  }
+
+  private async buildLifecycleGatewayOptions(
+    payment: typeof payments.$inferSelect,
+  ): Promise<PaymentGatewayCallOptions | undefined> {
+    if (payment.gatewayProvider?.toLowerCase() !== 'redsys') {
+      return undefined;
+    }
+    const creds = await this.redsysCredentials.resolveForProperty(payment.propertyId);
+    const options: PaymentGatewayCallOptions = {
+      propertyId: payment.propertyId,
+      currencyCode: payment.currencyCode,
+    };
+    if (creds) {
+      options.merchantCredentials = {
+        merchantCode: creds.merchantCode,
+        terminal: creds.terminal,
+        secretKey: creds.secretKey,
+        environment: creds.environment,
+      };
+    }
+    return options;
   }
 
   /**
@@ -233,11 +310,16 @@ export class PaymentService {
       );
     }
 
-    // Phase 2: call Stripe outside the DB tx with an idempotency key
+    // Phase 2: call gateway outside the DB tx with an idempotency key
+    const lifecycleOptions = await this.buildLifecycleGatewayOptions(claimed);
     const result = await this.gateway.capture(
       claimed.gatewayTransactionId,
       new Decimal(claimed.amount).toNumber(),
-      { idempotencyKey: `cap_${id}`, currencyCode: claimed.currencyCode },
+      {
+        idempotencyKey: `cap_${id}`,
+        currencyCode: claimed.currencyCode,
+        ...lifecycleOptions,
+      },
     );
 
     if (!result.success) {
@@ -294,8 +376,10 @@ export class PaymentService {
       );
     }
 
+    const lifecycleOptions = await this.buildLifecycleGatewayOptions(claimed);
     const result = await this.gateway.void(claimed.gatewayTransactionId, {
       idempotencyKey: `void_${id}`,
+      ...lifecycleOptions,
     });
 
     if (!result.success) {
@@ -429,10 +513,15 @@ export class PaymentService {
 
     const idempotencyKey = options.idempotencyKey
       ?? `ref_${id}_${totalAfterDec.toFixed(2)}`;
+    const lifecycleOptions = await this.buildLifecycleGatewayOptions(original);
     const result = await this.gateway.refund(
       original.gatewayTransactionId,
       refundDec.toNumber(),
-      { idempotencyKey, currencyCode: original.currencyCode },
+      {
+        idempotencyKey,
+        currencyCode: original.currencyCode,
+        ...lifecycleOptions,
+      },
     );
 
     if (!result.success) {
@@ -773,6 +862,30 @@ export class PaymentService {
         'Request-targeted payments must be accessed or changed through the Booking Request payment endpoint',
       );
     }
+  }
+
+
+  async getClientConfig(propertyId?: string) {
+    const provider = resolvePaymentGatewayProvider(this.configService);
+    let clientMode: 'mock' | 'stripe' | 'redsys' | 'unsupported' = 'unsupported';
+    if (provider === 'mock' || provider === 'stripe' || provider === 'redsys') {
+      clientMode = provider;
+    }
+    let redsysConfigured = false;
+    if (provider === 'redsys' && propertyId) {
+      const creds = await this.redsysCredentials.resolveForProperty(propertyId);
+      redsysConfigured = Boolean(creds);
+    } else if (provider === 'redsys') {
+      redsysConfigured = Boolean(
+        this.configService.get<string>('REDSYS_MERCHANT_CODE')?.trim() &&
+          this.configService.get<string>('REDSYS_SECRET_KEY')?.trim(),
+      );
+    }
+    return {
+      provider,
+      clientMode,
+      redsysConfigured,
+    };
   }
 
   private safePaymentResponse(payment: typeof payments.$inferSelect) {

@@ -26,6 +26,7 @@ export { remainingCapturedAmount, sumRefundChildren } from './payment-ledger.js'
 export {
   type PaymentGateway,
   type PaymentGatewayCallOptions,
+  type PaymentGatewayNextAction,
   type PaymentGatewayResult,
   PAYMENT_GATEWAY,
 } from './payment-gateway.interface.js';
