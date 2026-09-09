@@ -296,10 +296,11 @@ describe('PaymentService', () => {
       mockFolioService.findById.mockResolvedValue({ ...mockFolio, reservationId: 'res-001' } as any);
       mockGateway.authorize.mockResolvedValueOnce({ success: true, transactionId: 'order-001', providerStatus: 'requires_action', nextAction: { type: 'redirect' } } as any);
       const finalization = { deposit: { reservationId: 'res-001', isRefundable: false, autoConfirm: true } };
-      const result = await (service.authorizePayment as any)({ folioId: 'folio-001', propertyId: 'prop-001', amount: '150.00', currencyCode: 'USD', gatewayProvider: 'stripe', gatewayPaymentToken: 'token' }, finalization, { returnReferenceHash: 'a'.repeat(64) });
+      const result = await (service.authorizePayment as any)({ folioId: 'folio-001', propertyId: 'prop-001', amount: '150.00', currencyCode: 'USD', gatewayProvider: 'stripe', gatewayPaymentToken: 'token' }, finalization, { returnReferenceHash: 'a'.repeat(64), returnDestination: 'https://hotel.example/stays/book' });
       const inserted = (mockDb.insert as any).mock.results[0].value.values.mock.calls[0][0];
-      expect(inserted).toMatchObject({ status: 'pending', authorizationFinalization: finalization, bookingReturnReferenceHash: 'a'.repeat(64) });
+      expect(inserted).toMatchObject({ status: 'pending', authorizationFinalization: finalization, bookingReturnReferenceHash: 'a'.repeat(64), bookingReturnDestination: 'https://hotel.example/stays/book' });
       expect(result).not.toHaveProperty('bookingReturnReferenceHash');
+      expect(result).not.toHaveProperty('bookingReturnDestination');
     });
 
     it('rejects an internal deposit linked to a different reservation than the folio', async () => {

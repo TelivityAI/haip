@@ -69,16 +69,19 @@ export class RedsysCredentialsService {
   }
 
   publicApiBaseUrl(): string {
-    const base =
-      this.configService.get<string>('PUBLIC_API_BASE_URL')?.trim() ||
-      this.configService.get<string>('API_BASE_URL')?.trim() ||
-      'http://localhost:3000';
-    return base.replace(/\/$/, '');
+    return publicApiBaseUrl(this.configService);
   }
 
   merchantNotificationUrl(): string {
     return `${this.publicApiBaseUrl()}/api/v1/webhooks/redsys`;
   }
+}
+
+/** Shared trusted origin/prefix for the provider notification and browser relay. */
+export function publicApiBaseUrl(config: ConfigService): string {
+  const base = config.get<string>('PUBLIC_API_BASE_URL')?.trim()
+    || config.get<string>('API_BASE_URL')?.trim() || 'http://localhost:3000';
+  return base.replace(/\/$/, '');
 }
 
 function stringField(

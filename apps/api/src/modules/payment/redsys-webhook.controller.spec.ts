@@ -79,25 +79,56 @@ describe.skipIf(!databaseUrl)('Redsys authoritative booking finalization', () =>
     return { payment, reservation, deposits, audits };
   }
 
+  function returnService() {
+    return new BookingReturnService(db, { get: (key: string) => ({
+      BOOKING_RETURN_ORIGINS: 'https://hotel.example', PUBLIC_API_BASE_URL: 'https://api.example', NODE_ENV: 'production',
+    })[key] } as any);
+  }
+
   it('recovers payment state before and after the callback using only a scoped return capability', async () => {
-    const returns = new BookingReturnService(db, { get: () => 'https://hotel.example' } as any);
-    const prepared = returns.prepare('https://hotel.example/stays/book?lang=es');
-    const reference = new URL(prepared.url).searchParams.get('haip_payment_return')!;
-    await db.update(payments).set({ bookingReturnReferenceHash: prepared.referenceHash })
+    const returns = returnService();
+    const destination = `https://hotel.example/stays/book?lang=es&context=${'a'.repeat(500)}#rooms`;
+    const prepared = returns.prepare(propertyId, destination);
+    const reference = new URL(prepared.url).pathname.split('/').at(-1)!;
+    await db.update(payments).set({ bookingReturnReferenceHash: prepared.referenceHash, bookingReturnDestination: prepared.destination })
       .where(and(eq(payments.id, paymentId), eq(payments.propertyId, propertyId)));
+    const target = new URL(destination);
+    target.searchParams.set('haip_payment_return', reference);
+    expect(prepared.url.length).toBeLessThanOrEqual(250);
+    expect(await returns.resolve(propertyId, reference)).toBe(target.href);
+    await expect(returns.resolve(randomUUID(), reference)).rejects.toThrow('Payment return not found');
+    await expect(returns.resolve(propertyId, 'z'.repeat(43))).rejects.toThrow('Payment return not found');
     expect(await returns.status(propertyId, reference)).toEqual({ status: 'processing' });
     await expect(returns.status(randomUUID(), reference)).rejects.toThrow('Payment return not found');
     await expect(returns.status(propertyId, 'z'.repeat(43))).rejects.toThrow('Payment return not found');
     await notify();
     expect(await returns.status(propertyId, reference)).toEqual({ status: 'succeeded' });
+    expect(await returns.resolve(propertyId, reference)).toBe(target.href);
     expect((await state()).reservation?.status).toBe('confirmed');
   });
 
+  it('keeps two valid capabilities bound to their own exact persisted targets', async () => {
+    const returns = returnService();
+    const first = returns.prepare(propertyId, 'https://hotel.example/stays/first?lang=es');
+    const second = returns.prepare(propertyId, 'https://hotel.example/stays/second?lang=en');
+    await db.update(payments).set({ bookingReturnReferenceHash: first.referenceHash, bookingReturnDestination: first.destination })
+      .where(and(eq(payments.id, paymentId), eq(payments.propertyId, propertyId)));
+    const existing = (await state()).payment!;
+    await db.insert(payments).values({ ...existing, id: randomUUID(), gatewayTransactionId: null,
+      bookingReturnReferenceHash: second.referenceHash, bookingReturnDestination: second.destination });
+    for (const prepared of [first, second]) {
+      const reference = new URL(prepared.url).pathname.split('/').at(-1)!;
+      const expected = new URL(prepared.destination);
+      expected.searchParams.set('haip_payment_return', reference);
+      expect(await returns.resolve(propertyId, reference)).toBe(expected.href);
+    }
+  });
+
   it.each(['0180', '9915'])('shows failure only after the signed decline/cancellation callback %s', async (response) => {
-    const returns = new BookingReturnService(db, { get: () => 'https://hotel.example' } as any);
-    const prepared = returns.prepare('https://hotel.example/stays/book');
-    const reference = new URL(prepared.url).searchParams.get('haip_payment_return')!;
-    await db.update(payments).set({ bookingReturnReferenceHash: prepared.referenceHash })
+    const returns = returnService();
+    const prepared = returns.prepare(propertyId, 'https://hotel.example/stays/book');
+    const reference = new URL(prepared.url).pathname.split('/').at(-1)!;
+    await db.update(payments).set({ bookingReturnReferenceHash: prepared.referenceHash, bookingReturnDestination: prepared.destination })
       .where(and(eq(payments.id, paymentId), eq(payments.propertyId, propertyId)));
     expect(await returns.status(propertyId, reference)).toEqual({ status: 'processing' });
     await notify(notification({ Ds_Response: response }));

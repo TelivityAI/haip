@@ -187,6 +187,8 @@ export const payments = pgTable('payments', {
   gatewayTransactionId: varchar('gateway_transaction_id', { length: 255 }),
   // Hash of the limited guest payment-status capability; never the raw reference.
   bookingReturnReferenceHash: varchar('booking_return_reference_hash', { length: 64 }),
+  // Prevalidated embedding page for the browser relay; excludes the raw capability.
+  bookingReturnDestination: text('booking_return_destination'),
   // Server-owned snapshot for authorization that completes asynchronously.
   // Nullable for synchronous/legacy payments; never populated from public DTOs.
   authorizationFinalization: jsonb('authorization_finalization').$type<{
