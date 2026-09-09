@@ -302,6 +302,10 @@ suite('accepted-pricing mutex against PostgreSQL', () => {
       {} as any,
       {} as any,
       config,
+      {
+        get: (key: string, fallback?: string) =>
+          key === 'PAYMENT_GATEWAY' ? 'mock' : fallback,
+      } as any,
       ancillary,
       policy,
     );

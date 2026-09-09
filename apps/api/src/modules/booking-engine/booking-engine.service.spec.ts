@@ -58,6 +58,11 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
     }),
     evaluateCancellation: vi.fn(),
   };
+  const runtimeConfig = {
+    get: vi.fn((key: string, fallback?: string) =>
+      key === 'PAYMENT_GATEWAY' ? 'mock' : fallback,
+    ),
+  };
 
   const svc = new BookingEngineService(
     {} as any,
@@ -72,10 +77,25 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
     payment as any,
     deposit as any,
     config as any,
+    runtimeConfig as any,
     ancillary as any,
     policy as any,
   );
-  return { svc, config, availability, ratePlan, tax, guest, reservation, folio, payment, deposit, ancillary, policy };
+  return {
+    svc,
+    config,
+    runtimeConfig,
+    availability,
+    ratePlan,
+    tax,
+    guest,
+    reservation,
+    folio,
+    payment,
+    deposit,
+    ancillary,
+    policy,
+  };
 }
 
 const bookDto = {
