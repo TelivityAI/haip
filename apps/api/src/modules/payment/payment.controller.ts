@@ -36,6 +36,14 @@ export class PaymentController {
     return this.paymentService.authorizePayment(dto);
   }
 
+  @Get('client-config')
+  @ApiOperation({ summary: 'Payment client mode for the active process gateway' })
+  @ApiResponse({ status: 200, description: 'Client payment configuration' })
+  @ApiQuery({ name: 'propertyId', type: String, required: false })
+  getClientConfig(@Query('propertyId') propertyId?: string) {
+    return this.paymentService.getClientConfig(propertyId);
+  }
+
   @Get()
   @ApiOperation({ summary: 'List payments with filters' })
   @ApiResponse({ status: 200, description: 'Paginated list of payments' })

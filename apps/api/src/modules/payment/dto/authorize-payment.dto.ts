@@ -63,4 +63,22 @@ export class AuthorizePaymentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Browser return URL after successful Redsys checkout (required when gatewayProvider=redsys)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  redirectUrlOk?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Browser return URL after failed/cancelled Redsys checkout (required when gatewayProvider=redsys)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  redirectUrlKo?: string;
 }

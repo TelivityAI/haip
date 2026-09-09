@@ -2,6 +2,7 @@
 export {
   type PaymentGateway,
   type PaymentGatewayCallOptions,
+  type PaymentGatewayNextAction,
   type PaymentGatewayResult,
   PAYMENT_GATEWAY,
 } from '@telivityhaip/shared';

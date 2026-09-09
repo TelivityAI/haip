@@ -380,6 +380,16 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
       'Braintree gateway support for tokenized card payments, vault records, captures, and refunds.',
   },
   {
+    slug: 'redsys',
+    category: 'Payments',
+    name: 'Redsys',
+    status: 'shipped',
+    docsPath: 'docs/integrations/payments-redsys.md',
+    adapterKey: 'redsys',
+    description:
+      'Spanish bank TPV Virtual (Redsys) for hosted redirect deposits, folio pre-auth, capture, void, and refunds.',
+  },
+  {
     slug: 'wise-platform',
     category: 'Payments',
     name: 'Wise Platform',

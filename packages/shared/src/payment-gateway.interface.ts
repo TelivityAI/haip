@@ -1,9 +1,19 @@
+/** Hosted-checkout continuation when the guest must leave HAIP to pay (Redsys TPV). */
+export interface PaymentGatewayNextAction {
+  type: 'redirect';
+  url: string;
+  method: 'POST';
+  formFields: Record<string, string>;
+}
+
 export interface PaymentGatewayResult {
   success: boolean;
   transactionId: string;
   /** Provider lifecycle status when an operation can complete asynchronously. */
   providerStatus?: 'succeeded' | 'pending' | 'requires_action' | 'failed' | 'canceled' | 'unknown';
   errorMessage?: string;
+  /** Present when `providerStatus` is `requires_action` (e.g. Redsys redirect). */
+  nextAction?: PaymentGatewayNextAction;
 }
 
 /**
@@ -15,6 +25,21 @@ export interface PaymentGatewayCallOptions {
   idempotencyKey?: string;
   /** Required for amount-bearing capture/refund calls outside scale-two currencies. */
   currencyCode?: string;
+  /** Property that owns the charge — used by per-merchant PSPs (Redsys FUC). */
+  propertyId?: string;
+  /** Return / notification URLs for hosted redirect authorize. */
+  redirect?: {
+    merchantUrl: string;
+    urlOk: string;
+    urlKo: string;
+  };
+  /** Per-property merchant credentials (overrides process env when set). */
+  merchantCredentials?: {
+    merchantCode: string;
+    terminal: string;
+    secretKey: string;
+    environment?: 'test' | 'live';
+  };
   /** Durable correlation identifiers forwarded to the provider on refund claims. */
   metadata?: {
     claimId: string;
