@@ -36,6 +36,10 @@ export type RefundPaymentOptions = {
   idempotencyKey?: string;
 };
 
+export type AuthorizationFinalization = NonNullable<
+  typeof payments.$inferSelect.authorizationFinalization
+>;
+
 @Injectable()
 export class PaymentService {
   constructor(
@@ -118,10 +122,13 @@ export class PaymentService {
     return this.safePaymentResponse(payment);
   }
 
-  async authorizePayment(dto: AuthorizePaymentDto) {
+  async authorizePayment(dto: AuthorizePaymentDto, finalization?: AuthorizationFinalization) {
     const folio = await this.folioService.findById(dto.folioId, dto.propertyId);
     if (folio.status !== 'open') {
       throw new BadRequestException('Cannot authorize payment on a folio that is not open');
+    }
+    if (finalization && folio.reservationId !== finalization.deposit.reservationId) {
+      throw new BadRequestException('Deposit reservation must match the payment folio');
     }
 
     const gatewayOptions = await this.buildAuthorizeGatewayOptions(dto);
@@ -179,6 +186,7 @@ export class PaymentService {
         amount: dto.amount,
         currencyCode: dto.currencyCode,
         status: requiresAction ? 'pending' : 'authorized',
+        authorizationFinalization: requiresAction ? finalization ?? null : null,
         isPreAuthorization: true,
         preAuthExpiresAt: preAuthExpiry,
         gatewayProvider: dto.gatewayProvider,

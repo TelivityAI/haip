@@ -1,14 +1,8 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { eq, and } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import {
-  bookings,
-  depositLedgerEntries,
-  folios,
-  payments,
-  reservations,
-} from '@telivityhaip/database';
+import { bookings, reservations } from '@telivityhaip/database';
 import type { DepositPolicy } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { ConnectSearchService } from '../connect/connect-search.service';
@@ -498,10 +492,10 @@ export class BookingEngineService {
       amount: string;
       status: string;
       nextAction?: unknown;
-      checkoutToken?: string | null;
     } | null = null;
     if (depositDue.greaterThan(0) && dto.paymentToken) {
       const provider = resolvePaymentGatewayProvider(this.runtimeConfig);
+      const policy = config.depositPolicy as DepositPolicy;
       const payment = await this.paymentService.authorizePayment({
         folioId: folio.id,
         propertyId,
@@ -513,13 +507,18 @@ export class BookingEngineService {
         cardBrand: dto.cardBrand,
         redirectUrlOk: dto.redirectUrlOk,
         redirectUrlKo: dto.redirectUrlKo,
-      } as any);
+      } as any, {
+        deposit: {
+          reservationId: reservation.id,
+          isRefundable: policy.refundable,
+          autoConfirm: config.isEnabled && await this.shouldAutoConfirm(propertyId),
+        },
+      });
 
-      const policy = config.depositPolicy as DepositPolicy;
-      // Hosted redirect (Redsys): do NOT record a deposit until the signed
-      // MerchantURL notification authorizes the payment. Otherwise cancel /
-      // abandon leaves a held liability for money that never cleared.
-      if (!payment.nextAction) {
+      // A redirect is still awaiting authorization; its saved intent is finalized
+      // by the verified provider notification. Synchronous gateways keep this path.
+      const authorized = payment.status === 'authorized' || payment.status === 'captured';
+      if (authorized) {
         await this.depositService.recordDeposit({
           propertyId,
           reservationId: reservation.id,
@@ -533,13 +532,8 @@ export class BookingEngineService {
       depositInfo = {
         paymentId: payment.id,
         amount: depositDue.toFixed(2),
-        status: payment.nextAction ? 'pending_redirect' : 'held',
-        ...(payment.nextAction
-          ? {
-              nextAction: payment.nextAction,
-              checkoutToken: payment.gatewayTransactionId,
-            }
-          : {}),
+        status: authorized ? 'held' : payment.nextAction ? 'pending_redirect' : payment.status,
+        ...(payment.nextAction ? { nextAction: payment.nextAction } : {}),
       };
     }
 
@@ -549,7 +543,7 @@ export class BookingEngineService {
     if (
       config.isEnabled &&
       depositInfo &&
-      depositInfo.status !== 'pending_redirect' &&
+      depositInfo.status === 'held' &&
       (await this.shouldAutoConfirm(propertyId))
     ) {
       const confirmed = await this.reservationService.confirm(reservation.id, propertyId);
@@ -670,85 +664,6 @@ export class BookingEngineService {
     if (!config.sellableRatePlanIds.includes(ratePlanId)) {
       throw new BadRequestException('This rate is not available for direct booking');
     }
-  }
-
-
-  /**
-   * Recover booking/payment state after a Redsys hosted-checkout return.
-   * `checkoutToken` is the Redsys order id (gatewayTransactionId) embedded in
-   * URLOK/URLKO — opaque to the guest and durable across MemoryRouter remounts.
-   */
-  async getCheckout(propertyId: string, checkoutToken: string) {
-    const token = checkoutToken?.trim();
-    if (!token) {
-      throw new NotFoundException('Checkout not found');
-    }
-
-    const [payment] = await this.db
-      .select()
-      .from(payments)
-      .where(
-        and(
-          eq(payments.gatewayTransactionId, token),
-          eq(payments.gatewayProvider, 'redsys'),
-          eq(payments.propertyId, propertyId),
-        ),
-      )
-      .limit(1);
-
-    if (!payment?.folioId) {
-      throw new NotFoundException('Checkout not found');
-    }
-
-    const [folio] = await this.db
-      .select()
-      .from(folios)
-      .where(
-        and(eq(folios.id, payment.folioId), eq(folios.propertyId, propertyId)),
-      )
-      .limit(1);
-
-    if (!folio?.reservationId) {
-      throw new NotFoundException('Checkout not found');
-    }
-
-    const [reservation] = await this.db
-      .select()
-      .from(reservations)
-      .where(
-        and(
-          eq(reservations.id, folio.reservationId),
-          eq(reservations.propertyId, propertyId),
-        ),
-      )
-      .limit(1);
-
-    if (!reservation) {
-      throw new NotFoundException('Checkout not found');
-    }
-
-    const [deposit] = await this.db
-      .select()
-      .from(depositLedgerEntries)
-      .where(
-        and(
-          eq(depositLedgerEntries.paymentId, payment.id),
-          eq(depositLedgerEntries.propertyId, propertyId),
-        ),
-      )
-      .limit(1);
-
-    return {
-      checkoutToken: token,
-      confirmationNumber: reservation.confirmationNumber,
-      reservationId: reservation.id,
-      reservationStatus: reservation.status,
-      paymentId: payment.id,
-      paymentStatus: payment.status,
-      depositStatus: deposit?.status ?? null,
-      amount: String(payment.amount),
-      currencyCode: payment.currencyCode,
-    };
   }
 
   private async shouldAutoConfirm(propertyId: string): Promise<boolean> {

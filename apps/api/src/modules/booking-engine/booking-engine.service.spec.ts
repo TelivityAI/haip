@@ -40,7 +40,7 @@ function makeService(overrides: Partial<Record<string, any>> = {}) {
     cancel: vi.fn(),
   };
   const folio = { createAutoFolio: vi.fn().mockResolvedValue({ id: 'folio-1' }) };
-  const payment = { authorizePayment: vi.fn().mockResolvedValue({ id: 'pay-1' }) };
+  const payment = { authorizePayment: vi.fn().mockResolvedValue({ id: 'pay-1', status: 'authorized' }) };
   const deposit = { recordDeposit: vi.fn().mockResolvedValue({ id: 'dep-1', status: 'held' }) };
   const search = { search: vi.fn() };
   const bookingSvc = { verify: vi.fn() };
@@ -244,6 +244,34 @@ describe('BookingEngineService.quote', () => {
 });
 
 describe('BookingEngineService.book', () => {
+  it('does not classify an unauthorised payment as held when no next action is provided', async () => {
+    const { svc, config, payment, deposit, reservation } = makeService();
+    config.getConfig.mockResolvedValue({ autoConfirm: true });
+    payment.authorizePayment.mockResolvedValue({ id: 'pay-1', status: 'pending' });
+    const result = await svc.book(PROP, bookDto as any);
+    expect(deposit.recordDeposit).not.toHaveBeenCalled();
+    expect(reservation.confirm).not.toHaveBeenCalled();
+    expect(result.deposit?.status).toBe('pending');
+  });
+
+  it('keeps a redirect payment pending without recording a deposit or confirming', async () => {
+    const { svc, config, payment, deposit, reservation } = makeService();
+    config.getConfig.mockResolvedValue({ autoConfirm: true });
+    payment.authorizePayment.mockResolvedValue({
+      id: 'pay-1', status: 'pending', nextAction: { type: 'redirect' },
+    });
+
+    const result = await svc.book(PROP, bookDto as any);
+
+    expect(deposit.recordDeposit).not.toHaveBeenCalled();
+    expect(reservation.confirm).not.toHaveBeenCalled();
+    expect(result.status).toBe('pending');
+    expect(result.deposit).toMatchObject({ status: 'pending_redirect' });
+    expect(payment.authorizePayment).toHaveBeenCalledWith(expect.anything(), {
+      deposit: { reservationId: 'res-1', isRefundable: true, autoConfirm: true },
+    });
+  });
+
   it('classifies the payment as a held deposit', async () => {
     const { svc, deposit, payment } = makeService();
     const res = await svc.book(PROP, bookDto as any);
