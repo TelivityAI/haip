@@ -121,15 +121,30 @@ describe('BookingEngineService.quote', () => {
 
   it('binds the hosted return reference before signing the redirect and persists only its hash', async () => {
     const { svc, runtimeConfig, payment } = makeService();
-    runtimeConfig.get.mockImplementation((key: string) => ({ PAYMENT_GATEWAY: 'redsys', BOOKING_RETURN_ORIGINS: 'https://hotel.example' })[key]);
-    await svc.book(PROP, { ...bookDto, returnUrl: 'https://hotel.example/booking?lang=es' } as any);
+    runtimeConfig.get.mockImplementation((key: string) => ({ PAYMENT_GATEWAY: 'redsys', BOOKING_RETURN_ORIGINS: 'https://hotel.example', PUBLIC_API_BASE_URL: 'https://api.example' })[key]);
+    const destination = `https://hotel.example/booking?lang=es&context=${'a'.repeat(500)}`;
+    await svc.book(PROP, { ...bookDto, returnUrl: destination } as any);
     const [dto, , options] = payment.authorizePayment.mock.calls[0] as any[];
     expect(dto.redirectUrlOk).toBe(dto.redirectUrlKo);
     const url = new URL(dto.redirectUrlOk);
-    expect(url.pathname).toBe('/booking');
-    expect(url.searchParams.get('lang')).toBe('es');
-    expect(url.searchParams.get('haip_payment_return')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(url.origin).toBe('https://api.example');
+    expect(url.href.length).toBeLessThanOrEqual(250);
+    expect(url.pathname).toMatch(/^\/api\/v1\/booking-return\/[A-Za-z0-9_-]{43}$/);
+    expect(url.searchParams.get('propertyId')).toBe(PROP);
     expect(options.returnReferenceHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(options.returnDestination).toBe(destination);
+  });
+
+  it('rejects an oversized relay configuration before creating booking records', async () => {
+    const { svc, runtimeConfig, guest, reservation, payment } = makeService();
+    runtimeConfig.get.mockImplementation((key: string) => ({
+      PAYMENT_GATEWAY: 'redsys', BOOKING_RETURN_ORIGINS: 'https://hotel.example',
+      PUBLIC_API_BASE_URL: `https://api.example/${'a'.repeat(250)}`,
+    })[key]);
+    await expect(svc.book(PROP, { ...bookDto, returnUrl: 'https://hotel.example/book' } as any)).rejects.toThrow(/250/);
+    expect(guest.create).not.toHaveBeenCalled();
+    expect(reservation.create).not.toHaveBeenCalled();
+    expect(payment.authorizePayment).not.toHaveBeenCalled();
   });
 
   it('prices server-side with the real tax engine and computes the deposit', async () => {

@@ -431,7 +431,7 @@ export class BookingEngineService {
     const provider = resolvePaymentGatewayProvider(this.runtimeConfig);
     // Validate before guest/reservation writes; browser URLs never authorize payment.
     const bookingReturn = provider === 'redsys' && depositDue.greaterThan(0)
-      ? new BookingReturnService(this.db, this.runtimeConfig).prepare(dto.returnUrl)
+      ? new BookingReturnService(this.db, this.runtimeConfig).prepare(propertyId, dto.returnUrl)
       : undefined;
 
     // 2. Guest — walk-in exception (no prior reservation; one is created next).
@@ -518,7 +518,7 @@ export class BookingEngineService {
           isRefundable: policy.refundable,
           autoConfirm: config.isEnabled && await this.shouldAutoConfirm(propertyId),
         },
-      }, bookingReturn ? { returnReferenceHash: bookingReturn.referenceHash } : undefined);
+      }, bookingReturn ? { returnReferenceHash: bookingReturn.referenceHash, returnDestination: bookingReturn.destination } : undefined);
 
       // A redirect is still awaiting authorization; its saved intent is finalized
       // by the verified provider notification. Synchronous gateways keep this path.
@@ -576,6 +576,10 @@ export class BookingEngineService {
 
   async paymentReturnStatus(propertyId: string, reference: string) {
     return new BookingReturnService(this.db, this.runtimeConfig).status(propertyId, reference);
+  }
+
+  async resolvePaymentReturn(propertyId: string, reference: string) {
+    return new BookingReturnService(this.db, this.runtimeConfig).resolve(propertyId, reference);
   }
 
   async verify(confirmationNumber: string) {

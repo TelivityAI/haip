@@ -123,7 +123,7 @@ export class PaymentService {
   async authorizePayment(
     dto: AuthorizePaymentDto,
     finalization?: AuthorizationFinalization,
-    bookingReturn?: { returnReferenceHash: string },
+    bookingReturn?: { returnReferenceHash: string; returnDestination: string },
   ) {
     const folio = await this.folioService.findById(dto.folioId, dto.propertyId);
     if (folio.status !== 'open') {
@@ -190,6 +190,7 @@ export class PaymentService {
         status: requiresAction ? 'pending' : 'authorized',
         authorizationFinalization: requiresAction ? finalization ?? null : null,
         bookingReturnReferenceHash: bookingReturn?.returnReferenceHash ?? null,
+        bookingReturnDestination: bookingReturn?.returnDestination ?? null,
         isPreAuthorization: true,
         preAuthExpiresAt: preAuthExpiry,
         gatewayProvider: dto.gatewayProvider,
