@@ -6,12 +6,22 @@ import { Receipt, ChevronLeft, Plus, Lock, RotateCcw, Split, ArrowRightLeft, Cre
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId, requireCurrency } from '../lib/api-helpers';
 import { formatMoney, formatMoneyPlain } from '../lib/money';
+import {
+  submitRedirectNextAction,
+  type RedirectNextAction,
+} from '../lib/submit-redirect-next-action';
 import { useProperty } from '../context/PropertyContext';
 import { useToast } from '../components/ui/Toast';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import { StripeProvider } from '../components/payment/StripeProvider';
 import { CardInput } from '../components/payment/CardInput';
+
+interface PaymentClientConfig {
+  provider?: string;
+  clientMode?: 'mock' | 'stripe' | 'redsys' | 'unsupported';
+  redsysConfigured?: boolean;
+}
 
 interface Folio {
   id: string;
@@ -497,6 +507,17 @@ function FolioDetail() {
   const arLedgers: { id: string; name: string; balance?: string }[] =
     arLedgersData?.data ?? arLedgersData ?? [];
 
+  const { data: clientConfigData } = useQuery({
+    queryKey: ['payments-client-config', propertyId],
+    queryFn: () =>
+      api
+        .get<PaymentClientConfig>('/v1/payments/client-config', { params: { propertyId } })
+        .then((r) => r.data),
+    enabled: !!propertyId,
+  });
+  const paymentClientMode = clientConfigData?.clientMode ?? 'stripe';
+  const isRedsysClient = paymentClientMode === 'redsys';
+
   const folio: Folio | null = folioData?.data ?? folioData ?? null;
   const charges: Charge[] = chargesData?.data ?? chargesData ?? [];
   const payments: Payment[] = paymentsData?.data ?? paymentsData ?? [];
@@ -548,8 +569,8 @@ function FolioDetail() {
   });
 
   /**
-   * Card pre-auth (KB 14.1). The card itself is tokenized by Stripe.js in the
-   * browser — only the pm_xxx PaymentMethod id reaches HAIP (PCI DSS).
+   * Card pre-auth (KB 14.1). Stripe path tokenizes in-browser (pm_xxx only
+   * reaches HAIP). Redsys path returns a hosted-checkout nextAction to POST.
    */
   const authorizeMutation = useMutation({
     mutationFn: (pm: { id: string; card?: { last4: string; brand: string } }) => {
@@ -567,6 +588,35 @@ function FolioDetail() {
       });
     },
     onSuccess: () => {
+      invalidate();
+      setAuthorizeOpen(false);
+      setAuthAmount('');
+      toast('success', t('folios.authorizeSuccess'));
+    },
+  });
+
+  const redsysAuthorizeMutation = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
+      const folioUrl = `${window.location.origin}${window.location.pathname}`;
+      return api.post<{ nextAction?: RedirectNextAction }>('/v1/payments/authorize', {
+        folioId: id,
+        propertyId,
+        amount: moneyString(authAmount),
+        currencyCode,
+        gatewayProvider: 'redsys',
+        gatewayPaymentToken: 'redsys_redirect',
+        redirectUrlOk: `${folioUrl}?redsys=ok`,
+        redirectUrlKo: `${folioUrl}?redsys=ko`,
+      });
+    },
+    onSuccess: (res) => {
+      const nextAction = res.data?.nextAction;
+      if (nextAction?.type === 'redirect') {
+        submitRedirectNextAction(nextAction);
+        return;
+      }
       invalidate();
       setAuthorizeOpen(false);
       setAuthAmount('');
@@ -860,7 +910,7 @@ function FolioDetail() {
         </div>
       </Modal>
 
-      {/* Card pre-auth — Stripe.js tokenizes the card in the browser. */}
+      {/* Card pre-auth — Stripe Elements or Redsys hosted redirect. */}
       <Modal open={authorizeOpen} onClose={() => setAuthorizeOpen(false)} title={t('folios.authorizeCard')}>
         <div className="space-y-4">
           <div>
@@ -873,18 +923,42 @@ function FolioDetail() {
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
             />
           </div>
-          <p className="text-xs text-telivity-mid-grey">{t('folios.authorizeHint')}</p>
-          {Number(authAmount) > 0 ? (
-            <StripeProvider>
-              <CardInput
-                submitLabel={t('folios.authorize')}
-                disabled={authorizeMutation.isPending}
-                onPaymentMethod={(pm) => authorizeMutation.mutate(pm)}
-                onError={(msg) => toast('error', msg)}
-              />
-            </StripeProvider>
+          {isRedsysClient ? (
+            <>
+              <p className="text-xs text-telivity-mid-grey">
+                Guest will complete 3DS on Redsys and return to this folio.
+              </p>
+              {Number(authAmount) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => redsysAuthorizeMutation.mutate()}
+                  disabled={redsysAuthorizeMutation.isPending}
+                  className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                >
+                  {redsysAuthorizeMutation.isPending
+                    ? t('common.loading')
+                    : 'Authorize with Redsys'}
+                </button>
+              ) : (
+                <p className="text-xs text-telivity-mid-grey">{t('folios.authorizeEnterAmount')}</p>
+              )}
+            </>
           ) : (
-            <p className="text-xs text-telivity-mid-grey">{t('folios.authorizeEnterAmount')}</p>
+            <>
+              <p className="text-xs text-telivity-mid-grey">{t('folios.authorizeHint')}</p>
+              {Number(authAmount) > 0 ? (
+                <StripeProvider>
+                  <CardInput
+                    submitLabel={t('folios.authorize')}
+                    disabled={authorizeMutation.isPending}
+                    onPaymentMethod={(pm) => authorizeMutation.mutate(pm)}
+                    onError={(msg) => toast('error', msg)}
+                  />
+                </StripeProvider>
+              ) : (
+                <p className="text-xs text-telivity-mid-grey">{t('folios.authorizeEnterAmount')}</p>
+              )}
+            </>
           )}
         </div>
       </Modal>

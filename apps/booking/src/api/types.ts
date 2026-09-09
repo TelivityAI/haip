@@ -19,7 +19,15 @@ export interface Branding {
 
 export type BookingMode = 'instant' | 'request';
 export type PaymentMethodCollection = 'required' | 'optional' | 'disabled';
-export type PaymentMethodClientMode = 'mock' | 'stripe' | 'unsupported';
+export type PaymentMethodClientMode = 'mock' | 'stripe' | 'redsys' | 'unsupported';
+
+/** Hosted-checkout redirect returned by Redsys (and similar PSPs). */
+export type PaymentNextAction = {
+  type: 'redirect';
+  url: string;
+  method: 'POST';
+  formFields: Record<string, string>;
+};
 export type BookingFormQuestionType =
   | 'short_text'
   | 'long_text'
@@ -181,6 +189,10 @@ export interface BookRequest {
   cardLastFour?: string;
   cardBrand?: string;
   serviceIds?: string[];
+  /** Browser return URL after successful Redsys hosted checkout. */
+  redirectUrlOk?: string;
+  /** Browser return URL after failed/cancelled Redsys hosted checkout. */
+  redirectUrlKo?: string;
 }
 
 export interface BookResponse {
@@ -190,7 +202,12 @@ export interface BookResponse {
   status: string;
   currencyCode: string;
   grandTotal: string;
-  deposit?: { paymentId: string; amount: string; status: string } | null;
+  deposit?: {
+    paymentId: string;
+    amount: string;
+    status: string;
+    nextAction?: PaymentNextAction;
+  } | null;
   lineItems: QuoteLineItem[];
   cancellationPolicy: string;
 }
