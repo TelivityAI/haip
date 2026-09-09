@@ -85,6 +85,17 @@ describe.skipIf(!databaseUrl)('Redsys authoritative booking finalization', () =>
     })[key] } as any);
   }
 
+  it.each([['110', 200, 'authorized'], ['11000', 400, 'pending']] as const)(
+    'compares JPY authorization using its whole-unit amount %s', async (amount, status, paymentStatus) => {
+      await db.update(payments).set({ currencyCode: 'JPY' })
+        .where(and(eq(payments.id, paymentId), eq(payments.propertyId, propertyId)));
+      expect(await notify(notification({ Ds_Amount: amount, Ds_Currency: '392' }))).toBe(status);
+      const result = await state();
+      expect(result.payment.status).toBe(paymentStatus);
+      expect(result.deposits).toHaveLength(status === 200 ? 1 : 0);
+    },
+  );
+
   it('recovers payment state before and after the callback using only a scoped return capability', async () => {
     const returns = returnService();
     const destination = `https://hotel.example/stays/book?lang=es&context=${'a'.repeat(500)}#rooms`;

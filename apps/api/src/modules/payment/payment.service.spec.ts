@@ -7,6 +7,8 @@ import { WebhookService } from '../webhook/webhook.service';
 import { DRIZZLE } from '../../database/database.module';
 import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
 import { RedsysCredentialsService } from './redsys-credentials.service';
+import { RedsysGateway } from './gateways/redsys-gateway';
+import { REDSYS_SANDBOX, REDSYS_SIGNATURE_VERSION, decodeMerchantParameters, encodeMerchantParameters, signMerchantParameters } from './gateways/redsys-crypto';
 
 const mockFolio = {
   id: 'folio-001',
@@ -116,6 +118,25 @@ describe('PaymentService', () => {
   });
 
   describe('recordPayment', () => {
+    it.each([['JPY', '100.10'], ['EUR', '1.001'], ['KWD', '1.00']])('rejects unsupported %s precision before payment writes', async (currencyCode, amount) => {
+      mockRedsysCredentials.resolveForProperty.mockResolvedValueOnce({ merchantCode: '999008881', terminal: '001', secretKey: 'test-key', environment: 'test' } as any);
+      await expect(service.authorizePayment({
+        propertyId: 'prop-001', folioId: 'folio-001', amount, currencyCode,
+        gatewayProvider: 'redsys', gatewayPaymentToken: 'redsys_redirect',
+        redirectUrlOk: 'https://hotel.example/ok', redirectUrlKo: 'https://hotel.example/ko',
+      })).rejects.toThrow(/currency|minor units/i);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockGateway.authorize).not.toHaveBeenCalled();
+    });
+    it('rejects unconfigured Redsys authorization before persisting a payment', async () => {
+      await expect(service.authorizePayment({
+        propertyId: 'prop-001', folioId: 'folio-001', amount: '10.00', currencyCode: 'EUR',
+        gatewayProvider: 'redsys', gatewayPaymentToken: 'redsys_redirect',
+        redirectUrlOk: 'https://hotel.example/ok', redirectUrlKo: 'https://hotel.example/ko',
+      })).rejects.toThrow(/credentials/);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockGateway.authorize).not.toHaveBeenCalled();
+    });
     it('should record cash payment with status captured and recalculate balance', async () => {
       const result = await service.recordPayment({
         folioId: 'folio-001',
@@ -476,6 +497,33 @@ describe('PaymentService', () => {
   });
 
   describe('voidPayment', () => {
+    it.each(['capturePayment', 'voidPayment'] as const)('rejects %s with missing property credentials before claiming the payment', async (operation) => {
+      const db = createMockDb([{ ...mockPayment, status: 'authorized', gatewayProvider: 'redsys' }]);
+      const credentials = { resolveForProperty: vi.fn().mockResolvedValue(null) };
+      const svc = new PaymentService(db, mockFolioService as any, mockGateway, mockWebhookService as any, mockConfigService as any, credentials as any);
+      await expect(svc[operation](mockPayment.id, mockPayment.propertyId)).rejects.toThrow(/credentials/);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+    it.each(['capturePayment', 'voidPayment'] as const)('leaves the payment authorized when %s credentials cannot be resolved', async (operation) => {
+      const db = createMockDb([{ ...mockPayment, status: 'authorized', gatewayProvider: 'redsys' }]);
+      const credentials = { resolveForProperty: vi.fn().mockRejectedValue(new Error('Redsys credentials are unavailable')) };
+      const svc = new PaymentService(db, mockFolioService as any, mockGateway, mockWebhookService as any, mockConfigService as any, credentials as any);
+      await expect(svc[operation](mockPayment.id, mockPayment.propertyId)).rejects.toThrow(/unavailable/);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+    it('sends the persisted original JPY amount and currency in a type-9 void', async () => {
+      const order = '1234ABCDEF';
+      const row = { ...mockPayment, status: 'authorized', gatewayProvider: 'redsys', gatewayTransactionId: order, currencyCode: 'JPY', amount: '150.00' };
+      const db = createMockDb([row]);
+      const encoded = encodeMerchantParameters({ Ds_Order: order, Ds_Response: '0400', Ds_Amount: '150', Ds_Currency: '392', Ds_TransactionType: '9', Ds_MerchantCode: REDSYS_SANDBOX.merchantCode, Ds_Terminal: '1' });
+      const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ Ds_MerchantParameters: encoded, Ds_SignatureVersion: REDSYS_SIGNATURE_VERSION, Ds_Signature: signMerchantParameters(encoded, REDSYS_SANDBOX.secretKey, order) })));
+      const creds = { resolveForProperty: vi.fn().mockResolvedValue({ ...REDSYS_SANDBOX, environment: 'test' }) };
+      const gateway = new RedsysGateway({ get: () => undefined } as any, { fetchFn: request });
+      const svc = new PaymentService(db, mockFolioService as any, gateway, mockWebhookService as any, mockConfigService as any, creds as any);
+      await svc.voidPayment(row.id, row.propertyId);
+      const parameters = decodeMerchantParameters(JSON.parse(request.mock.calls[0][1].body).Ds_MerchantParameters);
+      expect(parameters).toMatchObject({ DS_MERCHANT_AMOUNT: '150', DS_MERCHANT_CURRENCY: '392', DS_MERCHANT_TRANSACTIONTYPE: '9' });
+    });
     it('should void an authorized payment', async () => {
       const authorizedPayment = { ...mockPayment, status: 'authorized' };
       const voidedPayment = { ...mockPayment, status: 'voided' };

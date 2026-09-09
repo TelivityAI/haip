@@ -26,6 +26,7 @@ export type {
   PublicBookingEngineConfig,
 } from './module/ports.js';
 export { isBookingRequestsEnabled } from './enabled.js';
+export { assertLedgerCurrencySupported } from './domain/booking-request-money.js';
 /**
  * Domain services + controllers, exported for apps/api's kept regression/e2e/
  * authorization specs (see `apps/api/src/modules/booking-request/*.spec.ts`),

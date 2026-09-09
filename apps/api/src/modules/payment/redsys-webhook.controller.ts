@@ -21,6 +21,7 @@ import { RedsysCredentialsService } from './redsys-credentials.service';
 import {
   decodeMerchantParameters,
   REDSYS_SIGNATURE_VERSION,
+  redsysAmountString,
   redsysCurrencyCode,
   verifyMerchantParametersSignature,
 } from './gateways/redsys-crypto';
@@ -122,7 +123,7 @@ export class RedsysWebhookController {
     const amount = params['Ds_Amount'] ?? params['DS_AMOUNT'] ?? '';
     const terminal = params['Ds_Terminal'] ?? params['DS_TERMINAL'] ?? '';
     if (!/^\d+$/.test(amount)
-      || !new Decimal(amount).equals(new Decimal(payment.amount).times(100))
+      || !new Decimal(amount).equals(redsysAmountString(payment.amount, payment.currencyCode))
       || (params['Ds_Currency'] ?? params['DS_CURRENCY']) !== redsysCurrencyCode(payment.currencyCode)
       || (params['Ds_MerchantCode'] ?? params['DS_MERCHANTCODE']) !== creds.merchantCode
       || !/^\d+$/.test(terminal) || Number(terminal) !== Number(creds.terminal)

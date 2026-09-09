@@ -25,6 +25,8 @@ export interface PaymentGatewayCallOptions {
   idempotencyKey?: string;
   /** Required for amount-bearing capture/refund calls outside scale-two currencies. */
   currencyCode?: string;
+  /** Original authorized amount from the server's payment row (required by Redsys void). */
+  authorizedAmount?: number;
   /** Property that owns the charge — used by per-merchant PSPs (Redsys FUC). */
   propertyId?: string;
   /** Return / notification URLs for hosted redirect authorize. */

@@ -11,7 +11,7 @@ One command (API must be running):
 What it does:
 1. Turns **ON** the property Integrations catalog toggle for `redsys`.
 2. Notes process env (`PAYMENT_GATEWAY=redsys`) — restart the API after changing it.
-3. Works in **console** mode when FUC/secret are missing (no live Spanish bank account required for the demo path).
+3. Requires configured sandbox or live merchant credentials for Redsys. For a deliberate offline demo, select `PAYMENT_GATEWAY=mock` and restart the API; unconfigured Redsys operations fail closed.
 
 ## Env
 
