@@ -120,7 +120,11 @@ export class PaymentService {
     return this.safePaymentResponse(payment);
   }
 
-  async authorizePayment(dto: AuthorizePaymentDto, finalization?: AuthorizationFinalization) {
+  async authorizePayment(
+    dto: AuthorizePaymentDto,
+    finalization?: AuthorizationFinalization,
+    bookingReturn?: { returnReferenceHash: string },
+  ) {
     const folio = await this.folioService.findById(dto.folioId, dto.propertyId);
     if (folio.status !== 'open') {
       throw new BadRequestException('Cannot authorize payment on a folio that is not open');
@@ -185,6 +189,7 @@ export class PaymentService {
         currencyCode: dto.currencyCode,
         status: requiresAction ? 'pending' : 'authorized',
         authorizationFinalization: requiresAction ? finalization ?? null : null,
+        bookingReturnReferenceHash: bookingReturn?.returnReferenceHash ?? null,
         isPreAuthorization: true,
         preAuthExpiresAt: preAuthExpiry,
         gatewayProvider: dto.gatewayProvider,

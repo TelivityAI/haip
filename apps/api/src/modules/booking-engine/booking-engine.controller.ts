@@ -7,8 +7,10 @@ import {
   Param,
   Req,
   UseGuards,
+  Header,
+  Headers,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiSecurity, ApiHeader } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
 import { BookingKeyGuard } from '../auth/booking-key.guard';
 import { BookingEngineScopeGuard } from '../auth/booking-engine-scope.guard';
@@ -84,6 +86,19 @@ export class BookingEngineController {
   async getBooking(@Param('confirmationNumber') confirmationNumber: string) {
     // Ownership is verified by BookingEngineScopeGuard before this runs.
     return this.service.verify(confirmationNumber);
+  }
+
+  @Get('payment-return-status')
+  @Header('Cache-Control', 'no-store')
+  @ApiHeader({ name: 'x-payment-return-reference', required: true })
+  @ApiOperation({ summary: 'Read payment state using a limited, expiring return reference' })
+  @ApiResponse({ status: 200, schema: { type: 'object', required: ['status'], properties: {
+    status: { type: 'string', enum: ['processing', 'succeeded', 'failed', 'cancelled', 'unavailable'] },
+  } } })
+  @ApiResponse({ status: 404, description: 'Unknown, expired, or out-of-scope return reference' })
+  async paymentReturnStatus(@Headers('x-payment-return-reference') reference: string, @Req() req: any) {
+    // Tenant comes from the booking-key credential, not from the return reference.
+    return this.service.paymentReturnStatus(this.propertyId(req), reference);
   }
 
   @Delete('bookings/:confirmationNumber')

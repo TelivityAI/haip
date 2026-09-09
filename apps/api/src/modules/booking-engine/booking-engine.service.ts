@@ -23,6 +23,7 @@ import { DepositService } from '../accounting/deposit.service';
 import { AncillaryService } from '../ancillary/ancillary.service';
 import { PolicyService } from '../policy/policy.service';
 import { BookingEngineConfigService } from './booking-engine-config.service';
+import { BookingReturnService } from './booking-return.service';
 import type { BeSearchDto } from './dto/be-search.dto';
 import type { BeQuoteDto } from './dto/be-quote.dto';
 import type { BeCreateBookingDto } from './dto/be-create-booking.dto';
@@ -427,6 +428,11 @@ export class BookingEngineService {
     if (depositDue.greaterThan(0) && !dto.paymentToken) {
       throw new BadRequestException('A payment is required to confirm this booking');
     }
+    const provider = resolvePaymentGatewayProvider(this.runtimeConfig);
+    // Validate before guest/reservation writes; browser URLs never authorize payment.
+    const bookingReturn = provider === 'redsys' && depositDue.greaterThan(0)
+      ? new BookingReturnService(this.db, this.runtimeConfig).prepare(dto.returnUrl)
+      : undefined;
 
     // 2. Guest — walk-in exception (no prior reservation; one is created next).
     //    We intentionally do NOT do an unscoped email lookup (cross-tenant PII leak).
@@ -494,7 +500,6 @@ export class BookingEngineService {
       nextAction?: unknown;
     } | null = null;
     if (depositDue.greaterThan(0) && dto.paymentToken) {
-      const provider = resolvePaymentGatewayProvider(this.runtimeConfig);
       const policy = config.depositPolicy as DepositPolicy;
       const payment = await this.paymentService.authorizePayment({
         folioId: folio.id,
@@ -505,15 +510,15 @@ export class BookingEngineService {
         gatewayPaymentToken: dto.paymentToken,
         cardLastFour: dto.cardLastFour,
         cardBrand: dto.cardBrand,
-        redirectUrlOk: dto.redirectUrlOk,
-        redirectUrlKo: dto.redirectUrlKo,
+        redirectUrlOk: bookingReturn?.url,
+        redirectUrlKo: bookingReturn?.url,
       } as any, {
         deposit: {
           reservationId: reservation.id,
           isRefundable: policy.refundable,
           autoConfirm: config.isEnabled && await this.shouldAutoConfirm(propertyId),
         },
-      });
+      }, bookingReturn ? { returnReferenceHash: bookingReturn.referenceHash } : undefined);
 
       // A redirect is still awaiting authorization; its saved intent is finalized
       // by the verified provider notification. Synchronous gateways keep this path.
@@ -568,6 +573,10 @@ export class BookingEngineService {
   }
 
   // --- Retrieve / cancel (ownership already enforced by BookingEngineScopeGuard) ---
+
+  async paymentReturnStatus(propertyId: string, reference: string) {
+    return new BookingReturnService(this.db, this.runtimeConfig).status(propertyId, reference);
+  }
 
   async verify(confirmationNumber: string) {
     return this.bookingService.verify(confirmationNumber);

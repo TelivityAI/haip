@@ -6,6 +6,7 @@ import { RoomSelect } from './pages/RoomSelect';
 import { Extras } from './pages/Extras';
 import { GuestDetails } from './pages/GuestDetails';
 import { Payment } from './pages/Payment';
+import { PaymentReturn } from './pages/PaymentReturn';
 import { Confirmation } from './pages/Confirmation';
 import { ManageBooking } from './pages/ManageBooking';
 import { RequestApplication } from './pages/RequestApplication';
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/extras" element={<Extras />} />
         <Route path="/guest" element={<GuestDetails />} />
         <Route path="/payment" element={<Payment />} />
+        <Route path="/payment-return" element={<PaymentReturn />} />
         <Route path="/confirmation" element={<Confirmation />} />
         {requestRoutesEnabled && (
           <>
