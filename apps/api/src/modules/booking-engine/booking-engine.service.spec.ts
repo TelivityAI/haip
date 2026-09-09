@@ -111,6 +111,27 @@ const bookDto = {
 };
 
 describe('BookingEngineService.quote', () => {
+  it('rejects an untrusted Redsys return before creating a guest or reservation', async () => {
+    const { svc, runtimeConfig, guest, reservation } = makeService();
+    runtimeConfig.get.mockImplementation((key: string) => key === 'PAYMENT_GATEWAY' ? 'redsys' : undefined);
+    await expect(svc.book(PROP, { ...bookDto, returnUrl: 'https://attacker.example/book' } as any)).rejects.toThrow(/return/i);
+    expect(guest.create).not.toHaveBeenCalled();
+    expect(reservation.create).not.toHaveBeenCalled();
+  });
+
+  it('binds the hosted return reference before signing the redirect and persists only its hash', async () => {
+    const { svc, runtimeConfig, payment } = makeService();
+    runtimeConfig.get.mockImplementation((key: string) => ({ PAYMENT_GATEWAY: 'redsys', BOOKING_RETURN_ORIGINS: 'https://hotel.example' })[key]);
+    await svc.book(PROP, { ...bookDto, returnUrl: 'https://hotel.example/booking?lang=es' } as any);
+    const [dto, , options] = payment.authorizePayment.mock.calls[0] as any[];
+    expect(dto.redirectUrlOk).toBe(dto.redirectUrlKo);
+    const url = new URL(dto.redirectUrlOk);
+    expect(url.pathname).toBe('/booking');
+    expect(url.searchParams.get('lang')).toBe('es');
+    expect(url.searchParams.get('haip_payment_return')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(options.returnReferenceHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
   it('prices server-side with the real tax engine and computes the deposit', async () => {
     const { svc } = makeService();
     const q = await svc.quote(PROP, { roomTypeId: RT, ratePlanId: RP, checkIn: '2026-07-01', checkOut: '2026-07-03', adults: 2 });
@@ -269,7 +290,7 @@ describe('BookingEngineService.book', () => {
     expect(result.deposit).toMatchObject({ status: 'pending_redirect' });
     expect(payment.authorizePayment).toHaveBeenCalledWith(expect.anything(), {
       deposit: { reservationId: 'res-1', isRefundable: true, autoConfirm: true },
-    });
+    }, undefined);
   });
 
   it('classifies the payment as a held deposit', async () => {

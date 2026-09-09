@@ -97,21 +97,12 @@ export class BeCreateBookingDto {
 
   @ApiPropertyOptional({
     description:
-      'Browser return URL after successful Redsys hosted checkout (required when PAYMENT_GATEWAY=redsys)',
+      'Exact embedding page URL for hosted checkout; origin must be configured in BOOKING_RETURN_ORIGINS',
   })
   @IsOptional()
   @IsString()
   @MaxLength(2048)
-  redirectUrlOk?: string;
-
-  @ApiPropertyOptional({
-    description:
-      'Browser return URL after failed/cancelled Redsys hosted checkout (required when PAYMENT_GATEWAY=redsys)',
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(2048)
-  redirectUrlKo?: string;
+  returnUrl?: string;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()

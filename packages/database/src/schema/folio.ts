@@ -185,6 +185,8 @@ export const payments = pgTable('payments', {
   // NEVER store raw card data. Stripe/Adyen tokenization only.
   gatewayProvider: varchar('gateway_provider', { length: 20 }), // "stripe", "adyen"
   gatewayTransactionId: varchar('gateway_transaction_id', { length: 255 }),
+  // Hash of the limited guest payment-status capability; never the raw reference.
+  bookingReturnReferenceHash: varchar('booking_return_reference_hash', { length: 64 }),
   // Server-owned snapshot for authorization that completes asynchronously.
   // Nullable for synchronous/legacy payments; never populated from public DTOs.
   authorizationFinalization: jsonb('authorization_finalization').$type<{
@@ -224,4 +226,6 @@ export const payments = pgTable('payments', {
   // core's schema only needs the plain `bookingRequestId`/`idempotencyKey` columns.
   propertyIdempotencyKeyUnique: uniqueIndex('payments_property_idempotency_key_unique')
     .on(table.propertyId, table.idempotencyKey),
+  bookingReturnReferenceUnique: uniqueIndex('payments_booking_return_reference_unique')
+    .on(table.bookingReturnReferenceHash),
 }));

@@ -189,10 +189,12 @@ export interface BookRequest {
   cardLastFour?: string;
   cardBrand?: string;
   serviceIds?: string[];
-  /** Browser return URL after successful Redsys hosted checkout. */
-  redirectUrlOk?: string;
-  /** Browser return URL after failed/cancelled Redsys hosted checkout. */
-  redirectUrlKo?: string;
+  /** Exact embedding page; the server validates and binds the return reference. */
+  returnUrl?: string;
+}
+
+export interface PaymentReturnStatus {
+  status: 'processing' | 'succeeded' | 'failed' | 'cancelled' | 'unavailable';
 }
 
 export interface BookResponse {

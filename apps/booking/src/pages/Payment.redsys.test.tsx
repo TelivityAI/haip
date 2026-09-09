@@ -129,8 +129,9 @@ describe('Payment redsys hosted redirect', () => {
     await waitFor(() => expect(bookMock).toHaveBeenCalledTimes(1));
     const body = bookMock.mock.calls[0][0];
     expect(body.paymentToken).toBe('redsys_redirect');
-    expect(body.redirectUrlOk).toMatch(/redsys=ok/);
-    expect(body.redirectUrlKo).toMatch(/redsys=ko/);
+    expect(body.returnUrl).toBe(window.location.href);
+    expect(body.redirectUrlOk).toBeUndefined();
+    expect(body.redirectUrlKo).toBeUndefined();
 
     await waitFor(() => expect(submitRedirect).toHaveBeenCalledWith(nextAction));
     expect(navigate).not.toHaveBeenCalledWith(
