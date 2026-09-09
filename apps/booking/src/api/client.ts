@@ -15,6 +15,7 @@ import type {
   SellableServicesResponse,
   SubmitBookingRequest,
   BookingRequestAcknowledgement,
+  PaymentReturnStatus,
 } from './types';
 
 /**
@@ -48,6 +49,12 @@ export const api = axios.create({
 setBookingKey(resolveBookingKey());
 
 export const bookingApi = {
+  paymentReturnStatus: async (reference: string): Promise<PaymentReturnStatus> => {
+    const { data } = await api.get<PaymentReturnStatus>('/payment-return-status', {
+      headers: { 'x-payment-return-reference': reference },
+    });
+    return data;
+  },
   config: async (): Promise<BookingConfig> => {
     const { data } = await api.get<BookingConfig>('/config');
     return data;

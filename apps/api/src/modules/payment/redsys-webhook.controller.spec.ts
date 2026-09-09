@@ -10,6 +10,7 @@ import {
 } from '@telivityhaip/database';
 import { WebhookService } from '../webhook/webhook.service';
 import { RedsysWebhookController } from './redsys-webhook.controller';
+import { BookingReturnService } from '../booking-engine/booking-return.service';
 import { REDSYS_SANDBOX, REDSYS_SIGNATURE_VERSION, encodeMerchantParameters, signMerchantParameters } from './gateways/redsys-crypto';
 
 // Opt-in PostgreSQL suite. Every fixture uses fresh IDs; cleanup only removes
@@ -77,6 +78,31 @@ describe.skipIf(!databaseUrl)('Redsys authoritative booking finalization', () =>
     const audits = await db.select().from(auditLogs).where(eq(auditLogs.propertyId, propertyId));
     return { payment, reservation, deposits, audits };
   }
+
+  it('recovers payment state before and after the callback using only a scoped return capability', async () => {
+    const returns = new BookingReturnService(db, { get: () => 'https://hotel.example' } as any);
+    const prepared = returns.prepare('https://hotel.example/stays/book?lang=es');
+    const reference = new URL(prepared.url).searchParams.get('haip_payment_return')!;
+    await db.update(payments).set({ bookingReturnReferenceHash: prepared.referenceHash })
+      .where(and(eq(payments.id, paymentId), eq(payments.propertyId, propertyId)));
+    expect(await returns.status(propertyId, reference)).toEqual({ status: 'processing' });
+    await expect(returns.status(randomUUID(), reference)).rejects.toThrow('Payment return not found');
+    await expect(returns.status(propertyId, 'z'.repeat(43))).rejects.toThrow('Payment return not found');
+    await notify();
+    expect(await returns.status(propertyId, reference)).toEqual({ status: 'succeeded' });
+    expect((await state()).reservation?.status).toBe('confirmed');
+  });
+
+  it.each(['0180', '9915'])('shows failure only after the signed decline/cancellation callback %s', async (response) => {
+    const returns = new BookingReturnService(db, { get: () => 'https://hotel.example' } as any);
+    const prepared = returns.prepare('https://hotel.example/stays/book');
+    const reference = new URL(prepared.url).searchParams.get('haip_payment_return')!;
+    await db.update(payments).set({ bookingReturnReferenceHash: prepared.referenceHash })
+      .where(and(eq(payments.id, paymentId), eq(payments.propertyId, propertyId)));
+    expect(await returns.status(propertyId, reference)).toEqual({ status: 'processing' });
+    await notify(notification({ Ds_Response: response }));
+    expect(await returns.status(propertyId, reference)).toEqual({ status: 'failed' });
+  });
 
   it('records the deposit and configured confirmation only after verified authorization', async () => {
     expect((await state()).deposits).toHaveLength(0);

@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { setBookingKey } from './api/client';
 import { resolveBookingKey } from './lib/bookingKey';
+import { paymentReturnEntry } from './lib/paymentReturn';
 import { resolveTheme, applyTheme } from './lib/theme';
 import { ConfigProvider } from './context/ConfigContext';
 import { BookingFlowProvider } from './context/BookingFlowContext';
@@ -55,7 +56,7 @@ export function mountBooking(el: Element) {
       ),
       errorElement: <BookingWidgetError />,
     },
-  ]);
+  ], { initialEntries: [paymentReturnEntry(window.location.href)] });
 
   createRoot(el).render(
     <StrictMode>

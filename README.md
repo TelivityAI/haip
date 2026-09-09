@@ -1203,6 +1203,38 @@ pnpm lint             # ESLint
 
 ---
 
+## Hosted booking payment returns
+
+For Redsys booking checkout, configure `BOOKING_RETURN_ORIGINS` with the exact
+origins of the pages embedding the booking widget (comma-separated, no wildcard).
+For example: `https://hotel.example,https://www.hotel.example`. Production requires
+HTTPS. Local development can explicitly allow `http://localhost:5174`. Configure
+the corresponding CORS origins for cross-origin widgets as usual.
+
+Apply database migration `0025_payment_booking_return_reference.sql` before
+deploying the API changes. The widget sends its full embedding-page URL as
+`returnUrl` to `POST /api/v1/booking-engine/book`. The API validates the origin
+before creating a guest or reservation, preserves the host path/query/fragment,
+and binds both provider outcomes to the same randomly generated return reference.
+The booking endpoint no longer accepts separate browser success/failure URLs.
+
+On return, the widget boots directly into its payment-status view without saved
+router state or browser storage. It polls
+`GET /api/v1/booking-engine/payment-return-status`, using the normal
+`x-booking-key` and an `x-payment-return-reference` header. The response contains
+only `status`: `processing`, `succeeded`, `failed`, `cancelled`, or `unavailable`.
+Only server payment state determines the result; browser flags are ignored.
+`succeeded` reports payment authorization, not unconditional booking confirmation.
+The reference expires seven days after payment creation and cannot retrieve guest
+details, retrieve a confirmation credential, or cancel a booking.
+
+Keep return references out of application, proxy, and analytics logs; the host
+page's `haip_payment_return` query parameter is a limited bearer capability.
+Failed, cancelled, or unverified returns direct guests to contact the hotel before
+trying again, because an earlier booking or payment may already exist.
+
+---
+
 ## License
 
 Licensed under the [Apache License, Version 2.0](LICENSE).

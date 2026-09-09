@@ -14,8 +14,7 @@ import { submitRedirectNextAction } from '../lib/submit-redirect-next-action';
 import type { BookRequest, BookResponse } from '../api/types';
 
 type BookPaymentInput = PaymentResult & {
-  redirectUrlOk?: string;
-  redirectUrlKo?: string;
+  returnUrl?: string;
 };
 
 export function Payment() {
@@ -47,22 +46,16 @@ export function Payment() {
         cardLastFour: payment?.cardLastFour,
         cardBrand: payment?.cardBrand,
         serviceIds: serviceIds.length ? serviceIds : undefined,
-        redirectUrlOk: payment?.redirectUrlOk,
-        redirectUrlKo: payment?.redirectUrlKo,
+        returnUrl: payment?.returnUrl,
       };
       return bookingApi.book(body);
     },
     onSuccess: (res: BookResponse) => {
       const nextAction = res.deposit?.nextAction;
       if (nextAction?.type === 'redirect') {
-        sessionStorage.setItem(
-          'haip.booking.pendingConfirmation',
-          JSON.stringify({ booking: res, email: guest!.email }),
-        );
         submitRedirectNextAction(nextAction);
         return;
       }
-      sessionStorage.removeItem('haip.booking.pendingConfirmation');
       navigate('/confirmation', { state: { booking: res, email: guest!.email } });
     },
   });
@@ -85,8 +78,7 @@ export function Payment() {
   const payRedsys = () =>
     bookMutation.mutate({
       paymentToken: 'redsys_redirect',
-      redirectUrlOk: `${window.location.origin}/confirmation?redsys=ok`,
-      redirectUrlKo: `${window.location.origin}/payment?redsys=ko`,
+      returnUrl: window.location.href,
     });
 
   return (
