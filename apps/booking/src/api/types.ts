@@ -207,6 +207,7 @@ export interface BookResponse {
     amount: string;
     status: string;
     nextAction?: PaymentNextAction;
+    checkoutToken?: string | null;
   } | null;
   lineItems: QuoteLineItem[];
   cancellationPolicy: string;
@@ -291,4 +292,16 @@ export interface SellableService {
 export interface SellableServicesResponse {
   propertyId: string;
   data: SellableService[];
+}
+
+export interface CheckoutStatus {
+  checkoutToken: string;
+  confirmationNumber: string;
+  reservationId: string;
+  reservationStatus: string;
+  paymentId: string;
+  paymentStatus: string;
+  depositStatus: string | null;
+  amount: string;
+  currencyCode: string;
 }

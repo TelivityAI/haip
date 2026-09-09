@@ -29,6 +29,22 @@ function BookingWidgetError() {
  * Uses MemoryRouter so routing is self-contained and never touches the host
  * page's URL/history — safe inside any embedding site.
  */
+function resolveReturnEntry(): string {
+  // MemoryRouter ignores the host URL after Redsys returns to the embed page.
+  // Bootstrap from window.location so the opaque checkout token survives remount.
+  if (typeof window === 'undefined') return '/';
+  const params = new URLSearchParams(window.location.search);
+  const checkout = params.get('haip_checkout');
+  const redsys = params.get('redsys');
+  if (checkout && redsys === 'ok') {
+    return `/confirmation?haip_checkout=${encodeURIComponent(checkout)}&redsys=ok`;
+  }
+  if (checkout && redsys === 'ko') {
+    return `/payment?haip_checkout=${encodeURIComponent(checkout)}&redsys=ko`;
+  }
+  return '/';
+}
+
 export function mountBooking(el: Element) {
   // The key may be carried on the mount element via data-booking-key.
   setBookingKey(resolveBookingKey(el));
@@ -55,7 +71,7 @@ export function mountBooking(el: Element) {
       ),
       errorElement: <BookingWidgetError />,
     },
-  ]);
+  ], { initialEntries: [resolveReturnEntry()] });
 
   createRoot(el).render(
     <StrictMode>

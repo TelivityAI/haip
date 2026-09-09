@@ -22,7 +22,7 @@ import { MigrationLegacyIdMapModule } from '../migration/migration-legacy-id-map
   imports: [
     forwardRef(() => FolioModule),
     RoomModule,
-    PaymentModule,
+    forwardRef(() => PaymentModule),
     WebhookModule,
     forwardRef(() => AncillaryModule),
     AccountingModule,
