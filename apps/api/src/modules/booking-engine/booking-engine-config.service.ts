@@ -131,9 +131,11 @@ export class BookingEngineConfigService {
     private readonly runtimeConfig: ConfigService,
   ) {}
 
-  private paymentMethodClientMode(): 'mock' | 'stripe' | 'unsupported' {
+  private paymentMethodClientMode(): 'mock' | 'stripe' | 'redsys' | 'unsupported' {
     const provider = resolvePaymentGatewayProvider(this.runtimeConfig);
-    if (provider === 'mock' || provider === 'stripe') return provider;
+    if (provider === 'mock' || provider === 'stripe' || provider === 'redsys') {
+      return provider;
+    }
     return 'unsupported';
   }
 

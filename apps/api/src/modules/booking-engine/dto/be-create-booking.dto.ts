@@ -95,6 +95,24 @@ export class BeCreateBookingDto {
   @MaxLength(20)
   cardBrand?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Browser return URL after successful Redsys hosted checkout (required when PAYMENT_GATEWAY=redsys)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  redirectUrlOk?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Browser return URL after failed/cancelled Redsys hosted checkout (required when PAYMENT_GATEWAY=redsys)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  redirectUrlKo?: string;
+
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()

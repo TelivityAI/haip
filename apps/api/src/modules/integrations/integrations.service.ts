@@ -9,6 +9,46 @@ import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { DRIZZLE } from '../../database/database.module';
 import { ListIntegrationsDto, UpsertPropertyIntegrationDto } from './dto/integration-registry.dto';
 
+
+export function maskSecret(secret: string): string {
+  const trimmed = secret.trim();
+  if (trimmed.length <= 4) return '••••';
+  return `${'•'.repeat(Math.min(8, trimmed.length - 4))}${trimmed.slice(-4)}`;
+}
+
+export function sanitizeIntegrationConfig(
+  slug: string,
+  config: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const raw = { ...(config ?? {}) };
+  if (slug !== 'redsys') return raw;
+  const secret = raw['secretKey'];
+  delete raw['secretKey'];
+  if (typeof secret === 'string' && secret.trim()) {
+    raw['secretKeyMasked'] = maskSecret(secret);
+  }
+  return raw;
+}
+
+export function mergeRedsysConfig(
+  incoming: Record<string, unknown>,
+  existing: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const merged = { ...incoming };
+  const nextSecret = merged['secretKey'];
+  if (typeof nextSecret !== 'string' || !nextSecret.trim()) {
+    const prev = existing?.['secretKey'];
+    if (typeof prev === 'string' && prev.trim()) {
+      merged['secretKey'] = prev;
+    } else {
+      delete merged['secretKey'];
+    }
+  }
+  // Never persist UI-only masked values.
+  delete merged['secretKeyMasked'];
+  return merged;
+}
+
 @Injectable()
 export class IntegrationsService {
   constructor(@Inject(DRIZZLE) private readonly db: any) {}
@@ -73,9 +113,11 @@ export class IntegrationsService {
   ) {
     await this.findCatalogBySlug(slug);
 
-    const config = dto.config ?? {};
     const [existing] = await this.db
-      .select({ id: propertyIntegrations.id })
+      .select({
+        id: propertyIntegrations.id,
+        config: propertyIntegrations.config,
+      })
       .from(propertyIntegrations)
       .where(
         and(
@@ -84,6 +126,12 @@ export class IntegrationsService {
         ),
       )
       .limit(1);
+
+    const incoming = (dto.config ?? {}) as Record<string, unknown>;
+    const config =
+      slug === 'redsys'
+        ? mergeRedsysConfig(incoming, (existing?.config ?? {}) as Record<string, unknown>)
+        : incoming;
 
     let row: any;
     if (existing) {
