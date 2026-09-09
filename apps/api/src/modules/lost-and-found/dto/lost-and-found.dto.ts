@@ -2,7 +2,7 @@ import {
   IsUUID,
   IsOptional,
   IsString,
-  IsEnum,
+  IsIn,
   IsDateString,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -32,7 +32,7 @@ export class CreateLostAndFoundItemDto {
 
   @ApiPropertyOptional({ enum: CATEGORIES, default: 'general' })
   @IsOptional()
-  @IsEnum(CATEGORIES)
+  @IsIn(CATEGORIES)
   category?: (typeof CATEGORIES)[number];
 
   @ApiProperty()
@@ -73,12 +73,12 @@ export class UpdateLostAndFoundItemDto {
 
   @ApiPropertyOptional({ enum: STATUSES })
   @IsOptional()
-  @IsEnum(STATUSES)
+  @IsIn(STATUSES)
   status?: string;
 
   @ApiPropertyOptional({ enum: CATEGORIES })
   @IsOptional()
-  @IsEnum(CATEGORIES)
+  @IsIn(CATEGORIES)
   category?: (typeof CATEGORIES)[number];
 
   @ApiPropertyOptional()
@@ -94,11 +94,11 @@ export class ListLostAndFoundItemsDto {
 
   @ApiPropertyOptional({ enum: STATUSES })
   @IsOptional()
-  @IsEnum(STATUSES)
+  @IsIn(STATUSES)
   status?: string;
 
   @ApiPropertyOptional({ enum: CATEGORIES })
   @IsOptional()
-  @IsEnum(CATEGORIES)
+  @IsIn(CATEGORIES)
   category?: (typeof CATEGORIES)[number];
 }

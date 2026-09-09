@@ -4,7 +4,7 @@ import {
   IsOptional,
   IsUUID,
   IsBoolean,
-  IsEnum,
+  IsIn,
   IsInt,
   IsNumberString,
   MaxLength,
@@ -58,7 +58,7 @@ export class CreateCancellationPolicyDto {
 
   @ApiPropertyOptional({ enum: CANCELLATION_PENALTY_TYPES, default: 'first_night' })
   @IsOptional()
-  @IsEnum(CANCELLATION_PENALTY_TYPES)
+  @IsIn(CANCELLATION_PENALTY_TYPES)
   penaltyType?: (typeof CANCELLATION_PENALTY_TYPES)[number];
 
   @ApiPropertyOptional({ example: '50.00', description: 'Required when penaltyType=percentage' })
@@ -71,7 +71,7 @@ export class CreateCancellationPolicyDto {
     default: 'refund_if_refundable',
   })
   @IsOptional()
-  @IsEnum(CANCELLATION_DEPOSIT_HANDLINGS)
+  @IsIn(CANCELLATION_DEPOSIT_HANDLINGS)
   depositHandling?: (typeof CANCELLATION_DEPOSIT_HANDLINGS)[number];
 
   @ApiPropertyOptional({ default: true })

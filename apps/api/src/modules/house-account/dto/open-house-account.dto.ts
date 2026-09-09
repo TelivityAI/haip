@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -22,7 +22,7 @@ export class OpenHouseAccountDto {
 
   @ApiPropertyOptional({ enum: ['retail', 'vendor', 'internal', 'other'], default: 'retail' })
   @IsOptional()
-  @IsEnum(['retail', 'vendor', 'internal', 'other'])
+  @IsIn(['retail', 'vendor', 'internal', 'other'])
   kind?: string;
 
   @ApiProperty({ example: 'USD' })

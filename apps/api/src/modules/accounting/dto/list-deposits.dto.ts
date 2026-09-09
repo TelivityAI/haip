@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID, IsEnum, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsUUID, IsIn, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -14,7 +14,7 @@ export class ListDepositsDto {
 
   @ApiPropertyOptional({ enum: ['held', 'applied', 'refunded', 'forfeited'] })
   @IsOptional()
-  @IsEnum(['held', 'applied', 'refunded', 'forfeited'])
+  @IsIn(['held', 'applied', 'refunded', 'forfeited'])
   status?: string;
 
   @ApiPropertyOptional({ default: 1 })

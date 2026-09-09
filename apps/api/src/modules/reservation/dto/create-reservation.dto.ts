@@ -4,7 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  IsEnum,
+  IsIn,
   Min,
   MaxLength,
 } from 'class-validator';
@@ -63,7 +63,7 @@ export class CreateReservationDto {
   specialRequests?: string;
 
   @ApiProperty({ enum: ['direct', 'ota', 'gds', 'phone', 'walk_in', 'agent', 'group', 'corporate'] })
-  @IsEnum(['direct', 'ota', 'gds', 'phone', 'walk_in', 'agent', 'group', 'corporate'])
+  @IsIn(['direct', 'ota', 'gds', 'phone', 'walk_in', 'agent', 'group', 'corporate'])
   source!: string;
 
   @ApiPropertyOptional({ example: 'booking_com' })

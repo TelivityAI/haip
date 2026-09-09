@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID, IsEnum, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsUUID, IsIn, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -19,12 +19,12 @@ export class ListFoliosDto {
 
   @ApiPropertyOptional({ enum: ['guest', 'master', 'city_ledger'] })
   @IsOptional()
-  @IsEnum(['guest', 'master', 'city_ledger'])
+  @IsIn(['guest', 'master', 'city_ledger'])
   type?: string;
 
   @ApiPropertyOptional({ enum: ['open', 'settled', 'closed'] })
   @IsOptional()
-  @IsEnum(['open', 'settled', 'closed'])
+  @IsIn(['open', 'settled', 'closed'])
   status?: string;
 
   @ApiPropertyOptional({ default: 1 })

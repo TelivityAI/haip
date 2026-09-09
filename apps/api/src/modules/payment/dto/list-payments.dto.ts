@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID, IsEnum, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsUUID, IsIn, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -14,7 +14,7 @@ export class ListPaymentsDto {
 
   @ApiPropertyOptional({ enum: ['pending', 'authorized', 'captured', 'settled', 'refunded', 'partially_refunded', 'failed', 'voided'] })
   @IsOptional()
-  @IsEnum(['pending', 'authorized', 'captured', 'settled', 'refunded', 'partially_refunded', 'failed', 'voided'])
+  @IsIn(['pending', 'authorized', 'captured', 'settled', 'refunded', 'partially_refunded', 'failed', 'voided'])
   status?: string;
 
   @ApiPropertyOptional({
@@ -30,7 +30,7 @@ export class ListPaymentsDto {
     ],
   })
   @IsOptional()
-  @IsEnum([
+  @IsIn([
     'credit_card',
     'debit_card',
     'cash',

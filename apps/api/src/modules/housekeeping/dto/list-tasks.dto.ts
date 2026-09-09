@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional, IsEnum, IsDateString, IsInt, Min, Max } from 'class-validator';
+import { IsUUID, IsOptional, IsIn, IsDateString, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -12,12 +12,12 @@ export class ListTasksDto {
 
   @ApiPropertyOptional({ enum: TASK_STATUSES })
   @IsOptional()
-  @IsEnum(TASK_STATUSES)
+  @IsIn(TASK_STATUSES)
   status?: string;
 
   @ApiPropertyOptional({ enum: TASK_TYPES })
   @IsOptional()
-  @IsEnum(TASK_TYPES)
+  @IsIn(TASK_TYPES)
   type?: string;
 
   @ApiPropertyOptional()

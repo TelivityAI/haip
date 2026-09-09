@@ -4,7 +4,7 @@ import {
   IsOptional,
   IsUUID,
   IsBoolean,
-  IsEnum,
+  IsIn,
   IsArray,
   IsInt,
   Min,
@@ -58,7 +58,7 @@ export class CreateServiceDto {
   description?: string;
 
   @ApiProperty({ enum: SERVICE_CHARGE_TYPES })
-  @IsEnum(SERVICE_CHARGE_TYPES)
+  @IsIn(SERVICE_CHARGE_TYPES)
   chargeType!: (typeof SERVICE_CHARGE_TYPES)[number];
 
   @ApiProperty({ example: '25.00' })
@@ -78,7 +78,7 @@ export class CreateServiceDto {
   taxCode?: string;
 
   @ApiProperty({ enum: SERVICE_POSTING_RULES })
-  @IsEnum(SERVICE_POSTING_RULES)
+  @IsIn(SERVICE_POSTING_RULES)
   postingRule!: (typeof SERVICE_POSTING_RULES)[number];
 
   @ApiPropertyOptional({

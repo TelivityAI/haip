@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
   IsDateString,
   MaxLength,
 } from 'class-validator';
@@ -43,7 +43,7 @@ export class PostPosChargeDto {
   folioId!: string;
 
   @ApiProperty({ enum: POS_CHARGE_TYPES, example: 'food_beverage' })
-  @IsEnum(POS_CHARGE_TYPES)
+  @IsIn(POS_CHARGE_TYPES)
   type!: (typeof POS_CHARGE_TYPES)[number];
 
   @ApiProperty({ example: 'Dinner — Oceanfront Grill (check #4821)' })

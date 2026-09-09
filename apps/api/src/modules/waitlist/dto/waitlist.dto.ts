@@ -1,7 +1,7 @@
 import {
   IsDateString,
   IsEmail,
-  IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -158,7 +158,7 @@ export class ListWaitlistEntriesDto {
 
   @ApiPropertyOptional({ enum: WAITLIST_STATUSES })
   @IsOptional()
-  @IsEnum(WAITLIST_STATUSES)
+  @IsIn(WAITLIST_STATUSES)
   status?: (typeof WAITLIST_STATUSES)[number];
 }
 

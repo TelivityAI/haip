@@ -1,6 +1,6 @@
 import {
   IsUUID,
-  IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsDateString,
@@ -24,7 +24,7 @@ export class SetRateOverrideDto {
   ratePlanId!: string;
 
   @ApiProperty({ enum: ['percentage', 'fixed'] })
-  @IsEnum(['percentage', 'fixed'])
+  @IsIn(['percentage', 'fixed'])
   adjustmentType!: 'percentage' | 'fixed';
 
   @ApiProperty({

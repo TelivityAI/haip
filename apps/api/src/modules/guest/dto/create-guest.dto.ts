@@ -4,7 +4,7 @@ import {
   IsOptional,
   IsEmail,
   IsBoolean,
-  IsEnum,
+  IsIn,
   IsDateString,
   IsObject,
   MaxLength,
@@ -131,7 +131,7 @@ export class CreateGuestDto {
 
   @ApiPropertyOptional({ enum: ['none', 'silver', 'gold', 'platinum', 'diamond'], default: 'none' })
   @IsOptional()
-  @IsEnum(['none', 'silver', 'gold', 'platinum', 'diamond'])
+  @IsIn(['none', 'silver', 'gold', 'platinum', 'diamond'])
   vipLevel?: string;
 
   @ApiPropertyOptional()

@@ -1,7 +1,7 @@
 import {
   IsString,
   IsOptional,
-  IsEnum,
+  IsIn,
   IsInt,
   IsBoolean,
   IsUrl,
@@ -20,7 +20,7 @@ export class UpdateMediaDto {
 
   @ApiPropertyOptional({ enum: MEDIA_CATEGORIES })
   @IsOptional()
-  @IsEnum(MEDIA_CATEGORIES)
+  @IsIn(MEDIA_CATEGORIES)
   category?: (typeof MEDIA_CATEGORIES)[number];
 
   @ApiPropertyOptional()

@@ -2,7 +2,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsUUID,
-  IsEnum,
+  IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -42,6 +42,6 @@ export class MoveTransactionsDto {
 
   @ApiPropertyOptional({ enum: CHARGE_TYPES, description: 'Move all charges of this type' })
   @IsOptional()
-  @IsEnum(CHARGE_TYPES)
+  @IsIn(CHARGE_TYPES)
   chargeType?: string;
 }

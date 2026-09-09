@@ -1,7 +1,7 @@
 import {
   IsBoolean,
   IsDateString,
-  IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -29,7 +29,7 @@ export class CreateTurnawayReasonCodeDto {
   description!: string;
 
   @ApiProperty({ enum: TURNAWAY_TYPES })
-  @IsEnum(TURNAWAY_TYPES)
+  @IsIn(TURNAWAY_TYPES)
   type!: (typeof TURNAWAY_TYPES)[number];
 
   @ApiPropertyOptional({ default: true })
@@ -89,7 +89,7 @@ export class CreateTurnawayDto {
   reasonCodeId?: string;
 
   @ApiProperty({ enum: TURNAWAY_TYPES })
-  @IsEnum(TURNAWAY_TYPES)
+  @IsIn(TURNAWAY_TYPES)
   type!: (typeof TURNAWAY_TYPES)[number];
 
   @ApiPropertyOptional({ example: 'phone' })

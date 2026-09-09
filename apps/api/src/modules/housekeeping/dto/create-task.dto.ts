@@ -1,6 +1,6 @@
 import {
   IsUUID,
-  IsEnum,
+  IsIn,
   IsOptional,
   IsInt,
   IsDateString,
@@ -39,7 +39,7 @@ export class CreateTaskDto {
   roomId!: string;
 
   @ApiProperty({ enum: TASK_TYPES })
-  @IsEnum(TASK_TYPES)
+  @IsIn(TASK_TYPES)
   type!: string;
 
   @ApiPropertyOptional({ default: 0 })

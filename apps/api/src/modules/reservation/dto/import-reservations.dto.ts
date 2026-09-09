@@ -8,7 +8,7 @@ import {
   IsBoolean,
   Min,
   MaxLength,
-  IsEnum,
+  IsIn,
   ValidateNested,
   ArrayMinSize,
 } from 'class-validator';
@@ -74,7 +74,7 @@ export class CreateReservationRow {
   currencyCode!: string;
 
   @ApiProperty({ enum: ['direct', 'ota', 'gds', 'phone', 'walk_in', 'agent', 'group', 'corporate'] })
-  @IsEnum(['direct', 'ota', 'gds', 'phone', 'walk_in', 'agent', 'group', 'corporate'])
+  @IsIn(['direct', 'ota', 'gds', 'phone', 'walk_in', 'agent', 'group', 'corporate'])
   source!: string;
 
   @ApiPropertyOptional({ default: 1 })

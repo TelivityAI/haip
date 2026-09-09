@@ -1,4 +1,4 @@
-import { IsUUID, IsEnum, IsArray, ArrayNotEmpty } from 'class-validator';
+import { IsUUID, IsIn, IsArray, ArrayNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { MEDIA_OWNER_TYPES } from './create-media.dto';
 
@@ -8,7 +8,7 @@ export class ReorderMediaDto {
   propertyId!: string;
 
   @ApiProperty({ enum: MEDIA_OWNER_TYPES })
-  @IsEnum(MEDIA_OWNER_TYPES)
+  @IsIn(MEDIA_OWNER_TYPES)
   ownerType!: (typeof MEDIA_OWNER_TYPES)[number];
 
   @ApiProperty({ format: 'uuid' })
