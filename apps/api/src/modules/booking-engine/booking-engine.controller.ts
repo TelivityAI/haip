@@ -79,6 +79,19 @@ export class BookingEngineController {
     return this.service.book(this.propertyId(req), dto);
   }
 
+
+  @Get('checkouts/:checkoutToken')
+  @ApiOperation({
+    summary:
+      'Recover booking/payment state after a Redsys hosted-checkout browser return',
+  })
+  async getCheckout(
+    @Param('checkoutToken') checkoutToken: string,
+    @Req() req: any,
+  ) {
+    return this.service.getCheckout(this.propertyId(req), checkoutToken);
+  }
+
   @Get('bookings/:confirmationNumber')
   @ApiOperation({ summary: 'Retrieve a booking by confirmation number (guest self-service)' })
   async getBooking(@Param('confirmationNumber') confirmationNumber: string) {

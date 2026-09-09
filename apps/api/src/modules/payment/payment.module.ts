@@ -1,8 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { FolioModule } from '../folio/folio.module';
 import { WebhookModule } from '../webhook/webhook.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
+import { AccountingModule } from '../accounting/accounting.module';
+import { ReservationModule } from '../reservation/reservation.module';
+import { RedsysPaymentFinalizer } from './redsys-payment-finalizer.service';
 import { PaymentController } from './payment.controller';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { RedsysWebhookController } from './redsys-webhook.controller';
@@ -37,7 +40,14 @@ function createSavedPaymentMethodGateway(configService: ConfigService) {
  * braintree, wise, redsys). When unset, STRIPE_MODE controls legacy behavior.
  */
 @Module({
-  imports: [ConfigModule, FolioModule, WebhookModule, IntegrationsModule],
+  imports: [
+    ConfigModule,
+    FolioModule,
+    WebhookModule,
+    IntegrationsModule,
+    AccountingModule,
+    forwardRef(() => ReservationModule),
+  ],
   controllers: [
     PaymentController,
     StripeWebhookController,
@@ -46,6 +56,7 @@ function createSavedPaymentMethodGateway(configService: ConfigService) {
   providers: [
     PaymentService,
     RedsysCredentialsService,
+    RedsysPaymentFinalizer,
     {
       provide: PAYMENT_GATEWAY,
       useFactory: (configService: ConfigService) =>
@@ -59,6 +70,6 @@ function createSavedPaymentMethodGateway(configService: ConfigService) {
       inject: [ConfigService],
     },
   ],
-  exports: [PaymentService, PAYMENT_GATEWAY, SAVED_PAYMENT_METHOD_GATEWAY],
+  exports: [PaymentService, PAYMENT_GATEWAY, SAVED_PAYMENT_METHOD_GATEWAY, RedsysPaymentFinalizer],
 })
 export class PaymentModule {}
