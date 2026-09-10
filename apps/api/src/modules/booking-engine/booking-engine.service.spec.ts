@@ -313,32 +313,23 @@ describe('BookingEngineService.book', () => {
     await expect(svc.book(PROP, bookDto as any)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-
-  it('defers deposit + auto-confirm while Redsys redirect is pending', async () => {
-    const { svc, deposit, payment, reservation, config } = makeService();
-    config.getConfig.mockResolvedValue({ autoConfirm: true });
-    payment.authorizePayment.mockResolvedValue({
-      id: 'pay-1',
-      gatewayTransactionId: '1234ABCDEF',
-      nextAction: {
-        type: 'redirect',
-        url: 'https://sis-t.redsys.es/realizarPago',
-        method: 'POST',
-        formFields: { Ds_SignatureVersion: 'HMAC_SHA512_V2' },
-      },
+  it('rejects request mode before creating a guest, reservation, folio, or payment', async () => {
+    const { svc, config, guest, reservation, folio, payment } = makeService();
+    config.getPublicConfig.mockResolvedValue({
+      isEnabled: true,
+      bookingMode: 'request',
+      paymentMethodCollection: 'disabled',
+      formQuestions: [],
+      sellableRoomTypeIds: [RT],
+      sellableRatePlanIds: [RP],
+      depositPolicy: { type: 'first_night', refundable: true },
     });
 
-    const res = await svc.book(PROP, bookDto as any);
-
-    expect(deposit.recordDeposit).not.toHaveBeenCalled();
-    expect(reservation.confirm).not.toHaveBeenCalled();
-    expect(res.deposit).toMatchObject({
-      paymentId: 'pay-1',
-      status: 'pending_redirect',
-      checkoutToken: '1234ABCDEF',
-    });
-    expect(res.deposit?.nextAction).toMatchObject({ type: 'redirect' });
-    expect(res.status).toBe('pending');
+    await expect(svc.book(PROP, bookDto as any)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(guest.create).not.toHaveBeenCalled();
+    expect(reservation.create).not.toHaveBeenCalled();
+    expect(folio.createAutoFolio).not.toHaveBeenCalled();
+    expect(payment.authorizePayment).not.toHaveBeenCalled();
   });
 
   it('requires a payment token when a deposit is due', async () => {

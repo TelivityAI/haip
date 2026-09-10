@@ -12,8 +12,8 @@ import { and, eq } from 'drizzle-orm';
 import { payments } from '@telivityhaip/database';
 import { Public } from '../auth/public.decorator';
 import { DRIZZLE } from '../../database/database.module';
+import { WebhookService } from '../webhook/webhook.service';
 import { RedsysCredentialsService } from './redsys-credentials.service';
-import { RedsysPaymentFinalizer } from './redsys-payment-finalizer.service';
 import {
   decodeMerchantParameters,
   isRedsysSuccessResponse,
@@ -25,9 +25,7 @@ import {
  *
  * Redsys POSTs `application/x-www-form-urlencoded` with
  * Ds_MerchantParameters, Ds_Signature, Ds_SignatureVersion.
- * Browser URLOK/URLKO alone must never authorize a payment — the signed
- * notification is the authority, and {@link RedsysPaymentFinalizer} owns
- * payment transition, deposit creation, and booking-engine auto-confirm.
+ * Browser URLOK/URLKO alone must never authorize a payment.
  */
 @ApiTags('webhooks')
 @Controller('webhooks/redsys')
@@ -36,8 +34,8 @@ export class RedsysWebhookController {
 
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
+    private readonly webhookService: WebhookService,
     private readonly credentialsService: RedsysCredentialsService,
-    private readonly finalizer: RedsysPaymentFinalizer,
   ) {}
 
   @Public()
@@ -110,11 +108,76 @@ export class RedsysWebhookController {
     const dsResponse = params['Ds_Response'] ?? params['DS_RESPONSE'];
     const success = isRedsysSuccessResponse(dsResponse);
 
-    await this.finalizer.finalizeVerifiedNotification({
-      payment,
-      success,
-      dsResponse,
-    });
+    if (payment.status === 'authorized' || payment.status === 'captured') {
+      return res.status(HttpStatus.OK).send('OK');
+    }
+
+    if (success) {
+      const [updated] = await this.db
+        .update(payments)
+        .set({
+          status: 'authorized',
+          notes: payment.notes
+            ? `${payment.notes}; redsys Ds_Response=${dsResponse}`
+            : `redsys Ds_Response=${dsResponse}`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(payments.id, payment.id),
+            eq(payments.propertyId, payment.propertyId),
+            eq(payments.status, 'pending'),
+          ),
+        )
+        .returning();
+
+      if (updated) {
+        await this.webhookService.emit(
+          'payment.received',
+          'payment',
+          updated.id,
+          {
+            folioId: updated.folioId,
+            status: 'authorized',
+            amount: updated.amount,
+            gatewayProvider: 'redsys',
+          },
+          updated.propertyId,
+        );
+        this.logger.log(
+          `Redsys order=${orderId} authorized payment=${updated.id}`,
+        );
+      }
+    } else {
+      await this.db
+        .update(payments)
+        .set({
+          status: 'failed',
+          notes: `redsys Ds_Response=${dsResponse ?? 'unknown'}`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(payments.id, payment.id),
+            eq(payments.propertyId, payment.propertyId),
+            eq(payments.status, 'pending'),
+          ),
+        );
+
+      await this.webhookService.emit(
+        'payment.failed',
+        'payment',
+        payment.id,
+        {
+          folioId: payment.folioId,
+          error: `Ds_Response=${dsResponse ?? 'unknown'}`,
+        },
+        payment.propertyId,
+      );
+      this.logger.warn(
+        `Redsys order=${orderId} failed Ds_Response=${dsResponse}`,
+      );
+    }
 
     return res.status(HttpStatus.OK).send('OK');
   }

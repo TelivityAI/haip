@@ -26,8 +26,6 @@ import { RedsysCredentialsService } from './redsys-credentials.service';
 import {
   resolvePaymentGatewayProvider,
 } from './payment-gateway.factory';
-import { generateRedsysOrderId } from './gateways/redsys-crypto';
-import { withRedsysCheckoutParams } from './redsys-checkout-url';
 
 const CARD_METHODS = ['credit_card', 'debit_card', 'vcc'];
 
@@ -203,13 +201,7 @@ export class PaymentService {
 
     return {
       ...this.safePaymentResponse(payment),
-      ...(requiresAction
-        ? {
-            nextAction: result.nextAction as PaymentGatewayNextAction,
-            // Opaque Redsys order id — used as the hosted-checkout return token.
-            gatewayTransactionId: payment.gatewayTransactionId,
-          }
-        : {}),
+      ...(requiresAction ? { nextAction: result.nextAction as PaymentGatewayNextAction } : {}),
     };
   }
 
@@ -228,15 +220,13 @@ export class PaymentService {
     }
 
     const creds = await this.redsysCredentials.resolveForProperty(dto.propertyId);
-    const orderId = generateRedsysOrderId();
     const options: PaymentGatewayCallOptions = {
       propertyId: dto.propertyId,
       currencyCode: dto.currencyCode,
       redirect: {
         merchantUrl: this.redsysCredentials.merchantNotificationUrl(),
-        urlOk: withRedsysCheckoutParams(dto.redirectUrlOk, orderId, 'ok'),
-        urlKo: withRedsysCheckoutParams(dto.redirectUrlKo, orderId, 'ko'),
-        orderId,
+        urlOk: dto.redirectUrlOk,
+        urlKo: dto.redirectUrlKo,
       },
     };
     if (creds) {

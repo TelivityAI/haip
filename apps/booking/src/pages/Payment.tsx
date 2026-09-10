@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import { useMutation } from '@tanstack/react-query';
@@ -13,20 +13,6 @@ import { money } from '../lib/format';
 import { submitRedirectNextAction } from '../lib/submit-redirect-next-action';
 import type { BookRequest, BookResponse } from '../api/types';
 
-
-function buildRedsysReturnUrls(): { redirectUrlOk: string; redirectUrlKo: string } {
-  // Return to the current host page (embed-safe). Server appends haip_checkout.
-  const base = new URL(window.location.href);
-  base.searchParams.delete('redsys');
-  base.searchParams.delete('haip_checkout');
-  const ok = new URL(base);
-  ok.searchParams.set('redsys', 'ok');
-  const ko = new URL(base);
-  ko.searchParams.set('redsys', 'ko');
-  return { redirectUrlOk: ok.toString(), redirectUrlKo: ko.toString() };
-}
-
-
 type BookPaymentInput = PaymentResult & {
   redirectUrlOk?: string;
   redirectUrlKo?: string;
@@ -34,8 +20,6 @@ type BookPaymentInput = PaymentResult & {
 
 export function Payment() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const redsysFailed = searchParams.get('redsys') === 'ko';
   const { config } = useConfig();
   const { criteria, roomType, rate, quote, guest, serviceIds } = useBookingFlow();
 
@@ -101,7 +85,8 @@ export function Payment() {
   const payRedsys = () =>
     bookMutation.mutate({
       paymentToken: 'redsys_redirect',
-      ...buildRedsysReturnUrls(),
+      redirectUrlOk: `${window.location.origin}/confirmation?redsys=ok`,
+      redirectUrlKo: `${window.location.origin}/payment?redsys=ko`,
     });
 
   return (
@@ -113,11 +98,6 @@ export function Payment() {
 
       <PriceBreakdown quote={quote} />
 
-      {redsysFailed && (
-        <p className="text-sm text-red-600">
-          Payment was cancelled or declined. You can try again to complete your booking.
-        </p>
-      )}
       {bookMutation.isError && (
         <p className="text-sm text-red-600">{errorMessage(bookMutation.error)}</p>
       )}

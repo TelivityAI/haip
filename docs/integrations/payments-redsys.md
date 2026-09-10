@@ -36,13 +36,6 @@ Dashboard → Integrations → Redsys exposes this form. Property config overrid
 
 ### Authorize (deposit / folio hold)
 
-> **Lifecycle (hosted redirect):** browser URLOK/URLKO is navigation only.
-> The signed MerchantURL notification is the authority. HAIP records the
-> deposit ledger entry and runs booking-engine auto-confirm only after that
-> verified success (idempotent finalizer). Return URLs carry an opaque
-> `haip_checkout` token so the MemoryRouter booking widget can restore state.
-
-
 1. Client calls `POST /api/v1/payments/authorize` with `gatewayProvider: "redsys"`, `gatewayPaymentToken: "redsys_redirect"`, and `redirectUrlOk` / `redirectUrlKo`.
 2. HAIP creates a **pending** payment, signs `Ds_MerchantParameters` (HMAC_SHA512_V2), and returns `nextAction` (POST form fields + Redsys `realizarPago` URL).
 3. Client auto-submits the form; guest completes 3DS on Redsys.
