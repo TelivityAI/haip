@@ -32,8 +32,6 @@ export interface PaymentGatewayCallOptions {
     merchantUrl: string;
     urlOk: string;
     urlKo: string;
-    /** Pre-assigned Redsys order id so return URLs can embed the same opaque token. */
-    orderId?: string;
   };
   /** Per-property merchant credentials (overrides process env when set). */
   merchantCredentials?: {

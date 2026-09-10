@@ -208,7 +208,7 @@ export class RedsysGateway implements PaymentGateway {
       };
     }
 
-    const orderId = options.redirect.orderId?.trim() || generateRedsysOrderId();
+    const orderId = generateRedsysOrderId();
     const params: Record<string, string> = {
       DS_MERCHANT_AMOUNT: redsysAmountString(amount),
       DS_MERCHANT_ORDER: orderId,
