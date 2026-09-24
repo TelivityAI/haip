@@ -123,25 +123,36 @@ export class LlmService {
     }
   }
 
-  /** Defensive JSON parse: tolerate stray prose around the JSON object. */
+  /** Defensive JSON parse: prefer whole-body JSON, then tolerate stray prose. */
   private parse(content: string): { rationale: string; suggestions: string[] } | null {
+    const tryParse = (raw: string): { rationale: string; suggestions: string[] } | null => {
+      try {
+        const obj = JSON.parse(raw) as { rationale?: unknown; suggestions?: unknown };
+        if (typeof obj.rationale !== 'string') return null;
+        const rationale = obj.rationale.trim().slice(0, 600);
+        if (!rationale) return null;
+        const suggestions = Array.isArray(obj.suggestions)
+          ? obj.suggestions
+              .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+              .map((s) => s.trim().slice(0, 200))
+              .slice(0, 3)
+          : [];
+        return { rationale, suggestions };
+      } catch {
+        return null;
+      }
+    };
+
     let raw = content.trim();
+    const direct = tryParse(raw);
+    if (direct) return direct;
+
     if (!raw.startsWith('{')) {
       const start = raw.indexOf('{');
       const end = raw.lastIndexOf('}');
       if (start === -1 || end === -1 || end <= start) return null;
       raw = raw.slice(start, end + 1);
     }
-    try {
-      const obj = JSON.parse(raw) as { rationale?: unknown; suggestions?: unknown };
-      const rationale = typeof obj.rationale === 'string' ? obj.rationale.trim() : '';
-      if (!rationale) return null;
-      const suggestions = Array.isArray(obj.suggestions)
-        ? obj.suggestions.filter((s): s is string => typeof s === 'string' && s.trim().length > 0).slice(0, 3)
-        : [];
-      return { rationale, suggestions };
-    } catch {
-      return null;
-    }
+    return tryParse(raw);
   }
 }
