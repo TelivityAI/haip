@@ -81,7 +81,7 @@
    - Haversine distance on coordinates, 250m threshold (weight: 0.25)
    - Chain code exact match (weight: 0.15)
    - Star rating match (weight: 0.1)
-4. **Threshold** — composite score > 0.85 = auto-merge, 0.65-0.85 = flag for review, < 0.65 = separate properties
+4. **Decide** — for each shortlisted pair, outcome is **same** (merge) / **maybe** (human review, with which fields disagree) / **different** (leave apart). Cheap similarity scores only propose candidates; they are **not** merge authority. Do not auto-merge solely because a composite exceeds 0.85.
 5. **Merge** — combine best content per attribute using source trust hierarchy
 
 **Content merge hierarchy (default):**
