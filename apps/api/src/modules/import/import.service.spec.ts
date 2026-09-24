@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import { ImportService } from './import.service';
-import { parseCsv, applyMapping } from './csv.util';
+import { parseCsv, applyMapping, suggestCanonicalField } from './csv.util';
 
 const PROP = 'aaaaaaaa-0000-4000-a000-000000000001';
 
@@ -28,6 +28,24 @@ describe('applyMapping', () => {
     expect(mapped.firstName).toBe('Ada');
     expect(mapped.lastName).toBe('Lovelace');
   });
+
+  it('applies common header aliases when canonical fields are provided', () => {
+    const mapped = applyMapping(
+      { 'Guest E-mail': 'ada@x.com', 'First Name': 'Ada', Surname: 'Lovelace' },
+      undefined,
+      ['firstName', 'lastName', 'email'],
+    );
+    expect(mapped.email).toBe('ada@x.com');
+    expect(mapped.firstName).toBe('Ada');
+    expect(mapped.lastName).toBe('Lovelace');
+  });
+});
+
+describe('suggestCanonicalField', () => {
+  it('maps guest e-mail style headers to email', () => {
+    expect(suggestCanonicalField('Guest E-mail', ['firstName', 'lastName', 'email'])).toBe('email');
+    expect(suggestCanonicalField('arrival', ['checkIn', 'checkOut'])).toBe('checkIn');
+  });
 });
 
 describe('ImportService', () => {
@@ -49,10 +67,11 @@ describe('ImportService', () => {
       createAutoFolio: vi.fn().mockResolvedValue({ id: 'folio-1' }),
       postCharge: vi.fn().mockResolvedValue({ id: 'charge-1' }),
     };
+    // Default: no existing guests (import create path). Folio tests override.
     db = {
       select: vi.fn(() => ({
         from: vi.fn(() => ({
-          where: vi.fn(() => Promise.resolve([{ id: 'res-1', propertyId: PROP, guestId: 'g-1', bookingId: 'b-1' }])),
+          where: vi.fn(() => Promise.resolve([])),
         })),
       })),
     };
@@ -110,6 +129,43 @@ describe('ImportService', () => {
     const res = await svc.run(PROP, 'guests', { csv, mapping: { First: 'firstName', Last: 'lastName' } });
     expect(res.created).toBe(1);
     expect(guest.create).toHaveBeenCalledWith(expect.objectContaining({ firstName: 'Ada', lastName: 'Lovelace' }));
+  });
+
+  it('dedupes guests by email within the same import batch', async () => {
+    guest.create
+      .mockResolvedValueOnce({ id: 'g-1' })
+      .mockResolvedValueOnce({ id: 'g-2' });
+    const csv =
+      'firstName,lastName,email\nAda,Lovelace,ada@x.com\nAda,Lovelace,ada@x.com';
+    const res = await svc.run(PROP, 'guests', { csv });
+    expect(guest.create).toHaveBeenCalledOnce();
+    expect(res.created).toBe(2);
+    expect(res.results[0]!.id).toBe('g-1');
+    expect(res.results[1]!.id).toBe('g-1');
+  });
+
+  it('reuses a guest already linked to the property by email', async () => {
+    db.select = vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn()
+          .mockResolvedValueOnce([{ id: 'g-existing', email: 'ada@x.com' }])
+          .mockResolvedValueOnce([{ id: 'res-1' }]),
+      })),
+    }));
+    const res = await svc.run(PROP, 'guests', {
+      rows: [{ firstName: 'Ada', lastName: 'Lovelace', email: 'ada@x.com' }],
+    });
+    expect(guest.create).not.toHaveBeenCalled();
+    expect(res.results[0]!.id).toBe('g-existing');
+  });
+
+  it('auto-maps Guest E-mail style headers without an explicit mapping', async () => {
+    const csv = 'First Name,Last Name,Guest E-mail\nAda,Lovelace,ada@x.com';
+    const res = await svc.run(PROP, 'guests', { csv });
+    expect(res.created).toBe(1);
+    expect(guest.create).toHaveBeenCalledWith(
+      expect.objectContaining({ firstName: 'Ada', lastName: 'Lovelace', email: 'ada@x.com' }),
+    );
   });
 
   it('imports physical rooms scoped to propertyId', async () => {
