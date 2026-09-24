@@ -238,6 +238,139 @@ describe('AgentService', () => {
     );
   });
 
+  it('does not auto-execute money agents below the 0.92 floor in autopilot', async () => {
+    const autopilotConfig = {
+      ...existingConfig,
+      mode: 'autopilot',
+      autopilotConfidenceThreshold: '0.85',
+    };
+    const insertedDecision = {
+      id: 'dec-money',
+      decisionType: 'rate_adjustment',
+      confidence: '0.90',
+      status: 'pending',
+    };
+    const db = createMockDb({
+      selectResult: [autopilotConfig],
+      insertResult: [insertedDecision],
+    });
+    const execute = vi.fn().mockResolvedValue({ success: true, changes: [] });
+    const agent = createMockAgent('pricing');
+    agent.recommend = async () => [
+      {
+        decisionType: 'rate_adjustment',
+        recommendation: { delta: 10 },
+        confidence: 0.9,
+        inputSnapshot: {},
+      },
+    ];
+    agent.execute = execute;
+
+    const module = await Test.createTestingModule({
+      providers: [
+        AgentService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: WebhookService, useValue: { emit: vi.fn().mockResolvedValue(undefined) } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
+      ],
+    }).compile();
+    const service = module.get(AgentService);
+    service.registerAgent(agent);
+
+    const result = await service.runAgent('prop-1', 'pricing');
+    expect(execute).not.toHaveBeenCalled();
+    expect((result as any).decisions[0].status).toBe('pending');
+  });
+
+  it('never auto-executes review_response even at high confidence in autopilot', async () => {
+    const autopilotConfig = {
+      ...existingConfig,
+      agentType: 'review_response',
+      mode: 'autopilot',
+      autopilotConfidenceThreshold: '0.50',
+    };
+    const insertedDecision = {
+      id: 'dec-review',
+      decisionType: 'review_response',
+      confidence: '0.99',
+      status: 'pending',
+    };
+    const db = createMockDb({
+      selectResult: [autopilotConfig],
+      insertResult: [insertedDecision],
+    });
+    const execute = vi.fn().mockResolvedValue({ success: true, changes: [] });
+    const agent = createMockAgent('review_response');
+    agent.recommend = async () => [
+      {
+        decisionType: 'review_response',
+        recommendation: { responseText: 'Thanks' },
+        confidence: 0.99,
+        inputSnapshot: {},
+      },
+    ];
+    agent.execute = execute;
+
+    const module = await Test.createTestingModule({
+      providers: [
+        AgentService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: WebhookService, useValue: { emit: vi.fn().mockResolvedValue(undefined) } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
+      ],
+    }).compile();
+    const service = module.get(AgentService);
+    service.registerAgent(agent);
+
+    await service.runAgent('prop-1', 'review_response');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('auto-executes ops agents at the configured threshold in autopilot', async () => {
+    const autopilotConfig = {
+      ...existingConfig,
+      agentType: 'demand_forecast',
+      mode: 'autopilot',
+      autopilotConfidenceThreshold: '0.85',
+    };
+    const insertedDecision = {
+      id: 'dec-ops',
+      decisionType: 'forecast',
+      confidence: '0.85',
+      status: 'pending',
+    };
+    const db = createMockDb({
+      selectResult: [autopilotConfig],
+      insertResult: [insertedDecision],
+      updateResult: [{ ...insertedDecision, status: 'auto_executed' }],
+    });
+    const execute = vi.fn().mockResolvedValue({ success: true, changes: [] });
+    const agent = createMockAgent('demand_forecast');
+    agent.recommend = async () => [
+      {
+        decisionType: 'forecast',
+        recommendation: { summary: 'ok' },
+        confidence: 0.85,
+        inputSnapshot: {},
+      },
+    ];
+    agent.execute = execute;
+
+    const module = await Test.createTestingModule({
+      providers: [
+        AgentService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: WebhookService, useValue: { emit: vi.fn().mockResolvedValue(undefined) } },
+        { provide: LlmService, useValue: { explain: vi.fn().mockResolvedValue(null) } },
+      ],
+    }).compile();
+    const service = module.get(AgentService);
+    service.registerAgent(agent);
+
+    await service.runAgent('prop-1', 'demand_forecast');
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
   // --- approveDecision ---
 
   it('rejects approval of non-pending decision', async () => {

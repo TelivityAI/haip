@@ -19,6 +19,7 @@ import {
   isValidAgentType,
   subgraphFor,
 } from './agent-graph';
+import { shouldAutoExecuteDecision } from './agent-autopilot-tiers';
 
 @Injectable()
 export class AgentService {
@@ -119,8 +120,13 @@ export class AgentService {
     const threshold = parseFloat(config.autopilotConfidenceThreshold ?? '0.85');
 
     for (const rec of recommendations) {
-      const shouldAutoExecute =
-        config.mode === 'autopilot' && rec.confidence >= threshold;
+      // Risk-tiered autopilot: money needs a harder floor; guest drafts never auto-run.
+      const shouldAutoExecute = shouldAutoExecuteDecision({
+        mode: config.mode,
+        agentType,
+        confidence: rec.confidence,
+        configThreshold: threshold,
+      });
 
       // Always insert as pending first — update to auto_executed only on success
       const [decision] = await this.db
