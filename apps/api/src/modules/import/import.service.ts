@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { folios, reservations } from '@telivityhaip/database';
+import { folios, guests, reservations } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { GuestService } from '../guest/guest.service';
 import { RoomService } from '../room/room.service';
@@ -183,6 +183,8 @@ export class ImportService {
   ): Promise<ImportResult> {
     const imp = this.requireImporter(entity);
     const dryRun = input.dryRun ?? false;
+    /** Same-batch email → guest id so duplicate CSV rows reuse one create. */
+    const guestEmailCache = new Map<string, string>();
 
     const rawRows = input.csv ? parseCsv(input.csv) : input.rows ?? [];
     if (rawRows.length === 0) {
@@ -191,7 +193,7 @@ export class ImportService {
 
     const results: RowResult[] = [];
     for (let i = 0; i < rawRows.length; i++) {
-      const mapped = applyMapping(rawRows[i]!, input.mapping);
+      const mapped = applyMapping(rawRows[i]!, input.mapping, imp.columns);
       try {
         await this.resolveLegacyRefs(mapped, propertyId, input);
         // Validate required columns.
@@ -203,6 +205,9 @@ export class ImportService {
         const dto = imp.build(mapped, propertyId);
         if (dryRun) {
           results.push({ index: i, success: true });
+        } else if (entity === 'guests') {
+          const created = await this.findOrCreateImportedGuest(propertyId, dto, guestEmailCache);
+          results.push({ index: i, success: true, id: created.id });
         } else {
           const created = await imp.create(dto);
           results.push({ index: i, success: true, id: created.id });
@@ -220,6 +225,52 @@ export class ImportService {
       failed: results.filter((r) => !r.success).length,
       results,
     };
+  }
+
+  /**
+   * Reuse a guest by email when they already have a reservation at this property
+   * (same rule as Connect/channel inbound), or when an earlier row in this batch
+   * already created them. Otherwise create via GuestService.
+   */
+  private async findOrCreateImportedGuest(
+    propertyId: string,
+    dto: {
+      firstName: string;
+      lastName: string;
+      email?: string;
+      phone?: string;
+      companyName?: string;
+      loyaltyNumber?: string;
+    },
+    emailCache: Map<string, string>,
+  ): Promise<{ id: string }> {
+    const email = dto.email?.trim().toLowerCase();
+    if (email && emailCache.has(email)) {
+      return { id: emailCache.get(email)! };
+    }
+
+    if (email) {
+      const matches = await this.db.select().from(guests).where(eq(guests.email, dto.email!.trim()));
+      for (const candidate of matches) {
+        const links = await this.db
+          .select({ id: reservations.id })
+          .from(reservations)
+          .where(
+            and(eq(reservations.guestId, candidate.id), eq(reservations.propertyId, propertyId)),
+          );
+        if (links.length > 0) {
+          emailCache.set(email, candidate.id);
+          return { id: candidate.id };
+        }
+      }
+    }
+
+    const created = await this.guestService.create({
+      ...dto,
+      email: dto.email?.trim() || undefined,
+    });
+    if (email) emailCache.set(email, created.id);
+    return created;
   }
 
   private async resolveLegacyRefs(

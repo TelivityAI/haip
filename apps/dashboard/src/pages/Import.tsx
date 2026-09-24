@@ -39,6 +39,61 @@ interface ImportResult {
 
 const UNMAPPED = '';
 
+/** Common PMS export headers → HAIP canonical fields (keep in sync with API csv.util). */
+const HEADER_ALIASES: Record<string, string> = {
+  'first name': 'firstName',
+  firstname: 'firstName',
+  'guest first name': 'firstName',
+  'given name': 'firstName',
+  'last name': 'lastName',
+  lastname: 'lastName',
+  surname: 'lastName',
+  'guest last name': 'lastName',
+  'family name': 'lastName',
+  email: 'email',
+  'e-mail': 'email',
+  'guest email': 'email',
+  'guest e-mail': 'email',
+  'email address': 'email',
+  phone: 'phone',
+  telephone: 'phone',
+  mobile: 'phone',
+  'phone number': 'phone',
+  company: 'companyName',
+  'company name': 'companyName',
+  loyalty: 'loyaltyNumber',
+  'loyalty number': 'loyaltyNumber',
+  arrival: 'checkIn',
+  'check in': 'checkIn',
+  'check-in': 'checkIn',
+  departure: 'checkOut',
+  'check out': 'checkOut',
+  'check-out': 'checkOut',
+  'room type': 'roomTypeId',
+  'room type id': 'roomTypeId',
+  'rate plan': 'ratePlanId',
+  'rate plan id': 'ratePlanId',
+  'room number': 'number',
+};
+
+function normalizeHeaderKey(header: string): string {
+  return header
+    .trim()
+    .toLowerCase()
+    .replace(/[_/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function suggestCanonical(sourceHeader: string, canonicalFields: string[]): string | undefined {
+  const lower = new Map(canonicalFields.map((c) => [c.toLowerCase(), c]));
+  const exact = lower.get(sourceHeader.trim().toLowerCase());
+  if (exact) return exact;
+  const alias = HEADER_ALIASES[normalizeHeaderKey(sourceHeader)];
+  if (alias && lower.has(alias.toLowerCase())) return lower.get(alias.toLowerCase());
+  return undefined;
+}
+
 /** Parse a single CSV line, honoring double-quoted fields with embedded commas. */
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
@@ -109,13 +164,12 @@ export default function Import() {
 
   const dataRowCount = useMemo(() => Math.max(0, splitLines(csvText).length - 1), [csvText]);
 
-  /** Build a default mapping (exact-name match) for the current columns + entity. */
+  /** Build a default mapping (exact name or common PMS header alias). */
   function buildDefaultMapping(cols: string[], ent: ImportEntity | null): Record<string, string> {
     const map: Record<string, string> = {};
     const canonical = ent?.columns ?? [];
     for (const col of cols) {
-      const exact = canonical.find((c) => c.toLowerCase() === col.toLowerCase());
-      map[col] = exact ?? UNMAPPED;
+      map[col] = suggestCanonical(col, canonical) ?? UNMAPPED;
     }
     return map;
   }
