@@ -17,8 +17,21 @@ describe('classifySentiment', () => {
     expect(classifySentiment(5)).toBe('positive');
   });
 
-  it('classifies 3 as mixed', () => {
+  it('classifies 3 as mixed when cues are balanced or absent', () => {
     expect(classifySentiment(3)).toBe('mixed');
+    expect(classifySentiment(3, 'Staff was great but the room was disappointing')).toBe('mixed');
+  });
+
+  it('leans a rating-3 review negative when complaint cues dominate', () => {
+    expect(
+      classifySentiment(3, 'Dirty room, terrible smell, rude service, never again'),
+    ).toBe('negative');
+  });
+
+  it('leans a rating-3 review positive when praise cues dominate', () => {
+    expect(
+      classifySentiment(3, 'Amazing staff, wonderful location, excellent breakfast, loved it'),
+    ).toBe('positive');
   });
 
   it('classifies 1-2 as negative', () => {
@@ -72,6 +85,18 @@ describe('extractTopics', () => {
   it('detects room quality topic', () => {
     const topics = extractTopics('The bed was extremely comfortable and the bathroom was modern');
     expect(topics).toContain('room_quality');
+  });
+
+  it('does not treat substring false positives as topics', () => {
+    // "bargain" must not match amenities "bar"; "vacations" must not match "ac"
+    const topics = extractTopics('Found a bargain on our vacations package online');
+    expect(topics).not.toContain('amenities');
+    expect(topics).not.toContain('room_quality');
+  });
+
+  it('still matches AC as a whole word for room quality', () => {
+    expect(extractTopics('The AC was broken all night')).toContain('room_quality');
+    expect(extractTopics('The bar was closed')).toContain('amenities');
   });
 });
 
@@ -180,7 +205,7 @@ describe('generateResponseDraft', () => {
     expect(draft.keyPointsAddressed.length).toBe(0);
   });
 
-  it('confidence increases with topic coverage', () => {
+  it('confidence increases with topic coverage but stays modest', () => {
     const noTopics = generateResponseDraft(5, 'Nice', 'Ivy', config);
     const withTopics = generateResponseDraft(
       2,
@@ -188,16 +213,17 @@ describe('generateResponseDraft', () => {
       'Jay',
       config,
     );
-    expect(withTopics.confidence).toBeGreaterThanOrEqual(0.70);
+    expect(withTopics.confidence).toBeGreaterThan(noTopics.confidence);
+    expect(withTopics.confidence).toBeLessThanOrEqual(0.85);
   });
 
-  it('caps confidence at 0.95', () => {
+  it('caps keyword-based confidence at 0.85', () => {
     const draft = generateResponseDraft(
       1,
       'Dirty, noisy, rude staff, overpriced, terrible food, bad parking, slow wifi',
       'Kay',
       config,
     );
-    expect(draft.confidence).toBeLessThanOrEqual(0.95);
+    expect(draft.confidence).toBeLessThanOrEqual(0.85);
   });
 });

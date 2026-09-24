@@ -49,14 +49,73 @@ export interface ReviewResponseConfig {
 // Sentiment classification
 // ---------------------------------------------------------------------------
 
-export function classifySentiment(rating: number): ReviewSentiment {
+const POSITIVE_CUES = [
+  'great',
+  'amazing',
+  'wonderful',
+  'excellent',
+  'loved',
+  'perfect',
+  'friendly',
+  'clean',
+  'helpful',
+  'comfortable',
+  'recommend',
+];
+
+const NEGATIVE_CUES = [
+  'dirty',
+  'terrible',
+  'awful',
+  'rude',
+  'slow',
+  'broken',
+  'worst',
+  'disappointed',
+  'noisy',
+  'smell',
+  'overpriced',
+  'never',
+  'however',
+  'but',
+];
+
+/** Escape a keyword for RegExp; spaces become flexible whitespace. */
+function keywordPattern(keyword: string): RegExp {
+  const escaped = keyword
+    .toLowerCase()
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\s+/g, '\\s+');
+  // Word-ish boundaries so "bar" ≠ "bargain" and "ac" ≠ "vacations".
+  return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, 'i');
+}
+
+function countCueHits(text: string, cues: string[]): number {
+  let n = 0;
+  for (const cue of cues) {
+    if (keywordPattern(cue).test(text)) n += 1;
+  }
+  return n;
+}
+
+/**
+ * Stars are the primary signal. For a middle rating (3), lean on simple
+ * positive/negative word cues so "staff was great but room was tiny" stays
+ * mixed while an all-complaint 3 drifts negative (and all-praise drifts positive).
+ */
+export function classifySentiment(rating: number, reviewText = ''): ReviewSentiment {
   if (rating >= 4) return 'positive';
-  if (rating === 3) return 'mixed';
-  return 'negative';
+  if (rating <= 2) return 'negative';
+  // rating === 3
+  const pos = countCueHits(reviewText, POSITIVE_CUES);
+  const neg = countCueHits(reviewText, NEGATIVE_CUES);
+  if (neg > pos + 1) return 'negative';
+  if (pos > neg + 1) return 'positive';
+  return 'mixed';
 }
 
 // ---------------------------------------------------------------------------
-// Topic extraction (keyword-based)
+// Topic extraction (keyword-based, word-boundary match)
 // ---------------------------------------------------------------------------
 
 const TOPIC_KEYWORDS: Record<ReviewTopic, string[]> = {
@@ -69,15 +128,14 @@ const TOPIC_KEYWORDS: Record<ReviewTopic, string[]> = {
   food: ['breakfast', 'restaurant', 'food', 'dining', 'meal', 'buffet', 'coffee', 'menu'],
   parking: ['parking', 'garage', 'valet', 'car'],
   wifi: ['wifi', 'wi-fi', 'internet', 'connection', 'signal'],
-  room_quality: ['room', 'bed', 'comfortable', 'view', 'bathroom', 'shower', 'towel', 'pillow', 'mattress', 'air conditioning', 'AC', 'heating'],
+  room_quality: ['room', 'bed', 'comfortable', 'view', 'bathroom', 'shower', 'towel', 'pillow', 'mattress', 'air conditioning', 'ac', 'heating'],
 };
 
 export function extractTopics(text: string): ReviewTopic[] {
-  const lower = text.toLowerCase();
   const found: ReviewTopic[] = [];
 
   for (const [topic, keywords] of Object.entries(TOPIC_KEYWORDS) as [ReviewTopic, string[]][]) {
-    if (keywords.some((kw) => lower.includes(kw))) {
+    if (keywords.some((kw) => keywordPattern(kw).test(text))) {
       found.push(topic);
     }
   }
@@ -90,7 +148,7 @@ export function extractTopics(text: string): ReviewTopic[] {
 // ---------------------------------------------------------------------------
 
 export function analyzeReview(rating: number, reviewText: string): ReviewAnalysis {
-  const sentiment = classifySentiment(rating);
+  const sentiment = classifySentiment(rating, reviewText);
   const topics = extractTopics(reviewText);
   const urgency = sentiment === 'negative' ? 'high' : 'normal';
 
@@ -228,9 +286,15 @@ export function generateResponseDraft(
     }
   }
 
-  // Confidence based on topic coverage
-  const topicCoverage = analysis.topics.length > 0 ? addressedTopics.length / analysis.topics.length : 1;
-  const confidence = Math.min(0.95, 0.70 + topicCoverage * 0.20);
+  // Keyword hits are a weak signal — keep confidence modest so autopilot
+  // risk tiers treat these as drafts for humans, not "understood" certainty.
+  const topicCoverage =
+    analysis.topics.length > 0 ? addressedTopics.length / analysis.topics.length : 0;
+  const shortText = reviewText.trim().split(/\s+/).filter(Boolean).length < 8;
+  let confidence = 0.55 + topicCoverage * 0.2;
+  if (shortText) confidence -= 0.1;
+  if (analysis.topics.length === 0) confidence = Math.min(confidence, 0.5);
+  confidence = Math.max(0.35, Math.min(0.85, confidence));
 
   return {
     responseText: response,
