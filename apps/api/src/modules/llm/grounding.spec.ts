@@ -103,6 +103,46 @@ describe('grounding — anti-hallucination guard', () => {
     expect(out.grounded).toBe(false);
   });
 
+  it('treats $-amounts as significant even when under 25', () => {
+    const nums = significantNumbers('Fee is only $12');
+    expect(nums).toContain(12);
+    const out = groundExplanation(
+      { fee: 5 },
+      { rationale: 'Charge a $12 resort fee.', suggestions: [] },
+    );
+    expect(out.grounded).toBe(false);
+  });
+
+  it('allows signed phrasing when the magnitude is in the decision (sign via words)', () => {
+    // Documented: natural language carries sign ("cut", "reduce"); bare "-" is not required.
+    const out = groundExplanation(
+      { recommendedAdjustmentPct: 12 },
+      { rationale: 'Cut the rate by 12%.', suggestions: [] },
+    );
+    expect(out.grounded).toBe(true);
+  });
+
+  it('does not let occupancy 100 support a hallucinated 1% via inverse scaling', () => {
+    expect(isSupported(1, new Set([100]))).toBe(false);
+    const out = groundExplanation(
+      { rooms: 100 },
+      { rationale: 'Lift rates by 1%.', suggestions: [] },
+    );
+    expect(out.grounded).toBe(false);
+  });
+
+  it('drops suggestions that invent percentages while keeping grounded ones', () => {
+    const out = groundExplanation(
+      { occupancy: 0.9, recommendedAdjustmentPct: 8 },
+      {
+        rationale: 'Occupancy is 90%.',
+        suggestions: ['Raise 8%', 'Also consider a secret 22% promo'],
+      },
+    );
+    expect(out.grounded).toBe(true);
+    expect(out.suggestions).toEqual(['Raise 8%']);
+  });
+
   // --- numericPayload: structural "numbers only" enforcement (finding #4) ---
   it('numericPayload keeps numeric leaves and drops all free-form strings', () => {
     const out = numericPayload({

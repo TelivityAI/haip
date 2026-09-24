@@ -62,27 +62,27 @@
 
 **Inputs:**
 - Raw hotel results from Agent 4.1 (multiple sources, unmerged)
-- Matching configuration (thresholds, algorithm weights)
+- Shortlist / blocking configuration (similarity only proposes candidates)
 - Source trust hierarchy (which source has best photos, most accurate coordinates, etc.)
 
 **Outputs:**
-- Canonical property records (one per physical property)
+- Canonical property records (one per physical property) for **same** decisions
 - Per-property: merged content (best name, best address, best coordinates, best photos, merged amenities)
-- Match confidence score per merge decision
+- Per-pair outcome: same / maybe / different, with field-level disagreement notes on maybe
 - Source attribution (which data came from which source)
-- Unmatched properties (couldn't confidently merge — flagged for review)
+- Maybe pairs flagged for human review (not auto-merged)
 
 **Matching pipeline:**
 1. **Normalize** — standardize address components, strip noise words ("Hotel", "The", "Resort & Spa"), normalize chain names
 2. **Block** — group candidates by coarse criteria (city + chain code) to reduce O(n²) comparison space
-3. **Score** — multi-algorithm scoring:
+3. **Shortlist** — multi-algorithm similarity scoring (proposes candidates only):
    - Jaro-Winkler on property name (weight: 0.3)
    - Levenshtein on normalized address (weight: 0.2)
    - Haversine distance on coordinates, 250m threshold (weight: 0.25)
    - Chain code exact match (weight: 0.15)
    - Star rating match (weight: 0.1)
 4. **Decide** — for each shortlisted pair, outcome is **same** (merge) / **maybe** (human review, with which fields disagree) / **different** (leave apart). Cheap similarity scores only propose candidates; they are **not** merge authority. Do not auto-merge solely because a composite exceeds 0.85.
-5. **Merge** — combine best content per attribute using source trust hierarchy
+5. **Merge** — combine best content per attribute using source trust hierarchy — **same** pairs only
 
 **Content merge hierarchy (default):**
 1. Hotel direct / chain CRS (most authoritative)
