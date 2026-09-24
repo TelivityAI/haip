@@ -119,4 +119,29 @@ describe('LlmService', () => {
     expect(out!.rationale).toBe('ok');
     expect(out!.suggestions).toEqual([]);
   });
+
+  it('rejects payloads whose rationale is not a string', async () => {
+    process.env['HAIP_AI_ENABLED'] = 'true';
+    vi.spyOn(globalThis, 'fetch' as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        message: { content: JSON.stringify({ rationale: { text: 'nope' }, suggestions: [] }) },
+      }),
+    } as any);
+    expect(await makeService().explain(INPUT)).toBeNull();
+  });
+
+  it('caps an overlong rationale', async () => {
+    process.env['HAIP_AI_ENABLED'] = 'true';
+    const long = 'x'.repeat(900);
+    vi.spyOn(globalThis, 'fetch' as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        message: { content: JSON.stringify({ rationale: long, suggestions: ['a'.repeat(300)] }) },
+      }),
+    } as any);
+    const out = await makeService().explain(INPUT);
+    expect(out!.rationale.length).toBe(600);
+    expect(out!.suggestions[0]!.length).toBe(200);
+  });
 });
