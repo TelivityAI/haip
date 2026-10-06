@@ -13,6 +13,15 @@ describe('iCal HTTP boundary', () => {
     expect(mocks.post).toHaveBeenCalledWith('/v1/ical/feeds/feed-a/rotate-token', {}, expect.any(Object));
     expect(mocks.delete).toHaveBeenCalledWith('/v1/ical/feeds/feed-a', expect.any(Object));
   });
+  it('drops sync errors and encodes feed ids', async () => {
+    mocks.get.mockResolvedValueOnce({ data: [{ id: 'feed/a', propertyId: 'property-a', roomTypeId: 'room-a', name: 'A', direction: 'import', sourceUrl: null, isActive: true, lastSyncAt: null, lastSyncStatus: 'failed', lastSyncError: 'token=secret', tokenHash: 'hash' }] });
+    const feeds = await icalApi.feeds('property-a');
+    expect(feeds[0]).not.toHaveProperty('lastSyncError');
+    expect(feeds[0]).not.toHaveProperty('tokenHash');
+    expect(feeds[0].lastSyncStatus).toBe('failed');
+    await icalApi.sync('property-a', 'feed/a');
+    expect(mocks.post).toHaveBeenCalledWith('/v1/ical/feeds/feed%2Fa/sync', {}, expect.any(Object));
+  });
   it('rejects executable URLs, inline credentials and fragments', () => {
     expect(validCalendarUrl('https://calendar.example.test/feed.ics?token=fixture')).toBe(true);
     for (const url of ['javascript:alert(1)', 'https://user:pass@calendar.example.test/feed.ics', 'https://calendar.example.test/feed.ics#secret', 'not-a-url']) expect(validCalendarUrl(url)).toBe(false);
