@@ -22,7 +22,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback((type: ToastType, message: string) => {
     const id = nextId++;
-    setToasts((prev) => [...prev, { id, type, message }]);
+    setToasts((prev) => {
+      if (prev.some(item => item.type === type && item.message === message)) return prev;
+      return [...prev, { id, type, message }].slice(-3);
+    });
   }, []);
 
   const dismiss = useCallback((id: number) => {
@@ -142,5 +145,4 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
     </div>
   );
 }
-
 

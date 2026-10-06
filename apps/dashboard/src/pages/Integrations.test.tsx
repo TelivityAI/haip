@@ -30,7 +30,7 @@ describe('Redsys integration settings', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/v1/admin/integrations/redsys', {
       enabled: true, config: { merchantCode: '999008881', terminal: '001', environment: 'live' },
-    }, { params: { propertyId: 'prop-1' } }));
+    }, { params: { propertyId: 'prop-1' }, skipErrorToast: true }));
   });
 
   it('submits a replacement secret then clears the input', async () => {
@@ -39,7 +39,7 @@ describe('Redsys integration settings', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/v1/admin/integrations/redsys', {
       enabled: true, config: { merchantCode: '999008881', terminal: '001', environment: 'test', secretKey: 'replacement-test-key' },
-    }, { params: { propertyId: 'prop-1' } }));
+    }, { params: { propertyId: 'prop-1' }, skipErrorToast: true }));
     await waitFor(() => expect(screen.getByLabelText('Secret key')).toHaveValue(''));
   });
 
@@ -47,5 +47,16 @@ describe('Redsys integration settings', () => {
     renderIntegrations();
     await userEvent.click(await screen.findByRole('button', { name: 'Disable' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/v1/admin/integrations/redsys', { enabled: false, config }, { params: { propertyId: 'prop-1' } }));
+  });
+
+  it('shows an inline read failure with refresh recovery and no raw provider message', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('private provider detail')).mockResolvedValue({ data: [] });
+    renderIntegrations();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Integrations could not load');
+    expect(screen.queryByText('No integrations match this filter.')).not.toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith('/v1/admin/integrations', { params: { propertyId: 'prop-1' }, skipErrorToast: true });
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(await screen.findByText('No integrations match this filter.')).toBeInTheDocument();
   });
 });
