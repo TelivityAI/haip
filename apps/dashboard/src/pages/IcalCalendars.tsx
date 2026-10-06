@@ -120,7 +120,7 @@ export default function IcalCalendars() {
     {canSync && scopes.length > 0 && isPending && <p role="status" className="py-8 text-sm text-telivity-slate">{t('ical.loading')}</p>}
     {isError && <p role="alert" className="py-5 text-sm text-red-700">{t('ical.loadFailed')}</p>}
     {data && feeds.length === 0 && <div className="rounded-xl border border-gray-200 bg-white px-6 py-10"><h2 className="font-semibold text-telivity-navy">{t('ical.empty')}</h2><p className="mt-2 text-sm text-telivity-slate">{canManage ? t('ical.emptyHelp') : t('ical.emptyReadOnly')}</p></div>}
-    <div className="divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white">
+    {feeds.length > 0 && <div className="divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white">
       {feeds.map(feed => <section key={feed.id} aria-label={feed.name} className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><h2 className="break-words font-semibold text-telivity-navy">{feed.name}</h2><p className="mt-1 text-sm text-telivity-slate">{properties.find(property => property.id === feed.propertyId)?.name} · {roomTypes.find(type => type.id === feed.roomTypeId)?.name} · {feed.direction === 'import' ? t('ical.import') : t('ical.export')}</p><p className="mt-2 text-sm text-telivity-slate">{feed.isActive ? t('ical.active') : t('ical.inactive')}{feed.direction === 'import' && <> · {feed.lastSyncAt ? t('ical.lastSync', { time: new Date(feed.lastSyncAt).toLocaleString(i18n.resolvedLanguage) }) : t('ical.neverSynced')}{feed.lastSyncStatus === 'failed' && <span className="ml-2 text-red-700">{t('ical.syncFailed')}</span>}</>}</p></div>
           <div className="flex flex-wrap gap-2">
@@ -130,7 +130,7 @@ export default function IcalCalendars() {
         </div>
         {blocksFor?.id === feed.id && <div id={`ical-blocks-${feed.id}`} className="mt-4 border-t border-gray-100 pt-4">{blocked.isPending ? <p role="status">{t('ical.loadingDates')}</p> : blocked.isError ? <p role="alert">{t('ical.loadFailed')}</p> : <><h3 className="mb-3 text-sm font-semibold">{t('ical.blockedDates')}</h3>{blocked.data?.length ? <ul className="space-y-2 text-sm text-telivity-slate">{blocked.data.map((block, index) => <li key={`${block.externalUid}-${index}`}>{block.startDate} → {block.endDate} <span>{t('ical.checkoutExclusive')}</span></li>)}</ul> : <p className="text-sm text-telivity-slate">{t('ical.noBlocks')}</p>}</>}</div>}
       </section>)}
-    </div>
+    </div>}
     <p className="mt-5 max-w-3xl text-sm text-telivity-slate">{t('ical.syncHelp')}</p>
     <dialog ref={confirmRef} onCancel={event => { if (busy) event.preventDefault(); else setConfirm(null); }} onClose={() => setConfirm(null)} className="w-full max-w-md rounded-xl border-0 bg-white p-6 shadow-xl backdrop:bg-black/40" aria-labelledby="ical-confirm-title" aria-describedby="ical-confirm-target ical-confirm-description">
       <h2 id="ical-confirm-title" className="text-lg font-semibold text-telivity-navy">{confirm?.kind === 'rotate' ? t('ical.regenerate') : t('ical.remove')}</h2>
