@@ -120,7 +120,7 @@ function RedsysCredentialsForm({
       return api.put(
         `/v1/admin/integrations/${row.slug}`,
         { enabled: true, config },
-        { params: { propertyId } },
+        { params: { propertyId }, skipErrorToast: true },
       );
     },
     onSuccess: () => {
@@ -220,10 +220,10 @@ export default function Integrations() {
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, refetch, isFetching, isError } = useQuery({
     queryKey: ['property-integrations', propertyId],
     queryFn: () =>
-      api.get<CatalogRow[]>('/v1/admin/integrations', { params: { propertyId } }).then((r) => r.data),
+      api.get<CatalogRow[]>('/v1/admin/integrations', { params: { propertyId }, skipErrorToast: true }).then((r) => r.data),
     enabled: !!propertyId,
   });
 
@@ -277,6 +277,7 @@ export default function Integrations() {
         <button
           type="button"
           onClick={() => refetch()}
+          disabled={isFetching}
           className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
@@ -303,9 +304,10 @@ export default function Integrations() {
         </select>
       </div>
 
+      {isError && <p role="alert" className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-telivity-slate">{t('integrations.loadFailed')}</p>}
       {isLoading ? (
         <p className="text-sm text-gray-500">{t('integrations.loading')}</p>
-      ) : (
+      ) : !isError && (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">

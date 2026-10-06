@@ -3,6 +3,8 @@
  * Money fields must be decimal strings; propertyId is required on most mutations.
  */
 
+import { PORTFOLIO_MODE_ID } from './property-types';
+
 export function moneyString(value: number | string): string {
   const n = typeof value === 'string' ? parseFloat(value) : value;
   if (!Number.isFinite(n)) return '0.00';
@@ -10,7 +12,7 @@ export function moneyString(value: number | string): string {
 }
 
 export function requirePropertyId(propertyId: string | null): asserts propertyId is string {
-  if (!propertyId) {
+  if (!propertyId || propertyId === PORTFOLIO_MODE_ID) {
     throw new Error('Select a property first');
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -252,13 +252,23 @@ export function SyncLogsTable({ logs }: { logs: SyncLog[] }) {
 function ConnectionDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
-  const { propertyId } = useProperty();
+  const { propertyId, properties } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [logsTab, setLogsTab] = useState<'content' | 'ari'>('content');
   const [roomTypeMapping, setRoomTypeMapping] = useState<RoomTypeMappingRow[]>([]);
   const [ratePlanMapping, setRatePlanMapping] = useState<RatePlanMappingRow[]>([]);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const removeDialog = useRef<HTMLDialogElement>(null);
+  const currentScope = useRef({ propertyId, id });
+  currentScope.current = { propertyId, id };
+  useEffect(() => { setRemoveOpen(false); }, [propertyId, id]);
+  useEffect(() => {
+    const dialog = removeDialog.current;
+    if (removeOpen && dialog && !dialog.open) dialog.showModal();
+    if (!removeOpen && dialog?.open) dialog.close();
+  }, [removeOpen]);
 
   const { data } = useQuery({
     queryKey: ['channels', id, propertyId],
@@ -270,7 +280,7 @@ function ConnectionDetail() {
 
   const { data: roomTypesData } = useQuery({
     queryKey: ['room-types', propertyId],
-    queryFn: () => api.get('/v1/room-types', { params: { propertyId } }).then((r) => r.data),
+    queryFn: () => api.get('/v1/rooms/types', { params: { propertyId } }).then((r) => r.data),
     enabled: !!propertyId,
   });
   const { data: ratePlansData } = useQuery({
@@ -351,6 +361,18 @@ function ConnectionDetail() {
     },
   });
 
+  const removeMutation = useMutation({
+    mutationFn: (target: { id: string; propertyId: string }) =>
+      api.delete(`/v1/channels/connections/${target.id}`, { params: { propertyId: target.propertyId }, skipErrorToast: true }),
+    onSuccess: (_data, target) => {
+      void queryClient.invalidateQueries({ queryKey: ['channels'] });
+      if (currentScope.current.propertyId !== target.propertyId || currentScope.current.id !== target.id) return;
+      setRemoveOpen(false);
+      toast('success', t('channels.connectionRemoved'));
+      navigate(`/channels?propertyId=${encodeURIComponent(target.propertyId)}`);
+    },
+  });
+
   if (!conn) return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.loading')}</div>;
 
   const contentLogs: SyncLog[] = contentLogsQuery.data?.data ?? contentLogsQuery.data ?? [];
@@ -358,12 +380,23 @@ function ConnectionDetail() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <button onClick={() => navigate('/channels')} className="p-1.5 rounded hover:bg-telivity-light-grey"><ChevronLeft size={20} /></button>
         <Radio size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">{conn.channelName ?? conn.channelCode}</h1>
         <StatusBadge status={conn.status === 'active' ? 'success' : conn.status} label={t(`channels.statuses.${conn.status}`, { defaultValue: conn.status })} />
+        <button type="button" onClick={() => { removeMutation.reset(); setRemoveOpen(true); }} className="ml-auto min-h-[44px] rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">{t('channels.removeConnection')}</button>
       </div>
+      <dialog ref={removeDialog} aria-labelledby="channel-remove-title" aria-describedby="channel-remove-target channel-remove-description" onCancel={event => { if (removeMutation.isPending) event.preventDefault(); else setRemoveOpen(false); }} className="w-[calc(100%-2rem)] max-w-md rounded-xl bg-white p-6 shadow-xl backdrop:bg-black/40">
+        <h2 id="channel-remove-title" className="text-lg font-semibold text-telivity-navy">{t('channels.removeConnection')}</h2>
+        <p id="channel-remove-target" className="mt-4 break-words text-sm font-semibold text-telivity-navy">{conn.channelName ?? conn.channelCode} · {properties?.find(property => property.id === propertyId)?.name}</p>
+        <p id="channel-remove-description" className="my-4 text-sm text-telivity-slate">{t('channels.removeWarning')}</p>
+        {removeMutation.isError && <p role="alert" className="mb-4 text-sm text-red-700">{t('channels.removeFailed')}</p>}
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" autoFocus disabled={removeMutation.isPending} onClick={() => setRemoveOpen(false)} className="min-h-[44px] rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium disabled:opacity-50">{t('common.cancel')}</button>
+          <button type="button" disabled={removeMutation.isPending} onClick={() => { if (id && propertyId) removeMutation.mutate({ id, propertyId }); }} className="min-h-[44px] rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{removeMutation.isPending ? t('channels.removing') : t('channels.removeConnection')}</button>
+        </div>
+      </dialog>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm p-6 space-y-4">

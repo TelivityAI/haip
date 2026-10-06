@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
+import PropertyScopeBoundary from './components/layout/PropertyScopeBoundary';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { SkeletonPage } from './components/ui/Skeleton';
 import { useRealtimeInvalidation } from './hooks/useRealtimeInvalidation';
@@ -38,34 +39,36 @@ export default function App() {
     <AppLayout>
       <ErrorBoundary>
         <Suspense fallback={<SkeletonPage />}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/front-desk" element={<FrontDesk />} />
-            {isBookingRequestsUiEnabled() && (
-              <Route path="/booking-requests/*" element={<BookingRequests />} />
-            )}
-            <Route path="/reservations/*" element={<Reservations />} />
-            <Route path="/guests/*" element={<Guests />} />
-            <Route path="/rooms/*" element={<Rooms />} />
-            <Route path="/housekeeping/*" element={<Housekeeping />} />
-            <Route path="/folios/*" element={<Folios />} />
-            <Route path="/groups/*" element={<Groups />} />
-            <Route path="/commercial/*" element={<Commercial />} />
-            <Route path="/cashier/*" element={<Cashier />} />
-            <Route path="/house-accounts/*" element={<HouseAccounts />} />
-            <Route path="/accounting/*" element={<Accounting />} />
-            <Route path="/tax/*" element={<TaxSettings />} />
-            <Route path="/rate-plans/*" element={<RatePlans />} />
-            <Route path="/revenue/*" element={<Revenue />} />
-            <Route path="/night-audit" element={<NightAudit />} />
-            <Route path="/reports/*" element={<Reports />} />
-            <Route path="/channels/*" element={<Channels />} />
-            <Route path="/integrations" element={<Integrations />} />
-            <Route path="/communications" element={<Communications />} />
-            <Route path="/reviews" element={<Reviews />} />
-            <Route path="/settings/*" element={<Settings />} />
-            <Route path="/import" element={<Import />} />
-          </Routes>
+          <PropertyScopeBoundary>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/front-desk" element={<FrontDesk />} />
+              {isBookingRequestsUiEnabled() && (
+                <Route path="/booking-requests/*" element={<BookingRequests />} />
+              )}
+              <Route path="/reservations/*" element={<Reservations />} />
+              <Route path="/guests/*" element={<Guests />} />
+              <Route path="/rooms/*" element={<Rooms />} />
+              <Route path="/housekeeping/*" element={<Housekeeping />} />
+              <Route path="/folios/*" element={<Folios />} />
+              <Route path="/groups/*" element={<Groups />} />
+              <Route path="/commercial/*" element={<Commercial />} />
+              <Route path="/cashier/*" element={<Cashier />} />
+              <Route path="/house-accounts/*" element={<HouseAccounts />} />
+              <Route path="/accounting/*" element={<Accounting />} />
+              <Route path="/tax/*" element={<TaxSettings />} />
+              <Route path="/rate-plans/*" element={<RatePlans />} />
+              <Route path="/revenue/*" element={<Revenue />} />
+              <Route path="/night-audit" element={<NightAudit />} />
+              <Route path="/reports/*" element={<Reports />} />
+              <Route path="/channels/*" element={<Channels />} />
+              <Route path="/integrations" element={<Integrations />} />
+              <Route path="/communications" element={<Communications />} />
+              <Route path="/reviews" element={<Reviews />} />
+              <Route path="/settings/*" element={<Settings />} />
+              <Route path="/import" element={<Import />} />
+            </Routes>
+          </PropertyScopeBoundary>
         </Suspense>
       </ErrorBoundary>
     </AppLayout>

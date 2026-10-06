@@ -9,6 +9,27 @@ function ToastTrigger({ type, message }: { type: 'success' | 'error' | 'info'; m
 }
 
 describe('Toast', () => {
+  it('deduplicates active repeated failures and allows them again after dismissal', async () => {
+    render(<ToastProvider><ToastTrigger type="error" message="Repeated failure" /></ToastProvider>);
+    await userEvent.click(screen.getByText('Show Toast'));
+    await userEvent.click(screen.getByText('Show Toast'));
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    await userEvent.click(screen.getByLabelText('Dismiss'));
+    await userEvent.click(screen.getByText('Show Toast'));
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+
+  it('limits concurrent messages without merging different outcomes', async () => {
+    function Burst() {
+      const { toast } = useToast();
+      return <button onClick={() => { toast('error', 'Outcome'); toast('success', 'Outcome'); toast('info', 'Third'); toast('error', 'Fourth'); }}>Burst</button>;
+    }
+    render(<ToastProvider><Burst /></ToastProvider>);
+    await userEvent.click(screen.getByText('Burst'));
+    expect(screen.getAllByRole('alert')).toHaveLength(3);
+    expect(screen.getAllByText('Outcome')).toHaveLength(1);
+    expect(screen.getByText('Fourth')).toBeInTheDocument();
+  });
   it('shows success toast when triggered', async () => {
     render(
       <ToastProvider>

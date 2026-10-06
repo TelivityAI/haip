@@ -273,6 +273,11 @@
     "viewReport": "View Report"
   },
   "channels": {
+    "removeConnection": "Remove connection",
+    "removeWarning": "This deactivates the connection and stops new synchronisation. Existing records and sync history are retained.",
+    "removeFailed": "The connection could not be removed. Check your access and try again.",
+    "removing": "Removing\u2026",
+    "connectionRemoved": "Connection removed.",
     "action": "Action",
     "adapter": "Adapter",
     "addMappingRow": "Add row",
@@ -1162,6 +1167,7 @@
     "enable": "Enable",
     "enabled": "Enabled",
     "loading": "Loading integrations…",
+    "loadFailed": "Integrations could not load. Check your access and use Refresh to try again.",
     "name": "Integration",
     "propertyStatus": "Property",
     "refresh": "Refresh",
@@ -2243,6 +2249,23 @@
     "Bad Request": "Bad Request",
     "Resource not found": "Resource not found",
     "Action not permitted": "Action not permitted"
+  },
+  "propertyScope": {
+    "title": "Choose a property",
+    "description": "Select the property you want to manage.",
+    "loading": "Loading properties…",
+    "loadFailed": "Properties could not load. Refresh the page to try again.",
+    "reload": "Refresh page",
+    "empty": "No properties are available to your staff account.",
+    "search": "Search properties",
+    "searchPlaceholder": "Name or property code",
+    "clearSearch": "Clear search",
+    "results": "Available properties",
+    "matches_one": "{{formattedCount}} property",
+    "matches_other": "{{formattedCount}} properties",
+    "noMatches": "No properties match your search.",
+    "showing": "Showing {{shown}} of {{total}}",
+    "showMore": "Show more properties"
   },
   "ical": {
     "title": "iCal calendars",

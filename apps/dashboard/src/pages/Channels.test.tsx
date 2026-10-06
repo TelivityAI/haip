@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '../components/ui/Toast';
 import Channels, { SyncLogsTable } from './Channels';
@@ -13,7 +13,7 @@ import Channels, { SyncLogsTable } from './Channels';
 // unsymbolled number — so a fixture without a currency was asserting the
 // invention rather than the formatting.
 vi.mock('../context/PropertyContext', () => ({
-  useProperty: () => ({ propertyId: 'prop-1', currencyCode: 'USD' }),
+  useProperty: () => ({ propertyId: 'prop-1', currencyCode: 'USD', properties: [{ id: 'prop-1', name: 'Test property' }] }),
 }));
 
 // Mock the API client.
@@ -28,10 +28,10 @@ function renderAt(path: string) {
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={[`/channels${path}`]}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
-          <Channels />
+          <Routes><Route path="/channels/*" element={<Channels />} /></Routes>
         </ToastProvider>
       </QueryClientProvider>
     </MemoryRouter>,
@@ -95,6 +95,8 @@ describe('Channels — push content', () => {
   it('calls the content push endpoint with the connection id', async () => {
     renderAt('/cc-1');
     const btn = await screen.findByText(/Push Content/i);
+    expect(api.get).toHaveBeenCalledWith('/v1/rooms/types', { params: { propertyId: 'prop-1' } });
+    expect(vi.mocked(api.get).mock.calls.some(([url]) => url === '/v1/room-types')).toBe(false);
     await userEvent.click(btn);
 
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/v1/channels/push/content', { propertyId: 'prop-1', channelConnectionId: 'cc-1' }));
@@ -157,5 +159,40 @@ describe('Channels — rate parity', () => {
     expect(screen.getByText('$165.00')).toBeInTheDocument();
     expect(screen.getByText('Violation')).toBeInTheDocument();
     expect(screen.getByText('Override')).toBeInTheDocument();
+  });
+});
+
+
+describe('Channels — remove connection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function(this: HTMLDialogElement) { this.setAttribute('open', ''); } });
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function(this: HTMLDialogElement) { this.removeAttribute('open'); } });
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url.includes('/connections/cc-1')
+      ? { id: 'cc-1', channelCode: 'booking_com', channelName: 'Test connection', status: 'active' } : [] }));
+    vi.mocked(api.delete).mockResolvedValue({ data: { isActive: false } });
+  });
+  it('requires confirmation, identifies the target, and returns to the scoped list', async () => {
+    renderAt('/cc-1');
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove connection' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Test connection · Test property');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.delete).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove connection' }));
+    await userEvent.click(screen.getAllByRole('button', { name: 'Remove connection' })[1]);
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/v1/channels/connections/cc-1', { params: { propertyId: 'prop-1' }, skipErrorToast: true }));
+    expect(await screen.findByRole('heading', { name: 'Channels' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Connection removed.');
+  });
+  it('keeps a failed removal open with an inline error and allows retry', async () => {
+    vi.mocked(api.delete).mockRejectedValueOnce(new Error('not allowed')).mockResolvedValueOnce({ data: {} });
+    renderAt('/cc-1');
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove connection' }));
+    await userEvent.click(screen.getAllByRole('button', { name: 'Remove connection' })[1]);
+    expect(await screen.findByRole('alert')).toHaveTextContent('The connection could not be removed');
+    expect(screen.getByRole('dialog')).toBeVisible();
+    await userEvent.click(screen.getAllByRole('button', { name: 'Remove connection' })[1]);
+    expect(await screen.findByRole('heading', { name: 'Channels' })).toBeInTheDocument();
+    expect(api.delete).toHaveBeenCalledTimes(2);
   });
 });
