@@ -132,8 +132,10 @@ export default function IcalCalendars() {
       </section>)}
     </div>
     <p className="mt-5 max-w-3xl text-sm text-telivity-slate">{t('ical.syncHelp')}</p>
-    <dialog ref={confirmRef} onCancel={event => { if (busy) event.preventDefault(); else setConfirm(null); }} onClose={() => setConfirm(null)} className="w-full max-w-md rounded-xl border-0 bg-white p-6 shadow-xl backdrop:bg-black/40" aria-labelledby="ical-confirm-title" aria-describedby="ical-confirm-description">
-      <h2 id="ical-confirm-title" className="text-lg font-semibold text-telivity-navy">{confirm?.kind === 'rotate' ? t('ical.regenerate') : t('ical.remove')}</h2><p id="ical-confirm-description" className="my-4 text-sm text-telivity-slate">{confirm?.kind === 'rotate' ? t('ical.rotateWarning') : t('ical.removeWarning')}</p>
+    <dialog ref={confirmRef} onCancel={event => { if (busy) event.preventDefault(); else setConfirm(null); }} onClose={() => setConfirm(null)} className="w-full max-w-md rounded-xl border-0 bg-white p-6 shadow-xl backdrop:bg-black/40" aria-labelledby="ical-confirm-title" aria-describedby="ical-confirm-target ical-confirm-description">
+      <h2 id="ical-confirm-title" className="text-lg font-semibold text-telivity-navy">{confirm?.kind === 'rotate' ? t('ical.regenerate') : t('ical.remove')}</h2>
+      {confirm && <div id="ical-confirm-target" className="mt-4 break-words text-sm"><p className="font-semibold text-telivity-navy">{confirm.feed.name}</p><p className="mt-1 text-telivity-slate">{properties.find(property => property.id === confirm.feed.propertyId)?.name} · {roomTypes.find(type => type.id === confirm.feed.roomTypeId)?.name} · {confirm.feed.direction === 'import' ? t('ical.import') : t('ical.export')}</p></div>}
+      <p id="ical-confirm-description" className="my-4 text-sm text-telivity-slate">{confirm?.kind === 'rotate' ? t('ical.rotateWarning') : t('ical.removeWarning')}</p>
       {notice?.error && <p role="alert" className="mb-4 text-sm text-red-700">{notice.text}</p>}
       <div className="flex flex-wrap justify-end gap-2"><button type="button" className={control} disabled={busy} onClick={() => setConfirm(null)}>{t('common.cancel')}</button><button type="button" className={primary} disabled={busy} onClick={() => {
         if (!confirm) return;

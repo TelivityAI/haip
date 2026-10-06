@@ -82,6 +82,8 @@ describe('iCal calendars', () => {
   it('requires confirmation for removal and supports cancelling it', async () => {
     view(); await screen.findByText('External calendar');
     await userEvent.click(screen.getByRole('button', { name: 'Remove calendar' }));
+    expect(within(screen.getByRole('dialog')).getByText('External calendar')).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByText('First property · Standard room · Import')).toBeInTheDocument();
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
     expect(mocks.remove).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Remove calendar' }));
@@ -101,6 +103,8 @@ describe('iCal calendars', () => {
     expect(await screen.findByLabelText('Export calendar URL')).toHaveValue('https://pms.example.test/api/v1/ical/export.ics?token=first');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Regenerate export URL' })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: 'Regenerate export URL' }));
+    expect(within(screen.getByRole('dialog')).getByText('Direct calendar')).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByText('First property · Standard room · Export')).toBeInTheDocument();
     expect(within(screen.getByRole('dialog')).getByText(/immediately invalidates/)).toBeInTheDocument();
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Regenerate export URL' }));
     await waitFor(() => expect(screen.getByLabelText('Export calendar URL')).toHaveValue('https://pms.example.test/api/v1/ical/export.ics?token=second'));
