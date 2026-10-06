@@ -22,7 +22,7 @@ beforeEach(() => {
 });
 
 describe('staff portfolio boundary', () => {
-  it.each(['/integrations', '/rooms', '/reservations', '/groups', '/settings?tab=users', '/channels/connection-a', '/channels/rate-parity', '/channels/ical'])('does not mount property-scoped pages at %s', path => {
+  it.each(['/integrations', '/rooms', '/reservations', '/groups', '/settings?tab=users', '/channels/connection-a', '/channels/rate-parity'])('does not mount property-scoped pages at %s', path => {
     render(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>);
     expect(screen.getByRole('heading', { name: 'Choose a property' })).toBeInTheDocument();
   });
@@ -35,7 +35,7 @@ describe('staff portfolio boundary', () => {
     rendered.rerender(<MemoryRouter initialEntries={['/integrations']}><PropertyScopeBoundary><Page /></PropertyScopeBoundary></MemoryRouter>);
     expect(mocks.mounted).toHaveBeenCalledOnce();
   });
-  it.each(['/', '/reports', '/reports/occupancy', '/channels'])('keeps the existing portfolio view at %s', path => {
+  it.each(['/', '/reports', '/reports/occupancy', '/channels', '/channels/ical'])('keeps the existing portfolio view at %s', path => {
     view(path); expect(screen.getByText('Operational page')).toBeInTheDocument();
     expect(supportsPortfolio(path)).toBe(true);
   });

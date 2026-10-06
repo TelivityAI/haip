@@ -9,7 +9,7 @@ import { useProperty } from '../../context/PropertyContext';
 export function supportsPortfolio(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, '') || '/';
   return path === '/' || path === '/reports' || path.startsWith('/reports/')
-    || path === '/channels';
+    || path === '/channels' || path === '/channels/ical';
 }
 
 export default function PropertyScopeBoundary({ children }: { children: ReactNode }) {
