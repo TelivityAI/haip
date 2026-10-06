@@ -10,6 +10,7 @@ import { useToast } from '../components/ui/Toast';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import { useTranslation } from 'react-i18next';
+import IcalCalendars from './IcalCalendars';
 
 interface RoomTypeMappingRow {
   roomTypeId: string;
@@ -99,7 +100,7 @@ function contentPushErrorMessages(results: unknown[]): string[] {
 // ---- Connection List ----
 function ConnectionList() {
   const { t } = useTranslation();
-  const { propertyId } = useProperty();
+  const { propertyId, isPortfolioMode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -112,7 +113,7 @@ function ConnectionList() {
   const { data } = useQuery({
     queryKey: ['channels', propertyId],
     queryFn: () => api.get('/v1/channels/connections', { params: { propertyId } }).then((r) => r.data),
-    enabled: !!propertyId,
+    enabled: !!propertyId && !isPortfolioMode,
   });
 
   const connections: Connection[] = data?.data ?? data ?? [];
@@ -144,12 +145,13 @@ function ConnectionList() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <Radio size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">{t('channels.title')}</h1>
-        <div className="ml-auto flex gap-2">
-          <button onClick={() => navigate('/channels/rate-parity')} className="border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-grey">{t('channels.rateParity')}</button>
-          <button onClick={() => setCreateOpen(true)} className="flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold"><Plus size={16} /> {t('channels.addConnection')}</button>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <button onClick={() => navigate(`/channels/ical?propertyId=${encodeURIComponent(propertyId)}`)} className="min-h-[44px] border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-grey">{t('ical.title')}</button>
+          <button disabled={isPortfolioMode} onClick={() => navigate('/channels/rate-parity')} className="border border-gray-200 text-telivity-slate rounded-lg px-4 py-2 text-sm font-semibold hover:bg-telivity-light-grey disabled:opacity-50">{t('channels.rateParity')}</button>
+          <button disabled={isPortfolioMode} onClick={() => setCreateOpen(true)} className="flex items-center gap-2 bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"><Plus size={16} /> {t('channels.addConnection')}</button>
         </div>
       </div>
 
@@ -175,7 +177,7 @@ function ConnectionList() {
               </tr>
             ))}
             {connections.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{t('channels.empty')}</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-telivity-mid-grey">{isPortfolioMode ? t('channels.selectProperty') : t('channels.empty')}</td></tr>
             )}
           </tbody>
         </table>
@@ -796,6 +798,7 @@ export default function Channels() {
     <Routes>
       <Route index element={<ConnectionList />} />
       <Route path="rate-parity" element={<RateParity />} />
+      <Route path="ical" element={<IcalCalendars />} />
       <Route path=":id" element={<ConnectionDetail />} />
     </Routes>
   );
