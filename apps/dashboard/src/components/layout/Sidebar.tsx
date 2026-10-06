@@ -176,7 +176,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               {section.items.map(({ to, icon: Icon, labelKey }) => (
                 <NavLink
                   key={to}
-                  to={to}
+                  to={propertyId ? `${to}${to.includes('?') ? '&' : '?'}propertyId=${encodeURIComponent(propertyId)}` : to}
                   end={to === '/'}
                   onClick={onClose}
                   className={({ isActive }) =>

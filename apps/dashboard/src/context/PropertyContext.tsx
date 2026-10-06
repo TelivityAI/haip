@@ -34,9 +34,13 @@ const PropertyContext = createContext<PropertyContextValue>({
 
 export function PropertyProvider({ children }: { children: ReactNode }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [propertyId, setPropertyIdState] = useState<string | null>(
+  const [lastPropertyId, setLastPropertyId] = useState<string | null>(
     searchParams.get('propertyId'),
   );
+  // Explicit deep links and browser history take precedence. Keep the last
+  // selection only for in-app destinations that omit the query parameter.
+  const urlPropertyId = searchParams.get('propertyId');
+  const propertyId = urlPropertyId || lastPropertyId;
   const [properties, setProperties] = useState<PropertySummary[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(true);
@@ -54,12 +58,30 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
     null;
 
   function setPropertyId(id: string) {
-    setPropertyIdState(id);
+    setLastPropertyId(id);
     setSearchParams((prev) => {
-      prev.set('propertyId', id);
-      return prev;
+      const next = new URLSearchParams(prev);
+      next.set('propertyId', id);
+      return next;
     });
   }
+
+  useEffect(() => {
+    if (urlPropertyId) {
+      setLastPropertyId(urlPropertyId);
+      return;
+    }
+    const fallback = lastPropertyId || (!propertiesLoading && properties.length > 0
+      ? properties.length > 1 ? PORTFOLIO_MODE_ID : properties[0].id
+      : null);
+    if (fallback) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('propertyId', fallback);
+        return next;
+      }, { replace: true });
+    }
+  }, [urlPropertyId, lastPropertyId, propertiesLoading, properties, setSearchParams]);
 
   useEffect(() => {
     setPropertiesLoading(true);
@@ -76,16 +98,13 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
         const orgList: OrganizationSummary[] = orgRes.data?.data ?? orgRes.data ?? [];
         setProperties(list);
         setOrganizations(orgList);
-        if (!propertyId && list.length > 0) {
-          // Default to portfolio when user has multiple properties
-          setPropertyId(list.length > 1 ? PORTFOLIO_MODE_ID : list[0].id);
-        }
       })
       .catch((err) => {
         setPropertiesError(err?.message ?? 'Failed to load properties');
       })
       .finally(() => setPropertiesLoading(false));
-    // Bootstrap once; propertyId auto-select handled inside the effect.
+    // Bootstrap once. Resolve defaults separately against the current URL,
+    // so a delayed response cannot overwrite a selection made while loading.
   }, []);
 
   useEffect(() => {
