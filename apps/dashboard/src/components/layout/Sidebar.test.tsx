@@ -6,6 +6,11 @@ import Sidebar from './Sidebar';
 
 const auth = vi.hoisted(() => ({
   permissions: new Set<string>(['reservations.read']),
+  propertyId: null as string | null,
+}));
+
+vi.mock('../../context/PropertyContext', () => ({
+  useProperty: () => ({ propertyId: auth.propertyId, isPortfolioMode: auth.propertyId === 'portfolio', properties: [] }),
 }));
 
 vi.mock('../../context/AuthContext', () => ({
@@ -17,6 +22,7 @@ vi.mock('../../context/AuthContext', () => ({
 
 describe('Sidebar', () => {
   beforeEach(() => {
+    auth.propertyId = null;
     auth.permissions = new Set([
       'dashboard.view',
       'frontdesk.access',
@@ -41,6 +47,19 @@ describe('Sidebar', () => {
       'reviews.manage',
       'admin.users.manage',
     ]);
+  });
+
+  it('preserves property scope in ordinary links and existing tab queries', () => {
+    auth.propertyId = 'property-a';
+    renderWithProviders(<Sidebar mobileOpen={false} onClose={() => {}} />);
+    expect(screen.getByRole('link', { name: 'Reservations' })).toHaveAttribute('href', '/reservations?propertyId=property-a');
+    expect(screen.getByRole('link', { name: 'Users & Roles' })).toHaveAttribute('href', '/settings?tab=users&propertyId=property-a');
+  });
+
+  it('keeps an explicit portfolio choice in navigation links', () => {
+    auth.propertyId = 'portfolio';
+    renderWithProviders(<Sidebar mobileOpen={false} onClose={() => {}} />);
+    expect(screen.getByRole('link', { name: 'Reports' })).toHaveAttribute('href', '/reports?propertyId=portfolio');
   });
 
   it('renders all navigation items', () => {
