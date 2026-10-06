@@ -2252,7 +2252,7 @@
   },
   "propertyScope": {
     "title": "Choose a property",
-    "description": "This page manages one property at a time. Choose a property to continue; its selection will stay with you as you navigate.",
+    "description": "This page manages one property at a time. Choose a property to continue.",
     "loading": "Loading properties…",
     "loadFailed": "Properties could not load. Refresh the page to try again.",
     "reload": "Refresh page",
