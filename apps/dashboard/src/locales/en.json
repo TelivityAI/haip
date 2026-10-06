@@ -2252,11 +2252,20 @@
   },
   "propertyScope": {
     "title": "Choose a property",
-    "description": "This page manages one property at a time. Choose a property to continue.",
+    "description": "Select the property you want to manage.",
     "loading": "Loading properties…",
     "loadFailed": "Properties could not load. Refresh the page to try again.",
     "reload": "Refresh page",
-    "empty": "No properties are available to your staff account."
+    "empty": "No properties are available to your staff account.",
+    "search": "Search properties",
+    "searchPlaceholder": "Name or property code",
+    "clearSearch": "Clear search",
+    "results": "Available properties",
+    "matches_one": "{{formattedCount}} property",
+    "matches_other": "{{formattedCount}} properties",
+    "noMatches": "No properties match your search.",
+    "showing": "Showing {{shown}} of {{total}}",
+    "showMore": "Show more properties"
   }
 
 }

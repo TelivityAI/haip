@@ -40,9 +40,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-telivity-light-grey">
       <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="lg:ml-60">
+      <div className="flex min-h-screen flex-col lg:ml-60">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-3 sm:p-4 lg:p-6">{children}</main>
+        <main className="flex flex-1 flex-col p-3 sm:p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );
