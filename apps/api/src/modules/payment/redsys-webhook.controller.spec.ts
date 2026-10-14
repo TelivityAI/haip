@@ -28,6 +28,7 @@ describe.skipIf(!databaseUrl)('Redsys authoritative booking finalization', () =>
   let reservationId: string;
   let paymentId: string;
   let orderId: string;
+  let confirmationNumber: string;
 
   beforeEach(async () => {
     propertyId = randomUUID();
@@ -35,6 +36,7 @@ describe.skipIf(!databaseUrl)('Redsys authoritative booking finalization', () =>
     reservationId = randomUUID();
     paymentId = randomUUID();
     orderId = `1234${randomUUID().replaceAll('-', '').slice(0, 8)}`;
+    confirmationNumber = randomUUID();
     const roomTypeId = randomUUID();
     const ratePlanId = randomUUID();
     const bookingId = randomUUID();
@@ -43,7 +45,7 @@ describe.skipIf(!databaseUrl)('Redsys authoritative booking finalization', () =>
     await db.insert(guests).values({ id: guestId, firstName: 'Test', lastName: 'Guest' });
     await db.insert(roomTypes).values({ id: roomTypeId, propertyId, name: 'Test', code: 'TEST', maxOccupancy: 2, defaultOccupancy: 1 });
     await db.insert(ratePlans).values({ id: ratePlanId, propertyId, roomTypeId, name: 'Test', code: 'TEST', type: 'bar', baseAmount: '110.00', currencyCode: 'EUR' });
-    await db.insert(bookings).values({ id: bookingId, propertyId, guestId, confirmationNumber: randomUUID(), source: 'direct', channelCode: 'booking_engine' });
+    await db.insert(bookings).values({ id: bookingId, propertyId, guestId, confirmationNumber, source: 'direct', channelCode: 'booking_engine' });
     await db.insert(reservations).values({ id: reservationId, propertyId, bookingId, guestId, roomTypeId, ratePlanId, arrivalDate: '2027-01-01', departureDate: '2027-01-02', nights: 1, totalAmount: '110.00', currencyCode: 'EUR' });
     await db.insert(folios).values({ id: folioId, propertyId, reservationId, bookingId, guestId, folioNumber: randomUUID(), currencyCode: 'EUR' });
     await db.insert(payments).values({ id: paymentId, propertyId, folioId, method: 'credit_card', status: 'pending', amount: '110.00', currencyCode: 'EUR', isPreAuthorization: true, gatewayProvider: 'redsys', gatewayTransactionId: orderId,
@@ -113,7 +115,7 @@ describe.skipIf(!databaseUrl)('Redsys authoritative booking finalization', () =>
     await expect(returns.status(randomUUID(), reference)).rejects.toThrow('Payment return not found');
     await expect(returns.status(propertyId, 'z'.repeat(43))).rejects.toThrow('Payment return not found');
     await notify();
-    expect(await returns.status(propertyId, reference)).toEqual({ status: 'succeeded' });
+    expect(await returns.status(propertyId, reference)).toEqual({ status: 'succeeded', confirmationNumber });
     expect(await returns.resolve(propertyId, reference)).toBe(target.href);
     expect((await state()).reservation?.status).toBe('confirmed');
   });

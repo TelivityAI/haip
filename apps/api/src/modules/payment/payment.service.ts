@@ -981,6 +981,7 @@ export class PaymentService {
       gatewayProvider: 'worldline',
       success: captured || read.outcome === 'authorized',
       captured,
+      cancelPendingReservation: true,
       failureReason: read.errorMessage ?? 'Hosted checkout was not authorized',
       gatewayTransactionId: read.paymentId,
     });
@@ -1015,6 +1016,7 @@ export class PaymentService {
       propertyId: payment.propertyId,
       gatewayProvider: 'worldline',
       success: false,
+      cancelPendingReservation: true,
       failureReason: 'Bank challenge was not completed',
     });
     for (const payload of notifications) {

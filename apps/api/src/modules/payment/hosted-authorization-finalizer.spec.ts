@@ -95,6 +95,7 @@ describe('finalizeHostedAuthorization', () => {
       propertyId: 'prop-1',
       gatewayProvider: 'worldline',
       success: false,
+      cancelPendingReservation: true,
       failureReason: 'Hosted checkout was not authorized',
     });
     const reservationWrite = writes.find((write) => write.table === 'reservations');
@@ -112,6 +113,22 @@ describe('finalizeHostedAuthorization', () => {
     expect(events.map((event) => event.event)).toEqual(['payment.failed', 'reservation.cancelled']);
   });
 
+  it('leaves a pending reservation in place when cancellation was not requested', async () => {
+    const { db, writes } = harness({
+      payment,
+      reservation: { id: 'res-1', status: 'pending' },
+    });
+    const events = await finalizeHostedAuthorization(db, {
+      paymentId: 'pay-1',
+      propertyId: 'prop-1',
+      gatewayProvider: 'redsys',
+      success: false,
+      failureReason: 'Ds_Response=0190',
+    });
+    expect(writes.some((write) => write.table === 'reservations')).toBe(false);
+    expect(events.map((event) => event.event)).toEqual(['payment.failed']);
+  });
+
   it('does not cancel a reservation that is already confirmed', async () => {
     const { db, writes } = harness({
       payment,
@@ -122,6 +139,7 @@ describe('finalizeHostedAuthorization', () => {
       propertyId: 'prop-1',
       gatewayProvider: 'worldline',
       success: false,
+      cancelPendingReservation: true,
       failureReason: 'Hosted checkout was not authorized',
     });
     expect(writes.some((write) => write.table === 'reservations')).toBe(false);

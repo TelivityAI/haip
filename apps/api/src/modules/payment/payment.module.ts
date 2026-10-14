@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { FolioModule } from '../folio/folio.module';
 import { WebhookModule } from '../webhook/webhook.module';
@@ -10,7 +10,10 @@ import { WorldlineWebhookController } from './worldline-webhook.controller';
 import { PaymentService } from './payment.service';
 import { RedsysCredentialsService } from './redsys-credentials.service';
 import { WorldlineCredentialsService } from './worldline-credentials.service';
-import { WorldlineChallengeQueue } from './worldline-challenge.queue';
+import {
+  WorldlineChallengeQueue,
+  WORLDLINE_CHALLENGE_EXPIRER,
+} from './worldline-challenge.queue';
 import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
 import {
   createPaymentGateway,
@@ -50,6 +53,10 @@ function createSavedPaymentMethodGateway(configService: ConfigService) {
   providers: [
     PaymentService,
     WorldlineChallengeQueue,
+    {
+      provide: WORLDLINE_CHALLENGE_EXPIRER,
+      useExisting: forwardRef(() => PaymentService),
+    },
     RedsysCredentialsService,
     WorldlineCredentialsService,
     {

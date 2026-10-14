@@ -5,10 +5,19 @@ import {
   Optional,
   OnModuleInit,
   OnModuleDestroy,
-  forwardRef,
 } from '@nestjs/common';
 import { Queue, Worker } from 'bullmq';
-import { PaymentService } from './payment.service';
+
+/**
+ * The payment service method the worker calls when a bank challenge expires.
+ * A token is used so this file does not import PaymentService. That import
+ * cycle crashes the compiled API before it can listen.
+ */
+export interface WorldlineChallengeExpirer {
+  expireWorldlineChallenge(paymentId: string, propertyId: string): Promise<void>;
+}
+
+export const WORLDLINE_CHALLENGE_EXPIRER = Symbol('WORLDLINE_CHALLENGE_EXPIRER');
 
 export const WORLDLINE_CHALLENGE_QUEUE_NAME = 'haip-worldline-challenges';
 export const WORLDLINE_CHALLENGE_JOB_NAME = 'expire-worldline-challenge';
@@ -46,8 +55,8 @@ export class WorldlineChallengeQueue implements OnModuleInit, OnModuleDestroy {
   private ownsWorker = false;
 
   constructor(
-    @Optional() @Inject(forwardRef(() => PaymentService))
-    private readonly payments?: PaymentService,
+    @Optional() @Inject(WORLDLINE_CHALLENGE_EXPIRER)
+    private readonly payments?: WorldlineChallengeExpirer,
     @Optional() @Inject(WORLDLINE_CHALLENGE_QUEUE)
     private queue?: ChallengeQueue,
     @Optional() @Inject(WORLDLINE_CHALLENGE_WORKER)

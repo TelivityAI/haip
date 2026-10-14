@@ -1,5 +1,5 @@
 {
-  "tests": 2539,
+  "tests": 2540,
   "files": 293,
   "scope": "all workspace packages with a test script",
   "semantics": "passed test cases and files containing at least one passed test; skipped test cases and skipped-only files are excluded",
