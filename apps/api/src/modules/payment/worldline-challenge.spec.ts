@@ -9,6 +9,7 @@ import {
   WORLDLINE_CHALLENGE_DELAY_MS,
   WORLDLINE_CHALLENGE_JOB_NAME,
   WorldlineChallengeQueue,
+  WORLDLINE_CHALLENGE_EXPIRER,
 } from './worldline-challenge.queue';
 
 const CREDS = { merchantId: 'm', apiKeyId: 'k', secretApiKey: 's', environment: 'test' as const };
@@ -109,7 +110,10 @@ describe('Worldline challenge deadline', () => {
 
   it('resolves in Nest without a Redis connection', async () => {
     const moduleRef = await Test.createTestingModule({
-      providers: [WorldlineChallengeQueue, { provide: PaymentService, useValue: {} }],
+      providers: [
+        WorldlineChallengeQueue,
+        { provide: WORLDLINE_CHALLENGE_EXPIRER, useValue: { expireWorldlineChallenge: vi.fn() } },
+      ],
     }).compile();
     await moduleRef.init();
     expect(moduleRef.get(WorldlineChallengeQueue)).toBeInstanceOf(WorldlineChallengeQueue);

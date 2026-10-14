@@ -19,6 +19,8 @@ export async function finalizeHostedAuthorization(
     success: boolean;
     /** Provider already captured. Stored as `captured` so staff are not asked to capture again. */
     captured?: boolean;
+    /** A decline cancels a still-pending reservation and does not record a penalty deposit. */
+    cancelPendingReservation?: boolean;
     failureReason: string;
     gatewayTransactionId?: string;
   },
@@ -56,7 +58,7 @@ export async function finalizeHostedAuthorization(
         : { folioId: payment.folioId, error: failureReason });
 
     const intent = payment.authorizationFinalization?.deposit;
-    if (!success && intent) {
+    if (!success && input.cancelPendingReservation && intent) {
       const [reservation] = await tx.select().from(reservations)
         .where(and(eq(reservations.id, intent.reservationId), eq(reservations.propertyId, propertyId)))
         .for('update');

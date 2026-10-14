@@ -118,6 +118,7 @@ export class WorldlineWebhookController {
       gatewayProvider: 'worldline',
       success: promote,
       captured,
+      cancelPendingReservation: true,
       failureReason: event.type ?? 'payment.rejected',
       gatewayTransactionId: paymentId || undefined,
     });
