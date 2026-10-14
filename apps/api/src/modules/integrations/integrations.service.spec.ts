@@ -142,3 +142,46 @@ describe('IntegrationsService', () => {
     expect(db.insert).toHaveBeenCalled();
   });
 });
+
+describe('worldline integration config', () => {
+  it('encrypts API and webhook secrets and never returns them', async () => {
+    const { mergeWorldlineConfig, sanitizeIntegrationConfig } = await import('./integrations.service');
+    vi.stubEnv('MIGRATION_CREDENTIAL_ENCRYPTION_KEY', '12'.repeat(32));
+    vi.stubEnv('MIGRATION_CREDENTIAL_ENCRYPTION_KEY_ID', 'default');
+    const stored = mergeWorldlineConfig({
+      merchantId: 'psp-1',
+      apiKeyId: 'key-1',
+      secretApiKey: 'api-secret',
+      webhookKeyId: 'wh-1',
+      webhookSecret: 'wh-secret',
+      environment: 'test',
+    }, {});
+    expect(stored['secretApiKey']).toBeUndefined();
+    expect(stored['webhookSecret']).toBeUndefined();
+    expect(stored['secretApiKeyEncrypted']).toEqual(expect.objectContaining({ ciphertext: expect.any(String) }));
+    expect(stored['webhookSecretEncrypted']).toEqual(expect.objectContaining({ ciphertext: expect.any(String) }));
+
+    const visible = sanitizeIntegrationConfig('worldline', stored);
+    expect(visible['secretApiKeyEncrypted']).toBeUndefined();
+    expect(visible['webhookSecretEncrypted']).toBeUndefined();
+    expect(visible['secretApiKeyMasked']).toBe('••••••••');
+    expect(visible['webhookSecretMasked']).toBe('••••••••');
+    expect(visible['merchantId']).toBe('psp-1');
+    vi.unstubAllEnvs();
+  });
+
+  it('keeps an existing encrypted secret when the update omits a replacement', async () => {
+    const { mergeWorldlineConfig } = await import('./integrations.service');
+    vi.stubEnv('MIGRATION_CREDENTIAL_ENCRYPTION_KEY', '12'.repeat(32));
+    const existing = mergeWorldlineConfig({ secretApiKey: 'keep-me', merchantId: 'psp-1', apiKeyId: 'key-1' }, {});
+    const updated = mergeWorldlineConfig({ environment: 'live' }, existing);
+    expect(updated['secretApiKeyEncrypted']).toEqual(existing['secretApiKeyEncrypted']);
+    expect(updated['environment']).toBe('live');
+    vi.unstubAllEnvs();
+  });
+
+  it('rejects ciphertext supplied by the caller', async () => {
+    const { mergeWorldlineConfig } = await import('./integrations.service');
+    expect(() => mergeWorldlineConfig({ secretApiKeyEncrypted: { ciphertext: 'forged' } }, {})).toThrow(/ciphertext/i);
+  });
+});
