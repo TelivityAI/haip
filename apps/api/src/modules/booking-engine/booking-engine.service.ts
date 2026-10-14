@@ -430,7 +430,7 @@ export class BookingEngineService {
     }
     const provider = resolvePaymentGatewayProvider(this.runtimeConfig);
     // Validate before guest/reservation writes; browser URLs never authorize payment.
-    const bookingReturn = provider === 'redsys' && depositDue.greaterThan(0)
+    const bookingReturn = (provider === 'redsys' || provider === 'worldline') && depositDue.greaterThan(0)
       ? new BookingReturnService(this.db, this.runtimeConfig).prepare(propertyId, dto.returnUrl)
       : undefined;
     if (bookingReturn) {
@@ -578,7 +578,9 @@ export class BookingEngineService {
   // --- Retrieve / cancel (ownership already enforced by BookingEngineScopeGuard) ---
 
   async paymentReturnStatus(propertyId: string, reference: string) {
-    return new BookingReturnService(this.db, this.runtimeConfig).status(propertyId, reference);
+    return new BookingReturnService(this.db, this.runtimeConfig, (payment) =>
+      this.paymentService.syncWorldlineHostedCheckout(payment),
+    ).status(propertyId, reference);
   }
 
   async resolvePaymentReturn(propertyId: string, reference: string) {

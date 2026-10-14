@@ -1,17 +1,30 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { payments } from '@telivityhaip/database';
 import { publicApiBaseUrl } from '../payment/redsys-credentials.service';
 
 const REFERENCE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const REFERENCE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+const HOSTED_RETURN_PROVIDERS = ['redsys', 'worldline'] as const;
 const hashReference = (reference: string) => createHash('sha256').update(reference).digest('hex');
+
+export type PendingHostedCheckout = {
+  id: string;
+  propertyId: string;
+  gatewayProvider: string | null;
+  gatewayTransactionId: string | null;
+  status: string;
+};
 
 /** Limited, expiring capability: reveals payment state only, never booking credentials. */
 export class BookingReturnService {
-  constructor(private readonly db: any, private readonly config: ConfigService) {}
+  constructor(
+    private readonly db: any,
+    private readonly config: ConfigService,
+    private readonly syncPending?: (payment: PendingHostedCheckout) => Promise<string>,
+  ) {}
 
   prepare(propertyId: string, destination?: string): { url: string; referenceHash: string; destination: string } {
     const target = this.validateDestination(destination);
@@ -59,6 +72,7 @@ export class BookingReturnService {
     // Reload the actual host document, retaining its path, query and fragment.
     // Neither provider outcome is proof: both return to the same status view.
     url.searchParams.delete('redsys');
+    url.searchParams.delete('worldline');
     url.searchParams.delete('haip_payment_return');
     for (const key of [...url.searchParams.keys()]) {
       if (/^ds_/i.test(key)) url.searchParams.delete(key);
@@ -68,12 +82,19 @@ export class BookingReturnService {
 
   private async findPayment(propertyId: string, reference: string) {
     if (!REFERENCE_PATTERN.test(reference)) throw new NotFoundException('Payment return not found');
-    const [payment] = await this.db.select({ status: payments.status, createdAt: payments.createdAt,
-      bookingReturnDestination: payments.bookingReturnDestination })
+    const [payment] = await this.db.select({
+      id: payments.id,
+      propertyId: payments.propertyId,
+      status: payments.status,
+      createdAt: payments.createdAt,
+      gatewayProvider: payments.gatewayProvider,
+      gatewayTransactionId: payments.gatewayTransactionId,
+      bookingReturnDestination: payments.bookingReturnDestination,
+    })
       .from(payments)
       .where(and(eq(payments.propertyId, propertyId),
         eq(payments.bookingReturnReferenceHash, hashReference(reference)),
-        eq(payments.gatewayProvider, 'redsys')));
+        inArray(payments.gatewayProvider, [...HOSTED_RETURN_PROVIDERS])));
     if (!payment || Date.now() - new Date(payment.createdAt).getTime() > REFERENCE_LIFETIME_MS) {
       throw new NotFoundException('Payment return not found');
     }
@@ -96,10 +117,14 @@ export class BookingReturnService {
 
   async status(propertyId: string, reference: string) {
     const payment = await this.findPayment(propertyId, reference);
-    const status = ['authorized', 'captured', 'settled'].includes(payment.status)
-      ? 'succeeded' : payment.status === 'failed' ? 'failed'
-        : payment.status === 'voided' ? 'cancelled'
-          : payment.status === 'pending' ? 'processing' : 'unavailable';
-    return { status };
+    let status = payment.status;
+    if (status === 'pending' && payment.gatewayProvider === 'worldline' && this.syncPending) {
+      status = await this.syncPending(payment);
+    }
+    const reported = ['authorized', 'captured', 'settled'].includes(status)
+      ? 'succeeded' : status === 'failed' ? 'failed'
+        : status === 'voided' ? 'cancelled'
+          : status === 'pending' ? 'processing' : 'unavailable';
+    return { status: reported };
   }
 }

@@ -19,8 +19,9 @@ import { CardInput } from '../components/payment/CardInput';
 
 interface PaymentClientConfig {
   provider?: string;
-  clientMode?: 'mock' | 'stripe' | 'redsys' | 'unsupported';
+  clientMode?: 'mock' | 'stripe' | 'redsys' | 'worldline' | 'unsupported';
   redsysConfigured?: boolean;
+  worldlineConfigured?: boolean;
 }
 
 interface Folio {
@@ -518,20 +519,35 @@ function FolioDetail() {
   });
   const paymentClientMode = clientConfigData?.clientMode ?? 'stripe';
   const isRedsysClient = paymentClientMode === 'redsys';
+  const isWorldlineClient = paymentClientMode === 'worldline';
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['folios'] });
+    queryClient.invalidateQueries({ queryKey: ['payments'] });
+  };
 
   useEffect(() => {
     const redsysReturn = searchParams.get('redsys');
-    if (!redsysReturn) return;
+    const worldlineReturn = searchParams.get('worldline');
+    if (!redsysReturn && worldlineReturn !== 'return') return;
+    // Wait until the folio identity is known. Stripping the query first would
+    // drop the only signal that a hosted checkout needs a server status read.
+    if (worldlineReturn === 'return' && (!propertyId || !id)) return;
     if (redsysReturn === 'ok') {
       toast('success', 'Returned from Redsys. Payment status updates when the bank notification arrives.');
       invalidate();
     } else if (redsysReturn === 'ko') {
       toast('error', 'Redsys payment was cancelled or declined.');
+    } else if (worldlineReturn === 'return') {
+      toast('success', 'Returned from hosted checkout. Payment status is read from the provider.');
+      api.post('/v1/payments/worldline/sync', null, { params: { propertyId, folioId: id } })
+        .finally(() => invalidate());
     }
     const next = new URLSearchParams(searchParams);
     next.delete('redsys');
+    next.delete('worldline');
     setSearchParams(next, { replace: true });
-  }, [searchParams]);
+  }, [searchParams, propertyId, id]);
 
   const folio: Folio | null = folioData?.data ?? folioData ?? null;
   const charges: Charge[] = chargesData?.data ?? chargesData ?? [];
@@ -541,11 +557,6 @@ function FolioDetail() {
   const reversedIds = new Set(
     charges.filter((c) => c.isReversal && c.originalChargeId).map((c) => c.originalChargeId!),
   );
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['folios'] });
-    queryClient.invalidateQueries({ queryKey: ['payments'] });
-  };
 
   const postChargeMutation = useMutation({
     mutationFn: () => {
@@ -624,6 +635,35 @@ function FolioDetail() {
         gatewayPaymentToken: 'redsys_redirect',
         redirectUrlOk: `${folioUrl}?redsys=ok`,
         redirectUrlKo: `${folioUrl}?redsys=ko`,
+      });
+    },
+    onSuccess: (res) => {
+      const nextAction = res.data?.nextAction;
+      if (nextAction?.type === 'redirect') {
+        submitRedirectNextAction(nextAction);
+        return;
+      }
+      invalidate();
+      setAuthorizeOpen(false);
+      setAuthAmount('');
+      toast('success', t('folios.authorizeSuccess'));
+    },
+  });
+
+  const worldlineAuthorizeMutation = useMutation({
+    mutationFn: () => {
+      requirePropertyId(propertyId);
+      requireCurrency(currencyCode);
+      const folioUrl = `${window.location.origin}${window.location.pathname}`;
+      return api.post<{ nextAction?: RedirectNextAction }>('/v1/payments/authorize', {
+        folioId: id,
+        propertyId,
+        amount: moneyString(authAmount),
+        currencyCode,
+        gatewayProvider: 'worldline',
+        gatewayPaymentToken: 'worldline_hosted',
+        redirectUrlOk: `${folioUrl}?worldline=return`,
+        redirectUrlKo: `${folioUrl}?worldline=return`,
       });
     },
     onSuccess: (res) => {
@@ -953,6 +993,26 @@ function FolioDetail() {
                   {redsysAuthorizeMutation.isPending
                     ? t('common.loading')
                     : 'Authorize with Redsys'}
+                </button>
+              ) : (
+                <p className="text-xs text-telivity-mid-grey">{t('folios.authorizeEnterAmount')}</p>
+              )}
+            </>
+          ) : isWorldlineClient ? (
+            <>
+              <p className="text-xs text-telivity-mid-grey">
+                Guest completes checkout on the hosted page. This screen does not treat the return URL as proof of payment.
+              </p>
+              {Number(authAmount) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => worldlineAuthorizeMutation.mutate()}
+                  disabled={worldlineAuthorizeMutation.isPending}
+                  className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                >
+                  {worldlineAuthorizeMutation.isPending
+                    ? t('common.loading')
+                    : 'Authorize on hosted checkout'}
                 </button>
               ) : (
                 <p className="text-xs text-telivity-mid-grey">{t('folios.authorizeEnterAmount')}</p>

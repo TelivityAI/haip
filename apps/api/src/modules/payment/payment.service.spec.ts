@@ -7,6 +7,7 @@ import { WebhookService } from '../webhook/webhook.service';
 import { DRIZZLE } from '../../database/database.module';
 import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
 import { RedsysCredentialsService } from './redsys-credentials.service';
+import { WorldlineCredentialsService } from './worldline-credentials.service';
 import { RedsysGateway } from './gateways/redsys-gateway';
 import { REDSYS_SANDBOX, REDSYS_SIGNATURE_VERSION, decodeMerchantParameters, encodeMerchantParameters, signMerchantParameters } from './gateways/redsys-crypto';
 
@@ -85,6 +86,10 @@ const mockRedsysCredentials = {
   resolveForProperty: vi.fn().mockResolvedValue(null),
   merchantNotificationUrl: vi.fn().mockReturnValue('http://localhost:3000/api/v1/webhooks/redsys'),
 };
+const mockWorldlineCredentials = {
+  resolveForProperty: vi.fn().mockResolvedValue(null),
+  webhookSecretForKeyId: vi.fn().mockResolvedValue(null),
+};
 
 function expectSafePublicPayment(value: Record<string, unknown>) {
   expect(value).not.toHaveProperty('gatewayPaymentToken');
@@ -111,6 +116,7 @@ describe('PaymentService', () => {
         { provide: WebhookService, useValue: mockWebhookService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+        { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
       ],
     }).compile();
 
@@ -342,6 +348,7 @@ describe('PaymentService', () => {
           { provide: WebhookService, useValue: mockWebhookService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+        { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
       ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
@@ -382,6 +389,7 @@ describe('PaymentService', () => {
           { provide: WebhookService, useValue: mockWebhookService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+        { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
       ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
@@ -443,6 +451,7 @@ describe('PaymentService', () => {
           { provide: WebhookService, useValue: mockWebhookService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+        { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
       ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
@@ -485,6 +494,7 @@ describe('PaymentService', () => {
           { provide: WebhookService, useValue: mockWebhookService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+        { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
       ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
@@ -500,14 +510,14 @@ describe('PaymentService', () => {
     it.each(['capturePayment', 'voidPayment'] as const)('rejects %s with missing property credentials before claiming the payment', async (operation) => {
       const db = createMockDb([{ ...mockPayment, status: 'authorized', gatewayProvider: 'redsys' }]);
       const credentials = { resolveForProperty: vi.fn().mockResolvedValue(null) };
-      const svc = new PaymentService(db, mockFolioService as any, mockGateway, mockWebhookService as any, mockConfigService as any, credentials as any);
+      const svc = new PaymentService(db, mockFolioService as any, mockGateway, mockWebhookService as any, mockConfigService as any, credentials as any, mockWorldlineCredentials as any);
       await expect(svc[operation](mockPayment.id, mockPayment.propertyId)).rejects.toThrow(/credentials/);
       expect(db.update).not.toHaveBeenCalled();
     });
     it.each(['capturePayment', 'voidPayment'] as const)('leaves the payment authorized when %s credentials cannot be resolved', async (operation) => {
       const db = createMockDb([{ ...mockPayment, status: 'authorized', gatewayProvider: 'redsys' }]);
       const credentials = { resolveForProperty: vi.fn().mockRejectedValue(new Error('Redsys credentials are unavailable')) };
-      const svc = new PaymentService(db, mockFolioService as any, mockGateway, mockWebhookService as any, mockConfigService as any, credentials as any);
+      const svc = new PaymentService(db, mockFolioService as any, mockGateway, mockWebhookService as any, mockConfigService as any, credentials as any, mockWorldlineCredentials as any);
       await expect(svc[operation](mockPayment.id, mockPayment.propertyId)).rejects.toThrow(/unavailable/);
       expect(db.update).not.toHaveBeenCalled();
     });
@@ -519,7 +529,7 @@ describe('PaymentService', () => {
       const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ Ds_MerchantParameters: encoded, Ds_SignatureVersion: REDSYS_SIGNATURE_VERSION, Ds_Signature: signMerchantParameters(encoded, REDSYS_SANDBOX.secretKey, order) })));
       const creds = { resolveForProperty: vi.fn().mockResolvedValue({ ...REDSYS_SANDBOX, environment: 'test' }) };
       const gateway = new RedsysGateway({ get: () => undefined } as any, { fetchFn: request });
-      const svc = new PaymentService(db, mockFolioService as any, gateway, mockWebhookService as any, mockConfigService as any, creds as any);
+      const svc = new PaymentService(db, mockFolioService as any, gateway, mockWebhookService as any, mockConfigService as any, creds as any, mockWorldlineCredentials as any);
       await svc.voidPayment(row.id, row.propertyId);
       const parameters = decodeMerchantParameters(JSON.parse(request.mock.calls[0][1].body).Ds_MerchantParameters);
       expect(parameters).toMatchObject({ DS_MERCHANT_AMOUNT: '150', DS_MERCHANT_CURRENCY: '392', DS_MERCHANT_TRANSACTIONTYPE: '9' });
@@ -555,6 +565,7 @@ describe('PaymentService', () => {
           { provide: WebhookService, useValue: mockWebhookService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+        { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
       ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
@@ -608,6 +619,7 @@ describe('PaymentService', () => {
           { provide: WebhookService, useValue: mockWebhookService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+        { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
       ],
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
@@ -663,6 +675,7 @@ describe('PaymentService', () => {
           { provide: WebhookService, useValue: mockWebhookService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+        { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
       ],
       }).compile();
 
@@ -711,6 +724,7 @@ describe('PaymentService', () => {
           { provide: WebhookService, useValue: mockWebhookService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+        { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
       ],
       }).compile();
 
@@ -783,6 +797,7 @@ describe('PaymentService', () => {
             { provide: WebhookService, useValue: mockWebhookService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+        { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
       ],
         }).compile();
         return module.get<PaymentService>(PaymentService);

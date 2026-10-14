@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { BadRequestException } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { RedsysCredentialsService } from './redsys-credentials.service';
+import { WorldlineCredentialsService } from './worldline-credentials.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';
 import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
@@ -53,6 +54,9 @@ const mockRedsysCredentials = {
   resolveForProperty: vi.fn().mockResolvedValue(null),
   merchantNotificationUrl: vi.fn().mockReturnValue('http://localhost:3000/api/v1/webhooks/redsys'),
 };
+const mockWorldlineCredentials = {
+  resolveForProperty: vi.fn().mockResolvedValue(null),
+};
 const mockFolioService = {
   recalculateBalance: vi.fn().mockResolvedValue(undefined),
   postCharge: vi.fn().mockResolvedValue({ id: 'adj-001', type: 'adjustment' }),
@@ -74,6 +78,7 @@ async function buildService(db: any) {
       { provide: PAYMENT_GATEWAY, useValue: mockGateway },
       { provide: ConfigService, useValue: mockConfigService },
       { provide: RedsysCredentialsService, useValue: mockRedsysCredentials },
+      { provide: WorldlineCredentialsService, useValue: mockWorldlineCredentials },
     ],
   }).compile();
   return module.get<PaymentService>(PaymentService);

@@ -23,10 +23,14 @@ import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
 import { ListPaymentsDto } from './dto/list-payments.dto';
 import { sumRefundChildren, parentCountsTowardFolioBalance } from './payment-ledger';
 import { RedsysCredentialsService } from './redsys-credentials.service';
+import { WorldlineCredentialsService } from './worldline-credentials.service';
 import { redsysAmountString } from './gateways/redsys-crypto';
 import {
   resolvePaymentGatewayProvider,
 } from './payment-gateway.factory';
+import type { WorldlineMerchantCredentials } from './gateways/worldline-gateway';
+import { WorldlineGateway } from './gateways/worldline-gateway';
+import { finalizeHostedAuthorization } from './hosted-authorization-finalizer';
 
 const CARD_METHODS = ['credit_card', 'debit_card', 'vcc'];
 
@@ -48,6 +52,7 @@ export class PaymentService {
     private readonly webhookService: WebhookService,
     private readonly configService: ConfigService,
     private readonly redsysCredentials: RedsysCredentialsService,
+    private readonly worldlineCredentials: WorldlineCredentialsService,
   ) {}
 
   async recordPayment(dto: CreatePaymentDto) {
@@ -222,7 +227,13 @@ export class PaymentService {
 
   /** Preflight also used by checkout before guest/reservation/folio writes. */
   async assertAuthorizationAvailable(propertyId: string, provider: string, amount: string, currency: string) {
-    if (provider.toLowerCase() !== 'redsys') return;
+    const normalized = provider.toLowerCase();
+    if (normalized === 'worldline') {
+      const credentials = await this.worldlineCredentials.resolveForProperty(propertyId);
+      if (!credentials) throw new BadRequestException('Worldline credentials are not configured');
+      return credentials;
+    }
+    if (normalized !== 'redsys') return;
     const credentials = await this.redsysCredentials.resolveForProperty(propertyId);
     if (!credentials) throw new BadRequestException('Redsys credentials are not configured');
     try {
@@ -237,6 +248,23 @@ export class PaymentService {
     dto: AuthorizePaymentDto,
   ): Promise<PaymentGatewayCallOptions | undefined> {
     const provider = dto.gatewayProvider?.toLowerCase();
+    if (provider === 'worldline') {
+      if (!dto.redirectUrlOk) {
+        throw new BadRequestException('Worldline authorize requires redirectUrlOk');
+      }
+      const creds = await this.assertAuthorizationAvailable(dto.propertyId, provider, dto.amount, dto.currencyCode);
+      return {
+        propertyId: dto.propertyId,
+        currencyCode: dto.currencyCode,
+        redirect: {
+          merchantUrl: '',
+          urlOk: dto.redirectUrlOk,
+          urlKo: dto.redirectUrlKo ?? dto.redirectUrlOk,
+          returnUrl: dto.redirectUrlOk,
+        },
+        worldlineCredentials: creds as WorldlineMerchantCredentials,
+      };
+    }
     if (provider !== 'redsys') {
       return undefined;
     }
@@ -257,7 +285,7 @@ export class PaymentService {
         urlKo: dto.redirectUrlKo,
       },
     };
-    if (creds) {
+    if (creds && 'merchantCode' in creds) {
       options.merchantCredentials = {
         merchantCode: creds.merchantCode,
         terminal: creds.terminal,
@@ -271,7 +299,21 @@ export class PaymentService {
   private async buildLifecycleGatewayOptions(
     payment: typeof payments.$inferSelect,
   ): Promise<PaymentGatewayCallOptions | undefined> {
-    if (payment.gatewayProvider?.toLowerCase() !== 'redsys') {
+    const provider = payment.gatewayProvider?.toLowerCase();
+    if (provider === 'worldline') {
+      const creds = await this.assertAuthorizationAvailable(
+        payment.propertyId,
+        'worldline',
+        payment.amount,
+        payment.currencyCode,
+      );
+      return {
+        propertyId: payment.propertyId,
+        currencyCode: payment.currencyCode,
+        worldlineCredentials: creds as WorldlineMerchantCredentials,
+      };
+    }
+    if (provider !== 'redsys') {
       return undefined;
     }
     const creds = await this.assertAuthorizationAvailable(payment.propertyId, 'redsys', payment.amount, payment.currencyCode);
@@ -279,7 +321,7 @@ export class PaymentService {
       propertyId: payment.propertyId,
       currencyCode: payment.currencyCode,
     };
-    if (creds) {
+    if (creds && 'merchantCode' in creds) {
       options.merchantCredentials = {
         merchantCode: creds.merchantCode,
         terminal: creds.terminal,
@@ -895,10 +937,55 @@ export class PaymentService {
   }
 
 
+  async syncWorldlineHostedCheckout(payment: {
+    id: string;
+    propertyId: string;
+    gatewayProvider: string | null;
+    gatewayTransactionId: string | null;
+    status: string;
+  }): Promise<string> {
+    if (payment.gatewayProvider !== 'worldline' || payment.status !== 'pending' || !payment.gatewayTransactionId) {
+      return payment.status;
+    }
+    const creds = await this.worldlineCredentials.resolveForProperty(payment.propertyId);
+    if (!creds) return payment.status;
+    const read = await new WorldlineGateway(this.configService).readHostedCheckout(payment.gatewayTransactionId, {
+      propertyId: payment.propertyId,
+      worldlineCredentials: creds,
+    });
+    if (read.outcome === 'pending') return 'pending';
+    const notifications = await finalizeHostedAuthorization(this.db, {
+      paymentId: payment.id,
+      propertyId: payment.propertyId,
+      gatewayProvider: 'worldline',
+      success: read.outcome === 'authorized',
+      failureReason: read.errorMessage ?? 'Hosted checkout was not authorized',
+      gatewayTransactionId: read.paymentId,
+    });
+    for (const payload of notifications) {
+      await this.webhookService.dispatchPersisted(payload, payload.logicalEventId!);
+    }
+    return read.outcome === 'authorized' ? 'authorized' : 'failed';
+  }
+
+  async syncWorldlineFolio(propertyId: string, folioId: string) {
+    const rows = await this.db.select().from(payments).where(and(
+      eq(payments.propertyId, propertyId),
+      eq(payments.folioId, folioId),
+      eq(payments.gatewayProvider, 'worldline'),
+      eq(payments.status, 'pending'),
+    ));
+    const synced = [];
+    for (const row of rows) {
+      synced.push({ id: row.id, status: await this.syncWorldlineHostedCheckout(row) });
+    }
+    return { payments: synced };
+  }
+
   async getClientConfig(propertyId?: string) {
     const provider = resolvePaymentGatewayProvider(this.configService);
-    let clientMode: 'mock' | 'stripe' | 'redsys' | 'unsupported' = 'unsupported';
-    if (provider === 'mock' || provider === 'stripe' || provider === 'redsys') {
+    let clientMode: 'mock' | 'stripe' | 'redsys' | 'worldline' | 'unsupported' = 'unsupported';
+    if (provider === 'mock' || provider === 'stripe' || provider === 'redsys' || provider === 'worldline') {
       clientMode = provider;
     }
     let redsysConfigured = false;
@@ -911,10 +998,21 @@ export class PaymentService {
           this.configService.get<string>('REDSYS_SECRET_KEY')?.trim(),
       );
     }
+    let worldlineConfigured = false;
+    if (provider === 'worldline' && propertyId) {
+      worldlineConfigured = Boolean(await this.worldlineCredentials.resolveForProperty(propertyId));
+    } else if (provider === 'worldline') {
+      worldlineConfigured = Boolean(
+        this.configService.get<string>('WORLDLINE_MERCHANT_ID')?.trim()
+        && this.configService.get<string>('WORLDLINE_API_KEY_ID')?.trim()
+        && this.configService.get<string>('WORLDLINE_SECRET_API_KEY')?.trim(),
+      );
+    }
     return {
       provider,
       clientMode,
       redsysConfigured,
+      worldlineConfigured,
     };
   }
 

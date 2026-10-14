@@ -118,7 +118,7 @@ describe('BookingReturnService', () => {
     await service.resolve(PROPERTY, 'a'.repeat(43));
     const { PgDialect } = await import('drizzle-orm/pg-core');
     const query = new PgDialect().sqlToQuery(where.mock.calls[0][0]);
-    expect(query.params).toEqual(expect.arrayContaining([PROPERTY, createHash('sha256').update('a'.repeat(43)).digest('hex'), 'redsys']));
+    expect(query.params).toEqual(expect.arrayContaining([PROPERTY, createHash('sha256').update('a'.repeat(43)).digest('hex'), 'redsys', 'worldline']));
     expect(query.params).not.toContain('a'.repeat(43));
   });
 });
