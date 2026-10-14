@@ -73,6 +73,21 @@ describe('WorldlineWebhookController', () => {
     expect(db.transaction).toHaveBeenCalledOnce();
   });
 
+  it('does not promote a pending_capture event that has no payment id', async () => {
+    const { controller, db } = setup();
+    const body = eventBody({
+      payment: {
+        status: 'PENDING_CAPTURE',
+        statusOutput: { statusCode: 5, isAuthorized: true },
+        hostedCheckoutSpecificOutput: { hostedCheckoutId: 'hc-1' },
+      },
+    });
+    const res = { status: vi.fn().mockReturnThis(), send: vi.fn(), type: vi.fn().mockReturnThis() };
+    await controller.handle(request(body), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
   it('echoes the endpoint verification header', async () => {
     const { controller } = setup(null);
     const res = { status: vi.fn().mockReturnThis(), send: vi.fn(), type: vi.fn().mockReturnThis() };

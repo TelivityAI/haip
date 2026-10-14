@@ -102,7 +102,9 @@ export class WorldlineWebhookController {
       isAuthorized: event.payment?.statusOutput?.isAuthorized,
       statusCategory: event.payment?.statusOutput?.statusCategory,
     });
-    const promote = event.type === 'payment.pending_capture' && outcome === 'authorized';
+    // Promoting without payment.id would store the hosted checkout id and
+    // later capture/cancel/refund calls would target the wrong resource.
+    const promote = event.type === 'payment.pending_capture' && outcome === 'authorized' && Boolean(paymentId);
     const decline = event.type === 'payment.rejected'
       || (event.type === 'payment.cancelled' && event.payment?.statusOutput?.statusCode === 1);
     if (!promote && !decline) return res.status(HttpStatus.OK).send('OK');

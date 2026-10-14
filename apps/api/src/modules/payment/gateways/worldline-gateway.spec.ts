@@ -157,4 +157,21 @@ describe('WorldlineGateway', () => {
       outcome: 'pending',
     });
   });
+
+  it('leaves an authorized-looking checkout pending until a payment id exists', async () => {
+    const client = sdk();
+    client.hostedCheckout.getHostedCheckout.mockResolvedValue({
+      isSuccess: true,
+      body: {
+        status: 'PAYMENT_CREATED',
+        createdPaymentOutput: {
+          payment: { status: 'PENDING_CAPTURE', statusOutput: { statusCode: 5, isAuthorized: true } },
+        },
+      },
+    });
+    const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
+    await expect(gateway.readHostedCheckout('hc-pending', { worldlineCredentials: CREDS })).resolves.toEqual({
+      outcome: 'pending',
+    });
+  });
 });
