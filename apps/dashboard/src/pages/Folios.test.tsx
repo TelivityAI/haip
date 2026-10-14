@@ -169,7 +169,7 @@ describe('Folios — payment corrections', () => {
     });
     (api.post as any).mockResolvedValue({ data: { payments: [{ id: 'pay-1', status: 'pending' }] } });
     renderDetail('/folio-1?worldline=return');
-    expect(await screen.findByText('Returned from hosted checkout. Payment status is read from the provider.')).toBeInTheDocument();
+    expect(await screen.findByText('Returned from card authorization. Payment status is read from the provider.')).toBeInTheDocument();
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith('/v1/payments/worldline/sync', null, {
         params: { propertyId: 'prop-1', folioId: 'folio-1' },
@@ -177,6 +177,45 @@ describe('Folios — payment corrections', () => {
     );
     expect(screen.queryByText('Capture')).not.toBeInTheDocument();
     expect(screen.queryByText('Void')).not.toBeInTheDocument();
+  });
+
+  it('authorizes from the in-page card field and does not send a card number', async () => {
+    mockGet({ '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' } });
+    const submitTokenization = vi.fn().mockResolvedValue({ success: true, hostedTokenizationId: 'ht-1' });
+    window.Tokenizer = class {
+      initialize = vi.fn().mockResolvedValue(undefined);
+      submitTokenization = submitTokenization;
+    } as unknown as Window['Tokenizer'];
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === '/v1/payments/worldline/tokenization') {
+        return Promise.resolve({
+          data: {
+            hostedTokenizationUrl: 'https://payment.preprod.direct.worldline-solutions.com/hostedtokenization/tokenization/form/session-1',
+            sri: null,
+            tokenizerScriptUrl: 'https://payment.preprod.direct.worldline-solutions.com/hostedtokenization/js/client/tokenizer.min.js',
+          },
+        });
+      }
+      return Promise.resolve({ data: { status: 'authorized' } });
+    });
+    renderDetail();
+    await userEvent.click(await screen.findByRole('button', { name: /Authorize Card/i }));
+    await userEvent.type(screen.getByRole('spinbutton'), '100');
+    await userEvent.click(await screen.findByRole('button', { name: /^Authorize$/ }));
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        '/v1/payments/authorize',
+        expect.objectContaining({
+          gatewayProvider: 'worldline',
+          gatewayPaymentToken: 'ht-1',
+          propertyId: 'prop-1',
+          folioId: 'folio-1',
+        }),
+      ),
+    );
+    const authorizeBody = vi.mocked(api.post).mock.calls.find((call) => call[0] === '/v1/payments/authorize')?.[1];
+    expect(JSON.stringify(authorizeBody)).not.toMatch(/cardNumber|cvv/i);
+    delete window.Tokenizer;
   });
 
   it('submits the hosted authorization form returned by the property-scoped API', async () => {

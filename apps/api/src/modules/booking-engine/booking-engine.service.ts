@@ -575,6 +575,10 @@ export class BookingEngineService {
     };
   }
 
+  createWorldlineTokenizationSession(propertyId: string) {
+    return this.paymentService.createWorldlineTokenizationSession(propertyId);
+  }
+
   // --- Retrieve / cancel (ownership already enforced by BookingEngineScopeGuard) ---
 
   async paymentReturnStatus(propertyId: string, reference: string) {

@@ -80,6 +80,15 @@ export const bookingApi = {
     return data;
   },
 
+  worldlineTokenization: async (): Promise<{
+    hostedTokenizationUrl: string;
+    sri: string | null;
+    tokenizerScriptUrl: string;
+  }> => {
+    const { data } = await api.post('/worldline-tokenization');
+    return data;
+  },
+
   createRequestPaymentMethodSetup: async (
     body: RequestPaymentMethodSetupRequest,
   ): Promise<RequestPaymentMethodSetupResponse> => {
