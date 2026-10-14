@@ -71,6 +71,7 @@ export function Payment() {
   const depositDue = Number(quote.depositDue);
   const needsPayment = depositDue > 0;
   const isRedsys = config?.paymentMethodClientMode === 'redsys';
+  const isWorldline = config?.paymentMethodClientMode === 'worldline';
 
   // Mock / demo mode (no Stripe key): submit the well-known MockGateway token.
   const payDemo = () => bookMutation.mutate({ paymentToken: 'tok_demo' });
@@ -78,6 +79,11 @@ export function Payment() {
   const payRedsys = () =>
     bookMutation.mutate({
       paymentToken: 'redsys_redirect',
+      returnUrl: window.location.href,
+    });
+  const payWorldline = () =>
+    bookMutation.mutate({
+      paymentToken: 'worldline_hosted',
       returnUrl: window.location.href,
     });
 
@@ -114,6 +120,18 @@ export function Payment() {
             </p>
             <Button className="w-full" onClick={payRedsys} disabled={bookMutation.isPending}>
               {bookMutation.isPending ? 'Redirecting…' : 'Pay deposit securely via Redsys'}
+            </Button>
+          </>
+        ) : isWorldline ? (
+          <>
+            <p className="mb-4 text-sm text-gray-600">
+              Deposit due now: <strong>{money(quote.depositDue, quote.currencyCode)}</strong>
+            </p>
+            <p className="mb-4 text-sm text-gray-600">
+              You will be redirected to a hosted checkout page to authorize the deposit. Card details stay on that page.
+            </p>
+            <Button className="w-full" onClick={payWorldline} disabled={bookMutation.isPending}>
+              {bookMutation.isPending ? 'Redirecting…' : 'Pay deposit on hosted checkout'}
             </Button>
           </>
         ) : stripePromise ? (

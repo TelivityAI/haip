@@ -162,6 +162,23 @@ describe('Folios — payment corrections', () => {
     expect(screen.queryByText('Void')).not.toBeInTheDocument();
   });
 
+  it('asks the API to read hosted checkout status and does not treat the return query as authorization', async () => {
+    mockGet({
+      '/v1/payments': [{ ...PAYMENT, status: 'pending' }],
+      '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+    });
+    (api.post as any).mockResolvedValue({ data: { payments: [{ id: 'pay-1', status: 'pending' }] } });
+    renderDetail('/folio-1?worldline=return');
+    expect(await screen.findByText('Returned from hosted checkout. Payment status is read from the provider.')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/v1/payments/worldline/sync', null, {
+        params: { propertyId: 'prop-1', folioId: 'folio-1' },
+      }),
+    );
+    expect(screen.queryByText('Capture')).not.toBeInTheDocument();
+    expect(screen.queryByText('Void')).not.toBeInTheDocument();
+  });
+
   it('submits the hosted authorization form returned by the property-scoped API', async () => {
     mockGet({ '/v1/payments/client-config': { provider: 'redsys', clientMode: 'redsys' } });
     const nextAction = { type: 'redirect', method: 'POST', url: 'https://bank.example/checkout', formFields: { Ds_MerchantParameters: 'test-parameters', Ds_Signature: 'test-signature' } };

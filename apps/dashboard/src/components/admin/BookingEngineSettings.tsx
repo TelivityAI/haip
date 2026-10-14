@@ -16,7 +16,7 @@ import {
 type DepositType = 'none' | 'first_night' | 'percentage' | 'full';
 type BookingMode = 'instant' | 'request';
 type PaymentMethodCollection = 'required' | 'optional' | 'disabled';
-type PaymentMethodClientMode = 'mock' | 'stripe' | 'redsys' | 'unsupported';
+type PaymentMethodClientMode = 'mock' | 'stripe' | 'redsys' | 'worldline' | 'unsupported';
 
 interface DepositPolicy {
   type: DepositType;

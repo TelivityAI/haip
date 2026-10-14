@@ -19,14 +19,14 @@ export interface Branding {
 
 export type BookingMode = 'instant' | 'request';
 export type PaymentMethodCollection = 'required' | 'optional' | 'disabled';
-export type PaymentMethodClientMode = 'mock' | 'stripe' | 'redsys' | 'unsupported';
+export type PaymentMethodClientMode = 'mock' | 'stripe' | 'redsys' | 'worldline' | 'unsupported';
 
-/** Hosted-checkout redirect returned by Redsys (and similar PSPs). */
+/** Hosted-checkout redirect. POST carries form fields; GET navigates to the provider URL. */
 export type PaymentNextAction = {
   type: 'redirect';
   url: string;
-  method: 'POST';
-  formFields: Record<string, string>;
+  method: 'POST' | 'GET';
+  formFields?: Record<string, string>;
 };
 export type BookingFormQuestionType =
   | 'short_text'
