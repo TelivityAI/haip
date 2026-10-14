@@ -212,6 +212,123 @@ function RedsysCredentialsForm({
   );
 }
 
+type WorldlineEnvironment = 'test' | 'live';
+
+interface WorldlineFormState {
+  merchantId: string;
+  apiKeyId: string;
+  secretApiKey: string;
+  webhookKeyId: string;
+  webhookSecret: string;
+  environment: WorldlineEnvironment;
+}
+
+function worldlineFormFromConfig(config: Record<string, unknown>): WorldlineFormState {
+  const envRaw = stringConfig(config, 'environment').toLowerCase();
+  return {
+    merchantId: stringConfig(config, 'merchantId'),
+    apiKeyId: stringConfig(config, 'apiKeyId'),
+    secretApiKey: '',
+    webhookKeyId: stringConfig(config, 'webhookKeyId'),
+    webhookSecret: '',
+    environment: envRaw === 'live' ? 'live' : 'test',
+  };
+}
+
+function WorldlineCredentialsForm({
+  row,
+  propertyId,
+  onSaved,
+}: {
+  row: CatalogRow;
+  propertyId: string;
+  onSaved: () => void;
+}) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const [form, setForm] = useState<WorldlineFormState>(() => worldlineFormFromConfig(row.config ?? {}));
+  const cfg = row.config ?? {};
+  const merchantId = stringConfig(cfg, 'merchantId');
+  const apiKeyId = stringConfig(cfg, 'apiKeyId');
+  const webhookKeyId = stringConfig(cfg, 'webhookKeyId');
+  const environment = stringConfig(cfg, 'environment');
+  const secretApiKeyMasked = stringConfig(cfg, 'secretApiKeyMasked');
+  const webhookSecretMasked = stringConfig(cfg, 'webhookSecretMasked');
+
+  useEffect(() => {
+    setForm(worldlineFormFromConfig(cfg));
+  }, [row.connectionId, merchantId, apiKeyId, webhookKeyId, environment, secretApiKeyMasked, webhookSecretMasked]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const config: Record<string, string> = {
+        merchantId: form.merchantId.trim(),
+        apiKeyId: form.apiKeyId.trim(),
+        webhookKeyId: form.webhookKeyId.trim(),
+        environment: form.environment,
+      };
+      if (form.secretApiKey.trim()) config.secretApiKey = form.secretApiKey.trim();
+      if (form.webhookSecret.trim()) config.webhookSecret = form.webhookSecret.trim();
+      return api.put(
+        `/v1/admin/integrations/${row.slug}`,
+        { enabled: true, config },
+        { params: { propertyId }, skipErrorToast: true },
+      );
+    },
+    onSuccess: () => {
+      setForm((prev) => ({ ...prev, secretApiKey: '', webhookSecret: '' }));
+      toast('success', t('integrations.saved'));
+      onSaved();
+    },
+    onError: () => {
+      toast('error', t('integrations.saveFailed', { defaultValue: 'Failed to save integration' }));
+    },
+  });
+
+  const apiSecretStored = Boolean(stringConfig(cfg, 'secretApiKeyMasked'));
+  const webhookSecretStored = Boolean(stringConfig(cfg, 'webhookSecretMasked'));
+
+  return (
+    <div className="mt-3 space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-left">
+      <p className="text-xs font-medium text-gray-700">Hosted checkout credentials</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs text-gray-600" htmlFor={`wl-merchant-${row.slug}`}>Merchant ID (PSPID)</label>
+          <input id={`wl-merchant-${row.slug}`} type="text" value={form.merchantId} autoComplete="off" onChange={(e) => setForm((f) => ({ ...f, merchantId: e.target.value }))} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-600" htmlFor={`wl-key-${row.slug}`}>API key id</label>
+          <input id={`wl-key-${row.slug}`} type="text" value={form.apiKeyId} autoComplete="off" onChange={(e) => setForm((f) => ({ ...f, apiKeyId: e.target.value }))} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-600" htmlFor={`wl-secret-${row.slug}`}>API secret</label>
+          <input id={`wl-secret-${row.slug}`} type="password" value={form.secretApiKey} autoComplete="new-password" placeholder={apiSecretStored ? '••••••••' : undefined} onChange={(e) => setForm((f) => ({ ...f, secretApiKey: e.target.value }))} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+          {apiSecretStored && !form.secretApiKey && <p className="mt-1 text-[11px] text-gray-500">Leave blank to keep the existing API secret.</p>}
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-600" htmlFor={`wl-env-${row.slug}`}>Environment</label>
+          <select id={`wl-env-${row.slug}`} value={form.environment} onChange={(e) => setForm((f) => ({ ...f, environment: e.target.value === 'live' ? 'live' : 'test' }))} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+            <option value="test">test</option>
+            <option value="live">live</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-600" htmlFor={`wl-wh-key-${row.slug}`}>Webhook key id</label>
+          <input id={`wl-wh-key-${row.slug}`} type="text" value={form.webhookKeyId} autoComplete="off" onChange={(e) => setForm((f) => ({ ...f, webhookKeyId: e.target.value }))} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-600" htmlFor={`wl-wh-secret-${row.slug}`}>Webhook secret</label>
+          <input id={`wl-wh-secret-${row.slug}`} type="password" value={form.webhookSecret} autoComplete="new-password" placeholder={webhookSecretStored ? '••••••••' : undefined} onChange={(e) => setForm((f) => ({ ...f, webhookSecret: e.target.value }))} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+          {webhookSecretStored && !form.webhookSecret && <p className="mt-1 text-[11px] text-gray-500">Leave blank to keep the existing webhook secret.</p>}
+        </div>
+      </div>
+      <button type="button" disabled={saveMutation.isPending || !form.merchantId.trim() || !form.apiKeyId.trim()} onClick={() => saveMutation.mutate()} className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+        {saveMutation.isPending ? t('common.saving', { defaultValue: 'Saving…' }) : t('common.save', { defaultValue: 'Save' })}
+      </button>
+    </div>
+  );
+}
+
 export default function Integrations() {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
@@ -250,6 +367,9 @@ export default function Integrations() {
       toast('success', t('integrations.saved'));
       if (row.slug === 'redsys' && !row.enabled) {
         setExpandedSlug('redsys');
+      }
+      if (row.slug === 'worldline' && !row.enabled) {
+        setExpandedSlug('worldline');
       }
     },
   });
@@ -322,8 +442,11 @@ export default function Integrations() {
             <tbody className="divide-y divide-gray-100">
               {filtered.map((row) => {
                 const isRedsys = row.slug === 'redsys';
+                const isWorldline = row.slug === 'worldline';
                 const showRedsysForm =
                   isRedsys && (row.enabled || expandedSlug === 'redsys');
+                const showWorldlineForm =
+                  isWorldline && (row.enabled || expandedSlug === 'worldline');
                 return (
                   <Fragment key={row.slug}>
                     <tr className="hover:bg-gray-50/80">
@@ -339,6 +462,19 @@ export default function Integrations() {
                             }
                           >
                             {expandedSlug === 'redsys'
+                              ? 'Hide credentials'
+                              : 'Configure credentials'}
+                          </button>
+                        )}
+                        {isWorldline && !row.enabled && (
+                          <button
+                            type="button"
+                            className="mt-1 text-xs font-medium text-indigo-600 hover:underline"
+                            onClick={() =>
+                              setExpandedSlug((s) => (s === 'worldline' ? null : 'worldline'))
+                            }
+                          >
+                            {expandedSlug === 'worldline'
                               ? 'Hide credentials'
                               : 'Configure credentials'}
                           </button>
@@ -381,6 +517,17 @@ export default function Integrations() {
                                     : ''),
                               },
                             }}
+                            propertyId={propertyId}
+                            onSaved={invalidateIntegrations}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                    {showWorldlineForm && propertyId && (
+                      <tr className="bg-gray-50/60">
+                        <td colSpan={5} className="px-4 pb-4">
+                          <WorldlineCredentialsForm
+                            row={row}
                             propertyId={propertyId}
                             onSaved={invalidateIntegrations}
                           />
