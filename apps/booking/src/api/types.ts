@@ -195,6 +195,8 @@ export interface BookRequest {
 
 export interface PaymentReturnStatus {
   status: 'processing' | 'succeeded' | 'failed' | 'cancelled' | 'unavailable';
+  /** Present only after the server reports a succeeded payment. */
+  confirmationNumber?: string;
 }
 
 export interface BookResponse {

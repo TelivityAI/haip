@@ -13,6 +13,8 @@ export interface PaymentGatewayResult {
   /** Provider lifecycle status when an operation can complete asynchronously. */
   providerStatus?: 'succeeded' | 'pending' | 'requires_action' | 'failed' | 'canceled' | 'unknown';
   errorMessage?: string;
+  /** The provider already captured the funds. HAIP stores `captured`, not a hold. */
+  alreadyCaptured?: boolean;
   /** Present when `providerStatus` is `requires_action` (e.g. Redsys redirect). */
   nextAction?: PaymentGatewayNextAction;
 }

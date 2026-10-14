@@ -10,6 +10,7 @@ import { WorldlineWebhookController } from './worldline-webhook.controller';
 import { PaymentService } from './payment.service';
 import { RedsysCredentialsService } from './redsys-credentials.service';
 import { WorldlineCredentialsService } from './worldline-credentials.service';
+import { WorldlineChallengeQueue } from './worldline-challenge.queue';
 import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
 import {
   createPaymentGateway,
@@ -48,6 +49,7 @@ function createSavedPaymentMethodGateway(configService: ConfigService) {
   ],
   providers: [
     PaymentService,
+    WorldlineChallengeQueue,
     RedsysCredentialsService,
     WorldlineCredentialsService,
     {

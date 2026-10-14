@@ -104,9 +104,10 @@ export class WorldlineWebhookController {
     });
     // Promoting without payment.id would store the hosted checkout id and
     // later capture/cancel/refund calls would target the wrong resource.
-    const promote = event.type === 'payment.pending_capture' && outcome === 'authorized' && Boolean(paymentId);
+    const captured = event.type === 'payment.captured' && outcome === 'captured' && Boolean(paymentId);
+    const promote = (event.type === 'payment.pending_capture' && outcome === 'authorized' && Boolean(paymentId)) || captured;
     const decline = event.type === 'payment.rejected'
-      || (event.type === 'payment.cancelled' && event.payment?.statusOutput?.statusCode === 1);
+      || (event.type === 'payment.cancelled' && outcome === 'failed');
     if (!promote && !decline) return res.status(HttpStatus.OK).send('OK');
 
     const notifications = await finalizeHostedAuthorization(this.db, {
@@ -114,6 +115,7 @@ export class WorldlineWebhookController {
       propertyId: payment.propertyId,
       gatewayProvider: 'worldline',
       success: promote,
+      captured,
       failureReason: event.type ?? 'payment.rejected',
       gatewayTransactionId: paymentId || undefined,
     });

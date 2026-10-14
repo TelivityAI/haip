@@ -17,17 +17,21 @@ export async function finalizeHostedAuthorization(
     propertyId: string;
     gatewayProvider: string;
     success: boolean;
+    /** Provider already captured. Stored as `captured` so staff are not asked to capture again. */
+    captured?: boolean;
     failureReason: string;
     gatewayTransactionId?: string;
   },
 ): Promise<WebhookPayload[]> {
   const { paymentId, propertyId, gatewayProvider, success, failureReason } = input;
+  const storedStatus = success ? (input.captured ? 'captured' : 'authorized') : 'failed';
   return db.transaction(async (tx: any) => {
     const [payment] = await tx
       .update(payments)
       .set({
-        status: success ? 'authorized' : 'failed',
+        status: storedStatus,
         updatedAt: new Date(),
+        ...(input.captured ? { processedAt: new Date() } : {}),
         ...(input.gatewayTransactionId ? { gatewayTransactionId: input.gatewayTransactionId } : {}),
       })
       .where(and(
@@ -48,10 +52,32 @@ export async function finalizeHostedAuthorization(
     };
     addEvent(success ? 'payment.received' : 'payment.failed', 'payment', payment.id,
       success
-        ? { folioId: payment.folioId, status: 'authorized', amount: payment.amount, gatewayProvider }
+        ? { folioId: payment.folioId, status: storedStatus, amount: payment.amount, gatewayProvider }
         : { folioId: payment.folioId, error: failureReason });
 
     const intent = payment.authorizationFinalization?.deposit;
+    if (!success && intent) {
+      const [reservation] = await tx.select().from(reservations)
+        .where(and(eq(reservations.id, intent.reservationId), eq(reservations.propertyId, propertyId)))
+        .for('update');
+      if (reservation?.status === 'pending') {
+        assertTransition(reservation.status, 'cancelled');
+        await tx.update(reservations).set({
+          status: 'cancelled',
+          cancelledAt: new Date(),
+          cancellationReason: 'Payment was not authorized',
+          updatedAt: new Date(),
+        }).where(and(
+          eq(reservations.id, reservation.id),
+          eq(reservations.propertyId, propertyId),
+          eq(reservations.status, 'pending'),
+        ));
+        addEvent('reservation.cancelled', 'reservation', reservation.id, {
+          status: 'cancelled',
+          cancellationReason: 'Payment was not authorized',
+        });
+      }
+    }
     if (success && intent) {
       const [folio] = await tx.select().from(folios).where(and(eq(folios.id, payment.folioId), eq(folios.propertyId, propertyId)));
       if (!folio || folio.reservationId !== intent.reservationId) {

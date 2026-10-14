@@ -10,6 +10,12 @@ import {
   submitRedirectNextAction,
   type RedirectNextAction,
 } from '../lib/submit-redirect-next-action';
+import {
+  WORLDLINE_SYNC_DEADLINE_MS,
+  WORLDLINE_SYNC_INTERVAL_MS,
+  worldlineSyncShouldContinue,
+  worldlineSyncToast,
+} from '../lib/worldline-sync';
 import { useProperty } from '../context/PropertyContext';
 import { useToast } from '../components/ui/Toast';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -478,6 +484,11 @@ function FolioDetail() {
   const [payAmount, setPayAmount] = useState('');
   const [authorizeOpen, setAuthorizeOpen] = useState(false);
   const [authAmount, setAuthAmount] = useState('');
+  const [worldlineWatch, setWorldlineWatch] = useState<{
+    propertyId: string;
+    folioId: string;
+    startedAt: number;
+  } | null>(null);
   const [refundTarget, setRefundTarget] = useState<Payment | null>(null);
   const [refundAmount, setRefundAmount] = useState('');
   const [correctTarget, setCorrectTarget] = useState<Payment | null>(null);
@@ -539,28 +550,69 @@ function FolioDetail() {
       invalidate();
     } else if (redsysReturn === 'ko') {
       toast('error', 'Redsys payment was cancelled or declined.');
-    } else if (worldlineReturn === 'return') {
-      api.post<{ payments?: { status: string }[] }>('/v1/payments/worldline/sync', null, { params: { propertyId, folioId: id } })
-        .then((res) => {
-          const statuses = (res.data?.payments ?? []).map((row) => row.status);
-          if (statuses.includes('failed')) {
-            toast('error', 'Card authorization was declined.');
-          } else if (statuses.includes('authorized')) {
-            toast('success', 'Card authorization is held.');
-          } else {
-            toast('info', 'Card authorization is still being checked.');
-          }
-        })
-        .catch(() => {
-          toast('info', 'Card authorization is still being checked.');
-        })
-        .finally(() => invalidate());
+    } else if (worldlineReturn === 'return' && propertyId && id) {
+      const watchPropertyId = propertyId;
+      const watchFolioId = id;
+      setWorldlineWatch((current) => (
+        current?.folioId === watchFolioId && current.propertyId === watchPropertyId
+          ? current
+          : { propertyId: watchPropertyId, folioId: watchFolioId, startedAt: Date.now() }
+      ));
     }
     const next = new URLSearchParams(searchParams);
     next.delete('redsys');
     next.delete('worldline');
     setSearchParams(next, { replace: true });
   }, [searchParams, propertyId, id]);
+
+  useEffect(() => {
+    if (!worldlineWatch) return;
+    let stopped = false;
+    const { propertyId: watchPropertyId, folioId, startedAt } = worldlineWatch;
+    const read = () => {
+      const elapsed = Date.now() - startedAt;
+      if (!worldlineSyncShouldContinue(['pending'], elapsed)) {
+        stopped = true;
+        setWorldlineWatch(null);
+        return;
+      }
+      api.post<{ payments?: { status: string }[] }>('/v1/payments/worldline/sync', null, {
+        params: { propertyId: watchPropertyId, folioId },
+      })
+        .then((res) => {
+          if (stopped) return;
+          const statuses = (res.data?.payments ?? []).map((row) => row.status);
+          const notice = worldlineSyncToast(statuses);
+          toast(notice.tone, notice.message);
+          invalidate();
+          if (!worldlineSyncShouldContinue(statuses, Date.now() - startedAt)) {
+            stopped = true;
+            setWorldlineWatch(null);
+          }
+        })
+        .catch(() => {
+          if (stopped) return;
+          toast('info', 'Card authorization is still being checked.');
+          invalidate();
+          if (!worldlineSyncShouldContinue(['pending'], Date.now() - startedAt)) {
+            stopped = true;
+            setWorldlineWatch(null);
+          }
+        });
+    };
+    read();
+    const timer = setInterval(read, WORLDLINE_SYNC_INTERVAL_MS);
+    const remaining = WORLDLINE_SYNC_DEADLINE_MS - (Date.now() - startedAt);
+    const deadline = setTimeout(() => {
+      stopped = true;
+      setWorldlineWatch(null);
+    }, Math.max(remaining, 0));
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      clearTimeout(deadline);
+    };
+  }, [worldlineWatch]);
 
   const folio: Folio | null = folioData?.data ?? folioData ?? null;
   const charges: Charge[] = chargesData?.data ?? chargesData ?? [];

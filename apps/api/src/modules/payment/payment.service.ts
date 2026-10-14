@@ -1,9 +1,12 @@
 import {
   Injectable,
   Inject,
+  Optional,
+  forwardRef,
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { eq, and, isNull, sql } from 'drizzle-orm';
@@ -31,6 +34,7 @@ import {
 import type { WorldlineMerchantCredentials } from './gateways/worldline-gateway';
 import { WorldlineGateway } from './gateways/worldline-gateway';
 import { finalizeHostedAuthorization } from './hosted-authorization-finalizer';
+import { WorldlineChallengeQueue } from './worldline-challenge.queue';
 
 const CARD_METHODS = ['credit_card', 'debit_card', 'vcc'];
 
@@ -45,6 +49,8 @@ export type AuthorizationFinalization = NonNullable<
 
 @Injectable()
 export class PaymentService {
+  private readonly logger = new Logger(PaymentService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     private readonly folioService: FolioService,
@@ -53,6 +59,8 @@ export class PaymentService {
     private readonly configService: ConfigService,
     private readonly redsysCredentials: RedsysCredentialsService,
     private readonly worldlineCredentials: WorldlineCredentialsService,
+    @Optional() @Inject(forwardRef(() => WorldlineChallengeQueue))
+    private readonly worldlineChallenges?: WorldlineChallengeQueue,
   ) {}
 
   async recordPayment(dto: CreatePaymentDto) {
@@ -181,6 +189,7 @@ export class PaymentService {
     }
 
     const requiresAction = result.providerStatus === 'requires_action' && result.nextAction;
+    const capturedNow = !requiresAction && result.alreadyCaptured === true;
     const preAuthExpiry = dto.preAuthExpiresAt
       ? new Date(dto.preAuthExpiresAt)
       : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // Default 7 days
@@ -193,12 +202,13 @@ export class PaymentService {
         method: 'credit_card',
         amount: dto.amount,
         currencyCode: dto.currencyCode,
-        status: requiresAction ? 'pending' : 'authorized',
+        status: requiresAction ? 'pending' : capturedNow ? 'captured' : 'authorized',
         authorizationFinalization: requiresAction ? finalization ?? null : null,
         bookingReturnReferenceHash: bookingReturn?.returnReferenceHash ?? null,
         bookingReturnDestination: bookingReturn?.returnDestination ?? null,
-        isPreAuthorization: true,
+        isPreAuthorization: !capturedNow,
         preAuthExpiresAt: preAuthExpiry,
+        ...(capturedNow ? { processedAt: new Date() } : {}),
         gatewayProvider: dto.gatewayProvider,
         gatewayPaymentToken: dto.gatewayPaymentToken,
         gatewayTransactionId: result.transactionId,
@@ -208,15 +218,24 @@ export class PaymentService {
       })
       .returning();
 
+    if (capturedNow) {
+      await this.folioService.recalculateBalance(dto.folioId, dto.propertyId);
+    }
     if (!requiresAction) {
-      // Do NOT recalculate balance — pre-auth is a hold, not a capture
+      // A hold does not change the folio balance. A provider capture does.
       await this.webhookService.emit(
         'payment.received',
         'payment',
         payment.id,
-        { folioId: dto.folioId, status: 'authorized', amount: payment.amount },
+        { folioId: dto.folioId, status: capturedNow ? 'captured' : 'authorized', amount: payment.amount },
         dto.propertyId,
       );
+    } else if (dto.gatewayProvider?.toLowerCase() === 'worldline') {
+      try {
+        await this.worldlineChallenges?.schedule(payment.id, dto.propertyId);
+      } catch (err) {
+        this.logger.error(`Worldline challenge deadline was not scheduled: ${err instanceof Error ? err.message : 'unknown'}`);
+      }
     }
 
     return {
@@ -943,6 +962,7 @@ export class PaymentService {
     gatewayProvider: string | null;
     gatewayTransactionId: string | null;
     status: string;
+    folioId?: string | null;
   }): Promise<string> {
     if (payment.gatewayProvider !== 'worldline' || payment.status !== 'pending' || !payment.gatewayTransactionId) {
       return payment.status;
@@ -954,18 +974,49 @@ export class PaymentService {
       worldlineCredentials: creds,
     });
     if (read.outcome === 'pending') return 'pending';
+    const captured = read.outcome === 'captured';
     const notifications = await finalizeHostedAuthorization(this.db, {
       paymentId: payment.id,
       propertyId: payment.propertyId,
       gatewayProvider: 'worldline',
-      success: read.outcome === 'authorized',
+      success: captured || read.outcome === 'authorized',
+      captured,
       failureReason: read.errorMessage ?? 'Hosted checkout was not authorized',
       gatewayTransactionId: read.paymentId,
+    });
+    if (captured && payment.folioId) {
+      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+    }
+    for (const payload of notifications) {
+      await this.webhookService.dispatchPersisted(payload, payload.logicalEventId!);
+    }
+    return read.outcome;
+  }
+
+  /**
+   * Finish a bank challenge that is still open after the deadline.
+   * A guest who already finished leaves no pending row, so this does nothing.
+   */
+  async expireWorldlineChallenge(paymentId: string, propertyId: string): Promise<void> {
+    const [payment] = await this.db.select().from(payments).where(and(
+      eq(payments.id, paymentId),
+      eq(payments.propertyId, propertyId),
+      eq(payments.gatewayProvider, 'worldline'),
+      eq(payments.status, 'pending'),
+    ));
+    if (!payment) return;
+    const status = await this.syncWorldlineHostedCheckout(payment);
+    if (status !== 'pending') return;
+    const notifications = await finalizeHostedAuthorization(this.db, {
+      paymentId: payment.id,
+      propertyId: payment.propertyId,
+      gatewayProvider: 'worldline',
+      success: false,
+      failureReason: 'Bank challenge was not completed',
     });
     for (const payload of notifications) {
       await this.webhookService.dispatchPersisted(payload, payload.logicalEventId!);
     }
-    return read.outcome === 'authorized' ? 'authorized' : 'failed';
   }
 
   async createWorldlineTokenizationSession(propertyId: string) {
