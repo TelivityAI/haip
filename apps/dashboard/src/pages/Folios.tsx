@@ -540,8 +540,20 @@ function FolioDetail() {
     } else if (redsysReturn === 'ko') {
       toast('error', 'Redsys payment was cancelled or declined.');
     } else if (worldlineReturn === 'return') {
-      toast('success', 'Returned from card authorization. Payment status is read from the provider.');
-      api.post('/v1/payments/worldline/sync', null, { params: { propertyId, folioId: id } })
+      api.post<{ payments?: { status: string }[] }>('/v1/payments/worldline/sync', null, { params: { propertyId, folioId: id } })
+        .then((res) => {
+          const statuses = (res.data?.payments ?? []).map((row) => row.status);
+          if (statuses.includes('failed')) {
+            toast('error', 'Card authorization was declined.');
+          } else if (statuses.includes('authorized')) {
+            toast('success', 'Card authorization is held.');
+          } else {
+            toast('info', 'Card authorization is still being checked.');
+          }
+        })
+        .catch(() => {
+          toast('info', 'Card authorization is still being checked.');
+        })
         .finally(() => invalidate());
     }
     const next = new URLSearchParams(searchParams);

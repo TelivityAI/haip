@@ -167,14 +167,33 @@ describe('Folios — payment corrections', () => {
       '/v1/payments': [{ ...PAYMENT, status: 'pending' }],
       '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
     });
-    (api.post as any).mockResolvedValue({ data: { payments: [{ id: 'pay-1', status: 'pending' }] } });
+    let finishSync: (value: { data: { payments: { id: string; status: string }[] } }) => void = () => {};
+    (api.post as any).mockImplementation(() => new Promise((resolve) => { finishSync = resolve; }));
     renderDetail('/folio-1?worldline=return');
-    expect(await screen.findByText('Returned from card authorization. Payment status is read from the provider.')).toBeInTheDocument();
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith('/v1/payments/worldline/sync', null, {
         params: { propertyId: 'prop-1', folioId: 'folio-1' },
       }),
     );
+    expect(screen.queryByText('Card authorization is still being checked.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Card authorization is held.')).not.toBeInTheDocument();
+    finishSync({ data: { payments: [{ id: 'pay-1', status: 'pending' }] } });
+    expect(await screen.findByText('Card authorization is still being checked.')).toBeInTheDocument();
+    expect(screen.queryByText('Capture')).not.toBeInTheDocument();
+    expect(screen.queryByText('Void')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['authorized', 'Card authorization is held.'],
+    ['failed', 'Card authorization was declined.'],
+  ])('toasts the %s result from the sync body', async (status, message) => {
+    mockGet({
+      '/v1/payments': [{ ...PAYMENT, status: 'pending' }],
+      '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+    });
+    (api.post as any).mockResolvedValue({ data: { payments: [{ id: 'pay-1', status }] } });
+    renderDetail('/folio-1?worldline=return');
+    expect(await screen.findByText(message)).toBeInTheDocument();
     expect(screen.queryByText('Capture')).not.toBeInTheDocument();
     expect(screen.queryByText('Void')).not.toBeInTheDocument();
   });
