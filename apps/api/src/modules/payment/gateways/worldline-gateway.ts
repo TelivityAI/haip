@@ -239,17 +239,20 @@ export class WorldlineGateway implements PaymentGateway {
         return { outcome: 'pending', errorMessage: 'Hosted checkout status is unavailable' };
       }
       const payment = res.body.createdPaymentOutput?.payment;
-      return {
-        outcome: classifyHostedCheckout({
-          sessionStatus: res.body.status,
-          paymentStatus: payment?.status,
-          statusCode: payment?.statusOutput?.statusCode,
-          isAuthorized: payment?.statusOutput?.isAuthorized,
-          statusCategory: payment?.statusOutput?.statusCategory,
-          paymentStatusCategory: res.body.createdPaymentOutput?.paymentStatusCategory,
-        }),
-        paymentId: payment?.id ?? undefined,
-      };
+      const outcome = classifyHostedCheckout({
+        sessionStatus: res.body.status,
+        paymentStatus: payment?.status,
+        statusCode: payment?.statusOutput?.statusCode,
+        isAuthorized: payment?.statusOutput?.isAuthorized,
+        statusCategory: payment?.statusOutput?.statusCategory,
+        paymentStatusCategory: res.body.createdPaymentOutput?.paymentStatusCategory,
+      });
+      // Capture, cancel, and refund need the payment id. A hold that only has
+      // the hosted checkout id is not finished yet.
+      if (outcome === 'authorized' && !payment?.id) {
+        return { outcome: 'pending' };
+      }
+      return { outcome, paymentId: payment?.id ?? undefined };
     } catch (err) {
       this.logger.error(`Hosted checkout read failed: ${err instanceof Error ? err.message : 'unknown'}`);
       return { outcome: 'pending', errorMessage: 'Hosted checkout status is unavailable' };
