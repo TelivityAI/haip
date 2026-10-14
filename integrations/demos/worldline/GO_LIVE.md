@@ -17,4 +17,4 @@ BOOKING_RETURN_ORIGINS=https://hotel.example
 
 3. Or save the same merchant fields on the property Integrations row. The API secret and webhook secret are encrypted.
 4. Point webhooks at `https://api.example/api/v1/webhooks/worldline`.
-5. Switch `WORLDLINE_ENV=live` and the live key pair only after a test hosted checkout, capture, cancel, and refund succeed. Live keys are different from test keys.
+5. Switch `WORLDLINE_ENV=live` and the live key pair only after a test in-page authorization, capture, cancel, and refund succeed. Live keys are different from test keys.

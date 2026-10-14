@@ -7,6 +7,7 @@ import { bookingApi, errorMessage } from '../api/client';
 import { Button } from '../components/Button';
 import { PriceBreakdown } from '../components/PriceBreakdown';
 import { StripeCard, type PaymentResult } from '../components/StripeCard';
+import { WorldlineCard } from '../components/WorldlineCard';
 import { useConfig } from '../context/ConfigContext';
 import { useBookingFlow } from '../context/BookingFlowContext';
 import { money } from '../lib/format';
@@ -81,11 +82,6 @@ export function Payment() {
       paymentToken: 'redsys_redirect',
       returnUrl: window.location.href,
     });
-  const payWorldline = () =>
-    bookMutation.mutate({
-      paymentToken: 'worldline_hosted',
-      returnUrl: window.location.href,
-    });
 
   return (
     <div className="space-y-4">
@@ -127,12 +123,10 @@ export function Payment() {
             <p className="mb-4 text-sm text-gray-600">
               Deposit due now: <strong>{money(quote.depositDue, quote.currencyCode)}</strong>
             </p>
-            <p className="mb-4 text-sm text-gray-600">
-              You will be redirected to a hosted checkout page to authorize the deposit. Card details stay on that page.
-            </p>
-            <Button className="w-full" onClick={payWorldline} disabled={bookMutation.isPending}>
-              {bookMutation.isPending ? 'Redirecting…' : 'Pay deposit on hosted checkout'}
-            </Button>
+            <WorldlineCard
+              onPaid={(p) => bookMutation.mutate(p)}
+              submitting={bookMutation.isPending}
+            />
           </>
         ) : stripePromise ? (
           <>

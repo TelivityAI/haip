@@ -16,6 +16,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import { StripeProvider } from '../components/payment/StripeProvider';
 import { CardInput } from '../components/payment/CardInput';
+import { WorldlineCard } from '../components/payment/WorldlineCard';
 
 interface PaymentClientConfig {
   provider?: string;
@@ -539,7 +540,7 @@ function FolioDetail() {
     } else if (redsysReturn === 'ko') {
       toast('error', 'Redsys payment was cancelled or declined.');
     } else if (worldlineReturn === 'return') {
-      toast('success', 'Returned from hosted checkout. Payment status is read from the provider.');
+      toast('success', 'Returned from card authorization. Payment status is read from the provider.');
       api.post('/v1/payments/worldline/sync', null, { params: { propertyId, folioId: id } })
         .finally(() => invalidate());
     }
@@ -595,8 +596,9 @@ function FolioDetail() {
   });
 
   /**
-   * Card pre-auth (KB 14.1). Stripe path tokenizes in-browser (pm_xxx only
-   * reaches HAIP). Redsys path returns a hosted-checkout nextAction to POST.
+   * Card pre-auth (KB 14.1). Stripe and Worldline tokenize in the browser.
+   * HAIP receives pm_xxx or a hosted tokenization id. Redsys returns a
+   * hosted-checkout nextAction to POST.
    */
   const authorizeMutation = useMutation({
     mutationFn: (pm: { id: string; card?: { last4: string; brand: string } }) => {
@@ -651,7 +653,7 @@ function FolioDetail() {
   });
 
   const worldlineAuthorizeMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (hostedTokenizationId: string) => {
       requirePropertyId(propertyId);
       requireCurrency(currencyCode);
       const folioUrl = `${window.location.origin}${window.location.pathname}`;
@@ -661,7 +663,7 @@ function FolioDetail() {
         amount: moneyString(authAmount),
         currencyCode,
         gatewayProvider: 'worldline',
-        gatewayPaymentToken: 'worldline_hosted',
+        gatewayPaymentToken: hostedTokenizationId,
         redirectUrlOk: `${folioUrl}?worldline=return`,
         redirectUrlKo: `${folioUrl}?worldline=return`,
       });
@@ -1001,19 +1003,16 @@ function FolioDetail() {
           ) : isWorldlineClient ? (
             <>
               <p className="text-xs text-telivity-mid-grey">
-                Guest completes checkout on the hosted page. This screen does not treat the return URL as proof of payment.
+                Enter the card on this page. A bank challenge can still leave HAIP, and the return URL is not proof of payment.
               </p>
-              {Number(authAmount) > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => worldlineAuthorizeMutation.mutate()}
+              {authorizeOpen && Number(authAmount) > 0 && propertyId ? (
+                <WorldlineCard
+                  propertyId={propertyId}
+                  submitLabel={t('folios.authorize')}
                   disabled={worldlineAuthorizeMutation.isPending}
-                  className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
-                >
-                  {worldlineAuthorizeMutation.isPending
-                    ? t('common.loading')
-                    : 'Authorize on hosted checkout'}
-                </button>
+                  onToken={(hostedTokenizationId) => worldlineAuthorizeMutation.mutate(hostedTokenizationId)}
+                  onError={(msg) => toast('error', msg)}
+                />
               ) : (
                 <p className="text-xs text-telivity-mid-grey">{t('folios.authorizeEnterAmount')}</p>
               )}

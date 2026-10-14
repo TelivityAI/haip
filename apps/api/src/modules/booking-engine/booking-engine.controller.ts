@@ -73,6 +73,13 @@ export class BookingEngineController {
     return this.service.quote(this.propertyId(req), dto);
   }
 
+  @Post('worldline-tokenization')
+  @UseGuards(BookingThrottleGuard)
+  @ApiOperation({ summary: 'Start an in-page card field for the booking deposit' })
+  async worldlineTokenization(@Req() req: any) {
+    return this.service.createWorldlineTokenizationSession(this.propertyId(req));
+  }
+
   @Post('book')
   @UseGuards(BookingThrottleGuard)
   @ApiOperation({ summary: 'Create a direct booking (guest + reservation + deposit payment)' })

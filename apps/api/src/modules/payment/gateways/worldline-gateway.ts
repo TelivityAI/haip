@@ -25,18 +25,30 @@ const HOSTS: Record<WorldlineEnvironment, string> = {
 
 export type WorldlineClientFactory = (
   creds: WorldlineMerchantCredentials,
-) => Pick<Client, 'hostedCheckout' | 'payments'>;
+) => Pick<Client, 'hostedCheckout' | 'payments' | 'hostedTokenization'>;
+
+/** Placeholder that still opens the full-page checkout. In-page card entry sends a hosted tokenization id instead. */
+const HOSTED_CHECKOUT_TOKEN = 'worldline_hosted';
+
+export interface WorldlineTokenizationSession {
+  hostedTokenizationUrl: string;
+  sri: string | null;
+  tokenizerScriptUrl: string;
+}
 
 interface SdkErrorBody {
   errors?: Array<{ message?: string | null; errorCode?: string | null }> | null;
 }
 
 /**
- * Online Payments hosted checkout.
+ * Online Payments card hold.
  *
- * Authorize creates a hosted checkout in PRE_AUTHORIZATION (a hold). Capture,
- * cancel, and refund use the payment id returned after the guest pays.
- * Card data stays on the hosted page. Missing credentials fail closed.
+ * The guest enters the card in an iframe on the HAIP page. Authorize then
+ * creates a PRE_AUTHORIZATION with that hosted tokenization id. A bank
+ * challenge is the only full-page redirect. The `worldline_hosted` token
+ * still opens hosted checkout for an in-flight session. Capture, cancel, and
+ * refund use the payment id. Card numbers are never sent here. Missing
+ * credentials fail closed.
  */
 @Injectable()
 export class WorldlineGateway implements PaymentGateway {
@@ -73,7 +85,97 @@ export class WorldlineGateway implements PaymentGateway {
   }
 
   async authorize(
-    _token: string,
+    token: string,
+    amount: number,
+    currency: string,
+    options?: PaymentGatewayCallOptions,
+  ): Promise<PaymentGatewayResult> {
+    if (!token || token === HOSTED_CHECKOUT_TOKEN) {
+      return this.authorizeHostedCheckout(amount, currency, options);
+    }
+    return this.authorizeTokenized(token, amount, currency, options);
+  }
+
+  /** Iframe session for the card field on the HAIP page. The browser submits the card to Worldline. */
+  async createTokenizationSession(
+    options?: PaymentGatewayCallOptions,
+  ): Promise<{ ok: true; session: WorldlineTokenizationSession } | { ok: false; errorMessage: string }> {
+    const creds = this.resolveCredentials(options);
+    if (!creds) {
+      return { ok: false, errorMessage: 'Worldline credentials are not configured' };
+    }
+    try {
+      const client = this.clientFactory(creds);
+      const res = await client.hostedTokenization.createHostedTokenization(
+        creds.merchantId,
+        { askConsumerConsent: false },
+        {},
+      );
+      if (!res.isSuccess || !res.body) {
+        return { ok: false, errorMessage: 'Hosted tokenization session was not created' };
+      }
+      const hostedTokenizationUrl = res.body.hostedTokenizationUrl?.trim();
+      if (!hostedTokenizationUrl) {
+        return { ok: false, errorMessage: 'Hosted tokenization session was not created' };
+      }
+      return {
+        ok: true,
+        session: {
+          hostedTokenizationUrl,
+          sri: res.body.sri?.trim() || null,
+          tokenizerScriptUrl: worldlineTokenizerScriptUrl(creds.environment),
+        },
+      };
+    } catch (err) {
+      this.logger.error(`Tokenization session failed: ${err instanceof Error ? err.message : 'unknown'}`);
+      return { ok: false, errorMessage: 'Hosted tokenization session was not created' };
+    }
+  }
+
+  private async authorizeTokenized(
+    hostedTokenizationId: string,
+    amount: number,
+    currency: string,
+    options?: PaymentGatewayCallOptions,
+  ): Promise<PaymentGatewayResult> {
+    const creds = this.resolveCredentials(options);
+    if (!creds) {
+      return { success: false, transactionId: '', errorMessage: 'Worldline credentials are not configured' };
+    }
+    const returnUrl = options?.redirect?.returnUrl || options?.redirect?.urlOk;
+    if (!returnUrl) {
+      return { success: false, transactionId: '', errorMessage: 'Worldline authorize requires a return URL' };
+    }
+    try {
+      const client = this.clientFactory(creds);
+      const res = await client.payments.createPayment(
+        creds.merchantId,
+        {
+          hostedTokenizationId,
+          order: {
+            amountOfMoney: {
+              currencyCode: currency.toUpperCase(),
+              amount: toMinorUnits(amount),
+            },
+          },
+          cardPaymentMethodSpecificInput: {
+            authorizationMode: 'PRE_AUTHORIZATION',
+            returnUrl,
+          },
+        },
+        callContext(options),
+      );
+      if (!res.isSuccess || !res.body) {
+        return failedResult('', res.isSuccess ? undefined : res.body, 'Authorization failed');
+      }
+      return mapTokenizedPayment(res.body);
+    } catch (err) {
+      this.logger.error(`Tokenized authorization failed: ${err instanceof Error ? err.message : 'unknown'}`);
+      return { success: false, transactionId: '', errorMessage: 'Authorization request failed' };
+    }
+  }
+
+  private async authorizeHostedCheckout(
     amount: number,
     currency: string,
     options?: PaymentGatewayCallOptions,
@@ -223,7 +325,34 @@ export class WorldlineGateway implements PaymentGateway {
     }
   }
 
-  /** Server read used when the guest returns. A transport error leaves the hold pending. */
+  /**
+   * Status read for a return or webhook gap.
+   * A payment id (in-page authorization, including a bank challenge) is read
+   * with GetPayment. A hosted-checkout id falls through when that read is not
+   * a payment. A transport error stays pending.
+   */
+  async readAuthorization(
+    transactionId: string,
+    options?: PaymentGatewayCallOptions,
+  ): Promise<{ outcome: 'authorized' | 'failed' | 'pending'; paymentId?: string; errorMessage?: string }> {
+    const creds = this.resolveCredentials(options);
+    if (!creds) {
+      return { outcome: 'pending', errorMessage: 'Worldline credentials are not configured' };
+    }
+    try {
+      const client = this.clientFactory(creds);
+      const res = await client.payments.getPayment(creds.merchantId, transactionId, {});
+      if (res.isSuccess && res.body) {
+        return classifyPaymentRead(res.body);
+      }
+    } catch (err) {
+      this.logger.error(`Payment read failed: ${err instanceof Error ? err.message : 'unknown'}`);
+      return { outcome: 'pending', errorMessage: 'Payment status is unavailable' };
+    }
+    return this.readHostedCheckout(transactionId, options);
+  }
+
+  /** Server read used when the guest returns from hosted checkout. A transport error leaves the hold pending. */
   async readHostedCheckout(
     hostedCheckoutId: string,
     options?: PaymentGatewayCallOptions,
@@ -262,6 +391,69 @@ export class WorldlineGateway implements PaymentGateway {
 
 export function worldlineEnvironment(raw: string | undefined): WorldlineEnvironment {
   return raw?.trim().toLowerCase() === 'live' ? 'live' : 'test';
+}
+
+export function worldlineTokenizerScriptUrl(environment: WorldlineEnvironment): string {
+  return `https://${HOSTS[environment]}/hostedtokenization/js/client/tokenizer.min.js`;
+}
+
+function classifyPaymentRead(payment: {
+  id?: string | null;
+  status?: string | null;
+  statusOutput?: {
+    statusCode?: number | null;
+    isAuthorized?: boolean | null;
+    statusCategory?: string | null;
+  } | null;
+}): { outcome: 'authorized' | 'failed' | 'pending'; paymentId?: string } {
+  const outcome = classifyHostedCheckout({
+    paymentStatus: payment.status,
+    statusCode: payment.statusOutput?.statusCode,
+    isAuthorized: payment.statusOutput?.isAuthorized,
+    statusCategory: payment.statusOutput?.statusCategory,
+  });
+  if (outcome === 'authorized' && !payment.id) return { outcome: 'pending' };
+  return { outcome, paymentId: payment.id ?? undefined };
+}
+
+function mapTokenizedPayment(body: {
+  payment?: {
+    id?: string | null;
+    status?: string | null;
+    statusOutput?: {
+      statusCode?: number | null;
+      isAuthorized?: boolean | null;
+      statusCategory?: string | null;
+    } | null;
+  } | null;
+  merchantAction?: {
+    actionType?: string | null;
+    redirectData?: { redirectURL?: string | null } | null;
+  } | null;
+}): PaymentGatewayResult {
+  const paymentId = body.payment?.id?.trim() || '';
+  const redirectUrl = body.merchantAction?.redirectData?.redirectURL?.trim();
+  if (body.merchantAction?.actionType?.toUpperCase() === 'REDIRECT' && redirectUrl && paymentId) {
+    return {
+      success: true,
+      transactionId: paymentId,
+      providerStatus: 'requires_action',
+      nextAction: { type: 'redirect', method: 'GET', url: redirectUrl, formFields: {} },
+    };
+  }
+  const read = classifyPaymentRead(body.payment ?? {});
+  if (read.outcome === 'authorized' && paymentId) {
+    return { success: true, transactionId: paymentId, providerStatus: 'succeeded' };
+  }
+  if (read.outcome === 'failed') {
+    return {
+      success: false,
+      transactionId: paymentId,
+      providerStatus: 'failed',
+      errorMessage: 'Authorization was declined',
+    };
+  }
+  return { success: false, transactionId: paymentId, errorMessage: 'Authorization is not complete' };
 }
 
 function defaultClientFactory(creds: WorldlineMerchantCredentials): Client {

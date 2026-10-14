@@ -949,7 +949,7 @@ export class PaymentService {
     }
     const creds = await this.worldlineCredentials.resolveForProperty(payment.propertyId);
     if (!creds) return payment.status;
-    const read = await new WorldlineGateway(this.configService).readHostedCheckout(payment.gatewayTransactionId, {
+    const read = await new WorldlineGateway(this.configService).readAuthorization(payment.gatewayTransactionId, {
       propertyId: payment.propertyId,
       worldlineCredentials: creds,
     });
@@ -966,6 +966,20 @@ export class PaymentService {
       await this.webhookService.dispatchPersisted(payload, payload.logicalEventId!);
     }
     return read.outcome === 'authorized' ? 'authorized' : 'failed';
+  }
+
+  async createWorldlineTokenizationSession(propertyId: string) {
+    if (resolvePaymentGatewayProvider(this.configService) !== 'worldline') {
+      throw new BadRequestException('Worldline is not the active payment gateway');
+    }
+    const creds = await this.worldlineCredentials.resolveForProperty(propertyId);
+    if (!creds) throw new BadRequestException('Worldline credentials are not configured');
+    const session = await new WorldlineGateway(this.configService).createTokenizationSession({
+      propertyId,
+      worldlineCredentials: creds,
+    });
+    if (!session.ok) throw new BadRequestException(session.errorMessage);
+    return session.session;
   }
 
   async syncWorldlineFolio(propertyId: string, folioId: string) {
