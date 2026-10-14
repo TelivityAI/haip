@@ -3,8 +3,9 @@ export const WORLDLINE_SYNC_INTERVAL_MS = 3000;
 export const WORLDLINE_SYNC_DEADLINE_MS = 30 * 60 * 1000;
 
 const FINISHED = new Set(['authorized', 'failed', 'captured']);
+const OPEN = new Set(['pending', 'unavailable']);
 
-/** Keep polling only while the latest read is still pending and inside the deadline. */
+/** Keep polling while the latest read is still open and inside the deadline. */
 export function worldlineSyncShouldContinue(
   statuses: string[],
   elapsedMs: number,
@@ -12,7 +13,7 @@ export function worldlineSyncShouldContinue(
 ): boolean {
   if (elapsedMs >= deadlineMs) return false;
   if (statuses.some((status) => FINISHED.has(status))) return false;
-  return statuses.includes('pending');
+  return statuses.some((status) => OPEN.has(status));
 }
 
 export function worldlineSyncToast(statuses: string[]): { tone: 'error' | 'success' | 'info'; message: string } {

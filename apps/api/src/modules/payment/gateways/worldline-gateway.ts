@@ -328,15 +328,16 @@ export class WorldlineGateway implements PaymentGateway {
   /**
    * Status read after the guest returns.
    * A bank challenge is finished with GetPaymentDetails. A hosted-checkout id
-   * falls through when that read is not a payment. A transport error stays pending.
+   * falls through when that read is not a payment. A thrown read is unavailable,
+   * not a decline and not a still-open challenge.
    */
   async readAuthorization(
     transactionId: string,
     options?: PaymentGatewayCallOptions,
-  ): Promise<{ outcome: 'authorized' | 'captured' | 'failed' | 'pending'; paymentId?: string; errorMessage?: string }> {
+  ): Promise<{ outcome: 'authorized' | 'captured' | 'failed' | 'pending' | 'unavailable'; paymentId?: string; errorMessage?: string }> {
     const creds = this.resolveCredentials(options);
     if (!creds) {
-      return { outcome: 'pending', errorMessage: 'Worldline credentials are not configured' };
+      return { outcome: 'unavailable', errorMessage: 'Worldline credentials are not configured' };
     }
     try {
       const client = this.clientFactory(creds);
@@ -346,19 +347,19 @@ export class WorldlineGateway implements PaymentGateway {
       }
     } catch (err) {
       this.logger.error(`Payment details read failed: ${err instanceof Error ? err.message : 'unknown'}`);
-      return { outcome: 'pending', errorMessage: 'Payment status is unavailable' };
+      return { outcome: 'unavailable', errorMessage: 'Payment status is unavailable' };
     }
     return this.readHostedCheckout(transactionId, options);
   }
 
-  /** Server read used when the guest returns from hosted checkout. A transport error leaves the hold pending. */
+  /** Server read used when the guest returns from hosted checkout. A thrown read is unavailable. */
   async readHostedCheckout(
     hostedCheckoutId: string,
     options?: PaymentGatewayCallOptions,
-  ): Promise<{ outcome: 'authorized' | 'captured' | 'failed' | 'pending'; paymentId?: string; errorMessage?: string }> {
+  ): Promise<{ outcome: 'authorized' | 'captured' | 'failed' | 'pending' | 'unavailable'; paymentId?: string; errorMessage?: string }> {
     const creds = this.resolveCredentials(options);
     if (!creds) {
-      return { outcome: 'pending', errorMessage: 'Worldline credentials are not configured' };
+      return { outcome: 'unavailable', errorMessage: 'Worldline credentials are not configured' };
     }
     try {
       const client = this.clientFactory(creds);
@@ -383,7 +384,7 @@ export class WorldlineGateway implements PaymentGateway {
       return { outcome, paymentId: payment?.id ?? undefined };
     } catch (err) {
       this.logger.error(`Hosted checkout read failed: ${err instanceof Error ? err.message : 'unknown'}`);
-      return { outcome: 'pending', errorMessage: 'Hosted checkout status is unavailable' };
+      return { outcome: 'unavailable', errorMessage: 'Hosted checkout status is unavailable' };
     }
   }
 }

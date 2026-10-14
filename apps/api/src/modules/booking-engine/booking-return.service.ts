@@ -123,6 +123,8 @@ export class BookingReturnService {
     if (status === 'pending' && payment.gatewayProvider === 'worldline' && this.syncPending) {
       status = await this.syncPending(payment);
     }
+    // A thrown bank read is not a finished result. Keep checking.
+    if (status === 'unavailable') status = 'pending';
     const reported = ['authorized', 'captured', 'settled'].includes(status)
       ? 'succeeded' : status === 'failed' ? 'failed'
         : status === 'voided' ? 'cancelled'

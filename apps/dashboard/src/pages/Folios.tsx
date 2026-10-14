@@ -85,6 +85,7 @@ interface Payment {
   amount: number;
   method: string;
   status: string;
+  gatewayProvider?: string;
   gatewayReference?: string;
   originalPaymentId?: string;
   createdAt: string;
@@ -617,6 +618,23 @@ function FolioDetail() {
   const folio: Folio | null = folioData?.data ?? folioData ?? null;
   const charges: Charge[] = chargesData?.data ?? chargesData ?? [];
   const payments: Payment[] = paymentsData?.data ?? paymentsData ?? [];
+  const pendingWorldlineKey = payments
+    .filter((payment) => payment.status === 'pending' && payment.gatewayProvider === 'worldline')
+    .map((payment) => `${payment.id}:${payment.createdAt}`)
+    .join('|');
+
+  useEffect(() => {
+    if (!propertyId || !id || !pendingWorldlineKey) return;
+    const pending = payments.filter((payment) => payment.status === 'pending' && payment.gatewayProvider === 'worldline');
+    const startedAt = Math.min(...pending.map((payment) => new Date(payment.createdAt).getTime()));
+    if (!Number.isFinite(startedAt) || Date.now() - startedAt >= WORLDLINE_SYNC_DEADLINE_MS) return;
+    setWorldlineWatch((current) => {
+      if (current?.folioId === id && current.propertyId === propertyId) {
+        return current.startedAt <= startedAt ? current : { ...current, startedAt };
+      }
+      return { propertyId, folioId: id, startedAt };
+    });
+  }, [pendingWorldlineKey, propertyId, id]);
   const currencyCode = folio?.currencyCode ?? null;
 
   const reversedIds = new Set(

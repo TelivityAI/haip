@@ -968,12 +968,12 @@ export class PaymentService {
       return payment.status;
     }
     const creds = await this.worldlineCredentials.resolveForProperty(payment.propertyId);
-    if (!creds) return payment.status;
+    if (!creds) return 'unavailable';
     const read = await new WorldlineGateway(this.configService).readAuthorization(payment.gatewayTransactionId, {
       propertyId: payment.propertyId,
       worldlineCredentials: creds,
     });
-    if (read.outcome === 'pending') return 'pending';
+    if (read.outcome === 'pending' || read.outcome === 'unavailable') return read.outcome;
     const captured = read.outcome === 'captured';
     const notifications = await finalizeHostedAuthorization(this.db, {
       paymentId: payment.id,
@@ -1006,6 +1006,9 @@ export class PaymentService {
     ));
     if (!payment) return;
     const status = await this.syncWorldlineHostedCheckout(payment);
+    if (status === 'unavailable') {
+      throw new Error('Payment status is unavailable');
+    }
     if (status !== 'pending') return;
     const notifications = await finalizeHostedAuthorization(this.db, {
       paymentId: payment.id,

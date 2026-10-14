@@ -4,6 +4,8 @@ import { payments, reservations } from '@telivityhaip/database';
 import { PaymentService } from './payment.service';
 import { WorldlineGateway } from './gateways/worldline-gateway';
 import {
+  WORLDLINE_CHALLENGE_ATTEMPTS,
+  WORLDLINE_CHALLENGE_BACKOFF_MS,
   WORLDLINE_CHALLENGE_DELAY_MS,
   WORLDLINE_CHALLENGE_JOB_NAME,
   WorldlineChallengeQueue,
@@ -124,6 +126,8 @@ describe('Worldline challenge deadline', () => {
       expect.objectContaining({
         delay: WORLDLINE_CHALLENGE_DELAY_MS,
         jobId: 'worldline-challenge-pay-1',
+        attempts: WORLDLINE_CHALLENGE_ATTEMPTS,
+        backoff: { type: 'exponential', delay: WORLDLINE_CHALLENGE_BACKOFF_MS },
       }),
     );
   });
@@ -187,8 +191,9 @@ describe('Worldline challenge deadline', () => {
       { emit: vi.fn(), dispatchPersisted } as any,
       { get: vi.fn() } as any,
       {} as any,
-      { resolveForProperty: vi.fn().mockResolvedValue(null) } as any,
+      { resolveForProperty: vi.fn().mockResolvedValue(CREDS) } as any,
     );
+    vi.spyOn(WorldlineGateway.prototype, 'readAuthorization').mockResolvedValue({ outcome: 'pending' });
     await svc.expireWorldlineChallenge('pay-1', 'prop-1');
     expect(reservationWrites).toEqual([
       expect.objectContaining({ status: 'cancelled', cancellationReason: 'Payment was not authorized' }),
@@ -204,6 +209,35 @@ describe('Worldline challenge deadline', () => {
       expect.objectContaining({ event: 'reservation.cancelled' }),
       expect.any(String),
     );
+  });
+
+  it('does not cancel a booking when the bank status read is unavailable', async () => {
+    const transaction = vi.fn();
+    const db = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{
+            id: 'pay-1',
+            propertyId: 'prop-1',
+            gatewayProvider: 'worldline',
+            gatewayTransactionId: 'wl-1',
+            status: 'pending',
+          }]),
+        }),
+      }),
+      transaction,
+    };
+    const svc = new PaymentService(
+      db as any,
+      { recalculateBalance: vi.fn() } as any,
+      {} as any,
+      { emit: vi.fn(), dispatchPersisted: vi.fn() } as any,
+      { get: vi.fn() } as any,
+      {} as any,
+      { resolveForProperty: vi.fn().mockResolvedValue(null) } as any,
+    );
+    await expect(svc.expireWorldlineChallenge('pay-1', 'prop-1')).rejects.toThrow(/unavailable/i);
+    expect(transaction).not.toHaveBeenCalled();
   });
 
   it('does nothing when the payment is no longer pending', async () => {

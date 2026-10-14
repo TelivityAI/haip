@@ -8,6 +8,7 @@ import {
 describe('worldline folio sync poll', () => {
   it('keeps checking a pending challenge and stops on a finished status or the deadline', () => {
     expect(worldlineSyncShouldContinue(['pending'], 0)).toBe(true);
+    expect(worldlineSyncShouldContinue(['unavailable'], 0)).toBe(true);
     expect(worldlineSyncShouldContinue(['pending'], WORLDLINE_SYNC_DEADLINE_MS - 1)).toBe(true);
     expect(worldlineSyncShouldContinue(['authorized'], 0)).toBe(false);
     expect(worldlineSyncShouldContinue(['failed'], 0)).toBe(false);

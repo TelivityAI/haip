@@ -112,6 +112,21 @@ describe('BookingReturnService', () => {
     await expect(service.resolve(PROPERTY, 'a'.repeat(43))).rejects.toThrow(/not found/i);
   });
 
+  it('keeps a thrown bank read as still processing', async () => {
+    const where = vi.fn().mockResolvedValue([{
+      status: 'pending',
+      createdAt: new Date(),
+      gatewayProvider: 'worldline',
+      gatewayTransactionId: 'wl-1',
+    }]);
+    const db = { select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where }) }) };
+    const settings: Record<string, string> = { BOOKING_RETURN_ORIGINS: 'https://hotel.example', PUBLIC_API_BASE_URL: 'https://api.example', NODE_ENV: 'production' };
+    const syncPending = vi.fn().mockResolvedValue('unavailable');
+    const service = new BookingReturnService(db as any, { get: (key: string) => settings[key] } as any, syncPending);
+    const reference = referenceOf(service.prepare(PROPERTY, 'https://hotel.example/book').url);
+    expect(await service.status('property-1', reference)).toEqual({ status: 'processing' });
+  });
+
   it('returns the confirmation number after a succeeded payment, scoped to the property', async () => {
     const paymentWhere = vi.fn().mockResolvedValue([{
       status: 'captured',

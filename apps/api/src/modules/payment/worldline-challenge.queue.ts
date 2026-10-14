@@ -14,6 +14,9 @@ export const WORLDLINE_CHALLENGE_QUEUE_NAME = 'haip-worldline-challenges';
 export const WORLDLINE_CHALLENGE_JOB_NAME = 'expire-worldline-challenge';
 /** A guest who closes the bank page is finished after this delay. */
 export const WORLDLINE_CHALLENGE_DELAY_MS = 30 * 60 * 1000;
+/** A thrown status read retries. It does not cancel the booking. */
+export const WORLDLINE_CHALLENGE_ATTEMPTS = 5;
+export const WORLDLINE_CHALLENGE_BACKOFF_MS = 30_000;
 
 export interface WorldlineChallengeJob {
   paymentId: string;
@@ -70,7 +73,8 @@ export class WorldlineChallengeQueue implements OnModuleInit, OnModuleDestroy {
         delay: WORLDLINE_CHALLENGE_DELAY_MS,
         jobId: `worldline-challenge-${paymentId}`,
         removeOnComplete: true,
-        attempts: 1,
+        attempts: WORLDLINE_CHALLENGE_ATTEMPTS,
+        backoff: { type: 'exponential', delay: WORLDLINE_CHALLENGE_BACKOFF_MS },
       },
     );
   }

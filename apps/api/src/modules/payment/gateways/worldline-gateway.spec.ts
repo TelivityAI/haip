@@ -167,7 +167,7 @@ describe('WorldlineGateway', () => {
       paymentId: 'pay-9',
     });
     await expect(gateway.readHostedCheckout('hc-9', { worldlineCredentials: CREDS })).resolves.toMatchObject({
-      outcome: 'pending',
+      outcome: 'unavailable',
     });
   });
 
@@ -443,13 +443,22 @@ describe('WorldlineGateway', () => {
     expect(client.hostedCheckout.getHostedCheckout).toHaveBeenCalledWith('psp-1', 'hc-9', {});
   });
 
-  it('leaves a thrown payment-details read pending', async () => {
+  it('reports a thrown payment-details read as unavailable', async () => {
     const client = sdk();
     client.payments.getPaymentDetails.mockRejectedValue(new Error('network'));
     const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
     await expect(gateway.readAuthorization('pay-down', { worldlineCredentials: CREDS })).resolves.toMatchObject({
-      outcome: 'pending',
+      outcome: 'unavailable',
     });
     expect(client.hostedCheckout.getHostedCheckout).not.toHaveBeenCalled();
+  });
+
+  it('reports a missing-credentials read as unavailable', async () => {
+    const client = sdk();
+    const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
+    await expect(gateway.readAuthorization('pay-down')).resolves.toMatchObject({
+      outcome: 'unavailable',
+    });
+    expect(client.payments.getPaymentDetails).not.toHaveBeenCalled();
   });
 });
