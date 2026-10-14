@@ -2,7 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
-import { payments } from '@telivityhaip/database';
+import { bookings, folios, payments, reservations } from '@telivityhaip/database';
 import { publicApiBaseUrl } from '../payment/redsys-credentials.service';
 
 const REFERENCE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -16,9 +16,10 @@ export type PendingHostedCheckout = {
   gatewayProvider: string | null;
   gatewayTransactionId: string | null;
   status: string;
+  folioId?: string | null;
 };
 
-/** Limited, expiring capability: reveals payment state only, never booking credentials. */
+/** Limited, expiring capability. A succeeded payment may also reveal its confirmation number. */
 export class BookingReturnService {
   constructor(
     private readonly db: any,
@@ -85,6 +86,7 @@ export class BookingReturnService {
     const [payment] = await this.db.select({
       id: payments.id,
       propertyId: payments.propertyId,
+      folioId: payments.folioId,
       status: payments.status,
       createdAt: payments.createdAt,
       gatewayProvider: payments.gatewayProvider,
@@ -125,6 +127,24 @@ export class BookingReturnService {
       ? 'succeeded' : status === 'failed' ? 'failed'
         : status === 'voided' ? 'cancelled'
           : status === 'pending' ? 'processing' : 'unavailable';
-    return { status: reported };
+    if (reported !== 'succeeded' || !payment.folioId) return { status: reported };
+    const confirmationNumber = await this.confirmationNumber(propertyId, payment.folioId);
+    return confirmationNumber ? { status: reported, confirmationNumber } : { status: reported };
+  }
+
+  /** Property-scoped path: payment folio → reservation → booking. */
+  private async confirmationNumber(propertyId: string, folioId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ confirmationNumber: bookings.confirmationNumber })
+      .from(folios)
+      .innerJoin(reservations, eq(reservations.id, folios.reservationId))
+      .innerJoin(bookings, eq(bookings.id, reservations.bookingId))
+      .where(and(
+        eq(folios.id, folioId),
+        eq(folios.propertyId, propertyId),
+        eq(reservations.propertyId, propertyId),
+        eq(bookings.propertyId, propertyId),
+      ));
+    return row?.confirmationNumber ?? null;
   }
 }

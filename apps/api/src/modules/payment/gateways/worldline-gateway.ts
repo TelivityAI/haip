@@ -333,7 +333,7 @@ export class WorldlineGateway implements PaymentGateway {
   async readAuthorization(
     transactionId: string,
     options?: PaymentGatewayCallOptions,
-  ): Promise<{ outcome: 'authorized' | 'failed' | 'pending'; paymentId?: string; errorMessage?: string }> {
+  ): Promise<{ outcome: 'authorized' | 'captured' | 'failed' | 'pending'; paymentId?: string; errorMessage?: string }> {
     const creds = this.resolveCredentials(options);
     if (!creds) {
       return { outcome: 'pending', errorMessage: 'Worldline credentials are not configured' };
@@ -355,7 +355,7 @@ export class WorldlineGateway implements PaymentGateway {
   async readHostedCheckout(
     hostedCheckoutId: string,
     options?: PaymentGatewayCallOptions,
-  ): Promise<{ outcome: 'authorized' | 'failed' | 'pending'; paymentId?: string; errorMessage?: string }> {
+  ): Promise<{ outcome: 'authorized' | 'captured' | 'failed' | 'pending'; paymentId?: string; errorMessage?: string }> {
     const creds = this.resolveCredentials(options);
     if (!creds) {
       return { outcome: 'pending', errorMessage: 'Worldline credentials are not configured' };
@@ -377,7 +377,7 @@ export class WorldlineGateway implements PaymentGateway {
       });
       // Capture, cancel, and refund need the payment id. A hold that only has
       // the hosted checkout id is not finished yet.
-      if (outcome === 'authorized' && !payment?.id) {
+      if ((outcome === 'authorized' || outcome === 'captured') && !payment?.id) {
         return { outcome: 'pending' };
       }
       return { outcome, paymentId: payment?.id ?? undefined };
@@ -404,14 +404,14 @@ function classifyPaymentRead(payment: {
     isAuthorized?: boolean | null;
     statusCategory?: string | null;
   } | null;
-}): { outcome: 'authorized' | 'failed' | 'pending'; paymentId?: string } {
+}): { outcome: 'authorized' | 'captured' | 'failed' | 'pending'; paymentId?: string } {
   const outcome = classifyHostedCheckout({
     paymentStatus: payment.status,
     statusCode: payment.statusOutput?.statusCode,
     isAuthorized: payment.statusOutput?.isAuthorized,
     statusCategory: payment.statusOutput?.statusCategory,
   });
-  if (outcome === 'authorized' && !payment.id) return { outcome: 'pending' };
+  if ((outcome === 'authorized' || outcome === 'captured') && !payment.id) return { outcome: 'pending' };
   return { outcome, paymentId: payment.id ?? undefined };
 }
 
@@ -441,6 +441,9 @@ function mapTokenizedPayment(body: {
     };
   }
   const read = classifyPaymentRead(body.payment ?? {});
+  if (read.outcome === 'captured' && paymentId) {
+    return { success: true, transactionId: paymentId, providerStatus: 'succeeded', alreadyCaptured: true };
+  }
   if (read.outcome === 'authorized' && paymentId) {
     return { success: true, transactionId: paymentId, providerStatus: 'succeeded' };
   }

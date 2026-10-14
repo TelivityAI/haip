@@ -341,6 +341,52 @@ describe('WorldlineGateway', () => {
     expect(client.hostedCheckout.getHostedCheckout).not.toHaveBeenCalled();
   });
 
+  it('finishes a bank challenge as a capture when status code is 9', async () => {
+    const client = sdk();
+    client.payments.getPaymentDetails.mockResolvedValue({
+      isSuccess: true,
+      body: { id: 'pay-cap', status: 'CAPTURED', statusOutput: { statusCode: 9 } },
+    });
+    const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
+    await expect(gateway.readAuthorization('pay-cap', { worldlineCredentials: CREDS })).resolves.toEqual({
+      outcome: 'captured',
+      paymentId: 'pay-cap',
+    });
+    expect(client.hostedCheckout.getHostedCheckout).not.toHaveBeenCalled();
+  });
+
+  it('reports an immediate status code 9 payment as already captured', async () => {
+    const client = sdk();
+    client.payments.createPayment.mockResolvedValue({
+      isSuccess: true,
+      body: { payment: { id: 'pay-cap', status: 'CAPTURED', statusOutput: { statusCode: 9 } } },
+    });
+    const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
+    await expect(gateway.authorize('ht-cap', 10, 'EUR', {
+      worldlineCredentials: CREDS,
+      redirect: REDIRECT,
+    })).resolves.toEqual({
+      success: true,
+      transactionId: 'pay-cap',
+      providerStatus: 'succeeded',
+      alreadyCaptured: true,
+    });
+  });
+
+  it('finishes a bank challenge as declined when status code 2 has no status text', async () => {
+    const client = sdk();
+    client.payments.getPaymentDetails.mockResolvedValue({
+      isSuccess: true,
+      body: { id: 'pay-2', statusOutput: { statusCode: 2 } },
+    });
+    const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
+    await expect(gateway.readAuthorization('pay-2', { worldlineCredentials: CREDS })).resolves.toEqual({
+      outcome: 'failed',
+      paymentId: 'pay-2',
+    });
+    expect(client.hostedCheckout.getHostedCheckout).not.toHaveBeenCalled();
+  });
+
   it('finishes a bank challenge as declined from payment details', async () => {
     const client = sdk();
     client.payments.getPaymentDetails.mockResolvedValue({

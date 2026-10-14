@@ -112,6 +112,53 @@ describe('BookingReturnService', () => {
     await expect(service.resolve(PROPERTY, 'a'.repeat(43))).rejects.toThrow(/not found/i);
   });
 
+  it('returns the confirmation number after a succeeded payment, scoped to the property', async () => {
+    const paymentWhere = vi.fn().mockResolvedValue([{
+      status: 'captured',
+      createdAt: new Date(),
+      folioId: 'folio-1',
+      gatewayProvider: 'worldline',
+    }]);
+    const confirmationWhere = vi.fn().mockResolvedValue([{ confirmationNumber: 'C-100' }]);
+    let selects = 0;
+    const db = {
+      select: vi.fn().mockImplementation(() => {
+        selects += 1;
+        if (selects === 1) return { from: vi.fn().mockReturnValue({ where: paymentWhere }) };
+        return {
+          from: vi.fn().mockReturnValue({
+            innerJoin: vi.fn().mockReturnValue({
+              innerJoin: vi.fn().mockReturnValue({ where: confirmationWhere }),
+            }),
+          }),
+        };
+      }),
+    };
+    const settings: Record<string, string> = { BOOKING_RETURN_ORIGINS: 'https://hotel.example', PUBLIC_API_BASE_URL: 'https://api.example', NODE_ENV: 'production' };
+    const service = new BookingReturnService(db as any, { get: (key: string) => settings[key] } as any);
+    const reference = referenceOf(service.prepare(PROPERTY, 'https://hotel.example/book').url);
+    expect(await service.status('property-1', reference)).toEqual({ status: 'succeeded', confirmationNumber: 'C-100' });
+    const { PgDialect } = await import('drizzle-orm/pg-core');
+    const query = new PgDialect().sqlToQuery(confirmationWhere.mock.calls[0][0]);
+    expect(query.params).toEqual(expect.arrayContaining(['folio-1', 'property-1']));
+    expect(query.params.filter((value) => value === 'property-1')).toHaveLength(3);
+  });
+
+  it('does not look up a confirmation number while the payment is unfinished', async () => {
+    const where = vi.fn().mockResolvedValue([{
+      status: 'pending',
+      createdAt: new Date(),
+      folioId: 'folio-1',
+      gatewayProvider: 'worldline',
+    }]);
+    const db = { select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where }) }) };
+    const settings: Record<string, string> = { BOOKING_RETURN_ORIGINS: 'https://hotel.example', PUBLIC_API_BASE_URL: 'https://api.example', NODE_ENV: 'production' };
+    const service = new BookingReturnService(db as any, { get: (key: string) => settings[key] } as any);
+    const reference = referenceOf(service.prepare(PROPERTY, 'https://hotel.example/book').url);
+    expect(await service.status('property-1', reference)).toEqual({ status: 'processing' });
+    expect(db.select).toHaveBeenCalledOnce();
+  });
+
   it('binds the relay lookup to property, hash and provider without accepting a destination', async () => {
     const { service, where } = setup();
     where.mockResolvedValue([{ bookingReturnDestination: 'https://hotel.example/book', createdAt: new Date() }]);

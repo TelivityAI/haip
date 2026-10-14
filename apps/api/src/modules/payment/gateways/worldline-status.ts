@@ -6,10 +6,13 @@ export function classifyHostedCheckout(input: {
   isAuthorized?: boolean | null;
   statusCategory?: string | null;
   paymentStatusCategory?: string | null;
-}): 'authorized' | 'failed' | 'pending' {
+}): 'authorized' | 'captured' | 'failed' | 'pending' {
   const status = (input.paymentStatus ?? '').toUpperCase();
   const session = (input.sessionStatus ?? '').toUpperCase();
   const category = (input.statusCategory ?? input.paymentStatusCategory ?? '').toUpperCase();
+  if (input.statusCode === 9 || status === 'CAPTURED') {
+    return 'captured';
+  }
   if (input.statusCode === 5 || status === 'PENDING_CAPTURE' || input.isAuthorized === true) {
     return 'authorized';
   }
@@ -19,6 +22,7 @@ export function classifyHostedCheckout(input: {
     || status === 'REJECTED'
     || category === 'REJECTED'
     || input.statusCode === 1
+    || input.statusCode === 2
   ) {
     return 'failed';
   }

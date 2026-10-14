@@ -73,6 +73,39 @@ describe('WorldlineWebhookController', () => {
     expect(db.transaction).toHaveBeenCalledOnce();
   });
 
+  it('completes a captured payment when a signed capture has status code 9', async () => {
+    const { controller, db } = setup();
+    const body = eventBody({
+      type: 'payment.captured',
+      payment: {
+        id: 'pay-wl',
+        status: 'CAPTURED',
+        statusOutput: { statusCode: 9 },
+        hostedCheckoutSpecificOutput: { hostedCheckoutId: 'hc-1' },
+      },
+    });
+    const res = { status: vi.fn().mockReturnThis(), send: vi.fn(), type: vi.fn().mockReturnThis() };
+    await controller.handle(request(body), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(db.transaction).toHaveBeenCalledOnce();
+  });
+
+  it('declines a cancelled payment when status code 2 has no status text', async () => {
+    const { controller, db } = setup();
+    const body = eventBody({
+      type: 'payment.cancelled',
+      payment: {
+        id: 'pay-wl',
+        statusOutput: { statusCode: 2 },
+        hostedCheckoutSpecificOutput: { hostedCheckoutId: 'hc-1' },
+      },
+    });
+    const res = { status: vi.fn().mockReturnThis(), send: vi.fn(), type: vi.fn().mockReturnThis() };
+    await controller.handle(request(body), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(db.transaction).toHaveBeenCalledOnce();
+  });
+
   it('does not promote a pending_capture event that has no payment id', async () => {
     const { controller, db } = setup();
     const body = eventBody({

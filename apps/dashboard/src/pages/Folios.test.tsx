@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -186,6 +186,7 @@ describe('Folios — payment corrections', () => {
   it.each([
     ['authorized', 'Card authorization is held.'],
     ['failed', 'Card authorization was declined.'],
+    ['captured', 'Card payment was captured.'],
   ])('toasts the %s result from the sync body', async (status, message) => {
     mockGet({
       '/v1/payments': [{ ...PAYMENT, status: 'pending' }],
@@ -196,6 +197,64 @@ describe('Folios — payment corrections', () => {
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(screen.queryByText('Capture')).not.toBeInTheDocument();
     expect(screen.queryByText('Void')).not.toBeInTheDocument();
+  });
+
+  it('polls a pending challenge until it is authorized, then stops', async () => {
+    vi.useFakeTimers();
+    try {
+      mockGet({
+        '/v1/payments': [{ ...PAYMENT, status: 'pending' }],
+        '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+      });
+      let calls = 0;
+      (api.post as any).mockImplementation(() => {
+        calls += 1;
+        return Promise.resolve({
+          data: { payments: [{ id: 'pay-1', status: calls < 2 ? 'pending' : 'authorized' }] },
+        });
+      });
+      renderDetail('/folio-1?worldline=return');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(calls).toBe(1);
+      expect(screen.getByText('Card authorization is still being checked.')).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(calls).toBe(2);
+      expect(screen.getByText('Card authorization is held.')).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(9000);
+      });
+      expect(calls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops polling when the folio page unmounts', async () => {
+    vi.useFakeTimers();
+    try {
+      mockGet({
+        '/v1/payments': [{ ...PAYMENT, status: 'pending' }],
+        '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+      });
+      (api.post as any).mockResolvedValue({ data: { payments: [{ id: 'pay-1', status: 'pending' }] } });
+      const view = renderDetail('/folio-1?worldline=return');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      const calls = vi.mocked(api.post).mock.calls.length;
+      expect(calls).toBeGreaterThan(0);
+      view.unmount();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(9000);
+      });
+      expect(vi.mocked(api.post).mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('authorizes from the in-page card field and does not send a card number', async () => {

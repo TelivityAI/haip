@@ -43,10 +43,33 @@ describe('hosted payment return without memory or storage', () => {
     await screen.findByText('Payment authorized', {}, { timeout: 4500 });
     expect(status).toHaveBeenCalledTimes(2);
   });
-  it.each(['failed', 'cancelled'])('shows server %s and safe retry guidance', async (value) => {
-    status.mockResolvedValue({ status: value });
+  it('shows the confirmation number from a succeeded status response', async () => {
+    status.mockResolvedValue({ status: 'succeeded', confirmationNumber: 'C-100' });
     show();
-    await screen.findByText(value === 'failed' ? 'Payment was not completed' : 'Payment was cancelled');
+    await screen.findByText('Booking confirmed');
+    expect(screen.getByText('C-100')).toBeTruthy();
+    expect(screen.queryByText(/contact the hotel for your booking details/i)).toBeNull();
+  });
+  it('does not show a confirmation number when the payment did not succeed', async () => {
+    status.mockResolvedValue({ status: 'processing', confirmationNumber: 'C-100' });
+    show();
+    await screen.findByText('Confirming your payment');
+    expect(screen.queryByText('Booking confirmed')).toBeNull();
+    expect(screen.queryByText('C-100')).toBeNull();
+  });
+  it('says a failed payment cancelled the booking and the guest can start again', async () => {
+    status.mockResolvedValue({ status: 'failed', confirmationNumber: 'C-100' });
+    show();
+    await screen.findByText('Payment was not completed');
+    expect(screen.getByText(/this booking was cancelled because the payment did not complete/i)).toBeTruthy();
+    expect(screen.getByText(/you can start again/i)).toBeTruthy();
+    expect(screen.queryByText('C-100')).toBeNull();
+    expect(screen.queryByText('Booking confirmed')).toBeNull();
+  });
+  it('shows a cancelled payment with retry guidance', async () => {
+    status.mockResolvedValue({ status: 'cancelled' });
+    show();
+    await screen.findByText('Payment was cancelled');
     expect(screen.getByText(/contact the hotel before trying again/i)).toBeTruthy();
   });
   it('offers status retry without rebooking when lookup fails', async () => {

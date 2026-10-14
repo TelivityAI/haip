@@ -336,6 +336,35 @@ describe('PaymentService', () => {
       expect(mockGateway.authorize).not.toHaveBeenCalled();
     });
 
+    it('stores an already captured authorization and recalculates the folio', async () => {
+      mockGateway.authorize.mockResolvedValueOnce({
+        success: true,
+        transactionId: 'cap-1',
+        providerStatus: 'succeeded',
+        alreadyCaptured: true,
+      });
+      await service.authorizePayment({
+        folioId: 'folio-001',
+        propertyId: 'prop-001',
+        amount: '150.00',
+        currencyCode: 'USD',
+        gatewayProvider: 'stripe',
+        gatewayPaymentToken: 'token',
+      });
+      const inserted = (mockDb.insert as any).mock.results[0].value.values.mock.calls[0][0];
+      expect(inserted.status).toBe('captured');
+      expect(inserted.isPreAuthorization).toBe(false);
+      expect(inserted.processedAt).toBeInstanceOf(Date);
+      expect(mockFolioService.recalculateBalance).toHaveBeenCalledWith('folio-001', 'prop-001');
+      expect(mockWebhookService.emit).toHaveBeenCalledWith(
+        'payment.received',
+        'payment',
+        'pay-001',
+        expect.objectContaining({ status: 'captured' }),
+        'prop-001',
+      );
+    });
+
     it('should call gateway and create authorized payment', async () => {
       const authPayment = { ...mockPayment, status: 'authorized', isPreAuthorization: true };
       const db = createMockDb([authPayment]);
