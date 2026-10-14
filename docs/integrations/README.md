@@ -38,6 +38,7 @@ Staff REST request/response conventions (propertyId locations, envelopes, pagina
 | [Beds24 & Channex](channel-beds24-channex.md) | Channel manager adapters |
 | [Payments (Adyen/Mollie/Square/Braintree)](payments-adyen-mollie-square-braintree.md) | Additional payment gateways |
 | [Payments (Redsys)](payments-redsys.md) | Spanish TPV Virtual (hosted redirect + REST capture/void/refund) |
+| [Payments (Worldline)](payments-worldline.md) | Hosted checkout hold, capture, cancel, and refund |
 | [Door locks](door-locks-nuki-ttlock-salto.md) | Nuki, TTLock, Salto KS |
 | [SendGrid email](sendgrid-email.md) | Transactional email provider |
 | [WhatsApp Cloud](whatsapp-cloud.md) | Meta WhatsApp Cloud API provider |

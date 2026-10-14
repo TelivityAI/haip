@@ -66,6 +66,26 @@
       "maturity": "shipped"
     },
     {
+      "slug": "worldline",
+      "title": "Worldline Online Payments",
+      "kind": "payment",
+      "env": [
+        "PAYMENT_GATEWAY=worldline"
+      ],
+      "liveEnv": [
+        "WORLDLINE_MERCHANT_ID=...",
+        "WORLDLINE_API_KEY_ID=...",
+        "WORLDLINE_SECRET_API_KEY=...",
+        "WORLDLINE_ENV=test",
+        "WORLDLINE_WEBHOOK_KEY_ID=...",
+        "WORLDLINE_WEBHOOK_SECRET=...",
+        "PUBLIC_API_BASE_URL=https://..."
+      ],
+      "docs": "docs/integrations/payments-worldline.md",
+      "smoke": "payment_console",
+      "maturity": "shipped"
+    },
+    {
       "slug": "square",
       "title": "Square",
       "kind": "payment",
