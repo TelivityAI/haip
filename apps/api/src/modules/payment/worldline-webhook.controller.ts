@@ -15,6 +15,7 @@ import { webhooks } from 'onlinepayments-sdk-nodejs';
 import { payments } from '@telivityhaip/database';
 import { Public } from '../auth/public.decorator';
 import { DRIZZLE } from '../../database/database.module';
+import { FolioService } from '../folio/folio.service';
 import { WebhookService } from '../webhook/webhook.service';
 import { WorldlineCredentialsService } from './worldline-credentials.service';
 import { finalizeHostedAuthorization } from './hosted-authorization-finalizer';
@@ -33,6 +34,7 @@ export class WorldlineWebhookController {
     @Inject(DRIZZLE) private readonly db: any,
     private readonly webhookService: WebhookService,
     private readonly credentials: WorldlineCredentialsService,
+    private readonly folioService: FolioService,
   ) {}
 
   @Public()
@@ -121,6 +123,9 @@ export class WorldlineWebhookController {
     });
     for (const payload of notifications) {
       await this.webhookService.dispatchPersisted(payload, payload.logicalEventId!);
+    }
+    if (captured && notifications.length > 0 && payment.folioId) {
+      await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
     }
     return res.status(HttpStatus.OK).send('OK');
   }

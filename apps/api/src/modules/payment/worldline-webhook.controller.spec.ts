@@ -35,13 +35,13 @@ describe('WorldlineWebhookController', () => {
     status: 'pending',
     gatewayProvider: 'worldline',
     gatewayTransactionId: 'hc-1',
-  }) {
+  }, options?: { finalized?: boolean }) {
     const returning = vi.fn().mockResolvedValue(payment ? [payment] : []);
     const where = vi.fn().mockReturnValue({ returning, limit: vi.fn().mockResolvedValue(payment ? [payment] : []) });
     const db = {
       select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where }) }),
       transaction: vi.fn(async (fn: (tx: any) => Promise<unknown>) => fn({
-        update: () => ({ set: () => ({ where: () => ({ returning: async () => [] }) }) }),
+        update: () => ({ set: () => ({ where: () => ({ returning: async () => (options?.finalized && payment ? [payment] : []) }) }) }),
         insert: () => ({ values: async () => undefined }),
         select: () => ({ from: () => ({ where: () => ({ for: async () => [] }) }) }),
       })),
@@ -51,8 +51,9 @@ describe('WorldlineWebhookController', () => {
       resolveForProperty: vi.fn(async () => ({ merchantId: 'psp-1', apiKeyId: 'k', secretApiKey: 's', environment: 'test' })),
     };
     const webhook = { dispatchPersisted: vi.fn() };
-    const controller = new WorldlineWebhookController(db, webhook as any, credentials as any);
-    return { controller, db, where };
+    const folio = { recalculateBalance: vi.fn() };
+    const controller = new WorldlineWebhookController(db, webhook as any, credentials as any, folio as any);
+    return { controller, db, where, folio };
   }
 
   it('rejects a bad signature without reading or changing a payment', async () => {
@@ -88,6 +89,31 @@ describe('WorldlineWebhookController', () => {
     await controller.handle(request(body), res);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(db.transaction).toHaveBeenCalledOnce();
+  });
+
+  it('recalculates the folio when a capture is stored', async () => {
+    const { controller, folio } = setup({
+      id: 'row-1',
+      propertyId: 'prop-1',
+      folioId: 'folio-1',
+      amount: '40.00',
+      status: 'pending',
+      gatewayProvider: 'worldline',
+      gatewayTransactionId: 'hc-1',
+      authorizationFinalization: null,
+    }, { finalized: true });
+    const body = eventBody({
+      type: 'payment.captured',
+      payment: {
+        id: 'pay-wl',
+        status: 'CAPTURED',
+        statusOutput: { statusCode: 9 },
+        hostedCheckoutSpecificOutput: { hostedCheckoutId: 'hc-1' },
+      },
+    });
+    const res = { status: vi.fn().mockReturnThis(), send: vi.fn(), type: vi.fn().mockReturnThis() };
+    await controller.handle(request(body), res);
+    expect(folio.recalculateBalance).toHaveBeenCalledWith('folio-1', 'prop-1');
   });
 
   it('declines a cancelled payment when status code 2 has no status text', async () => {

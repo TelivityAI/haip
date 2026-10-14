@@ -257,6 +257,40 @@ describe('Folios — payment corrections', () => {
     }
   });
 
+  it('keeps checking a pending Worldline payment after the return query is gone', async () => {
+    mockGet({
+      '/v1/payments': [{
+        ...PAYMENT,
+        status: 'pending',
+        gatewayProvider: 'worldline',
+        createdAt: new Date().toISOString(),
+      }],
+      '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+    });
+    (api.post as any).mockResolvedValue({ data: { payments: [{ id: 'pay-1', status: 'authorized' }] } });
+    renderDetail('/folio-1');
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/v1/payments/worldline/sync', null, {
+      params: { propertyId: 'prop-1', folioId: 'folio-1' },
+    }));
+    expect(await screen.findByText('Card authorization is held.')).toBeInTheDocument();
+  });
+
+  it('does not poll a Worldline challenge that is already past the deadline', async () => {
+    mockGet({
+      '/v1/payments': [{
+        ...PAYMENT,
+        status: 'pending',
+        gatewayProvider: 'worldline',
+        createdAt: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
+      }],
+      '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+    });
+    renderDetail('/folio-1');
+    expect(await screen.findByText('F-0001')).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/v1/payments', expect.anything()));
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it('authorizes from the in-page card field and does not send a card number', async () => {
     mockGet({ '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' } });
     const submitTokenization = vi.fn().mockResolvedValue({ success: true, hostedTokenizationId: 'ht-1' });
