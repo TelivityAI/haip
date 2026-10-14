@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { MockGateway } from './mock-gateway';
+import { WorldlineGateway } from './gateways/worldline-gateway';
 import {
   createPaymentGateway,
   isPaymentGatewayMockMode,
@@ -31,6 +32,9 @@ describe('payment-gateway.factory', () => {
       expect(
         resolvePaymentGatewayProvider(config({ PAYMENT_GATEWAY: 'adyen', STRIPE_MODE: 'mock' })),
       ).toBe('adyen');
+      expect(
+        resolvePaymentGatewayProvider(config({ PAYMENT_GATEWAY: 'worldline', STRIPE_MODE: 'mock' })),
+      ).toBe('worldline');
     });
 
     it('throws on unknown PAYMENT_GATEWAY', () => {
@@ -44,6 +48,11 @@ describe('payment-gateway.factory', () => {
     it('returns MockGateway for mock mode', () => {
       const gw = createPaymentGateway(config({ STRIPE_MODE: 'mock' }));
       expect(gw).toBeInstanceOf(MockGateway);
+    });
+
+    it('returns WorldlineGateway when PAYMENT_GATEWAY=worldline', () => {
+      const gw = createPaymentGateway(config({ PAYMENT_GATEWAY: 'worldline' }));
+      expect(gw).toBeInstanceOf(WorldlineGateway);
     });
   });
 

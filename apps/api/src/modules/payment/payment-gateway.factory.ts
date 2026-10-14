@@ -7,6 +7,7 @@ import { SquareGateway } from './gateways/square-gateway';
 import { BraintreeGateway } from './gateways/braintree-gateway';
 import { WiseGateway } from './gateways/wise-gateway';
 import { RedsysGateway } from './gateways/redsys-gateway';
+import { WorldlineGateway } from './gateways/worldline-gateway';
 import type { PaymentGateway } from './interfaces/payment-gateway.interface';
 
 export const PAYMENT_GATEWAY_PROVIDERS = [
@@ -18,6 +19,7 @@ export const PAYMENT_GATEWAY_PROVIDERS = [
   'braintree',
   'wise',
   'redsys',
+  'worldline',
 ] as const;
 
 export type PaymentGatewayProvider = (typeof PAYMENT_GATEWAY_PROVIDERS)[number];
@@ -66,6 +68,8 @@ export function createPaymentGateway(configService: ConfigService): PaymentGatew
       return new WiseGateway(configService);
     case 'redsys':
       return new RedsysGateway(configService);
+    case 'worldline':
+      return new WorldlineGateway(configService);
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;

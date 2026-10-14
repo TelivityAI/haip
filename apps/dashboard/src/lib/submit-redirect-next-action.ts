@@ -1,16 +1,23 @@
-/** Auto-submit a Redsys (or any PSP) hosted-checkout POST form. */
+/** Continue a hosted checkout: POST form fields, or GET the provider redirect URL. */
 export type RedirectNextAction = {
   type: 'redirect';
   url: string;
-  method: 'POST';
-  formFields: Record<string, string>;
+  method: 'POST' | 'GET';
+  formFields?: Record<string, string>;
 };
 
 export function submitRedirectNextAction(nextAction: RedirectNextAction): void {
   if (typeof document === 'undefined') {
     throw new Error('submitRedirectNextAction requires a browser document');
   }
-  if (nextAction.type !== 'redirect' || nextAction.method !== 'POST') {
+  if (nextAction.type !== 'redirect') {
+    throw new Error(`Unsupported nextAction: ${nextAction.type}`);
+  }
+  if (nextAction.method === 'GET') {
+    window.location.assign(nextAction.url);
+    return;
+  }
+  if (nextAction.method !== 'POST') {
     throw new Error(`Unsupported nextAction: ${nextAction.type}/${nextAction.method}`);
   }
 
