@@ -2,7 +2,7 @@
 
 HAIP card flows (`POST /api/v1/payments/authorize`, capture, void, refund) use a pluggable **PaymentGateway**. Set `PAYMENT_GATEWAY=worldline` to take a card hold on the HAIP page. The card field is an iframe from Worldline. HAIP receives a hosted tokenization id, then creates a `PRE_AUTHORIZATION`. Card numbers are not sent to HAIP.
 
-A bank challenge can still send the guest to the issuer. That return is not proof of payment. HAIP reads the payment with GetPayment and stores the payment id. The older full-page checkout remains available for a `worldline_hosted` token already in flight.
+A bank challenge can still send the guest to the issuer. That return is not proof of payment. HAIP calls GetPaymentDetails with the payment id and stores one result: authorized, failed, or still pending. The older full-page checkout remains available for a `worldline_hosted` token already in flight.
 
 Capture, cancel, and refund run later through the official Node server SDK.
 
@@ -34,9 +34,9 @@ A property can store the same fields on Integrations → Worldline (`merchantId`
 
 The booking widget calls `POST /api/v1/booking-engine/worldline-tokenization` and mounts the card field on the payment page. Submit returns a hosted tokenization id. That id is `paymentToken` on book. The folio screen does the same with `POST /api/v1/payments/worldline/tokenization` (`folios.manage`) and sends the id to `POST /api/v1/payments/authorize`.
 
-Authorize calls `payments.createPayment` with `hostedTokenizationId`, `authorizationMode: PRE_AUTHORIZATION`, and the return URL. A frictionless hold completes on the page. `merchantAction.actionType` `REDIRECT` is a GET to the bank. The payment row stays pending with the payment id until GetPayment says the hold is authorized.
+Authorize calls `payments.createPayment` with `hostedTokenizationId`, `authorizationMode: PRE_AUTHORIZATION`, and the return URL. A frictionless hold completes on the page. `merchantAction.actionType` `REDIRECT` is a GET to the bank. The payment row stays pending with the payment id until GetPaymentDetails says the hold is authorized or declined.
 
-The browser return is not proof of payment. The booking return status and `POST /api/v1/payments/worldline/sync` call GetPayment first. A hosted-checkout id that is not a payment falls through to GetHostedCheckout. Folio staff return to `?worldline=return` after a bank challenge. Do not treat that query flag as success.
+The browser return is not proof of payment. The booking return status and `POST /api/v1/payments/worldline/sync` call `payments.getPaymentDetails` first. Status code 5, `PENDING_CAPTURE`, or `isAuthorized` authorizes the row. Status code 1, `REJECTED`, or `CANCELLED` fails it. Any other result, a missing payment id, or a transport error leaves it pending. A hosted-checkout id that is not a payment falls through to GetHostedCheckout. Folio staff return to `?worldline=return` after a bank challenge. The toast follows the sync status. Do not treat that query flag as success.
 
 A token of `worldline_hosted` still creates a hosted checkout and a GET redirect. New booking and folio screens do not send that token.
 
@@ -53,7 +53,7 @@ A token of `worldline_hosted` still creates a hosted checkout and a GET redirect
 | card field | `hostedTokenization.createHostedTokenization` |
 | authorize (in-page) | `payments.createPayment` with `hostedTokenizationId` |
 | authorize (`worldline_hosted`) | `hostedCheckout.createHostedCheckout` |
-| return / sync | `payments.getPayment`, then `hostedCheckout.getHostedCheckout` |
+| return / sync | `payments.getPaymentDetails`, then `hostedCheckout.getHostedCheckout` |
 | capture | `payments.capturePayment` (`isFinal` when the amount is the full hold) |
 | void | `payments.cancelPayment` |
 | refund | `payments.refundPayment` |

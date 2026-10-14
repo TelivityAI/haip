@@ -326,10 +326,9 @@ export class WorldlineGateway implements PaymentGateway {
   }
 
   /**
-   * Status read for a return or webhook gap.
-   * A payment id (in-page authorization, including a bank challenge) is read
-   * with GetPayment. A hosted-checkout id falls through when that read is not
-   * a payment. A transport error stays pending.
+   * Status read after the guest returns.
+   * A bank challenge is finished with GetPaymentDetails. A hosted-checkout id
+   * falls through when that read is not a payment. A transport error stays pending.
    */
   async readAuthorization(
     transactionId: string,
@@ -341,12 +340,12 @@ export class WorldlineGateway implements PaymentGateway {
     }
     try {
       const client = this.clientFactory(creds);
-      const res = await client.payments.getPayment(creds.merchantId, transactionId, {});
+      const res = await client.payments.getPaymentDetails(creds.merchantId, transactionId, {});
       if (res.isSuccess && res.body) {
         return classifyPaymentRead(res.body);
       }
     } catch (err) {
-      this.logger.error(`Payment read failed: ${err instanceof Error ? err.message : 'unknown'}`);
+      this.logger.error(`Payment details read failed: ${err instanceof Error ? err.message : 'unknown'}`);
       return { outcome: 'pending', errorMessage: 'Payment status is unavailable' };
     }
     return this.readHostedCheckout(transactionId, options);

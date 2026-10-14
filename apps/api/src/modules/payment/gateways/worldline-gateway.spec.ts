@@ -27,6 +27,7 @@ function sdk() {
       refundPayment: vi.fn(),
       createPayment: vi.fn(),
       getPayment: vi.fn(),
+      getPaymentDetails: vi.fn(),
     },
     hostedTokenization: {
       createHostedTokenization: vi.fn(),
@@ -325,15 +326,60 @@ describe('WorldlineGateway', () => {
     expect(missing).toEqual({ ok: false, errorMessage: expect.stringMatching(/credentials/i) });
   });
 
-  it('reads a payment id before falling back to hosted checkout', async () => {
+  it('finishes a bank challenge as authorized from payment details', async () => {
     const client = sdk();
-    client.payments.getPayment
+    client.payments.getPaymentDetails.mockResolvedValue({
+      isSuccess: true,
+      body: { id: 'pay-9', status: 'PENDING_CAPTURE', statusOutput: { statusCode: 5, isAuthorized: true } },
+    });
+    const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
+    await expect(gateway.readAuthorization('pay-9', { worldlineCredentials: CREDS })).resolves.toEqual({
+      outcome: 'authorized',
+      paymentId: 'pay-9',
+    });
+    expect(client.payments.getPaymentDetails).toHaveBeenCalledWith('psp-1', 'pay-9', {});
+    expect(client.hostedCheckout.getHostedCheckout).not.toHaveBeenCalled();
+  });
+
+  it('finishes a bank challenge as declined from payment details', async () => {
+    const client = sdk();
+    client.payments.getPaymentDetails.mockResolvedValue({
+      isSuccess: true,
+      body: { id: 'pay-no', status: 'REJECTED', statusOutput: { statusCode: 1, statusCategory: 'REJECTED' } },
+    });
+    const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
+    await expect(gateway.readAuthorization('pay-no', { worldlineCredentials: CREDS })).resolves.toEqual({
+      outcome: 'failed',
+      paymentId: 'pay-no',
+    });
+    expect(client.hostedCheckout.getHostedCheckout).not.toHaveBeenCalled();
+  });
+
+  it('leaves a bank challenge pending when payment details are not final', async () => {
+    const client = sdk();
+    client.payments.getPaymentDetails
       .mockResolvedValueOnce({
         isSuccess: true,
-        body: { id: 'pay-9', status: 'PENDING_CAPTURE', statusOutput: { statusCode: 5, isAuthorized: true } },
+        body: { id: 'pay-wait', status: 'REDIRECTED' },
       })
-      .mockResolvedValueOnce({ isSuccess: false, status: 404, body: {} })
-      .mockRejectedValueOnce(new Error('network'));
+      .mockResolvedValueOnce({
+        isSuccess: true,
+        body: { status: 'PENDING_CAPTURE', statusOutput: { statusCode: 5, isAuthorized: true } },
+      });
+    const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
+    await expect(gateway.readAuthorization('pay-wait', { worldlineCredentials: CREDS })).resolves.toEqual({
+      outcome: 'pending',
+      paymentId: 'pay-wait',
+    });
+    await expect(gateway.readAuthorization('pay-wait', { worldlineCredentials: CREDS })).resolves.toEqual({
+      outcome: 'pending',
+    });
+    expect(client.hostedCheckout.getHostedCheckout).not.toHaveBeenCalled();
+  });
+
+  it('falls back to hosted checkout when payment details are not a payment', async () => {
+    const client = sdk();
+    client.payments.getPaymentDetails.mockResolvedValue({ isSuccess: false, status: 404, body: {} });
     client.hostedCheckout.getHostedCheckout.mockResolvedValue({
       isSuccess: true,
       body: {
@@ -344,21 +390,20 @@ describe('WorldlineGateway', () => {
       },
     });
     const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
-    await expect(gateway.readAuthorization('pay-9', { worldlineCredentials: CREDS })).resolves.toEqual({
-      outcome: 'authorized',
-      paymentId: 'pay-9',
-    });
-    expect(client.hostedCheckout.getHostedCheckout).not.toHaveBeenCalled();
-
     await expect(gateway.readAuthorization('hc-9', { worldlineCredentials: CREDS })).resolves.toEqual({
       outcome: 'authorized',
       paymentId: 'pay-hc',
     });
     expect(client.hostedCheckout.getHostedCheckout).toHaveBeenCalledWith('psp-1', 'hc-9', {});
+  });
 
+  it('leaves a thrown payment-details read pending', async () => {
+    const client = sdk();
+    client.payments.getPaymentDetails.mockRejectedValue(new Error('network'));
+    const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
     await expect(gateway.readAuthorization('pay-down', { worldlineCredentials: CREDS })).resolves.toMatchObject({
       outcome: 'pending',
     });
-    expect(client.hostedCheckout.getHostedCheckout).toHaveBeenCalledTimes(1);
+    expect(client.hostedCheckout.getHostedCheckout).not.toHaveBeenCalled();
   });
 });
