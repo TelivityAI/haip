@@ -1,18 +1,20 @@
 /**
- * Discord Activity bootstrap.
- * When running inside Discord's iframe, Embedded App SDK is available.
- * Outside Discord, this is a no-op and the browser private UI is used.
+ * Discord Activity bootstrap — primary product surface.
+ * When embedded in Discord, force view-only and init Embedded App SDK.
+ * Direct browser hits to the Activity origin are unsupported for normal use.
  */
 
 export async function initDiscordActivity(): Promise<{ viewOnly: boolean; inDiscord: boolean }> {
   const params = new URLSearchParams(location.search);
   const forceView = params.get('viewOnly') === '1' || params.get('discord') === '1';
 
-  // Heuristic: Discord Activities load under discordsays.com or with frame_id
+  // Discord Activities: discordsays.com proxy, frame_id / instance_id query, or SDK global
   const inDiscordFrame =
     forceView ||
     location.hostname.endsWith('discordsays.com') ||
     params.has('frame_id') ||
+    params.has('instance_id') ||
+    params.has('platform') ||
     Boolean((window as unknown as { DiscordSDK?: unknown }).DiscordSDK);
 
   if (!inDiscordFrame) {

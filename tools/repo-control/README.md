@@ -1,89 +1,66 @@
-# Telivity Repository Control
+# Telivity Repository Control — Discord Activity
 
-Private, reusable **Repository Control Dashboard** for honest codebase status — not a decorative health score.
+**Primary surface: Discord.** Open a voice channel → Start Activity → see the view-only Repo Control board. Not a standalone product site.
 
-- Isolated under `tools/repo-control` (does not modify customer HAIP apps)
-- Snapshot pipeline → versioned `schema/snapshot.v1.json`
-- Dense desktop overview (1440×900 target)
-- Graphify map drill-in
-- Optional **Discord Activity** (view-only) + private authenticated browser URL
+The HTTP service exists only because Discord Activities load your UI through Discord’s proxy (`*.discordsays.com`). That origin is **Activity plumbing**, not a separate dashboard people should browse.
 
-## What is measured vs inferred
+## What you get in Discord
 
-| Class | Meaning |
-|-------|---------|
-| **Fact** | Taken from files, git, or command exit codes |
-| **Heuristic** | Pattern-based (large files, unused-dep string scan) — labeled **suspected** |
-| **Inference** | Requires human confirmation |
+- Always-on **view-only** board in a dedicated voice channel (e.g. `Repo Control`)
+- Branch/commit, check status, capabilities, issues, Graphify drill-in, next actions
+- No refresh / annotations / exports from Discord (observational only)
+- Runtime telemetry shows **Not connected** unless you wire it later
 
-**Verified** capability status is **not** assigned merely because a route, function, UI page, or unit test exists. This scanner defaults to **implemented, unverified** when code+tests are located without a passing capability-specific workflow.
+## Honest constraint
 
-**Runtime telemetry** shows **Not connected** unless you wire external systems (not included by default). No uptime, users, revenue, or production errors are fabricated.
+Discord cannot wallpaper a text channel with a live SPA. Activities run in a **voice channel**. Someone starts the Activity once; others join that channel and see it.
 
-## Quick start (local)
+Discord still requires a reachable Activity origin. Host it privately; do not advertise the URL. Do not commit auth tokens.
+
+## Discord setup (required)
+
+Follow **[docs/DISCORD_ACTIVITY.md](./docs/DISCORD_ACTIVITY.md)** end-to-end:
+
+1. Create a Discord Application + enable Activities  
+2. Deploy/map the Activity origin (URL Mapping `/` → host)  
+3. Invite the app to your private server  
+4. Voice channel → Start Activity  
+
+Without portal + invite steps, nothing appears inside Discord.
+
+## Snapshot / analyze (feeds the Activity)
 
 ```bash
 cd tools/repo-control
-pnpm install --ignore-workspace   # isolated from the HAIP pnpm workspace
-
-# Fast snapshot (structure/git/capabilities/todos/bloat; checks disabled via flag)
-pnpm analyze -- --skip-checks
-
-# Or full configured checks (lint/typecheck per config.haip.yaml)
-pnpm analyze
-
+pnpm install --ignore-workspace
+pnpm exec tsx src/analyze.ts          # or --skip-checks
 pnpm build:ui
-# Set a local-only token in your shell (do NOT commit it):
-export REPO_CONTROL_AUTH_TOKEN="$(openssl rand -hex 16)"
-pnpm serve
-# → http://localhost:8787
 ```
 
-Log in with the same value you exported. Refresh re-runs analysis (authenticated). Never commit `.env` or real tokens.
-
-### Discord view-only preview
+Activity host env (set on the host — never commit):
 
 ```bash
-export REPO_CONTROL_AUTH_TOKEN="$(openssl rand -hex 16)"
-export REPO_CONTROL_DISCORD_PUBLIC_READ=true
-pnpm serve
-# open http://localhost:8787/?discord=1
+export REPO_CONTROL_AUTH_TOKEN="$(openssl rand -hex 24)"
+export REPO_CONTROL_DISCORD_PUBLIC_READ=true   # required so Discord's proxy can load the board
+export VITE_DISCORD_CLIENT_ID="<your Discord Application ID>"
+pnpm build:ui   # rebuild after setting VITE_DISCORD_CLIENT_ID
+pnpm start
 ```
-
-Portal setup: [docs/DISCORD_ACTIVITY.md](./docs/DISCORD_ACTIVITY.md).
 
 ## Reuse on another repo
 
-1. Copy `tools/repo-control` (or depend on it as a private package).
-2. Copy `config.example.yaml` → `config.<product>.yaml`.
-3. Point `repoRoot`, `checks`, and `capabilities` probes at that repository.
-4. Run `REPO_CONTROL_CONFIG=config.<product>.yaml pnpm analyze`.
+Copy this folder, point `config.<product>.yaml` at that repo, re-analyze, remap the Activity URL. Collectors are repo-agnostic; HAIP probes live only in `config.haip.yaml`.
 
-No HAIP modules are hardcoded in collectors — only in `config.haip.yaml`.
+## What is measured
 
-## Snapshots
+| Class | Meaning |
+|-------|---------|
+| **Fact** | Files, git, command exit codes |
+| **Heuristic** | Suspected unused deps / large modules |
+| **Inference** | Needs human confirmation |
 
-- Written to `snapshots/latest.json` and stamped files
-- Annotations in `annotations.json` (gitignored) — do **not** mutate scan evidence
-- Graphify outputs under configured `graphifyDir` (default `tools/repo-control/graphify-out`)
+No health score. No fabricated production metrics.
 
-## Private hosting
+## Private Activity origin (Render)
 
-See `render.yaml` in this folder — **separate** from the public HAIP demo blueprint.
-
-- Browser: auth token required
-- Discord Activity: optional `REPO_CONTROL_DISCORD_PUBLIC_READ=true` for read-only proxy access
-- Refresh on host: `POST /api/refresh` with auth (or upload a snapshot). Not live local FS.
-
-**Do not publish publicly without explicit approval.**
-
-## Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `pnpm analyze` | Run collectors → snapshot |
-| `pnpm serve` / `pnpm start` | Serve UI + API |
-| `pnpm build:ui` | Vite production build |
-| `pnpm test` | Unit tests |
-
-Analyze flags: `--config <path>`, `--skip-checks`, `--skip-graphify`.
+`render.yaml` in this folder is **only** the Activity origin for Discord’s proxy — not a public demo. Set secrets in the host dashboard (`REPO_CONTROL_AUTH_TOKEN`, `VITE_DISCORD_CLIENT_ID`).

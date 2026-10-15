@@ -2,7 +2,7 @@
   "name": "@telivity/repo-control",
   "version": "0.1.0",
   "private": true,
-  "description": "Reusable Repository Control Dashboard — snapshot analysis + private view + Discord Activity",
+  "description": "Repository Control board for Discord Activities (view-only) — snapshot analysis feeds the Activity origin",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"

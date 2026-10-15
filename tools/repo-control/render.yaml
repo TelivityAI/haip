@@ -1,9 +1,10 @@
-# Private Repository Control Dashboard — SEPARATE from the public HAIP demo.
-# Do NOT merge this into the root render.yaml demo blueprint.
+# Discord Activity ORIGIN only — not a standalone public product.
+# Discord proxies this host into a voice-channel Activity. Do NOT advertise the URL.
+# SEPARATE from the public HAIP demo blueprint — do not merge into root render.yaml.
 #
-# Deploy manually from this directory / Blueprint with intentional secrets.
-# Requires REPO_CONTROL_AUTH_TOKEN. Snapshots refresh via authenticated POST /api/refresh
-# (or bake a snapshot at deploy). Hosted instance does not see your laptop filesystem live.
+# Set secrets in the Render dashboard (never commit):
+#   REPO_CONTROL_AUTH_TOKEN, VITE_DISCORD_CLIENT_ID
+# Bake/refresh snapshots via build or authenticated POST /api/refresh.
 
 services:
   - type: web
@@ -28,5 +29,8 @@ services:
         value: "true"
       - key: REPO_CONTROL_CONFIG
         value: config.haip.yaml
+      # Discord Application ID — required for Embedded App SDK inside Activity
       - key: VITE_DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_ID
         sync: false

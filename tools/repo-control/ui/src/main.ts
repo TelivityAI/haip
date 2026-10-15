@@ -215,9 +215,9 @@ function render(): void {
     <div class="topbar">
       <div class="brand">
         <div class="brand-mark">Telivity</div>
-        <div class="brand-sub">Repository Control</div>
+        <div class="brand-sub">Repo Control · Discord</div>
       </div>
-      ${state.viewOnly ? '<div class="viewonly">Discord view-only</div>' : ''}
+      ${state.viewOnly ? '<div class="viewonly">Discord view-only</div>' : '<div class="viewonly" style="border-color:rgba(6,189,180,.35);color:var(--teal)">Activity origin — use in Discord</div>'}
       <div class="search">
         <input id="q" placeholder="Search capabilities & findings…" value="${escapeAttr(state.query)}" />
         <div class="filters">
