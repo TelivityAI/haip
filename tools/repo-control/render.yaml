@@ -13,6 +13,8 @@ services:
     runtime: node
     plan: starter
     rootDir: tools/repo-control
+    # Install must include runtime build tools (tsx/vite live in dependencies)
+    # so NODE_ENV=production does not skip them.
     buildCommand: pnpm install --ignore-workspace && pnpm exec tsx src/analyze.ts --skip-checks && pnpm build:ui
     startCommand: pnpm start
     healthCheckPath: /api/health

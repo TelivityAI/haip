@@ -22,11 +22,12 @@ You (human) must do these — no agent can click your portal:
 2. **OAuth2 → Redirects**: add `https://127.0.0.1` (placeholder).
 3. Enable **Activities**.
 4. **Activities → URL Mappings**
-   - Prefix `/` → Activity origin host (no `https://` in TARGET; e.g. `haip-repo-control.onrender.com`)
-5. Copy **Application ID**.
-6. Generate an invite with Activity scopes; add the app to your **private** Telivity Discord server.
-7. Create voice channel: `Repo Control` (or similar).
-8. Join channel → **Start Activity** → pick the app. Leave it running.
+   - Prefix `/` → Activity origin host (no `https://` in TARGET): `telivity-repo-control.onrender.com`
+5. Copy **Application ID** (already: `1560400786767220806` for Haip Dashboard).
+6. Invite the bot with permissions integer `549756863504` (Manage Channels, View Channels, Connect, Use Embedded Activities):
+   - https://discord.com/oauth2/authorize?client_id=1560400786767220806&permissions=549756863504&integration_type=0&scope=bot%20applications.commands
+7. Create voice channel: `Repo Control` (or run `node scripts/discord-setup-channel.mjs` after invite).
+8. Join channel → **Start Activity** → pick **Haip Dashboard**. Leave it running.
 
 ## Activity origin env (host secrets — never commit)
 

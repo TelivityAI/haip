@@ -21,15 +21,15 @@
     "@clerk/backend": "^3.24.0",
     "@clerk/clerk-js": "^6.39.0",
     "@discord/embedded-app-sdk": "^1.9.0",
+    "tsx": "^4.19.1",
+    "vite": "^6.0.0",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "tsx": "^4.19.1",
     "typescript": "^5.6.2",
-    "vite": "^6.0.0",
     "vitest": "^2.1.1"
   }
 }
