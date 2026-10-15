@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telivity.ai/schemas/repo-control/snapshot.v1.json",
+  "title": "RepoControlSnapshotV1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "repoRoot",
+    "git",
+    "checks",
+    "capabilities",
+    "findings",
+    "recentChanges",
+    "nextActions",
+    "runtime",
+    "collectors",
+    "graphify",
+    "productSummary"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "repoRoot": { "type": "string" },
+    "configPath": { "type": "string" },
+    "productSummary": { "type": "string" },
+    "git": {
+      "type": "object",
+      "required": ["branch", "commit", "shortCommit", "dirty", "dirtyPaths", "analyzedCommit"],
+      "properties": {
+        "branch": { "type": "string" },
+        "commit": { "type": "string" },
+        "shortCommit": { "type": "string" },
+        "dirty": { "type": "boolean" },
+        "dirtyPaths": { "type": "array", "items": { "type": "string" } },
+        "analyzedCommit": { "type": "string" },
+        "analyzedAt": { "type": "string" },
+        "stale": { "type": "boolean" },
+        "staleReason": { "type": ["string", "null"] }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id", "status", "command"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "command": { "type": "string" },
+          "status": {
+            "enum": ["passed", "failed", "not_run", "unavailable", "stale", "timeout"]
+          },
+          "exitCode": { "type": ["integer", "null"] },
+          "durationMs": { "type": ["integer", "null"] },
+          "summary": { "type": "string" },
+          "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "status", "exists", "missing", "files", "verification", "consequence"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "status": {
+            "enum": [
+              "verified",
+              "implemented_unverified",
+              "partial",
+              "broken",
+              "stub_mock",
+              "planned_only",
+              "unknown"
+            ]
+          },
+          "exists": { "type": "string" },
+          "missing": { "type": "string" },
+          "files": { "type": "array", "items": { "type": "string" } },
+          "routes": { "type": "array", "items": { "type": "string" } },
+          "tests": { "type": "array", "items": { "type": "string" } },
+          "verification": { "type": "string" },
+          "consequence": { "type": "string" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "recentChanges": {
+      "type": "object",
+      "required": ["commits", "uncommitted"],
+      "properties": {
+        "commits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["sha", "subject", "date", "paths", "capabilities"],
+            "properties": {
+              "sha": { "type": "string" },
+              "subject": { "type": "string" },
+              "date": { "type": "string" },
+              "paths": { "type": "array", "items": { "type": "string" } },
+              "capabilities": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "uncommitted": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "nextActions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rank", "title", "why", "findingIds", "confidence"],
+        "properties": {
+          "rank": { "type": "integer" },
+          "title": { "type": "string" },
+          "why": { "type": "string" },
+          "findingIds": { "type": "array", "items": { "type": "string" } },
+          "confidence": { "enum": ["high", "medium", "low"] },
+          "effortEstimate": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["status", "note"],
+      "properties": {
+        "status": { "enum": ["not_connected", "connected"] },
+        "note": { "type": "string" },
+        "sources": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "collectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "durationMs"],
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "enum": ["ok", "failed", "timeout", "skipped"] },
+          "durationMs": { "type": "integer" },
+          "summary": { "type": "string" },
+          "error": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "graphify": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["ready", "missing", "failed", "skipped"] },
+        "dir": { "type": ["string", "null"] },
+        "htmlPath": { "type": ["string", "null"] },
+        "jsonPath": { "type": ["string", "null"] },
+        "reportPath": { "type": ["string", "null"] },
+        "nodeCount": { "type": ["integer", "null"] },
+        "edgeCount": { "type": ["integer", "null"] },
+        "summary": { "type": "string" }
+      }
+    },
+    "manifests": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "structure": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "previousSnapshotId": { "type": ["string", "null"] },
+    "comparison": { "type": ["object", "null"] }
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "required": ["kind", "summary"],
+      "properties": {
+        "kind": {
+          "enum": ["file", "symbol", "command", "workflow", "url", "other"]
+        },
+        "path": { "type": "string" },
+        "symbol": { "type": "string" },
+        "line": { "type": "integer" },
+        "command": { "type": "string" },
+        "summary": { "type": "string" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "id",
+        "category",
+        "severity",
+        "confidence",
+        "evidenceClass",
+        "title",
+        "explanation",
+        "evidence",
+        "analyzedCommit",
+        "analyzedAt",
+        "suggestedAction",
+        "verificationLimits"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "category": {
+          "enum": [
+            "check_failure",
+            "incomplete_workflow",
+            "disconnected_ui",
+            "disconnected_api",
+            "placeholder",
+            "auth_tenancy",
+            "schema_migration",
+            "todo",
+            "bloat",
+            "duplication",
+            "complexity",
+            "other"
+          ]
+        },
+        "capability": { "type": ["string", "null"] },
+        "severity": { "enum": ["critical", "high", "medium", "low"] },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "evidenceClass": { "enum": ["fact", "heuristic", "inference"] },
+        "title": { "type": "string" },
+        "explanation": { "type": "string" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+        "analyzedCommit": { "type": "string" },
+        "analyzedAt": { "type": "string" },
+        "suggestedAction": { "type": "string" },
+        "verificationLimits": { "type": "string" },
+        "observedFailure": { "type": "boolean" }
+      }
+    }
+  }
+}

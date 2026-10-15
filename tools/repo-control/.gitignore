@@ -1,0 +1,12 @@
+node_modules/
+dist/
+ui/dist/
+snapshots/*
+!snapshots/.gitkeep
+annotations.json
+graphify-out/
+.env
+.env.local
+*.log
+.vitest-count/
+ui/public/graphify/

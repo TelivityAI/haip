@@ -1,0 +1,32 @@
+# Private Repository Control Dashboard — SEPARATE from the public HAIP demo.
+# Do NOT merge this into the root render.yaml demo blueprint.
+#
+# Deploy manually from this directory / Blueprint with intentional secrets.
+# Requires REPO_CONTROL_AUTH_TOKEN. Snapshots refresh via authenticated POST /api/refresh
+# (or bake a snapshot at deploy). Hosted instance does not see your laptop filesystem live.
+
+services:
+  - type: web
+    name: haip-repo-control
+    runtime: node
+    plan: starter
+    rootDir: tools/repo-control
+    buildCommand: pnpm install --ignore-workspace && pnpm exec tsx src/analyze.ts --skip-checks && pnpm build:ui
+    startCommand: pnpm start
+
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "8787"
+      - key: REPO_CONTROL_AUTH_TOKEN
+        sync: false
+      - key: REPO_CONTROL_DISCORD_PUBLIC_READ
+        value: "true"
+      - key: REPO_CONTROL_CONFIG
+        value: config.haip.yaml
+      - key: VITE_DISCORD_CLIENT_ID
+        sync: false
