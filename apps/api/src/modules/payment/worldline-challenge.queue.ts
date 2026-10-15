@@ -6,6 +6,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Queue, Worker } from 'bullmq';
 
 /**
@@ -61,12 +62,25 @@ export class WorldlineChallengeQueue implements OnModuleInit, OnModuleDestroy {
     private queue?: ChallengeQueue,
     @Optional() @Inject(WORLDLINE_CHALLENGE_WORKER)
     private worker?: ChallengeWorker,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   onModuleInit() {
     if (process.env['NODE_ENV'] === 'test') return;
+    const gateway = (this.configService?.get<string>('PAYMENT_GATEWAY') ?? process.env['PAYMENT_GATEWAY'] ?? '')
+      .trim()
+      .toLowerCase();
+    if (gateway !== 'worldline') return;
     this.getQueue();
     this.getWorker();
+  }
+
+  /** Visible failure when the expirer did not inject. A missing call would drop the job. */
+  async processJob(data: WorldlineChallengeJob): Promise<void> {
+    if (!this.payments) {
+      throw new Error('Worldline challenge expirer is not available');
+    }
+    await this.payments.expireWorldlineChallenge(data.paymentId, data.propertyId);
   }
 
   async onModuleDestroy() {
@@ -103,7 +117,7 @@ export class WorldlineChallengeQueue implements OnModuleInit, OnModuleDestroy {
       const worker = new Worker<WorldlineChallengeJob>(
         WORLDLINE_CHALLENGE_QUEUE_NAME,
         async (job) => {
-          await this.payments?.expireWorldlineChallenge(job.data.paymentId, job.data.propertyId);
+          await this.processJob(job.data);
         },
         { connection: redisConnectionOptions() },
       );

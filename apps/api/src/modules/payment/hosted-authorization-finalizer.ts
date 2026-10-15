@@ -75,8 +75,13 @@ export async function finalizeHostedAuthorization(
           eq(reservations.status, 'pending'),
         ));
         addEvent('reservation.cancelled', 'reservation', reservation.id, {
-          status: 'cancelled',
+          reservationId: reservation.id,
+          arrivalDate: reservation.arrivalDate,
+          departureDate: reservation.departureDate,
+          roomTypeId: reservation.roomTypeId,
           cancellationReason: 'Payment was not authorized',
+          penaltyAmount: null,
+          withinFreeWindow: null,
         });
       }
     }

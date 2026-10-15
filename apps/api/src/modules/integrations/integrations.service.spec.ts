@@ -184,4 +184,59 @@ describe('worldline integration config', () => {
     const { mergeWorldlineConfig } = await import('./integrations.service');
     expect(() => mergeWorldlineConfig({ secretApiKeyEncrypted: { ciphertext: 'forged' } }, {})).toThrow(/ciphertext/i);
   });
+
+  it('leaves a null config untouched while protecting credentials', async () => {
+    const forUpdate = vi.fn().mockResolvedValue([{ id: 'row-1', propertyId: 'prop-1', config: null }]);
+    const update = vi.fn();
+    const db = {
+      transaction: vi.fn(async (fn: (tx: any) => Promise<void>) => fn({
+        select: () => ({ from: () => ({ where: () => ({ limit: () => ({ for: forUpdate }) }) }) }),
+        update,
+      })),
+    };
+    const service = new IntegrationsService(db as any);
+    await expect(service.protectWorldlineCredentials('prop-1')).resolves.toBeUndefined();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('does not attribute a webhook key id that belongs to more than one property', async () => {
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: async () => [
+            { propertyId: 'prop-a', config: { webhookKeyId: 'shared' } },
+            { propertyId: 'prop-b', config: { webhookKeyId: 'shared' } },
+          ],
+        }),
+      }),
+    };
+    const service = new IntegrationsService(db as any);
+    await expect(service.findWorldlineWebhookConfig('shared')).resolves.toBeNull();
+  });
+
+  it('rejects a webhook key id already saved by another property', async () => {
+    const { ConflictException } = await import('@nestjs/common');
+    let selects = 0;
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: () => {
+            selects += 1;
+            if (selects === 1) {
+              return { limit: async () => [{ slug: 'worldline' }] };
+            }
+            if (selects === 2) return { limit: async () => [] };
+            return [
+              { propertyId: 'prop-b', config: { webhookKeyId: 'shared' } },
+            ];
+          },
+        }),
+      }),
+    };
+    const service = new IntegrationsService(db as any);
+    await expect(service.upsertPropertyIntegration('prop-a', 'worldline', {
+      enabled: true,
+      config: { webhookKeyId: 'shared', merchantId: 'psp-1' },
+    })).rejects.toBeInstanceOf(ConflictException);
+  });
 });

@@ -115,7 +115,7 @@ describe.skipIf(!databaseUrl)('Redsys authoritative booking finalization', () =>
     await expect(returns.status(randomUUID(), reference)).rejects.toThrow('Payment return not found');
     await expect(returns.status(propertyId, 'z'.repeat(43))).rejects.toThrow('Payment return not found');
     await notify();
-    expect(await returns.status(propertyId, reference)).toEqual({ status: 'succeeded', confirmationNumber });
+    expect(await returns.status(propertyId, reference)).toEqual({ status: 'succeeded', reservationStatus: 'confirmed' });
     expect(await returns.resolve(propertyId, reference)).toBe(target.href);
     expect((await state()).reservation?.status).toBe('confirmed');
   });
@@ -145,7 +145,7 @@ describe.skipIf(!databaseUrl)('Redsys authoritative booking finalization', () =>
       .where(and(eq(payments.id, paymentId), eq(payments.propertyId, propertyId)));
     expect(await returns.status(propertyId, reference)).toEqual({ status: 'processing' });
     await notify(notification({ Ds_Response: response }));
-    expect(await returns.status(propertyId, reference)).toEqual({ status: 'failed' });
+    expect(await returns.status(propertyId, reference)).toEqual({ status: 'failed', reservationStatus: 'pending' });
   });
 
   it('records the deposit and configured confirmation only after verified authorization', async () => {

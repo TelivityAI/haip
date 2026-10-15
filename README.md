@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-  <img src="https://img.shields.io/badge/Tests-2540%20passing-brightgreen" alt="2540 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+  <img src="https://img.shields.io/badge/Tests-2549%20passing-brightgreen" alt="2549 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -510,7 +510,7 @@ Operator notes for activating existing adapters, metasearch landings on the dire
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (2540 passing tests across 293 files with passing tests) | Unit and integration tests |
+| Testing | Vitest (2549 passing tests across 293 files with passing tests) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -648,7 +648,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# Passing-test count: 2540 test cases across 293 files (skipped excluded)
+# Passing-test count: 2549 test cases across 293 files (skipped excluded)
 
 # API tests only
 pnpm --filter @telivityhaip/api test
@@ -1197,7 +1197,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (2540 passing, 293 files with passes; skipped excluded)
+pnpm test             # Run all tests (2549 passing, 293 files with passes; skipped excluded)
 pnpm lint             # ESLint
 ```
 
@@ -1213,8 +1213,9 @@ the corresponding CORS origins for cross-origin widgets as usual.
 
 Run `pnpm db:migrate` before deploying the API changes, including
 `0024_payment_authorization_finalization.sql`,
-`0025_payment_booking_return_reference.sql`, and
-`0026_payment_booking_return_destination.sql`. Follow the
+`0025_payment_booking_return_reference.sql`,
+`0026_payment_booking_return_destination.sql`, and
+`0027_worldline_webhook_key_unique.sql`. Follow the
 [Redsys credential migration](docs/integrations/payments-redsys.md#existing-installations)
 before accepting payments with previously stored signing keys.
 The widget sends its full embedding-page URL as
@@ -1238,17 +1239,21 @@ On return, the widget boots directly into its payment-status view without saved
 router state or browser storage. It polls
 `GET /api/v1/booking-engine/payment-return-status`, using the normal
 `x-booking-key` and an `x-payment-return-reference` header. The response contains
-only `status`: `processing`, `succeeded`, `failed`, `cancelled`, or `unavailable`.
-Only server payment state determines the result; browser flags are ignored.
-`succeeded` reports payment authorization, not unconditional booking confirmation.
+`status`: `processing`, `succeeded`, `failed`, `cancelled`, or `unavailable`.
+A succeeded or failed payment also includes `reservationStatus`. It does not
+include a confirmation credential. Only server payment state determines the
+result; browser flags are ignored. `succeeded` reports payment authorization.
+`reservationStatus` of `confirmed` means the reservation was confirmed.
 The reference expires seven days after payment creation and cannot retrieve guest
 details, retrieve a confirmation credential, or cancel a booking.
 
 Keep return references out of application, proxy, and analytics logs; the relay
 path reference and the host page's `haip_payment_return` query parameter are
 limited bearer capabilities. The relay sets `Referrer-Policy: no-referrer`.
-Failed, cancelled, or unverified returns direct guests to contact the hotel before
-trying again, because an earlier booking or payment may already exist.
+A failed return says the booking was cancelled only when `reservationStatus` is
+`cancelled`. Other failed, cancelled, or unverified returns direct guests to
+contact the hotel before trying again, because an earlier booking or payment may
+already exist.
 
 ---
 

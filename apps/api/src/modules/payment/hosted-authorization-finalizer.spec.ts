@@ -88,7 +88,13 @@ describe('finalizeHostedAuthorization', () => {
   it('cancels a still-pending reservation on decline without a penalty deposit', async () => {
     const { db, writes, inserts } = harness({
       payment,
-      reservation: { id: 'res-1', status: 'pending' },
+      reservation: {
+        id: 'res-1',
+        status: 'pending',
+        arrivalDate: '2026-11-01',
+        departureDate: '2026-11-03',
+        roomTypeId: 'rt-1',
+      },
     });
     const events = await finalizeHostedAuthorization(db, {
       paymentId: 'pay-1',
@@ -111,6 +117,15 @@ describe('finalizeHostedAuthorization', () => {
     ]);
     expect(inserts.some((row) => row.table === 'deposits')).toBe(false);
     expect(events.map((event) => event.event)).toEqual(['payment.failed', 'reservation.cancelled']);
+    expect(events[1]?.data).toEqual({
+      reservationId: 'res-1',
+      arrivalDate: '2026-11-01',
+      departureDate: '2026-11-03',
+      roomTypeId: 'rt-1',
+      cancellationReason: 'Payment was not authorized',
+      penaltyAmount: null,
+      withinFreeWindow: null,
+    });
   });
 
   it('leaves a pending reservation in place when cancellation was not requested', async () => {

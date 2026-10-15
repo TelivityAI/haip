@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { WorldlineCredentialsService } from './worldline-credentials.service';
 
 describe('WorldlineCredentialsService', () => {
@@ -39,6 +39,6 @@ describe('WorldlineCredentialsService', () => {
       })[key],
     };
     const service = new WorldlineCredentialsService(integrations as any, config as any);
-    await expect(service.resolveForProperty('prop-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.resolveForProperty('prop-1')).resolves.toBeNull();
   });
 });

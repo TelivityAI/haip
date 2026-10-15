@@ -2,7 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
-import { bookings, folios, payments, reservations } from '@telivityhaip/database';
+import { folios, payments, reservations } from '@telivityhaip/database';
 import { publicApiBaseUrl } from '../payment/redsys-credentials.service';
 
 const REFERENCE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -19,7 +19,7 @@ export type PendingHostedCheckout = {
   folioId?: string | null;
 };
 
-/** Limited, expiring capability. A succeeded payment may also reveal its confirmation number. */
+/** Limited, expiring capability. Reports payment state and reservation state, never a booking credential. */
 export class BookingReturnService {
   constructor(
     private readonly db: any,
@@ -129,24 +129,24 @@ export class BookingReturnService {
       ? 'succeeded' : status === 'failed' ? 'failed'
         : status === 'voided' ? 'cancelled'
           : status === 'pending' ? 'processing' : 'unavailable';
-    if (reported !== 'succeeded' || !payment.folioId) return { status: reported };
-    const confirmationNumber = await this.confirmationNumber(propertyId, payment.folioId);
-    return confirmationNumber ? { status: reported, confirmationNumber } : { status: reported };
+    if ((reported !== 'succeeded' && reported !== 'failed') || !payment.folioId) {
+      return { status: reported };
+    }
+    const reservationStatus = await this.reservationStatus(propertyId, payment.folioId);
+    return reservationStatus ? { status: reported, reservationStatus } : { status: reported };
   }
 
-  /** Property-scoped path: payment folio → reservation → booking. */
-  private async confirmationNumber(propertyId: string, folioId: string): Promise<string | null> {
+  /** Property-scoped path: payment folio → reservation. Status only, never the confirmation number. */
+  private async reservationStatus(propertyId: string, folioId: string): Promise<string | null> {
     const [row] = await this.db
-      .select({ confirmationNumber: bookings.confirmationNumber })
+      .select({ status: reservations.status })
       .from(folios)
       .innerJoin(reservations, eq(reservations.id, folios.reservationId))
-      .innerJoin(bookings, eq(bookings.id, reservations.bookingId))
       .where(and(
         eq(folios.id, folioId),
         eq(folios.propertyId, propertyId),
         eq(reservations.propertyId, propertyId),
-        eq(bookings.propertyId, propertyId),
       ));
-    return row?.confirmationNumber ?? null;
+    return row?.status ?? null;
   }
 }
