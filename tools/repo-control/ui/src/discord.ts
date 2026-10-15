@@ -22,8 +22,18 @@ export async function initDiscordActivity(): Promise<{ viewOnly: boolean; inDisc
   }
 
   try {
-    const clientId = (import.meta as ImportMeta & { env: Record<string, string> }).env
+    let clientId = (import.meta as ImportMeta & { env: Record<string, string> }).env
       ?.VITE_DISCORD_CLIENT_ID;
+    if (!clientId) {
+      try {
+        const cfg = await fetch('/api/public-config').then((r) => r.json()) as {
+          discordClientId?: string | null;
+        };
+        clientId = cfg.discordClientId || undefined;
+      } catch {
+        /* ignore */
+      }
+    }
     if (!clientId) {
       // Still treat as view-only when embedded without SDK config
       document.documentElement.dataset.discord = 'view-only-no-sdk';
