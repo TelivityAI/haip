@@ -1,5 +1,6 @@
 import './styles.css';
 import { initDiscordActivity } from './discord';
+import { ensureClerkSignedIn, getClerkBearer, getClerkSession } from './clerk';
 
 type Snapshot = {
   schemaVersion: number;
@@ -131,12 +132,42 @@ async function boot(): Promise<void> {
   const discord = await initDiscordActivity();
   state.viewOnly = discord.viewOnly;
 
-  const me = await api<{ authenticated: boolean; viewOnly?: boolean }>('/api/me');
-  state.authed = me.authenticated;
-  if (me.viewOnly) state.viewOnly = true;
+  // Discord Activity: load board without Clerk
+  if (discord.inDiscord) {
+    state.authed = true;
+    state.viewOnly = true;
+    await loadData();
+    render();
+    return;
+  }
 
-  if (!state.authed && !state.viewOnly) {
-    renderLogin();
+  // Hosted contributors: Clerk email sign-up / sign-in (view-only unless owner)
+  const clerk = await ensureClerkSignedIn(app);
+  if (clerk.error === 'needs_sign_in') {
+    // Sign-in UI already mounted
+    return;
+  }
+  if (clerk.ok) {
+    state.authed = true;
+    state.viewOnly = true; // contributors default view-only; owners detected via /api/me
+  }
+
+  const me = await api<{
+    authenticated: boolean;
+    viewOnly?: boolean;
+    canWrite?: boolean;
+    clerkEnabled?: boolean;
+    via?: string;
+  }>('/api/me');
+
+  if (me.authenticated) {
+    state.authed = true;
+    state.viewOnly = Boolean(me.viewOnly) || !me.canWrite;
+  } else if (!clerk.ok && clerk.error === 'clerk_disabled') {
+    renderOwnerTokenLogin();
+    return;
+  } else if (!me.authenticated) {
+    app.innerHTML = `<div class="login"><h1>Telivity</h1><p class="sev-critical">Sign-in required. ${escapeHtml(clerk.error || 'unauthorized')}</p></div>`;
     return;
   }
 
@@ -144,14 +175,14 @@ async function boot(): Promise<void> {
   render();
 }
 
-function renderLogin(): void {
+function renderOwnerTokenLogin(): void {
   app.innerHTML = `
     <div class="login">
       <h1>Telivity</h1>
-      <p>Repository Control — owner access</p>
+      <p>Repository Control — owner token (Clerk not configured)</p>
       <input id="token" type="password" placeholder="Auth token" />
       <button class="btn primary" id="loginBtn" style="width:100%">Enter</button>
-      <p style="font-size:11px">Set <code>REPO_CONTROL_AUTH_TOKEN</code> on the server. Never commit secrets.</p>
+      <p style="font-size:11px">For contributors, configure Clerk. Never commit secrets.</p>
       <div id="loginErr" class="sev-critical"></div>
     </div>`;
   document.getElementById('loginBtn')!.addEventListener('click', async () => {
@@ -186,7 +217,16 @@ async function loadData(): Promise<void> {
 }
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const headers = new Headers(init?.headers);
+  const session = getClerkSession();
+  if (session) {
+    const token = (await session.getToken()) || getClerkBearer();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+  } else {
+    const bearer = getClerkBearer();
+    if (bearer) headers.set('Authorization', `Bearer ${bearer}`);
+  }
+  const res = await fetch(url, { ...init, headers });
   if (res.status === 401) {
     state.authed = false;
     throw new Error('Unauthorized');
@@ -217,7 +257,8 @@ function render(): void {
         <div class="brand-mark">Telivity</div>
         <div class="brand-sub">Repo Control · Discord</div>
       </div>
-      ${state.viewOnly ? '<div class="viewonly">Discord view-only</div>' : '<div class="viewonly" style="border-color:rgba(6,189,180,.35);color:var(--teal)">Activity origin — use in Discord</div>'}
+      ${state.viewOnly ? '<div class="viewonly">View-only</div>' : '<div class="viewonly" style="border-color:rgba(6,189,180,.35);color:var(--teal)">Owner</div>'}
+      ${getClerkSession() ? `<button class="btn" id="signOutBtn" title="${escapeAttr(getClerkSession()?.email || '')}">Sign out</button>` : ''}
       <div class="search">
         <input id="q" placeholder="Search capabilities & findings…" value="${escapeAttr(state.query)}" />
         <div class="filters">
@@ -450,6 +491,9 @@ function bindChrome(): void {
       render();
     });
   }
+  document.getElementById('signOutBtn')?.addEventListener('click', async () => {
+    await getClerkSession()?.signOut();
+  });
   document.getElementById('refresh')?.addEventListener('click', async () => {
     if (state.viewOnly) return;
     state.refreshing = true;

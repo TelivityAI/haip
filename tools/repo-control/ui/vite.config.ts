@@ -12,6 +12,10 @@ export default defineConfig({
     outDir: path.join(root, 'dist'),
     emptyOutDir: true,
     sourcemap: true,
+    chunkSizeWarningLimit: 2000,
+  },
+  optimizeDeps: {
+    include: ['@clerk/clerk-js'],
   },
   server: {
     port: 4173,

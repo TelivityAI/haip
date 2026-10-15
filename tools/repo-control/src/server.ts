@@ -5,19 +5,38 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PACKAGE_ROOT, annotationsPath, latestSnapshotPath } from './lib/paths.js';
 import { runAnalyze } from './analyze.js';
+import {
+  clerkEnabled,
+  publicClerkConfig,
+  resolveClerkIdentity,
+  type ClerkIdentity,
+} from './lib/clerk-auth.js';
 
 const PORT = Number(process.env.PORT || process.env.REPO_CONTROL_PORT || 8787);
 const HOST = process.env.HOST || '0.0.0.0';
 const AUTH_TOKEN = process.env.REPO_CONTROL_AUTH_TOKEN || '';
 const AUTH_DISABLED = process.env.REPO_CONTROL_AUTH_DISABLED === 'true';
-/** When true, GET snapshot/UI/graphify are readable without login (Discord Activity). Mutations still require auth. */
+/** Discord Activity proxy may read snapshot/UI without Clerk. */
 const DISCORD_PUBLIC_READ = process.env.REPO_CONTROL_DISCORD_PUBLIC_READ === 'true';
 const COOKIE_NAME = 'repo_control_session';
 const DEV = process.argv.includes('--dev') || process.env.REPO_CONTROL_DEV === 'true';
 
-const READ_API = new Set(['/api/me', '/api/snapshot', '/api/annotations', '/api/health']);
+const READ_API = new Set(['/api/me', '/api/snapshot', '/api/annotations', '/api/health', '/api/public-config']);
 
-type AnnotationMap = Record<string, { status: 'acknowledged' | 'false_positive'; note?: string; at: string }>;
+type AnnotationMap = Record<
+  string,
+  { status: 'acknowledged' | 'false_positive'; note?: string; at: string }
+>;
+
+type Access = {
+  /** Can read snapshot / UI */
+  canRead: boolean;
+  /** Can refresh / annotate */
+  canWrite: boolean;
+  viewOnly: boolean;
+  via: 'discord' | 'clerk' | 'owner_token' | 'open_dev' | 'none';
+  clerk: ClerkIdentity | null;
+};
 
 function readAnnotations(): AnnotationMap {
   const p = annotationsPath();
@@ -44,12 +63,9 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return out;
 }
 
-function isAuthed(req: http.IncomingMessage): boolean {
+function ownerTokenOk(req: http.IncomingMessage): boolean {
   if (AUTH_DISABLED) return true;
-  if (!AUTH_TOKEN) {
-    // Local default: allow if token unset AND not production
-    return process.env.NODE_ENV !== 'production';
-  }
+  if (!AUTH_TOKEN) return false;
   const cookies = parseCookies(req.headers.cookie);
   if (cookies[COOKIE_NAME] === AUTH_TOKEN) return true;
   const auth = req.headers.authorization;
@@ -64,6 +80,56 @@ function isAuthed(req: http.IncomingMessage): boolean {
     }
   }
   return false;
+}
+
+async function resolveAccess(
+  req: http.IncomingMessage,
+  url: URL,
+): Promise<Access> {
+  const referer = String(req.headers.referer || req.headers.referrer || '');
+  const fromDiscordProxy =
+    referer.includes('discordsays.com') ||
+    url.searchParams.get('discord') === '1' ||
+    url.pathname.startsWith('/discord') ||
+    Boolean(req.headers['x-discord-activity']);
+
+  if (AUTH_DISABLED) {
+    return { canRead: true, canWrite: true, viewOnly: false, via: 'open_dev', clerk: null };
+  }
+
+  if (ownerTokenOk(req)) {
+    return { canRead: true, canWrite: true, viewOnly: false, via: 'owner_token', clerk: null };
+  }
+
+  const clerk = await resolveClerkIdentity(req);
+  if (clerk) {
+    const canWrite = clerk.isOwner;
+    return {
+      canRead: true,
+      canWrite,
+      viewOnly: !canWrite,
+      via: 'clerk',
+      clerk,
+    };
+  }
+
+  // Discord Activity iframe only — not arbitrary browsers (Clerk covers those)
+  if (DISCORD_PUBLIC_READ && fromDiscordProxy) {
+    return {
+      canRead: true,
+      canWrite: false,
+      viewOnly: true,
+      via: 'discord',
+      clerk: null,
+    };
+  }
+
+  // Local non-production without Clerk/token: open for agent testing
+  if (!AUTH_TOKEN && !clerkEnabled() && process.env.NODE_ENV !== 'production') {
+    return { canRead: true, canWrite: true, viewOnly: false, via: 'open_dev', clerk: null };
+  }
+
+  return { canRead: false, canWrite: false, viewOnly: true, via: 'none', clerk: null };
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
@@ -126,31 +192,44 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = url.pathname;
+    const access = await resolveAccess(req, url);
 
-    // Health — unauthenticated
     if (pathname === '/api/health') {
       sendJson(res, 200, { ok: true, service: 'repo-control' });
       return;
     }
 
-    if (pathname === '/api/me') {
-      const authed = isAuthed(req);
+    if (pathname === '/api/public-config') {
       sendJson(res, 200, {
-        authenticated: authed || DISCORD_PUBLIC_READ,
-        viewOnly:
-          url.searchParams.get('viewOnly') === '1' ||
-          url.searchParams.get('discord') === '1' ||
-          (DISCORD_PUBLIC_READ && !authed),
-        authRequired: Boolean(AUTH_TOKEN) && !AUTH_DISABLED,
+        clerk: publicClerkConfig(),
+        discordClientId:
+          process.env.VITE_DISCORD_CLIENT_ID || process.env.DISCORD_CLIENT_ID || null,
         discordPublicRead: DISCORD_PUBLIC_READ,
       });
       return;
     }
 
+    if (pathname === '/api/me') {
+      sendJson(res, 200, {
+        authenticated: access.canRead,
+        viewOnly: access.viewOnly || !access.canWrite,
+        authRequired: !AUTH_DISABLED && (Boolean(AUTH_TOKEN) || clerkEnabled()),
+        discordPublicRead: DISCORD_PUBLIC_READ,
+        clerkEnabled: clerkEnabled(),
+        via: access.via,
+        user: access.clerk
+          ? { id: access.clerk.userId, email: access.clerk.email, isOwner: access.clerk.isOwner }
+          : null,
+        canWrite: access.canWrite,
+      });
+      return;
+    }
+
     if (pathname === '/api/login' && req.method === 'POST') {
+      // Legacy owner-token cookie login (optional alongside Clerk)
       const raw = await readBody(req);
       const body = JSON.parse(raw || '{}') as { token?: string };
-      if (!AUTH_TOKEN && process.env.NODE_ENV !== 'production') {
+      if (!AUTH_TOKEN && process.env.NODE_ENV !== 'production' && !clerkEnabled()) {
         res.writeHead(200, {
           'Set-Cookie': `${COOKIE_NAME}=local; Path=/; HttpOnly; SameSite=Lax`,
           'Content-Type': 'application/json',
@@ -170,9 +249,8 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // Graphify static — readable when authed or Discord public-read mode
     if (pathname.startsWith('/graphify/')) {
-      if (!isAuthed(req) && !DISCORD_PUBLIC_READ && AUTH_TOKEN && !AUTH_DISABLED) {
+      if (!access.canRead && !DISCORD_PUBLIC_READ) {
         sendJson(res, 401, { error: 'unauthorized' });
         return;
       }
@@ -189,21 +267,24 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // API routes require auth; optional public read for Discord Activity GET endpoints
     if (pathname.startsWith('/api/')) {
       const isRead = req.method === 'GET' && READ_API.has(pathname);
-      const allow =
-        isAuthed(req) ||
-        (DISCORD_PUBLIC_READ && isRead) ||
-        pathname === '/api/health' ||
-        pathname === '/api/me';
-      if (!allow) {
+      const isWrite = !isRead;
+      if (isWrite && !access.canWrite) {
+        sendJson(res, 401, { error: 'unauthorized', hint: 'owner_required' });
+        return;
+      }
+      if (isRead && !access.canRead && pathname !== '/api/public-config' && pathname !== '/api/health' && pathname !== '/api/me') {
         sendJson(res, 401, { error: 'unauthorized' });
         return;
       }
     }
 
     if (pathname === '/api/snapshot') {
+      if (!access.canRead) {
+        sendJson(res, 401, { error: 'unauthorized' });
+        return;
+      }
       const latest = latestSnapshotPath();
       if (!fs.existsSync(latest)) {
         sendJson(res, 404, {
@@ -213,7 +294,6 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const snap = JSON.parse(fs.readFileSync(latest, 'utf8'));
-      // Mark stale if file older than config threshold — lightweight
       const ageMin = (Date.now() - new Date(snap.generatedAt).getTime()) / 60000;
       if (ageMin > 60) {
         snap.git = {
@@ -227,6 +307,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/annotations' && req.method === 'GET') {
+      if (!access.canRead) {
+        sendJson(res, 401, { error: 'unauthorized' });
+        return;
+      }
       sendJson(res, 200, { annotations: readAnnotations() });
       return;
     }
@@ -277,29 +361,21 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // Static UI — gated when auth token configured unless Discord public-read
-    const canReadUi =
-      isAuthed(req) || DISCORD_PUBLIC_READ || AUTH_DISABLED || (!AUTH_TOKEN && process.env.NODE_ENV !== 'production');
-    if (!canReadUi && (pathname === '/' || pathname.endsWith('.html'))) {
-      // Serve a tiny login shell without the snapshot
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Telivity Repo Control</title>
-        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&display=swap" rel="stylesheet"/>
-        <style>body{font-family:Montserrat,sans-serif;background:#0e1118;color:#f0f0f6;display:grid;place-items:center;height:100vh;margin:0}
-        form{background:#161a24;border:1px solid #2a3145;padding:24px;border-radius:10px;width:320px}
-        h1{color:#06bdb4;margin:0 0 8px;font-size:18px}input,button{width:100%;margin-top:8px;padding:10px;border-radius:6px;border:1px solid #2a3145;background:#0e1118;color:#f0f0f6}
-        button{background:#06bdb4;color:#04110f;font-weight:700;border:0;cursor:pointer}</style></head>
-        <body><form method="POST" action="/api/login" id="f"><h1>Telivity</h1><p>Repository Control</p>
-        <input name="token" id="token" type="password" placeholder="Auth token" />
-        <button type="submit">Enter</button></form>
-        <script>document.getElementById('f').onsubmit=async(e)=>{e.preventDefault();
-          const token=document.getElementById('token').value;
-          const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});
-          if(r.ok) location.reload(); else alert('Invalid token');};</script></body></html>`);
+    // Always serve SPA shell when Clerk is enabled so the sign-in UI can mount.
+    // Snapshot APIs remain protected.
+    const serveShell =
+      access.canRead ||
+      clerkEnabled() ||
+      DISCORD_PUBLIC_READ ||
+      AUTH_DISABLED ||
+      (!AUTH_TOKEN && process.env.NODE_ENV !== 'production');
+
+    if (!serveShell && (pathname === '/' || pathname.endsWith('.html'))) {
+      res.writeHead(401, { 'Content-Type': 'text/plain' });
+      res.end('Unauthorized');
       return;
     }
 
-    // Static UI
     const root = uiRoot();
     const reqPath = pathname === '/' ? '/index.html' : pathname;
     const file = safeJoin(root, reqPath);
@@ -309,7 +385,6 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // Also allow /src/* from ui when serving unbuilt tree
     if (pathname.startsWith('/src/')) {
       const srcFile = safeJoin(path.join(PACKAGE_ROOT, 'ui'), pathname);
       if (srcFile && fs.existsSync(srcFile)) {
@@ -319,9 +394,8 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // SPA fallback
     const index = path.join(root, 'index.html');
-    if (fs.existsSync(index) && canReadUi) {
+    if (fs.existsSync(index) && serveShell) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       fs.createReadStream(index).pipe(res);
       return;
@@ -339,7 +413,15 @@ server.listen(PORT, HOST, () => {
     JSON.stringify({
       service: 'repo-control',
       url: `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`,
-      auth: AUTH_DISABLED ? 'disabled' : AUTH_TOKEN ? 'token' : 'open-non-production',
+      auth: AUTH_DISABLED
+        ? 'disabled'
+        : clerkEnabled()
+          ? 'clerk+optional-owner-token'
+          : AUTH_TOKEN
+            ? 'owner-token'
+            : 'open-non-production',
+      clerk: clerkEnabled(),
+      discordPublicRead: DISCORD_PUBLIC_READ,
       ui: uiRoot(),
       dev: DEV,
     }),

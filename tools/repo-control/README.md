@@ -1,66 +1,65 @@
-# Telivity Repository Control — Discord Activity
+# Telivity Repository Control
 
-**Primary surface: Discord.** Open a voice channel → Start Activity → see the view-only Repo Control board. Not a standalone product site.
+Two ways to read the same snapshot board:
 
-The HTTP service exists only because Discord Activities load your UI through Discord’s proxy (`*.discordsays.com`). That origin is **Activity plumbing**, not a separate dashboard people should browse.
+| Surface | Who | Access |
+|---------|-----|--------|
+| **Discord Activity** (voice channel) | Team in Discord | View-only inside Discord |
+| **Hosted web (Clerk)** | Contributors | Free email sign-up / sign-in, view-only report |
 
-## What you get in Discord
+The HTTP service is the Activity origin **and** the Clerk-gated web app. Contributors do not need Discord; Discord users do not need Clerk.
 
-- Always-on **view-only** board in a dedicated voice channel (e.g. `Repo Control`)
-- Branch/commit, check status, capabilities, issues, Graphify drill-in, next actions
-- No refresh / annotations / exports from Discord (observational only)
-- Runtime telemetry shows **Not connected** unless you wire it later
+## Auth model
 
-## Honest constraint
+- **Contributors (Clerk):** any signed-in user can **read** the report. Mutations (refresh / annotations) stay off unless their email/user id is in `REPO_CONTROL_OWNER_EMAILS` / `REPO_CONTROL_OWNER_USER_IDS`.
+- **Discord Activity:** view-only via Discord’s iframe proxy (`REPO_CONTROL_DISCORD_PUBLIC_READ=true`, requests detected from `discordsays.com`).
+- **Owner token (optional):** `REPO_CONTROL_AUTH_TOKEN` for operator refresh without Clerk owner allowlist.
 
-Discord cannot wallpaper a text channel with a live SPA. Activities run in a **voice channel**. Someone starts the Activity once; others join that channel and see it.
+Never commit secrets.
 
-Discord still requires a reachable Activity origin. Host it privately; do not advertise the URL. Do not commit auth tokens.
+## Required secrets (host / Cursor env)
 
-## Discord setup (required)
+```bash
+# Clerk (contributor web access)
+CLERK_PUBLISHABLE_KEY=pk_...
+CLERK_SECRET_KEY=sk_...
+# optional owners who can refresh:
+# REPO_CONTROL_OWNER_EMAILS=you@telivity.ai
 
-Follow **[docs/DISCORD_ACTIVITY.md](./docs/DISCORD_ACTIVITY.md)** end-to-end:
+# Discord Activity
+DISCORD_CLIENT_ID=...
+REPO_CONTROL_DISCORD_PUBLIC_READ=true
 
-1. Create a Discord Application + enable Activities  
-2. Deploy/map the Activity origin (URL Mapping `/` → host)  
-3. Invite the app to your private server  
-4. Voice channel → Start Activity  
+# optional operator token
+# REPO_CONTROL_AUTH_TOKEN=...
+```
 
-Without portal + invite steps, nothing appears inside Discord.
+Create a free Clerk application at [dashboard.clerk.com](https://dashboard.clerk.com) (email sign-up enabled). Add your hosted URL to Clerk allowed origins / redirect URLs.
 
-## Snapshot / analyze (feeds the Activity)
+## Local
 
 ```bash
 cd tools/repo-control
 pnpm install --ignore-workspace
-pnpm exec tsx src/analyze.ts          # or --skip-checks
+pnpm exec tsx src/analyze.ts --skip-checks
 pnpm build:ui
+# export Clerk + Discord env vars, then:
+pnpm serve
 ```
 
-Activity host env (set on the host — never commit):
+## Discord install
+
+See [docs/DISCORD_ACTIVITY.md](./docs/DISCORD_ACTIVITY.md). Needs your Application ID + portal URL mapping + invite.
+
+## Hosted deploy
+
+`render.yaml` is the Activity origin + Clerk web host. Set Clerk + Discord secrets in the host dashboard (`sync: false`). Do not use the public HAIP demo blueprint.
+
+## Analyze / reuse
 
 ```bash
-export REPO_CONTROL_AUTH_TOKEN="$(openssl rand -hex 24)"
-export REPO_CONTROL_DISCORD_PUBLIC_READ=true   # required so Discord's proxy can load the board
-export VITE_DISCORD_CLIENT_ID="<your Discord Application ID>"
-pnpm build:ui   # rebuild after setting VITE_DISCORD_CLIENT_ID
-pnpm start
+pnpm exec tsx src/analyze.ts
+# other repos: REPO_CONTROL_CONFIG=config.example.yaml
 ```
 
-## Reuse on another repo
-
-Copy this folder, point `config.<product>.yaml` at that repo, re-analyze, remap the Activity URL. Collectors are repo-agnostic; HAIP probes live only in `config.haip.yaml`.
-
-## What is measured
-
-| Class | Meaning |
-|-------|---------|
-| **Fact** | Files, git, command exit codes |
-| **Heuristic** | Suspected unused deps / large modules |
-| **Inference** | Needs human confirmation |
-
-No health score. No fabricated production metrics.
-
-## Private Activity origin (Render)
-
-`render.yaml` in this folder is **only** the Activity origin for Discord’s proxy — not a public demo. Set secrets in the host dashboard (`REPO_CONTROL_AUTH_TOKEN`, `VITE_DISCORD_CLIENT_ID`).
+No health score. Facts / heuristics / inferences are labeled. Runtime stays **Not connected** unless wired.

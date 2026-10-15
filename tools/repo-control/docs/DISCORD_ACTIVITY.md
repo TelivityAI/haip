@@ -2,6 +2,8 @@
 
 Goal: a dedicated voice channel where the team opens the channel and sees the **view-only** Repository Control board as a Discord Activity.
 
+Contributors who are not in Discord can use the **same host** via **Clerk email sign-up** (view-only web). That path is separate — see README.
+
 ## Reality check
 
 | Want | Discord mechanism |
