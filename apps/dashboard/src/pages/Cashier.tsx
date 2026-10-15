@@ -277,6 +277,10 @@ function SessionReport() {
   const report = data?.data ?? data;
   const session = report?.session;
   const summary = report?.movementSummary ?? {};
+  // API puts countedBalance / variance on the report root (see cashierReport).
+  // Fall back to session.* for older response shapes that nested them.
+  const countedBalance = report?.countedBalance ?? session?.countedBalance ?? null;
+  const variance = report?.variance ?? session?.variance ?? null;
 
   return (
     <div>
@@ -294,8 +298,8 @@ function SessionReport() {
           <div className="bg-white rounded-xl shadow-sm p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div><p className="text-xs text-telivity-mid-grey">{t('cashier.openingFloat')}</p><p className="font-semibold">${session?.openingFloat ?? '0.00'}</p></div>
             <div><p className="text-xs text-telivity-mid-grey">{t('cashier.expected')}</p><p className="font-semibold">${report.expectedBalance ?? '0.00'}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.counted')}</p><p className="font-semibold">${session?.countedBalance ?? '—'}</p></div>
-            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.variance')}</p><p className="font-semibold">${session?.variance ?? '0.00'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.counted')}</p><p className="font-semibold">${countedBalance ?? '—'}</p></div>
+            <div><p className="text-xs text-telivity-mid-grey">{t('cashier.variance')}</p><p className="font-semibold">${variance ?? '0.00'}</p></div>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
