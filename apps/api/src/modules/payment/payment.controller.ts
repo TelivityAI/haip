@@ -44,6 +44,26 @@ export class PaymentController {
     return this.paymentService.getClientConfig(propertyId);
   }
 
+  @Post('worldline/tokenization')
+  @RequirePermissions('folios.manage')
+  @ApiOperation({ summary: 'Start an in-page card field for a Worldline hold' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  createWorldlineTokenization(@Query('propertyId', ParseUUIDPipe) propertyId: string) {
+    return this.paymentService.createWorldlineTokenizationSession(propertyId);
+  }
+
+  @Post('worldline/sync')
+  @RequirePermissions('folios.manage')
+  @ApiOperation({ summary: 'Refresh pending Worldline holds for a folio' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  @ApiQuery({ name: 'folioId', type: String })
+  syncWorldlineFolio(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('folioId', ParseUUIDPipe) folioId: string,
+  ) {
+    return this.paymentService.syncWorldlineFolio(propertyId, folioId);
+  }
+
   @Get()
   @ApiOperation({ summary: 'List payments with filters' })
   @ApiResponse({ status: 200, description: 'Paginated list of payments' })

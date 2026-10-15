@@ -112,13 +112,74 @@ describe('BookingReturnService', () => {
     await expect(service.resolve(PROPERTY, 'a'.repeat(43))).rejects.toThrow(/not found/i);
   });
 
+  it('keeps a thrown bank read as still processing', async () => {
+    const where = vi.fn().mockResolvedValue([{
+      status: 'pending',
+      createdAt: new Date(),
+      gatewayProvider: 'worldline',
+      gatewayTransactionId: 'wl-1',
+    }]);
+    const db = { select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where }) }) };
+    const settings: Record<string, string> = { BOOKING_RETURN_ORIGINS: 'https://hotel.example', PUBLIC_API_BASE_URL: 'https://api.example', NODE_ENV: 'production' };
+    const syncPending = vi.fn().mockResolvedValue('unavailable');
+    const service = new BookingReturnService(db as any, { get: (key: string) => settings[key] } as any, syncPending);
+    const reference = referenceOf(service.prepare(PROPERTY, 'https://hotel.example/book').url);
+    expect(await service.status('property-1', reference)).toEqual({ status: 'processing' });
+  });
+
+  it('returns reservation status after a succeeded payment, scoped to the property', async () => {
+    const paymentWhere = vi.fn().mockResolvedValue([{
+      status: 'captured',
+      createdAt: new Date(),
+      folioId: 'folio-1',
+      gatewayProvider: 'worldline',
+    }]);
+    const reservationWhere = vi.fn().mockResolvedValue([{ status: 'confirmed' }]);
+    let selects = 0;
+    const db = {
+      select: vi.fn().mockImplementation(() => {
+        selects += 1;
+        if (selects === 1) return { from: vi.fn().mockReturnValue({ where: paymentWhere }) };
+        return {
+          from: vi.fn().mockReturnValue({
+            innerJoin: vi.fn().mockReturnValue({ where: reservationWhere }),
+          }),
+        };
+      }),
+    };
+    const settings: Record<string, string> = { BOOKING_RETURN_ORIGINS: 'https://hotel.example', PUBLIC_API_BASE_URL: 'https://api.example', NODE_ENV: 'production' };
+    const service = new BookingReturnService(db as any, { get: (key: string) => settings[key] } as any);
+    const reference = referenceOf(service.prepare(PROPERTY, 'https://hotel.example/book').url);
+    expect(await service.status('property-1', reference)).toEqual({ status: 'succeeded', reservationStatus: 'confirmed' });
+    const { PgDialect } = await import('drizzle-orm/pg-core');
+    const query = new PgDialect().sqlToQuery(reservationWhere.mock.calls[0][0]);
+    expect(query.sql).not.toMatch(/confirmation/i);
+    expect(query.params).toEqual(expect.arrayContaining(['folio-1', 'property-1']));
+    expect(query.params.filter((value) => value === 'property-1')).toHaveLength(2);
+  });
+
+  it('does not look up a confirmation number while the payment is unfinished', async () => {
+    const where = vi.fn().mockResolvedValue([{
+      status: 'pending',
+      createdAt: new Date(),
+      folioId: 'folio-1',
+      gatewayProvider: 'worldline',
+    }]);
+    const db = { select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where }) }) };
+    const settings: Record<string, string> = { BOOKING_RETURN_ORIGINS: 'https://hotel.example', PUBLIC_API_BASE_URL: 'https://api.example', NODE_ENV: 'production' };
+    const service = new BookingReturnService(db as any, { get: (key: string) => settings[key] } as any);
+    const reference = referenceOf(service.prepare(PROPERTY, 'https://hotel.example/book').url);
+    expect(await service.status('property-1', reference)).toEqual({ status: 'processing' });
+    expect(db.select).toHaveBeenCalledOnce();
+  });
+
   it('binds the relay lookup to property, hash and provider without accepting a destination', async () => {
     const { service, where } = setup();
     where.mockResolvedValue([{ bookingReturnDestination: 'https://hotel.example/book', createdAt: new Date() }]);
     await service.resolve(PROPERTY, 'a'.repeat(43));
     const { PgDialect } = await import('drizzle-orm/pg-core');
     const query = new PgDialect().sqlToQuery(where.mock.calls[0][0]);
-    expect(query.params).toEqual(expect.arrayContaining([PROPERTY, createHash('sha256').update('a'.repeat(43)).digest('hex'), 'redsys']));
+    expect(query.params).toEqual(expect.arrayContaining([PROPERTY, createHash('sha256').update('a'.repeat(43)).digest('hex'), 'redsys', 'worldline']));
     expect(query.params).not.toContain('a'.repeat(43));
   });
 });

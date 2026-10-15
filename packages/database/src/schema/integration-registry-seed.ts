@@ -390,6 +390,16 @@ export const INTEGRATION_REGISTRY_SEED: IntegrationRegistrySeedRow[] = [
       'Spanish bank TPV Virtual (Redsys) for hosted redirect deposits, folio pre-auth, capture, void, and refunds.',
   },
   {
+    slug: 'worldline',
+    category: 'Payments',
+    name: 'Worldline Online Payments',
+    status: 'shipped',
+    docsPath: 'docs/integrations/payments-worldline.md',
+    adapterKey: 'worldline',
+    description:
+      'Hosted checkout authorization, capture, cancel, and refund for properties that already process cards on Worldline Direct.',
+  },
+  {
     slug: 'wise-platform',
     category: 'Payments',
     name: 'Wise Platform',

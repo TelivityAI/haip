@@ -81,6 +81,7 @@ The flat list below is the full public surface. Registry seed status is the matu
 - **PayPal/Braintree** - Wallet and card payment support through PayPal and Braintree payment flows.
 - **Braintree standalone** - Braintree gateway support for tokenized card payments, vault records, captures, and refunds.
 - **Mollie** - European payment method support for cards, local payment rails, refunds, and settlement-aware reporting.
+- **Worldline Online Payments** - In-page card authorization, capture, cancel, and refund for properties that process cards on Worldline Direct. See [payments-worldline.md](integrations/payments-worldline.md).
 - **SumUp** - In-person and small-business payment connectivity for terminal and transaction record workflows.
 - **GoCardless** - Bank debit payment support for mandates, collections, refunds, and payment status updates.
 - **Wise Platform** - Cross-border account and transfer support for payout and treasury workflows.

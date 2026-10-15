@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { FolioModule } from '../folio/folio.module';
 import { WebhookModule } from '../webhook/webhook.module';
@@ -6,8 +6,14 @@ import { IntegrationsModule } from '../integrations/integrations.module';
 import { PaymentController } from './payment.controller';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { RedsysWebhookController } from './redsys-webhook.controller';
+import { WorldlineWebhookController } from './worldline-webhook.controller';
 import { PaymentService } from './payment.service';
 import { RedsysCredentialsService } from './redsys-credentials.service';
+import { WorldlineCredentialsService } from './worldline-credentials.service';
+import {
+  WorldlineChallengeQueue,
+  WORLDLINE_CHALLENGE_EXPIRER,
+} from './worldline-challenge.queue';
 import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
 import {
   createPaymentGateway,
@@ -34,7 +40,7 @@ function createSavedPaymentMethodGateway(configService: ConfigService) {
  * Payment module with configurable gateway.
  *
  * PAYMENT_GATEWAY selects the PSP adapter (mock, stripe, adyen, mollie, square,
- * braintree, wise, redsys). When unset, STRIPE_MODE controls legacy behavior.
+ * braintree, wise, redsys, worldline). When unset, STRIPE_MODE controls legacy behavior.
  */
 @Module({
   imports: [ConfigModule, FolioModule, WebhookModule, IntegrationsModule],
@@ -42,10 +48,17 @@ function createSavedPaymentMethodGateway(configService: ConfigService) {
     PaymentController,
     StripeWebhookController,
     RedsysWebhookController,
+    WorldlineWebhookController,
   ],
   providers: [
     PaymentService,
+    WorldlineChallengeQueue,
+    {
+      provide: WORLDLINE_CHALLENGE_EXPIRER,
+      useExisting: forwardRef(() => PaymentService),
+    },
     RedsysCredentialsService,
+    WorldlineCredentialsService,
     {
       provide: PAYMENT_GATEWAY,
       useFactory: (configService: ConfigService) =>

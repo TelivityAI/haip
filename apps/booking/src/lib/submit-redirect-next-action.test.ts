@@ -47,4 +47,16 @@ describe('submitRedirectNextAction', () => {
     ]);
     expect(submit).toHaveBeenCalledTimes(1);
   });
+
+  it('navigates to a GET hosted-checkout URL', () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    submitRedirectNextAction({
+      type: 'redirect',
+      method: 'GET',
+      url: 'https://payment.preprod.example/checkout/hc-1',
+    });
+    expect(assign).toHaveBeenCalledWith('https://payment.preprod.example/checkout/hc-1');
+    expect(document.querySelector('form')).toBeNull();
+  });
 });

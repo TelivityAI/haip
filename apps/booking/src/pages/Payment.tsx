@@ -7,6 +7,7 @@ import { bookingApi, errorMessage } from '../api/client';
 import { Button } from '../components/Button';
 import { PriceBreakdown } from '../components/PriceBreakdown';
 import { StripeCard, type PaymentResult } from '../components/StripeCard';
+import { WorldlineCard } from '../components/WorldlineCard';
 import { useConfig } from '../context/ConfigContext';
 import { useBookingFlow } from '../context/BookingFlowContext';
 import { money } from '../lib/format';
@@ -71,6 +72,7 @@ export function Payment() {
   const depositDue = Number(quote.depositDue);
   const needsPayment = depositDue > 0;
   const isRedsys = config?.paymentMethodClientMode === 'redsys';
+  const isWorldline = config?.paymentMethodClientMode === 'worldline';
 
   // Mock / demo mode (no Stripe key): submit the well-known MockGateway token.
   const payDemo = () => bookMutation.mutate({ paymentToken: 'tok_demo' });
@@ -115,6 +117,16 @@ export function Payment() {
             <Button className="w-full" onClick={payRedsys} disabled={bookMutation.isPending}>
               {bookMutation.isPending ? 'Redirecting…' : 'Pay deposit securely via Redsys'}
             </Button>
+          </>
+        ) : isWorldline ? (
+          <>
+            <p className="mb-4 text-sm text-gray-600">
+              Deposit due now: <strong>{money(quote.depositDue, quote.currencyCode)}</strong>
+            </p>
+            <WorldlineCard
+              onPaid={(p) => bookMutation.mutate(p)}
+              submitting={bookMutation.isPending}
+            />
           </>
         ) : stripePromise ? (
           <>

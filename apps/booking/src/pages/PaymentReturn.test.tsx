@@ -43,10 +43,39 @@ describe('hosted payment return without memory or storage', () => {
     await screen.findByText('Payment authorized', {}, { timeout: 4500 });
     expect(status).toHaveBeenCalledTimes(2);
   });
-  it.each(['failed', 'cancelled'])('shows server %s and safe retry guidance', async (value) => {
-    status.mockResolvedValue({ status: value });
+  it('shows booking confirmed only when the reservation is confirmed', async () => {
+    status.mockResolvedValue({ status: 'succeeded', reservationStatus: 'confirmed' });
     show();
-    await screen.findByText(value === 'failed' ? 'Payment was not completed' : 'Payment was cancelled');
+    await screen.findByText('Booking confirmed');
+    expect(screen.getByText(/your booking is confirmed/i)).toBeTruthy();
+    expect(screen.getByText(/contact the hotel for your booking details/i)).toBeTruthy();
+  });
+  it('keeps a succeeded payment as authorized while the reservation is still pending', async () => {
+    status.mockResolvedValue({ status: 'succeeded', reservationStatus: 'pending' });
+    show();
+    await screen.findByText('Payment authorized');
+    expect(screen.queryByText('Booking confirmed')).toBeNull();
+    expect(screen.getByText(/contact the hotel for your booking details/i)).toBeTruthy();
+  });
+  it('says the guest can start again only when the reservation was cancelled', async () => {
+    status.mockResolvedValue({ status: 'failed', reservationStatus: 'cancelled' });
+    show();
+    await screen.findByText('Payment was not completed');
+    expect(screen.getByText(/this booking was cancelled because the payment did not complete/i)).toBeTruthy();
+    expect(screen.getByText(/you can start again/i)).toBeTruthy();
+  });
+  it('warns about a duplicate booking when a failed payment left the reservation in place', async () => {
+    status.mockResolvedValue({ status: 'failed', reservationStatus: 'pending' });
+    show();
+    await screen.findByText('Payment was not completed');
+    expect(screen.getByText(/contact the hotel before trying again/i)).toBeTruthy();
+    expect(screen.queryByText(/you can start again/i)).toBeNull();
+    expect(screen.queryByText('Booking confirmed')).toBeNull();
+  });
+  it('shows a cancelled payment with retry guidance', async () => {
+    status.mockResolvedValue({ status: 'cancelled' });
+    show();
+    await screen.findByText('Payment was cancelled');
     expect(screen.getByText(/contact the hotel before trying again/i)).toBeTruthy();
   });
   it('offers status retry without rebooking when lookup fails', async () => {

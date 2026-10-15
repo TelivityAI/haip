@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -160,6 +160,174 @@ describe('Folios — payment corrections', () => {
     expect(api.post).not.toHaveBeenCalled();
     expect(screen.queryByText('Capture')).not.toBeInTheDocument();
     expect(screen.queryByText('Void')).not.toBeInTheDocument();
+  });
+
+  it('asks the API to read hosted checkout status and does not treat the return query as authorization', async () => {
+    mockGet({
+      '/v1/payments': [{ ...PAYMENT, status: 'pending' }],
+      '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+    });
+    let finishSync: (value: { data: { payments: { id: string; status: string }[] } }) => void = () => {};
+    (api.post as any).mockImplementation(() => new Promise((resolve) => { finishSync = resolve; }));
+    renderDetail('/folio-1?worldline=return');
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/v1/payments/worldline/sync', null, {
+        params: { propertyId: 'prop-1', folioId: 'folio-1' },
+      }),
+    );
+    expect(screen.queryByText('Card authorization is still being checked.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Card authorization is held.')).not.toBeInTheDocument();
+    finishSync({ data: { payments: [{ id: 'pay-1', status: 'pending' }] } });
+    expect(await screen.findByText('Card authorization is still being checked.')).toBeInTheDocument();
+    expect(screen.queryByText('Capture')).not.toBeInTheDocument();
+    expect(screen.queryByText('Void')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['authorized', 'Card authorization is held.'],
+    ['failed', 'Card authorization was declined.'],
+    ['captured', 'Card payment was captured.'],
+  ])('toasts the %s result from the sync body', async (status, message) => {
+    mockGet({
+      '/v1/payments': [{ ...PAYMENT, status: 'pending' }],
+      '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+    });
+    (api.post as any).mockResolvedValue({ data: { payments: [{ id: 'pay-1', status }] } });
+    renderDetail('/folio-1?worldline=return');
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByText('Capture')).not.toBeInTheDocument();
+    expect(screen.queryByText('Void')).not.toBeInTheDocument();
+  });
+
+  it('polls a pending challenge until it is authorized, then stops', async () => {
+    vi.useFakeTimers();
+    try {
+      mockGet({
+        '/v1/payments': [{ ...PAYMENT, status: 'pending' }],
+        '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+      });
+      let calls = 0;
+      (api.post as any).mockImplementation(() => {
+        calls += 1;
+        return Promise.resolve({
+          data: { payments: [{ id: 'pay-1', status: calls < 2 ? 'pending' : 'authorized' }] },
+        });
+      });
+      renderDetail('/folio-1?worldline=return');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(calls).toBe(1);
+      expect(screen.getByText('Card authorization is still being checked.')).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(calls).toBe(2);
+      expect(screen.getByText('Card authorization is held.')).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(9000);
+      });
+      expect(calls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops polling when the folio page unmounts', async () => {
+    vi.useFakeTimers();
+    try {
+      mockGet({
+        '/v1/payments': [{ ...PAYMENT, status: 'pending' }],
+        '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+      });
+      (api.post as any).mockResolvedValue({ data: { payments: [{ id: 'pay-1', status: 'pending' }] } });
+      const view = renderDetail('/folio-1?worldline=return');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      const calls = vi.mocked(api.post).mock.calls.length;
+      expect(calls).toBeGreaterThan(0);
+      view.unmount();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(9000);
+      });
+      expect(vi.mocked(api.post).mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps checking a pending Worldline payment after the return query is gone', async () => {
+    mockGet({
+      '/v1/payments': [{
+        ...PAYMENT,
+        status: 'pending',
+        gatewayProvider: 'worldline',
+        createdAt: new Date().toISOString(),
+      }],
+      '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+    });
+    (api.post as any).mockResolvedValue({ data: { payments: [{ id: 'pay-1', status: 'authorized' }] } });
+    renderDetail('/folio-1');
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/v1/payments/worldline/sync', null, {
+      params: { propertyId: 'prop-1', folioId: 'folio-1' },
+    }));
+    expect(await screen.findByText('Card authorization is held.')).toBeInTheDocument();
+  });
+
+  it('does not poll a Worldline challenge that is already past the deadline', async () => {
+    mockGet({
+      '/v1/payments': [{
+        ...PAYMENT,
+        status: 'pending',
+        gatewayProvider: 'worldline',
+        createdAt: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
+      }],
+      '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+    });
+    renderDetail('/folio-1');
+    expect(await screen.findByText('F-0001')).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/v1/payments', expect.anything()));
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('authorizes from the in-page card field and does not send a card number', async () => {
+    mockGet({ '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' } });
+    const submitTokenization = vi.fn().mockResolvedValue({ success: true, hostedTokenizationId: 'ht-1' });
+    window.Tokenizer = class {
+      initialize = vi.fn().mockResolvedValue(undefined);
+      submitTokenization = submitTokenization;
+    } as unknown as Window['Tokenizer'];
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === '/v1/payments/worldline/tokenization') {
+        return Promise.resolve({
+          data: {
+            hostedTokenizationUrl: 'https://payment.preprod.direct.worldline-solutions.com/hostedtokenization/tokenization/form/session-1',
+            sri: null,
+            tokenizerScriptUrl: 'https://payment.preprod.direct.worldline-solutions.com/hostedtokenization/js/client/tokenizer.min.js',
+          },
+        });
+      }
+      return Promise.resolve({ data: { status: 'authorized' } });
+    });
+    renderDetail();
+    await userEvent.click(await screen.findByRole('button', { name: /Authorize Card/i }));
+    await userEvent.type(screen.getByRole('spinbutton'), '100');
+    await userEvent.click(await screen.findByRole('button', { name: /^Authorize$/ }));
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        '/v1/payments/authorize',
+        expect.objectContaining({
+          gatewayProvider: 'worldline',
+          gatewayPaymentToken: 'ht-1',
+          propertyId: 'prop-1',
+          folioId: 'folio-1',
+        }),
+      ),
+    );
+    const authorizeBody = vi.mocked(api.post).mock.calls.find((call) => call[0] === '/v1/payments/authorize')?.[1];
+    expect(JSON.stringify(authorizeBody)).not.toMatch(/cardNumber|cvv/i);
+    delete window.Tokenizer;
   });
 
   it('submits the hosted authorization form returned by the property-scoped API', async () => {

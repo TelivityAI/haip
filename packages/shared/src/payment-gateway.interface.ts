@@ -1,8 +1,9 @@
-/** Hosted-checkout continuation when the guest must leave HAIP to pay (Redsys TPV). */
+/** Hosted-checkout continuation when the guest must leave HAIP to pay. */
 export interface PaymentGatewayNextAction {
   type: 'redirect';
   url: string;
-  method: 'POST';
+  /** POST form (Redsys) or GET navigation (hosted checkout redirect URL). */
+  method: 'POST' | 'GET';
   formFields: Record<string, string>;
 }
 
@@ -12,6 +13,8 @@ export interface PaymentGatewayResult {
   /** Provider lifecycle status when an operation can complete asynchronously. */
   providerStatus?: 'succeeded' | 'pending' | 'requires_action' | 'failed' | 'canceled' | 'unknown';
   errorMessage?: string;
+  /** The provider already captured the funds. HAIP stores `captured`, not a hold. */
+  alreadyCaptured?: boolean;
   /** Present when `providerStatus` is `requires_action` (e.g. Redsys redirect). */
   nextAction?: PaymentGatewayNextAction;
 }
@@ -34,12 +37,21 @@ export interface PaymentGatewayCallOptions {
     merchantUrl: string;
     urlOk: string;
     urlKo: string;
+    /** Single browser return URL for hosted checkout that does not split ok/ko. */
+    returnUrl?: string;
   };
   /** Per-property merchant credentials (overrides process env when set). */
   merchantCredentials?: {
     merchantCode: string;
     terminal: string;
     secretKey: string;
+    environment?: 'test' | 'live';
+  };
+  /** Per-property Direct merchant credentials. Do not reuse merchantCode/terminal. */
+  worldlineCredentials?: {
+    merchantId: string;
+    apiKeyId: string;
+    secretApiKey: string;
     environment?: 'test' | 'live';
   };
   /** Durable correlation identifiers forwarded to the provider on refund claims. */
