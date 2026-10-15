@@ -33,16 +33,20 @@ pnpm analyze -- --skip-checks
 pnpm analyze
 
 pnpm build:ui
-REPO_CONTROL_AUTH_TOKEN=dev pnpm serve
+# Set a local-only token in your shell (do NOT commit it):
+export REPO_CONTROL_AUTH_TOKEN="$(openssl rand -hex 16)"
+pnpm serve
 # → http://localhost:8787
 ```
 
-Login with token `dev`. Refresh re-runs analysis (authenticated).
+Log in with the same value you exported. Refresh re-runs analysis (authenticated). Never commit `.env` or real tokens.
 
 ### Discord view-only preview
 
 ```bash
-REPO_CONTROL_AUTH_TOKEN=dev REPO_CONTROL_DISCORD_PUBLIC_READ=true pnpm serve
+export REPO_CONTROL_AUTH_TOKEN="$(openssl rand -hex 16)"
+export REPO_CONTROL_DISCORD_PUBLIC_READ=true
+pnpm serve
 # open http://localhost:8787/?discord=1
 ```
 

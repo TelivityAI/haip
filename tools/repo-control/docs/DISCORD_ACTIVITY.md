@@ -28,8 +28,8 @@ Activities are iframes. Discord’s proxy must reach your hosted origin (`*.disc
 
 ```bash
 cd tools/repo-control
-REPO_CONTROL_AUTH_TOKEN=dev \
-REPO_CONTROL_DISCORD_PUBLIC_READ=true \
+export REPO_CONTROL_AUTH_TOKEN="$(openssl rand -hex 16)"   # local only — never commit
+export REPO_CONTROL_DISCORD_PUBLIC_READ=true
 pnpm serve
 ```
 
