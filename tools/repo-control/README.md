@@ -20,18 +20,19 @@ Never commit secrets.
 ## Required secrets (host / Cursor env)
 
 ```bash
+# Set in host env / Cursor secrets / Render dashboard — NEVER commit values.
 # Clerk (contributor web access)
-CLERK_PUBLISHABLE_KEY=pk_...
-CLERK_SECRET_KEY=sk_...
+CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
 # optional owners who can refresh:
-# REPO_CONTROL_OWNER_EMAILS=you@telivity.ai
+# REPO_CONTROL_OWNER_EMAILS=
 
 # Discord Activity
-DISCORD_CLIENT_ID=...
+DISCORD_CLIENT_ID=
 REPO_CONTROL_DISCORD_PUBLIC_READ=true
 
 # optional operator token
-# REPO_CONTROL_AUTH_TOKEN=...
+# REPO_CONTROL_AUTH_TOKEN=
 ```
 
 Create a free Clerk application at [dashboard.clerk.com](https://dashboard.clerk.com) (email sign-up enabled). Add your hosted URL to Clerk allowed origins / redirect URLs.
