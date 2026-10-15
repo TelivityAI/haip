@@ -127,14 +127,14 @@ describe('BookingReturnService', () => {
     expect(await service.status('property-1', reference)).toEqual({ status: 'processing' });
   });
 
-  it('returns the confirmation number after a succeeded payment, scoped to the property', async () => {
+  it('returns reservation status after a succeeded payment, scoped to the property', async () => {
     const paymentWhere = vi.fn().mockResolvedValue([{
       status: 'captured',
       createdAt: new Date(),
       folioId: 'folio-1',
       gatewayProvider: 'worldline',
     }]);
-    const confirmationWhere = vi.fn().mockResolvedValue([{ confirmationNumber: 'C-100' }]);
+    const reservationWhere = vi.fn().mockResolvedValue([{ status: 'confirmed' }]);
     let selects = 0;
     const db = {
       select: vi.fn().mockImplementation(() => {
@@ -142,9 +142,7 @@ describe('BookingReturnService', () => {
         if (selects === 1) return { from: vi.fn().mockReturnValue({ where: paymentWhere }) };
         return {
           from: vi.fn().mockReturnValue({
-            innerJoin: vi.fn().mockReturnValue({
-              innerJoin: vi.fn().mockReturnValue({ where: confirmationWhere }),
-            }),
+            innerJoin: vi.fn().mockReturnValue({ where: reservationWhere }),
           }),
         };
       }),
@@ -152,11 +150,12 @@ describe('BookingReturnService', () => {
     const settings: Record<string, string> = { BOOKING_RETURN_ORIGINS: 'https://hotel.example', PUBLIC_API_BASE_URL: 'https://api.example', NODE_ENV: 'production' };
     const service = new BookingReturnService(db as any, { get: (key: string) => settings[key] } as any);
     const reference = referenceOf(service.prepare(PROPERTY, 'https://hotel.example/book').url);
-    expect(await service.status('property-1', reference)).toEqual({ status: 'succeeded', confirmationNumber: 'C-100' });
+    expect(await service.status('property-1', reference)).toEqual({ status: 'succeeded', reservationStatus: 'confirmed' });
     const { PgDialect } = await import('drizzle-orm/pg-core');
-    const query = new PgDialect().sqlToQuery(confirmationWhere.mock.calls[0][0]);
+    const query = new PgDialect().sqlToQuery(reservationWhere.mock.calls[0][0]);
+    expect(query.sql).not.toMatch(/confirmation/i);
     expect(query.params).toEqual(expect.arrayContaining(['folio-1', 'property-1']));
-    expect(query.params.filter((value) => value === 'property-1')).toHaveLength(3);
+    expect(query.params.filter((value) => value === 'property-1')).toHaveLength(2);
   });
 
   it('does not look up a confirmation number while the payment is unfinished', async () => {

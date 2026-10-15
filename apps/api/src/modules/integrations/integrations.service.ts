@@ -1,5 +1,5 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { and, asc, eq } from 'drizzle-orm';
 import {
   auditLogs,
   integrationCatalogEntries,
@@ -100,7 +100,15 @@ export function mergeWorldlineConfig(
   const ring = loadMigrationCredentialKeyRingFromEnv();
   if (apiSecret) merged['secretApiKeyEncrypted'] = encryptCredentialPlaintext(apiSecret, ring);
   if (webhookSecret) merged['webhookSecretEncrypted'] = encryptCredentialPlaintext(webhookSecret, ring);
+  const webhookKeyId = webhookKeyIdOf(merged);
+  if (webhookKeyId) merged['webhookKeyId'] = webhookKeyId;
+  else delete merged['webhookKeyId'];
   return merged;
+}
+
+export function webhookKeyIdOf(config: Record<string, unknown> | null | undefined): string {
+  const value = config?.['webhookKeyId'];
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function sanitizeWorldlineConfig(raw: Record<string, unknown>): Record<string, unknown> {
@@ -145,8 +153,10 @@ export class IntegrationsService {
       const [row] = await tx.select().from(propertyIntegrations)
         .where(and(eq(propertyIntegrations.propertyId, propertyId), eq(propertyIntegrations.catalogSlug, 'worldline')))
         .limit(1).for('update');
-      if (!row || !secretFields.some((key) => Object.hasOwn(row.config, key))) return;
-      const config = mergeWorldlineConfig({}, row.config);
+      if (!row) return;
+      const stored = (row.config ?? {}) as Record<string, unknown>;
+      if (!secretFields.some((key) => Object.hasOwn(stored, key))) return;
+      const config = mergeWorldlineConfig({}, stored);
       await tx.update(propertyIntegrations).set({ config, updatedAt: new Date() })
         .where(and(eq(propertyIntegrations.id, row.id), eq(propertyIntegrations.propertyId, propertyId)));
       await tx.insert(auditLogs).values({
@@ -157,19 +167,44 @@ export class IntegrationsService {
     });
   }
 
+  /**
+   * The property that owns this webhook key id.
+   * More than one match is ambiguous, so the caller must reject the event.
+   */
   async findWorldlineWebhookConfig(keyId: string): Promise<{ propertyId: string; config: Record<string, unknown> } | null> {
-    const [row] = await this.db.select({
+    const trimmed = keyId.trim();
+    if (!trimmed) return null;
+    const rows = await this.db.select({
       propertyId: propertyIntegrations.propertyId,
       config: propertyIntegrations.config,
     }).from(propertyIntegrations)
       .where(and(
         eq(propertyIntegrations.catalogSlug, 'worldline'),
         eq(propertyIntegrations.enabled, true),
-        sql`${propertyIntegrations.config}->>'webhookKeyId' = ${keyId}`,
-      ))
-      .limit(1);
-    if (!row) return null;
+      ));
+    const matches = rows.filter((row: { config: unknown }) => webhookKeyIdOf((row.config ?? {}) as Record<string, unknown>) === trimmed);
+    if (matches.length !== 1) return null;
+    const row = matches[0];
     return { propertyId: row.propertyId, config: (row.config ?? {}) as Record<string, unknown> };
+  }
+
+  /** A webhook key id verifies events for one property only. */
+  private async assertUniqueWorldlineWebhookKey(propertyId: string, keyId: string): Promise<void> {
+    const rows = await this.db.select({
+      propertyId: propertyIntegrations.propertyId,
+      config: propertyIntegrations.config,
+    }).from(propertyIntegrations)
+      .where(and(
+        eq(propertyIntegrations.catalogSlug, 'worldline'),
+        eq(propertyIntegrations.enabled, true),
+      ));
+    const clash = rows.some((row: { propertyId: string; config: unknown }) => (
+      row.propertyId !== propertyId
+      && webhookKeyIdOf((row.config ?? {}) as Record<string, unknown>) === keyId
+    ));
+    if (clash) {
+      throw new ConflictException('Webhook key id is already used by another property');
+    }
   }
 
   async listCatalog(filters: ListIntegrationsDto = {}) {
@@ -254,6 +289,8 @@ export class IntegrationsService {
         : slug === 'worldline'
           ? mergeWorldlineConfig(incoming, existingConfig)
           : incoming;
+    const webhookKeyId = slug === 'worldline' && dto.enabled ? webhookKeyIdOf(config) : '';
+    if (webhookKeyId) await this.assertUniqueWorldlineWebhookKey(propertyId, webhookKeyId);
 
     let row: any;
     if (existing) {

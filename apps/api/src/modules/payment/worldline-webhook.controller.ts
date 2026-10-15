@@ -67,36 +67,38 @@ export class WorldlineWebhookController {
         hostedCheckoutSpecificOutput?: { hostedCheckoutId?: string | null } | null;
       } | null;
     };
+    const verified: { owner: { propertyId: string | null; merchantId: string } | null } = { owner: null };
     try {
       event = await webhooks.init({
         getSecretKey: async (keyId: string) => {
-          const secret = await this.credentials.webhookSecretForKeyId(keyId);
-          if (!secret) throw new Error(`unknown webhook key ${keyId}`);
-          return secret;
+          const resolved = await this.credentials.webhookSecretForKeyId(keyId);
+          if (!resolved) throw new Error(`unknown webhook key ${keyId}`);
+          verified.owner = { propertyId: resolved.propertyId, merchantId: resolved.merchantId };
+          return resolved.secret;
         },
       }).unmarshal(rawBody, req.headers ?? {});
     } catch (err) {
       this.logger.warn(`Webhook signature rejected: ${err instanceof Error ? err.message : 'invalid'}`);
       return res.status(HttpStatus.BAD_REQUEST).send('bad signature');
     }
+    const owner = verified.owner;
 
     const paymentId = event.payment?.id ?? '';
     const hostedCheckoutId = event.payment?.hostedCheckoutSpecificOutput?.hostedCheckoutId ?? '';
     const ids = [paymentId, hostedCheckoutId].filter(Boolean);
     if (ids.length === 0) return res.status(HttpStatus.OK).send('OK');
 
-    // The provider reference identifies the row. The signature was already
-    // checked, and every later write is scoped by that row's propertyId.
+    // The key id's merchant must be on the event. A property key can only
+    // update that property's payments.
+    if (!owner || !event.merchantId || event.merchantId !== owner.merchantId) {
+      return res.status(HttpStatus.BAD_REQUEST).send('merchant mismatch');
+    }
     const [payment] = await this.db.select().from(payments).where(and(
       eq(payments.gatewayProvider, 'worldline'),
       inArray(payments.gatewayTransactionId, ids),
+      ...(owner.propertyId ? [eq(payments.propertyId, owner.propertyId)] : []),
     )).limit(1);
     if (!payment) return res.status(HttpStatus.OK).send('OK');
-
-    const creds = await this.credentials.resolveForProperty(payment.propertyId);
-    if (creds && event.merchantId && event.merchantId !== creds.merchantId) {
-      return res.status(HttpStatus.BAD_REQUEST).send('merchant mismatch');
-    }
 
     const outcome = classifyHostedCheckout({
       paymentStatus: event.payment?.status,

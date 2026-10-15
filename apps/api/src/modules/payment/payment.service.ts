@@ -188,8 +188,10 @@ export class PaymentService {
       throw new BadRequestException(`Authorization failed: ${result.errorMessage}`);
     }
 
-    const requiresAction = result.providerStatus === 'requires_action' && result.nextAction;
-    const capturedNow = !requiresAction && result.alreadyCaptured === true;
+    const requiresAction = result.providerStatus === 'requires_action' && Boolean(result.nextAction);
+    const awaitingProvider = result.providerStatus === 'pending';
+    const leavePending = requiresAction || awaitingProvider;
+    const capturedNow = !leavePending && result.alreadyCaptured === true;
     const preAuthExpiry = dto.preAuthExpiresAt
       ? new Date(dto.preAuthExpiresAt)
       : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // Default 7 days
@@ -202,8 +204,8 @@ export class PaymentService {
         method: 'credit_card',
         amount: dto.amount,
         currencyCode: dto.currencyCode,
-        status: requiresAction ? 'pending' : capturedNow ? 'captured' : 'authorized',
-        authorizationFinalization: requiresAction ? finalization ?? null : null,
+        status: leavePending ? 'pending' : capturedNow ? 'captured' : 'authorized',
+        authorizationFinalization: leavePending ? finalization ?? null : null,
         bookingReturnReferenceHash: bookingReturn?.returnReferenceHash ?? null,
         bookingReturnDestination: bookingReturn?.returnDestination ?? null,
         isPreAuthorization: !capturedNow,
@@ -221,7 +223,7 @@ export class PaymentService {
     if (capturedNow) {
       await this.folioService.recalculateBalance(dto.folioId, dto.propertyId);
     }
-    if (!requiresAction) {
+    if (!leavePending) {
       // A hold does not change the folio balance. A provider capture does.
       await this.webhookService.emit(
         'payment.received',
@@ -1011,6 +1013,32 @@ export class PaymentService {
       throw new Error('Payment status is unavailable');
     }
     if (status !== 'pending') return;
+    const creds = await this.worldlineCredentials.resolveForProperty(payment.propertyId);
+    if (!creds || !payment.gatewayTransactionId) {
+      throw new Error('Payment status is unavailable');
+    }
+    const gateway = new WorldlineGateway(this.configService);
+    const read = await gateway.readAuthorization(payment.gatewayTransactionId, {
+      propertyId: payment.propertyId,
+      worldlineCredentials: creds,
+    });
+    if (read.outcome === 'unavailable') {
+      throw new Error('Payment status is unavailable');
+    }
+    if (read.outcome !== 'pending') return;
+    // A provider payment id is a hold. Cancel it before HAIP drops the row,
+    // or a later authorization has nowhere to land and stays on the card.
+    if (read.paymentId) {
+      const voided = await gateway.void(read.paymentId, {
+        propertyId: payment.propertyId,
+        worldlineCredentials: creds,
+        authorizedAmount: Number(payment.amount),
+        currencyCode: payment.currencyCode,
+      });
+      if (!voided.success) {
+        throw new Error('Payment could not be cancelled at the provider');
+      }
+    }
     const notifications = await finalizeHostedAuthorization(this.db, {
       paymentId: payment.id,
       propertyId: payment.propertyId,

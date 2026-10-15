@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IntegrationsService } from '../integrations/integrations.service';
 import {
@@ -32,19 +32,30 @@ export class WorldlineCredentialsService {
         if (parsed) return parsed;
       }
     } catch (error) {
-      if (!(error instanceof NotFoundException)) {
-        throw new ServiceUnavailableException('Worldline credentials are unavailable');
-      }
+      // A stored row that cannot be read must not fall back to another merchant.
+      if (!(error instanceof NotFoundException)) return null;
     }
     return this.fromEnv();
   }
 
-  async webhookSecretForKeyId(keyId: string): Promise<string | null> {
+  /**
+   * Secret for a webhook key id, plus the property and merchant that own it.
+   * An operator env key has no property id. A property key never verifies
+   * another property's payments.
+   */
+  async webhookSecretForKeyId(keyId: string): Promise<{
+    secret: string;
+    propertyId: string | null;
+    merchantId: string;
+  } | null> {
     const trimmed = keyId.trim();
     if (!trimmed) return null;
     const envKey = this.configService.get<string>('WORLDLINE_WEBHOOK_KEY_ID')?.trim();
     const envSecret = this.configService.get<string>('WORLDLINE_WEBHOOK_SECRET')?.trim();
-    if (envKey && envSecret && envKey === trimmed) return envSecret;
+    const envMerchant = this.configService.get<string>('WORLDLINE_MERCHANT_ID')?.trim();
+    if (envKey && envSecret && envMerchant && envKey === trimmed) {
+      return { secret: envSecret, propertyId: null, merchantId: envMerchant };
+    }
 
     const match = await this.integrationsService.findWorldlineWebhookConfig(trimmed);
     if (!match) return null;
@@ -52,10 +63,12 @@ export class WorldlineCredentialsService {
       await this.integrationsService.protectWorldlineCredentials(match.propertyId);
       const connection = await this.integrationsService.getPropertyIntegration(match.propertyId, 'worldline');
       const cfg = (connection.config ?? {}) as Record<string, unknown>;
-      return decryptField(cfg, 'webhookSecretEncrypted') ?? stringField(cfg, 'webhookSecret', 'webhook_secret') ?? null;
-    } catch (error) {
-      if (error instanceof NotFoundException) return null;
-      throw new ServiceUnavailableException('Worldline credentials are unavailable');
+      const secret = decryptField(cfg, 'webhookSecretEncrypted') ?? stringField(cfg, 'webhookSecret', 'webhook_secret');
+      const merchantId = stringField(cfg, 'merchantId', 'merchant_id', 'pspid');
+      if (!secret || !merchantId) return null;
+      return { secret, propertyId: match.propertyId, merchantId };
+    } catch {
+      return null;
     }
   }
 

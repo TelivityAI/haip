@@ -47,7 +47,9 @@ describe('WorldlineWebhookController', () => {
       })),
     };
     const credentials = {
-      webhookSecretForKeyId: vi.fn(async (keyId: string) => keyId === KEY_ID ? SECRET : null),
+      webhookSecretForKeyId: vi.fn(async (keyId: string) => (
+        keyId === KEY_ID ? { secret: SECRET, propertyId: 'prop-1', merchantId: 'psp-1' } : null
+      )),
       resolveForProperty: vi.fn(async () => ({ merchantId: 'psp-1', apiKeyId: 'k', secretApiKey: 's', environment: 'test' })),
     };
     const webhook = { dispatchPersisted: vi.fn() };
@@ -67,11 +69,28 @@ describe('WorldlineWebhookController', () => {
   });
 
   it('promotes a pending row when a signed pending_capture event is authorized', async () => {
-    const { controller, db } = setup();
+    const { controller, db, where } = setup();
     const res = { status: vi.fn().mockReturnThis(), send: vi.fn(), type: vi.fn().mockReturnThis() };
     await controller.handle(request(eventBody()), res);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(db.transaction).toHaveBeenCalledOnce();
+    const { PgDialect } = await import('drizzle-orm/pg-core');
+    const query = new PgDialect().sqlToQuery(where.mock.calls[0][0]);
+    expect(query.params).toEqual(expect.arrayContaining(['worldline', 'prop-1']));
+  });
+
+  it('rejects a signed event that omits the merchant or names a different one', async () => {
+    const { controller, db } = setup();
+    const res = { status: vi.fn().mockReturnThis(), send: vi.fn(), type: vi.fn().mockReturnThis() };
+    await controller.handle(request(eventBody({ merchantId: '' })), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(db.select).not.toHaveBeenCalled();
+
+    const mismatch = { status: vi.fn().mockReturnThis(), send: vi.fn(), type: vi.fn().mockReturnThis() };
+    await controller.handle(request(eventBody({ merchantId: 'other-merchant' })), mismatch);
+    expect(mismatch.status).toHaveBeenCalledWith(400);
+    expect(db.select).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   it('completes a captured payment when a signed capture has status code 9', async () => {

@@ -74,6 +74,25 @@ describe('Worldline challenge deadline', () => {
       gatewayPaymentToken: 'pm_1',
     });
     expect(scheduler.schedule).not.toHaveBeenCalled();
+
+    gateway.authorize.mockResolvedValue({
+      success: true,
+      transactionId: 'wl-open',
+      providerStatus: 'pending',
+    });
+    scheduler.schedule.mockClear();
+    db.values.mockClear();
+    await svc.authorizePayment({
+      folioId: 'folio-1',
+      propertyId: 'prop-1',
+      amount: '40.00',
+      currencyCode: 'EUR',
+      gatewayProvider: 'worldline',
+      gatewayPaymentToken: 'ht-open',
+      redirectUrlOk: 'https://hotel.example/return',
+    });
+    expect(scheduler.schedule).toHaveBeenCalledWith('pay-001', 'prop-1');
+    expect(db.values).toHaveBeenCalledWith(expect.objectContaining({ status: 'pending', gatewayTransactionId: 'wl-open' }));
   });
 
   it('still returns the bank redirect when the deadline cannot be scheduled', async () => {
@@ -172,7 +191,13 @@ describe('Worldline challenge deadline', () => {
         select: () => ({
           from: (table: unknown) => ({
             where: () => {
-              const rows = table === reservations ? [{ id: 'res-1', status: 'pending' }] : [];
+              const rows = table === reservations ? [{
+                id: 'res-1',
+                status: 'pending',
+                arrivalDate: '2026-11-01',
+                departureDate: '2026-11-03',
+                roomTypeId: 'rt-1',
+              }] : [];
               return Object.assign(Promise.resolve(rows), { for: async () => rows });
             },
           }),
@@ -197,8 +222,10 @@ describe('Worldline challenge deadline', () => {
       {} as any,
       { resolveForProperty: vi.fn().mockResolvedValue(CREDS) } as any,
     );
-    vi.spyOn(WorldlineGateway.prototype, 'readAuthorization').mockResolvedValue({ outcome: 'pending' });
+    vi.spyOn(WorldlineGateway.prototype, 'readAuthorization').mockResolvedValue({ outcome: 'pending', paymentId: 'wl-1' });
+    const voided = vi.spyOn(WorldlineGateway.prototype, 'void').mockResolvedValue({ success: true, transactionId: 'wl-1' });
     await svc.expireWorldlineChallenge('pay-1', 'prop-1');
+    expect(voided).toHaveBeenCalledWith('wl-1', expect.objectContaining({ worldlineCredentials: CREDS }));
     expect(reservationWrites).toEqual([
       expect.objectContaining({ status: 'cancelled', cancellationReason: 'Payment was not authorized' }),
     ]);
@@ -210,9 +237,74 @@ describe('Worldline challenge deadline', () => {
       expect.any(String),
     );
     expect(dispatchPersisted).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'reservation.cancelled' }),
+      expect.objectContaining({
+        event: 'reservation.cancelled',
+        data: expect.objectContaining({
+          arrivalDate: '2026-11-01',
+          departureDate: '2026-11-03',
+          roomTypeId: 'rt-1',
+          penaltyAmount: null,
+        }),
+      }),
       expect.any(String),
     );
+  });
+
+  it('leaves the booking pending when the provider hold cannot be cancelled', async () => {
+    const payment = {
+      id: 'pay-1',
+      propertyId: 'prop-1',
+      folioId: 'folio-1',
+      amount: '40.00',
+      currencyCode: 'EUR',
+      gatewayProvider: 'worldline',
+      gatewayTransactionId: 'wl-1',
+      status: 'pending',
+      authorizationFinalization: {
+        deposit: { reservationId: 'res-1', isRefundable: true, autoConfirm: true },
+      },
+    };
+    const transaction = vi.fn();
+    const db = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([payment]) }),
+      }),
+      transaction,
+    };
+    const svc = new PaymentService(
+      db as any,
+      { recalculateBalance: vi.fn(), findById: vi.fn() } as any,
+      {} as any,
+      { emit: vi.fn(), dispatchPersisted: vi.fn() } as any,
+      { get: vi.fn() } as any,
+      {} as any,
+      { resolveForProperty: vi.fn().mockResolvedValue(CREDS) } as any,
+    );
+    vi.spyOn(WorldlineGateway.prototype, 'readAuthorization').mockResolvedValue({ outcome: 'pending', paymentId: 'wl-1' });
+    vi.spyOn(WorldlineGateway.prototype, 'void').mockResolvedValue({ success: false, transactionId: 'wl-1', errorMessage: 'Void failed' });
+    await expect(svc.expireWorldlineChallenge('pay-1', 'prop-1')).rejects.toThrow(/cancelled at the provider/i);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('fails the expiry job when the expirer is missing', async () => {
+    const scheduler = new WorldlineChallengeQueue(undefined, { add: vi.fn() });
+    await expect(scheduler.processJob({ paymentId: 'pay-1', propertyId: 'prop-1' })).rejects.toThrow(/expirer/i);
+  });
+
+  it('does not open a queue when the active gateway is not worldline', () => {
+    const previousNodeEnv = process.env['NODE_ENV'];
+    const previousGateway = process.env['PAYMENT_GATEWAY'];
+    process.env['NODE_ENV'] = 'development';
+    process.env['PAYMENT_GATEWAY'] = 'redsys';
+    try {
+      const scheduler = new WorldlineChallengeQueue();
+      scheduler.onModuleInit();
+      expect((scheduler as unknown as { ownsQueue: boolean }).ownsQueue).toBe(false);
+    } finally {
+      process.env['NODE_ENV'] = previousNodeEnv;
+      if (previousGateway === undefined) delete process.env['PAYMENT_GATEWAY'];
+      else process.env['PAYMENT_GATEWAY'] = previousGateway;
+    }
   });
 
   it('does not cancel a booking when the bank status read is unavailable', async () => {

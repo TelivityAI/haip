@@ -160,11 +160,15 @@ describe('WorldlineGateway', () => {
           },
         },
       })
-      .mockRejectedValueOnce(new Error('network'));
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ isSuccess: false, status: 404, body: null });
     const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
     await expect(gateway.readHostedCheckout('hc-9', { worldlineCredentials: CREDS })).resolves.toEqual({
       outcome: 'authorized',
       paymentId: 'pay-9',
+    });
+    await expect(gateway.readHostedCheckout('hc-9', { worldlineCredentials: CREDS })).resolves.toMatchObject({
+      outcome: 'unavailable',
     });
     await expect(gateway.readHostedCheckout('hc-9', { worldlineCredentials: CREDS })).resolves.toMatchObject({
       outcome: 'unavailable',
@@ -252,7 +256,7 @@ describe('WorldlineGateway', () => {
     });
   });
 
-  it('does not report success when a tokenized payment is still incomplete', async () => {
+  it('keeps a non-final tokenized payment pending so a later authorization can land', async () => {
     const client = sdk();
     client.payments.createPayment.mockResolvedValue({
       isSuccess: true,
@@ -263,8 +267,11 @@ describe('WorldlineGateway', () => {
       worldlineCredentials: CREDS,
       redirect: REDIRECT,
     });
-    expect(result.success).toBe(false);
-    expect(result.providerStatus).not.toBe('succeeded');
+    expect(result).toEqual({
+      success: true,
+      transactionId: 'pay-wait',
+      providerStatus: 'pending',
+    });
     expect(result.nextAction).toBeUndefined();
   });
 
@@ -441,6 +448,16 @@ describe('WorldlineGateway', () => {
       paymentId: 'pay-hc',
     });
     expect(client.hostedCheckout.getHostedCheckout).toHaveBeenCalledWith('psp-1', 'hc-9', {});
+  });
+
+  it('reports a provider error on both reads as unavailable', async () => {
+    const client = sdk();
+    client.payments.getPaymentDetails.mockResolvedValue({ isSuccess: false, status: 401, body: {} });
+    client.hostedCheckout.getHostedCheckout.mockResolvedValue({ isSuccess: false, status: 404, body: {} });
+    const gateway = new WorldlineGateway(config(), { clientFactory: () => client });
+    await expect(gateway.readAuthorization('pay-down', { worldlineCredentials: CREDS })).resolves.toMatchObject({
+      outcome: 'unavailable',
+    });
   });
 
   it('reports a thrown payment-details read as unavailable', async () => {

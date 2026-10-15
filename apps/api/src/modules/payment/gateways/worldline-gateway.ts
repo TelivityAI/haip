@@ -365,7 +365,7 @@ export class WorldlineGateway implements PaymentGateway {
       const client = this.clientFactory(creds);
       const res = await client.hostedCheckout.getHostedCheckout(creds.merchantId, hostedCheckoutId, {});
       if (!res.isSuccess || !res.body) {
-        return { outcome: 'pending', errorMessage: 'Hosted checkout status is unavailable' };
+        return { outcome: 'unavailable', errorMessage: 'Hosted checkout status is unavailable' };
       }
       const payment = res.body.createdPaymentOutput?.payment;
       const outcome = classifyHostedCheckout({
@@ -455,6 +455,10 @@ function mapTokenizedPayment(body: {
       providerStatus: 'failed',
       errorMessage: 'Authorization was declined',
     };
+  }
+  // A non-final status still has a payment the provider may authorize later.
+  if (paymentId) {
+    return { success: true, transactionId: paymentId, providerStatus: 'pending' };
   }
   return { success: false, transactionId: paymentId, errorMessage: 'Authorization is not complete' };
 }
