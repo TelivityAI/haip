@@ -16,18 +16,46 @@ There is still an HTTPS origin behind the Activity. That host is plumbing for Di
 
 ## One-time Discord Developer Portal
 
-You (human) must do these — no agent can click your portal:
+You (human) must do these — no agent can click your portal. **Inviting the bot alone is not enough**; Discord only lists apps flagged as Embedded Activities.
 
-1. [Discord Developer Portal](https://discord.com/developers/applications) → **New Application** (e.g. `Telivity Repo Control`).
-2. **OAuth2 → Redirects**: add `https://127.0.0.1` (placeholder).
-3. Enable **Activities**.
-4. **Activities → URL Mappings**
-   - Prefix `/` → Activity origin host (no `https://` in TARGET): `telivity-repo-control-v2.onrender.com`
-5. Copy **Application ID** (already: `1560400786767220806` for Haip Dashboard).
-6. Invite the bot with permissions integer `549756863504` (Manage Channels, View Channels, Connect, Use Embedded Activities):
-   - https://discord.com/oauth2/authorize?client_id=1560400786767220806&permissions=549756863504&integration_type=0&scope=bot%20applications.commands
-7. Create voice channel: `Repo Control` (or run `node scripts/discord-setup-channel.mjs` after invite).
-8. Join channel → **Start Activity** → pick **Haip Dashboard**. Leave it running.
+Application: **Haip Dashboard** (`1560400786767220806`)  
+Activity origin: `telivity-repo-control-v2.onrender.com`
+
+### A. Make it an Activity (required — this is why search shows “No activities match”)
+
+1. Open https://discord.com/developers/applications → **Haip Dashboard**.
+2. **OAuth2 → Redirects**: add `https://127.0.0.1` → Save.
+3. **Activities → URL Mappings** (do this **before** Enable Activities):
+   - Prefix: `/`
+   - Target: `telivity-repo-control-v2.onrender.com` (no `https://`)
+   - Save
+4. **Activities → Settings**:
+   - Turn **Enable Activities** **ON**
+   - Under **Supported Platforms**, check at least **Desktop** (and **Web** if you use browser Discord)
+   - Save
+5. **Installation** (left sidebar):
+   - Enable **Guild Install** and **User Install**
+   - Save
+
+### B. Discord client: show in-dev Activities
+
+1. Discord → **User Settings** → **App Settings** → **Advanced** → turn **Developer Mode** **ON**.
+2. Fully quit Discord and reopen (or refresh the browser client).
+
+### C. Bot invite (already done if the bot is in Telivity Community)
+
+Permissions integer `549756863504` (Manage Channels, View Channels, Connect, Use Embedded Activities):
+
+https://discord.com/oauth2/authorize?client_id=1560400786767220806&permissions=549756863504&integration_type=0&scope=bot%20applications.commands
+
+### D. Launch
+
+1. Join any **voice** channel in **Telivity Community**.
+2. Click the rocket / **Activities** / **Choose Activity**.
+3. Your app should appear in the **developer** shelf as **Haip Dashboard** (even if the public search for published games finds nothing).
+4. Click it and leave it running.
+
+If it still doesn’t appear: confirm step A4 shows Enable Activities on, Desktop is checked, URL mapping `/` exists, and Developer Mode is on — then restart Discord.
 
 ## Activity origin env (host secrets — never commit)
 
