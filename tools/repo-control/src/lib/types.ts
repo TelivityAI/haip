@@ -189,6 +189,11 @@ export interface CapabilityProbe {
   consequence: string;
 }
 
+export interface RuntimeProbeConfig {
+  id: string;
+  url: string;
+}
+
 export interface RepoControlConfig {
   productName: string;
   productSummary: string;
@@ -203,4 +208,6 @@ export interface RepoControlConfig {
   todoLimit: number;
   largeFileLineThreshold: number;
   staleAfterMinutes: number;
+  /** Public health URLs. Empty means runtime telemetry stays not_connected. */
+  runtimeProbes?: RuntimeProbeConfig[];
 }

@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Graphify</title>
+  <style>
+    :root {
+      --teal: #06bdb4;
+      --dark-teal: #00a692;
+      --orange: #f2641b;
+      --deep-blue: #016491;
+      --purple: #5838c0;
+      --navy: #23273d;
+      --slate: #444863;
+      --bg: #0e1118;
+      --panel: #161a24;
+      --fg: #f0f0f6;
+      --muted: #9aa0b4;
+      --line: #2a3145;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: Montserrat, "Trebuchet MS", sans-serif; }
+    header {
+      height: 48px; padding: 0 16px; background: var(--navy);
+      border-bottom: 1px solid var(--line);
+      display: flex; gap: 14px; align-items: center;
+    }
+    header strong { color: var(--teal); letter-spacing: 0.04em; }
+    #stats { color: var(--muted); font-size: 12px; }
+    #layout { display: grid; grid-template-columns: 1fr minmax(280px, 380px); height: calc(100% - 48px); }
+    #stage { position: relative; min-height: 0; background:
+      radial-gradient(900px 480px at 20% -10%, rgba(6, 189, 180, 0.16), transparent 55%),
+      radial-gradient(700px 420px at 100% 0%, rgba(1, 100, 145, 0.22), transparent 50%),
+      var(--bg); }
+    canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+    canvas.dragging { cursor: grabbing; }
+    #zoombar {
+      position: absolute; left: 12px; bottom: 12px;
+      display: flex; gap: 6px; align-items: center;
+      background: rgba(22, 26, 36, 0.92);
+      border: 1px solid var(--line); border-radius: 10px; padding: 6px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+    #zoombar button {
+      width: 36px; height: 32px; border-radius: 8px;
+      border: 1px solid var(--line); background: #1c2130; color: var(--fg);
+      font: 600 16px Montserrat, "Trebuchet MS", sans-serif; cursor: pointer;
+    }
+    #zoombar button:hover { border-color: var(--teal); color: var(--teal); }
+    #zoombar button.wide { width: auto; padding: 0 10px; font-size: 12px; }
+    #zlabel { min-width: 48px; text-align: center; font-size: 12px; color: var(--muted); }
+    aside { border-left: 1px solid var(--line); padding: 14px 16px; overflow: auto; background: var(--panel); }
+    h2 { margin: 0 0 6px; font-size: 18px; color: var(--teal); }
+    .muted { color: var(--muted); font-size: 12px; }
+    .path { font-size: 12px; margin-bottom: 10px; word-break: break-all; color: var(--fg); }
+    .edge { padding: 7px 0; border-top: 1px solid var(--line); font-size: 12px; }
+    .rel { color: var(--orange); font-weight: 600; }
+    input { width: 100%; padding: 8px 10px; margin: 12px 0 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; }
+    button.node, button.action {
+      display: block; width: 100%; text-align: left; background: transparent; border: 0; color: var(--fg);
+      padding: 7px 6px; cursor: pointer; border-radius: 6px; font: inherit;
+    }
+    button.action { border: 1px solid var(--line); margin: 8px 0; text-align: center; color: var(--teal); }
+    button.node:hover, button.node.active, button.action:hover { background: #1c2130; color: var(--teal); }
+    @media (max-width: 800px) {
+      #layout { grid-template-columns: 1fr; grid-template-rows: 1fr 240px; }
+      aside { border-left: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>TELIVITY</strong>
+    <span>Repository map</span>
+    <span id="stats"></span>
+  </header>
+  <div id="layout">
+    <div id="stage">
+      <canvas id="c"></canvas>
+      <div id="zoombar">
+        <button id="zout" type="button" title="Zoom out">−</button>
+        <span id="zlabel">100%</span>
+        <button id="zin" type="button" title="Zoom in">+</button>
+        <button id="zfit" class="wide" type="button">Fit</button>
+        <button id="zback" class="wide" type="button">Communities</button>
+      </div>
+    </div>
+    <aside>
+      <h2 id="d-title">Communities</h2>
+      <div id="d-body" class="muted">Click a community. Lines are TypeScript imports between those groups. Open folders to see the files.</div>
+      <input id="q" placeholder="Filter communities…" />
+      <div id="list"></div>
+    </aside>
+  </div>
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const titleEl = document.getElementById('d-title');
+    const bodyEl = document.getElementById('d-body');
+    const listEl = document.getElementById('list');
+    const q = document.getElementById('q');
+    const stats = document.getElementById('stats');
+    const zlabel = document.getElementById('zlabel');
+
+    let data = { nodes: [], links: [] };
+    const byId = new Map();
+    const positions = new Map();
+    let communities = [];
+    let communityLinks = [];
+    let mode = 'communities';
+    let selectedCommunity = null;
+    let selectedNode = null;
+    const cam = { x: 40, y: 36, scale: 1 };
+    const MIN_SCALE = 0.35;
+    const MAX_SCALE = 2.4;
+    const PALETTE = ['#06bdb4', '#016491', '#f2641b', '#5838c0', '#eec517', '#00a692', '#c46bff', '#2fbf71'];
+    const communityColor = new Map();
+
+    function colorFor(name) {
+      if (!communityColor.has(name)) communityColor.set(name, PALETTE[communityColor.size % PALETTE.length]);
+      return communityColor.get(name);
+    }
+    function labelOf(id) { return byId.get(id)?.label || id; }
+    function communityOf(id) {
+      const n = byId.get(id);
+      return n ? (n.community_name || n.community || 'other') : '';
+    }
+
+    function build() {
+      const groups = new Map();
+      for (const n of data.nodes) {
+        const key = n.community_name || n.community || 'other';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(n);
+      }
+      const names = [...groups.keys()].sort();
+      const cols = Math.max(4, Math.ceil(Math.sqrt(names.length * 1.35)));
+      const cellX = 210;
+      const cellY = 78;
+      communities = names.map((name, i) => ({
+        name,
+        x: (i % cols) * cellX,
+        y: Math.floor(i / cols) * cellY,
+        members: groups.get(name),
+        count: groups.get(name).length,
+      }));
+      const agg = new Map();
+      for (const e of data.links) {
+        const ca = communityOf(e.source);
+        const cb = communityOf(e.target);
+        if (!ca || !cb || ca === cb) continue;
+        const key = ca + '\n' + cb;
+        const cur = agg.get(key) || { source: ca, target: cb, weight: 0, samples: [] };
+        cur.weight += e.weight || 1;
+        for (const s of e.samples || []) {
+          if (cur.samples.length < 4) cur.samples.push(s);
+        }
+        agg.set(key, cur);
+      }
+      communityLinks = [...agg.values()].sort((a, b) => b.weight - a.weight);
+      for (const c of communities) {
+        const inner = Math.max(90, 40 + c.members.length * 26);
+        c.members.forEach((n, j) => {
+          const a = (j / Math.max(c.members.length, 1)) * Math.PI * 2 - Math.PI / 2;
+          positions.set(n.id, { x: c.x + Math.cos(a) * inner, y: c.y + Math.sin(a) * inner });
+        });
+      }
+    }
+
+    function toScreen(p) { return { x: p.x * cam.scale + cam.x, y: p.y * cam.scale + cam.y }; }
+    function toWorld(x, y) { return { x: (x - cam.x) / cam.scale, y: (y - cam.y) / cam.scale }; }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function pillBox(text, sx, sy, active) {
+      ctx.font = '600 12px Montserrat, Trebuchet MS, sans-serif';
+      const tw = ctx.measureText(text).width;
+      const w = Math.max(86, Math.min(200, tw + 22));
+      const h = 30;
+      return { x: sx - w / 2, y: sy - h / 2, w, h, cx: sx, cy: sy, active };
+    }
+
+    function drawPill(box, text, tone, active) {
+      ctx.shadowColor = active ? 'rgba(6, 189, 180, 0.45)' : 'transparent';
+      ctx.shadowBlur = active ? 16 : 0;
+      roundRect(box.x, box.y, box.w, box.h, 15);
+      ctx.fillStyle = active ? '#10242c' : '#161a24';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = active ? 2 : 1.5;
+      ctx.strokeStyle = active ? '#f0f0f6' : tone;
+      ctx.stroke();
+      ctx.fillStyle = active ? '#06bdb4' : '#f0f0f6';
+      ctx.font = '600 12px Montserrat, Trebuchet MS, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, box.cx, box.cy);
+    }
+
+    function visibleFolderNodes() {
+      if (!selectedCommunity) return data.nodes;
+      const ids = new Set(communities.find((c) => c.name === selectedCommunity)?.members.map((m) => m.id) || []);
+      const extra = new Set(ids);
+      for (const e of data.links) {
+        if (ids.has(e.source)) extra.add(e.target);
+        if (ids.has(e.target)) extra.add(e.source);
+      }
+      return data.nodes.filter((n) => extra.has(n.id));
+    }
+
+    function layoutFolders() {
+      const nodes = visibleFolderNodes();
+      const focus = nodes.filter((n) => communityOf(n.id) === selectedCommunity);
+      const rest = nodes.filter((n) => communityOf(n.id) !== selectedCommunity);
+      focus.forEach((n, i) => {
+        const cols = Math.max(2, Math.ceil(Math.sqrt(focus.length)));
+        positions.set(n.id, { x: (i % cols) * 180, y: Math.floor(i / cols) * 70 });
+      });
+      rest.forEach((n, i) => {
+        const a = (i / Math.max(rest.length, 1)) * Math.PI * 2 - Math.PI / 2;
+        const ring = Math.max(280, 80 + rest.length * 18);
+        positions.set(n.id, { x: Math.cos(a) * ring + 200, y: Math.sin(a) * ring + 80 });
+      });
+    }
+
+    function drawEdges(edges, hotFn) {
+      for (const e of edges) {
+        const hot = hotFn(e);
+        if (!hot && (e.weight || 1) < 3 && !selectedCommunity && !selectedNode) continue;
+        const a = mode === 'communities'
+          ? communities.find((c) => c.name === e.source)
+          : positions.get(e.source);
+        const b = mode === 'communities'
+          ? communities.find((c) => c.name === e.target)
+          : positions.get(e.target);
+        if (!a || !b) continue;
+        const sa = toScreen(a);
+        const sb = toScreen(b);
+        const weight = e.weight || 1;
+        ctx.globalAlpha = hot ? 0.9 : Math.min(0.28, 0.05 + Math.log2(weight + 1) / 14);
+        ctx.strokeStyle = hot ? '#06bdb4' : colorFor(e.source);
+        ctx.lineWidth = hot ? Math.min(5, 1.5 + Math.log2(weight + 1)) : 1;
+        ctx.beginPath();
+        ctx.moveTo(sa.x, sa.y);
+        ctx.lineTo(sb.x, sb.y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    function drawGrid() {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      const step = 48 * cam.scale;
+      if (step < 16) return;
+      const ox = ((cam.x % step) + step) % step;
+      const oy = ((cam.y % step) + step) % step;
+      ctx.strokeStyle = 'rgba(42, 49, 69, 0.55)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = ox; x < w; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+      for (let y = oy; y < h; y += step) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+      ctx.stroke();
+    }
+
+    function draw() {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+      drawGrid();
+      if (mode === 'communities') {
+        drawEdges(communityLinks, (e) => selectedCommunity && (e.source === selectedCommunity || e.target === selectedCommunity));
+        for (const c of communities) {
+          const s = toScreen(c);
+          const active = selectedCommunity === c.name;
+          const box = pillBox(c.name, s.x, s.y, active);
+          c.box = box;
+          drawPill(box, c.name, colorFor(c.name), active);
+        }
+      } else {
+        const nodes = visibleFolderNodes();
+        const idset = new Set(nodes.map((n) => n.id));
+        const edges = data.links.filter((e) => idset.has(e.source) && idset.has(e.target));
+        drawEdges(edges, (e) => selectedNode && (e.source === selectedNode || e.target === selectedNode));
+        for (const n of nodes) {
+          const p = positions.get(n.id);
+          if (!p) continue;
+          const s = toScreen(p);
+          const active = selectedNode === n.id;
+          const box = pillBox(n.label, s.x, s.y, active);
+          n.box = box;
+          drawPill(box, n.label, colorFor(communityOf(n.id)), active);
+        }
+      }
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      zlabel.textContent = Math.round(cam.scale * 100) + '%';
+    }
+
+    function resize() {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, canvas.clientWidth) * dpr;
+      canvas.height = Math.max(1, canvas.clientHeight) * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
+    }
+
+    function zoomAt(sx, sy, factor) {
+      const before = toWorld(sx, sy);
+      cam.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, cam.scale * factor));
+      cam.x = sx - before.x * cam.scale;
+      cam.y = sy - before.y * cam.scale;
+      draw();
+    }
+
+    function boundsOf(points) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const p of points) {
+        minX = Math.min(minX, p.x - 100);
+        minY = Math.min(minY, p.y - 20);
+        maxX = Math.max(maxX, p.x + 100);
+        maxY = Math.max(maxY, p.y + 20);
+      }
+      return { minX, minY, maxX, maxY };
+    }
+
+    function fit() {
+      const pts = mode === 'communities' ? communities : visibleFolderNodes().map((n) => positions.get(n.id)).filter(Boolean);
+      if (!pts.length) return;
+      const b = boundsOf(pts);
+      const bw = Math.max(80, b.maxX - b.minX);
+      const bh = Math.max(80, b.maxY - b.minY);
+      const pad = 36;
+      cam.scale = Math.min(1.15, Math.max(MIN_SCALE, Math.min(
+        (canvas.clientWidth - pad * 2) / bw,
+        (canvas.clientHeight - pad * 2) / bh,
+      )));
+      cam.x = canvas.clientWidth / 2 - ((b.minX + b.maxX) / 2) * cam.scale;
+      cam.y = canvas.clientHeight / 2 - ((b.minY + b.maxY) / 2) * cam.scale;
+      draw();
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+
+    function edgeHtml(rows, verb) {
+      if (!rows.length) return '';
+      return '<div style="margin-top:10px;font-weight:600">' + verb + '</div>' + rows.map((r) => {
+        const files = (r.samples || []).slice(0, 3).map((s) => '<div class="muted">' + escapeHtml(s) + '</div>').join('');
+        return '<div class="edge"><span class="rel">imports</span> ' + escapeHtml(r.label) + ' · ' + r.weight + files + '</div>';
+      }).join('');
+    }
+
+    function communityEdges(name) {
+      const out = [];
+      const inc = [];
+      for (const e of communityLinks) {
+        if (e.source === name) out.push({ label: e.target, weight: e.weight, samples: e.samples });
+        if (e.target === name) inc.push({ label: e.source, weight: e.weight, samples: e.samples });
+      }
+      return { out, inc };
+    }
+
+    function showCommunity(name) {
+      mode = 'communities';
+      selectedCommunity = name;
+      selectedNode = null;
+      const c = communities.find((x) => x.name === name);
+      titleEl.textContent = name;
+      const { out, inc } = communityEdges(name);
+      const files = c ? c.count + ' folders' : '';
+      bodyEl.innerHTML =
+        '<div class="muted">' + files + ' · ' + (out.length + inc.length) + ' community links</div>' +
+        '<button class="action" id="open-folders" type="button">Open folders</button>' +
+        edgeHtml(out, 'Outgoing') + edgeHtml(inc, 'Incoming');
+      const btn = document.getElementById('open-folders');
+      if (btn) btn.addEventListener('click', () => showFolders(name));
+      q.placeholder = 'Filter communities…';
+      draw();
+      renderList();
+    }
+
+    function showFolders(name) {
+      mode = 'folders';
+      selectedCommunity = name;
+      selectedNode = null;
+      layoutFolders();
+      titleEl.textContent = name;
+      bodyEl.innerHTML = '<div class="muted">Folders in this community, plus the folders they import. Click a folder for the file samples.</div>';
+      q.placeholder = 'Filter folders…';
+      fit();
+      renderList();
+    }
+
+    function showNode(n) {
+      selectedNode = n.id;
+      titleEl.textContent = n.label;
+      const rowsOut = [];
+      const rowsIn = [];
+      for (const e of data.links) {
+        if (e.source === n.id) rowsOut.push({ label: labelOf(e.target), weight: e.weight || 1, samples: e.samples || [] });
+        if (e.target === n.id) rowsIn.push({ label: labelOf(e.source), weight: e.weight || 1, samples: e.samples || [] });
+      }
+      rowsOut.sort((a, b) => b.weight - a.weight);
+      rowsIn.sort((a, b) => b.weight - a.weight);
+      bodyEl.innerHTML =
+        '<div class="path">' + escapeHtml(n.source_file || n.id) + '</div>' +
+        '<div class="muted">community: ' + escapeHtml(communityOf(n.id)) + '</div>' +
+        (edgeHtml(rowsOut, 'Outgoing') + edgeHtml(rowsIn, 'Incoming') || '<div class="muted">No links in this map.</div>');
+      draw();
+      renderList();
+    }
+
+    function backToCommunities() {
+      mode = 'communities';
+      selectedNode = null;
+      q.placeholder = 'Filter communities…';
+      if (selectedCommunity) showCommunity(selectedCommunity);
+      else {
+        titleEl.textContent = 'Communities';
+        bodyEl.textContent = 'Click a community. Lines are TypeScript imports between those groups. Open folders to see the files.';
+        renderList();
+      }
+      fit();
+    }
+
+    function degree(name) {
+      let n = 0;
+      for (const e of communityLinks) if (e.source === name || e.target === name) n += e.weight;
+      return n;
+    }
+
+    function renderList() {
+      const term = q.value.trim().toLowerCase();
+      listEl.innerHTML = '';
+      if (mode === 'communities') {
+        communities
+          .filter((c) => !term || c.name.toLowerCase().includes(term))
+          .forEach((c) => {
+            const b = document.createElement('button');
+            b.className = 'node' + (selectedCommunity === c.name ? ' active' : '');
+            b.textContent = c.name + ' · ' + degree(c.name);
+            b.addEventListener('click', () => showCommunity(c.name));
+            listEl.appendChild(b);
+          });
+        return;
+      }
+      visibleFolderNodes()
+        .filter((n) => !term || String(n.label).toLowerCase().includes(term) || String(n.source_file || '').toLowerCase().includes(term))
+        .forEach((n) => {
+          const b = document.createElement('button');
+          b.className = 'node' + (selectedNode === n.id ? ' active' : '');
+          b.textContent = n.label;
+          b.addEventListener('click', () => showNode(n));
+          listEl.appendChild(b);
+        });
+    }
+
+    function hitCommunity(sx, sy) {
+      for (let i = communities.length - 1; i >= 0; i--) {
+        const box = communities[i].box;
+        if (!box) continue;
+        if (sx >= box.x && sx <= box.x + box.w && sy >= box.y && sy <= box.y + box.h) return communities[i];
+      }
+      return null;
+    }
+    function hitFolder(sx, sy) {
+      const nodes = visibleFolderNodes();
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const box = nodes[i].box;
+        if (!box) continue;
+        if (sx >= box.x && sx <= box.x + box.w && sy >= box.y && sy <= box.y + box.h) return nodes[i];
+      }
+      return null;
+    }
+
+    let drag = null;
+    canvas.addEventListener('pointerdown', (ev) => {
+      drag = { x: ev.clientX, y: ev.clientY, camx: cam.x, camy: cam.y, moved: false };
+      canvas.classList.add('dragging');
+      canvas.setPointerCapture(ev.pointerId);
+    });
+    canvas.addEventListener('pointermove', (ev) => {
+      if (!drag) return;
+      const dx = ev.clientX - drag.x;
+      const dy = ev.clientY - drag.y;
+      if (Math.hypot(dx, dy) > 4) drag.moved = true;
+      cam.x = drag.camx + dx;
+      cam.y = drag.camy + dy;
+      draw();
+    });
+    canvas.addEventListener('pointerup', (ev) => {
+      if (drag && !drag.moved) {
+        const rect = canvas.getBoundingClientRect();
+        const sx = ev.clientX - rect.left;
+        const sy = ev.clientY - rect.top;
+        if (mode === 'communities') {
+          const hit = hitCommunity(sx, sy);
+          if (hit) showCommunity(hit.name);
+        } else {
+          const hit = hitFolder(sx, sy);
+          if (hit) showNode(hit);
+        }
+      }
+      drag = null;
+      canvas.classList.remove('dragging');
+    });
+    canvas.addEventListener('pointercancel', () => { drag = null; canvas.classList.remove('dragging'); });
+    canvas.addEventListener('wheel', (ev) => {
+      ev.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      zoomAt(ev.clientX - rect.left, ev.clientY - rect.top, ev.deltaY < 0 ? 1.12 : 1 / 1.12);
+    }, { passive: false });
+    document.getElementById('zin').addEventListener('click', () => zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1.2));
+    document.getElementById('zout').addEventListener('click', () => zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1 / 1.2));
+    document.getElementById('zfit').addEventListener('click', fit);
+    document.getElementById('zback').addEventListener('click', backToCommunities);
+    q.addEventListener('input', renderList);
+    window.addEventListener('resize', resize);
+
+    async function boot() {
+      const res = await fetch('/graphify/graph.json', { cache: 'no-store' });
+      if (!res.ok) {
+        bodyEl.textContent = 'Graph JSON failed to load (' + res.status + ').';
+        return;
+      }
+      const raw = await res.json();
+      data = { nodes: raw.nodes || [], links: raw.links || raw.edges || [] };
+      for (const n of data.nodes) byId.set(n.id, n);
+      build();
+      const communityCount = communities.length;
+      stats.textContent = data.nodes.length + ' folders · ' + data.links.length + ' imports · ' + communityCount + ' communities';
+      resize();
+      fit();
+      renderList();
+    }
+    boot().catch((err) => { bodyEl.textContent = String(err); });
+  </script>
+</body>
+</html>

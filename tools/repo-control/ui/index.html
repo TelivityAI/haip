@@ -4,16 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Telivity · Repository Control</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- No external fonts — Discord Activity CSP blocks fonts.googleapis.com -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #0e1118;
+        color: #f0f0f6;
+        font-family: Montserrat, 'Trebuchet MS', sans-serif;
+      }
+      #boot {
+        padding: 24px;
+        font-weight: 600;
+        font-size: 14px;
+      }
+    </style>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app"><div id="boot">Loading Telivity Repo Control…</div></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

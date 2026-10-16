@@ -6,7 +6,8 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   root,
-  base: './',
+  // Absolute base so Discord's discordsays.com proxy resolves /assets correctly
+  base: '/',
   publicDir: path.join(root, 'public'),
   build: {
     outDir: path.join(root, 'dist'),

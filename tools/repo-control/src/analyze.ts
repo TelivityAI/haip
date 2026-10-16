@@ -12,6 +12,7 @@ import { collectCapabilities } from './collectors/capabilities.js';
 import { collectTodos } from './collectors/todos.js';
 import { collectBloat } from './collectors/bloat.js';
 import { collectGraphify } from './collectors/graphify.js';
+import { collectRuntime } from './collectors/runtime.js';
 import { findingsFromChecks } from './lib/findings-from-checks.js';
 import { buildNextActions, mapPathsToCapabilities } from './lib/next-actions.js';
 import { compareSnapshots } from './lib/compare.js';
@@ -62,6 +63,9 @@ export async function runAnalyze(opts: AnalyzeOptions = {}): Promise<SnapshotV1>
   const graphify = await collectGraphify(config);
   collectors.push(graphify.collector);
 
+  const runtime = await collectRuntime(config.runtimeProbes ?? []);
+  collectors.push(runtime.collector);
+
   const findings: Finding[] = [
     ...findingsFromChecks(checks.data, analyzedCommit, analyzedAt),
     ...todos.findings,
@@ -98,11 +102,7 @@ export async function runAnalyze(opts: AnalyzeOptions = {}): Promise<SnapshotV1>
       uncommitted: gitMeta.dirtyPaths,
     },
     nextActions: buildNextActions(findings, capabilities.data),
-    runtime: {
-      status: 'not_connected',
-      note: 'No logs, deployments, error tracking, or production DB credentials are connected to Repo Control. Repository analysis cannot speak for production runtime.',
-      sources: [],
-    },
+    runtime: runtime.data,
     collectors,
     graphify: {
       ...graphify.data,

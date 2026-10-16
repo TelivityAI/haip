@@ -24,18 +24,20 @@ Activity origin: `telivity-repo-control-v2.onrender.com`
 ### A. Make it an Activity (required — this is why search shows “No activities match”)
 
 1. Open https://discord.com/developers/applications → **Haip Dashboard**.
-2. **OAuth2 → Redirects**: add `https://127.0.0.1` → Save.
-3. **Activities → URL Mappings** (do this **before** Enable Activities):
+2. **OAuth2 → Redirects**: delete `https://127.0.0.1`. Add `https://telivity-repo-control-v2.onrender.com` and save. That localhost redirect is what Discord opens when the Activity fails to launch.
+3. **Activities → URL Mappings**:
    - Prefix: `/`
    - Target: `telivity-repo-control-v2.onrender.com` (no `https://`)
    - Save
 4. **Activities → Settings**:
    - Turn **Enable Activities** **ON**
-   - Under **Supported Platforms**, check at least **Desktop** (and **Web** if you use browser Discord)
+   - Under **Supported Platforms**, check **Web**
    - Save
 5. **Installation** (left sidebar):
    - Enable **Guild Install** and **User Install**
    - Save
+
+The Entry Point command (`/launch`, type PRIMARY_ENTRY_POINT) is already registered on this app. If the portal still warns about it, ignore the warning after URL mapping + Enable Activities are correct.
 
 ### B. Discord client: show in-dev Activities
 

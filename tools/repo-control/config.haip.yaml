@@ -29,6 +29,15 @@ todoLimit: 50
 largeFileLineThreshold: 900
 staleAfterMinutes: 60
 
+# Public health only. No logs, error tracker, or production DB credentials.
+runtimeProbes:
+  - id: haip-prod-api
+    url: https://haip-prod-api.onrender.com/api/v1/health
+  - id: haip-cloud-api
+    url: https://haip-cloud-api.onrender.com/api/v1/health
+  - id: haip-cloud-api-v2
+    url: https://haip-cloud-api-v2.onrender.com/api/v1/health
+
 checks:
   - id: lint
     label: Lint

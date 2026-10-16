@@ -1,6 +1,18 @@
 import './styles.css';
-import { initDiscordActivity } from './discord';
+import { initDiscordActivity, isDiscordSurface } from './discord';
 import { ensureClerkSignedIn, getClerkBearer, getClerkSession } from './clerk';
+
+// Paint immediately so Discord never sits on a blank white iframe while SDK boots
+document.documentElement.style.background = '#0e1118';
+document.body.style.background = '#0e1118';
+document.body.style.color = '#f0f0f6';
+document.body.style.margin = '0';
+document.body.style.fontFamily = "Montserrat, 'Trebuchet MS', sans-serif";
+const bootEl = document.getElementById('app');
+if (bootEl && !bootEl.textContent?.trim()) {
+  bootEl.innerHTML =
+    '<div style="padding:24px;font:600 14px Montserrat,Trebuchet MS,sans-serif;color:#f0f0f6">Loading Telivity Repo Control…</div>';
+}
 
 type Snapshot = {
   schemaVersion: number;
@@ -226,7 +238,15 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
     const bearer = getClerkBearer();
     if (bearer) headers.set('Authorization', `Bearer ${bearer}`);
   }
-  const res = await fetch(url, { ...init, headers });
+  // Discord's proxy may strip Referer to the origin — tag reads so the server
+  // still grants view-only access when REPO_CONTROL_DISCORD_PUBLIC_READ=true.
+  let finalUrl = url;
+  if (isDiscordSurface() && url.startsWith('/api/')) {
+    const u = new URL(url, location.origin);
+    u.searchParams.set('discord', '1');
+    finalUrl = u.pathname + u.search;
+  }
+  const res = await fetch(finalUrl, { ...init, headers });
   if (res.status === 401) {
     state.authed = false;
     throw new Error('Unauthorized');
@@ -386,6 +406,9 @@ function render(): void {
           <div style="margin-top:8px" class="runtime-box">
             <strong>Runtime telemetry: ${escapeHtml(s.runtime.status)}</strong>
             <div>${escapeHtml(s.runtime.note)}</div>
+            ${(s.runtime.sources || [])
+              .map((src) => `<div class="meta">${escapeHtml(src)}</div>`)
+              .join('')}
           </div>
         </div>
       </section>
@@ -409,7 +432,7 @@ function renderDrawer(s: Snapshot): string {
         <h3 style="margin:0">Graphify map</h3>
         <button class="btn" id="closeDrawer">Close</button>
       </div>
-      <iframe src="/graphify/graph.html" title="Graphify" style="border:0;flex:1;width:100%;height:100%;background:#0f121c"></iframe>
+      <iframe src="/graphify/viewer.html" title="Graphify" style="border:0;flex:1;width:100%;min-height:0;background:#0f121c"></iframe>
     </div></div>`;
   }
   if (state.drawer.kind === 'compare') {

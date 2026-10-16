@@ -4,7 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PACKAGE_ROOT, annotationsPath, latestSnapshotPath } from './lib/paths.js';
+import { loadConfig } from './lib/config.js';
+import { collectRuntime } from './collectors/runtime.js';
 import { runAnalyze } from './analyze.js';
+import type { SnapshotV1 } from './lib/types.js';
 import {
   clerkEnabled,
   publicClerkConfig,
@@ -44,6 +47,25 @@ const COOKIE_NAME = 'repo_control_session';
 const DEV = process.argv.includes('--dev') || process.env.REPO_CONTROL_DEV === 'true';
 
 const READ_API = new Set(['/api/me', '/api/snapshot', '/api/annotations', '/api/health', '/api/public-config']);
+
+let runtimeCache: { at: number; data: SnapshotV1['runtime'] } | null = null;
+
+/** Fresh public health probes so a stale snapshot still shows live availability. */
+async function liveRuntime(): Promise<SnapshotV1['runtime']> {
+  if (runtimeCache && Date.now() - runtimeCache.at < 60_000) return runtimeCache.data;
+  try {
+    const { config } = loadConfig(process.env.REPO_CONTROL_CONFIG);
+    const result = await collectRuntime(config.runtimeProbes ?? []);
+    runtimeCache = { at: Date.now(), data: result.data };
+    return result.data;
+  } catch (err) {
+    return {
+      status: 'not_connected',
+      note: err instanceof Error ? err.message : 'Runtime probe failed',
+      sources: [],
+    };
+  }
+}
 
 type AnnotationMap = Record<
   string,
@@ -109,8 +131,12 @@ async function resolveAccess(
   url: URL,
 ): Promise<Access> {
   const referer = String(req.headers.referer || req.headers.referrer || '');
+  const originHdr = String(req.headers.origin || '');
+  const fwdHost = String(req.headers['x-forwarded-host'] || req.headers['x-original-host'] || '');
   const fromDiscordProxy =
     referer.includes('discordsays.com') ||
+    originHdr.includes('discordsays.com') ||
+    fwdHost.includes('discordsays.com') ||
     url.searchParams.get('discord') === '1' ||
     url.pathname.startsWith('/discord') ||
     Boolean(req.headers['x-discord-activity']);
@@ -277,6 +303,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const rel = pathname.replace(/^\/graphify\//, '');
+      if (rel === 'viewer.html') {
+        const viewer = path.join(PACKAGE_ROOT, 'ui', 'graphify-viewer.html');
+        if (fs.existsSync(viewer)) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          fs.createReadStream(viewer).pipe(res);
+          return;
+        }
+      }
       for (const root of graphifyRoots()) {
         const file = safeJoin(root, rel);
         if (file && fs.existsSync(file) && fs.statSync(file).isFile()) {
@@ -315,7 +349,8 @@ const server = http.createServer(async (req, res) => {
         });
         return;
       }
-      const snap = JSON.parse(fs.readFileSync(latest, 'utf8'));
+      const snap = JSON.parse(fs.readFileSync(latest, 'utf8')) as SnapshotV1;
+      snap.runtime = await liveRuntime();
       const ageMin = (Date.now() - new Date(snap.generatedAt).getTime()) / 60000;
       if (ageMin > 60) {
         snap.git = {
