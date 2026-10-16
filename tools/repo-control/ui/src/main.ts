@@ -353,16 +353,16 @@ function render(): void {
       </section>
 
       <section class="panel">
-        <h2>Graphify map</h2>
+        <h2>Repo map</h2>
         <div class="graphify-tile">
           <div class="product-blurb">${escapeHtml(s.graphify.summary)}</div>
           <div class="graphify-preview" id="openGraphify">
             <div>
-              <div style="font-weight:700;color:var(--teal);margin-bottom:4px">Open & drill in</div>
-              <div class="muted">${s.graphify.nodeCount ?? '—'} nodes · ${s.graphify.edgeCount ?? '—'} edges · ${escapeHtml(s.graphify.status)}</div>
+              <div style="font-weight:700;color:var(--teal);margin-bottom:4px">Modules, imports, and the files inside</div>
+              <div class="muted">${s.graphify.nodeCount ?? '—'} modules · ${s.graphify.edgeCount ?? '—'} cross-imports · ${escapeHtml(s.graphify.status)}</div>
             </div>
           </div>
-          <button class="btn" id="openGraphifyBtn">Open Graphify</button>
+          <button class="btn" id="openGraphifyBtn">Open map</button>
         </div>
       </section>
 
@@ -429,10 +429,10 @@ function renderDrawer(s: Snapshot): string {
   if (state.drawer.kind === 'graphify') {
     return `<div class="drawer-backdrop" id="backdrop"><div class="drawer wide">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)">
-        <h3 style="margin:0">Graphify map</h3>
+        <h3 style="margin:0">Repo map</h3>
         <button class="btn" id="closeDrawer">Close</button>
       </div>
-      <iframe src="/graphify/viewer.html" title="Graphify" style="border:0;flex:1;width:100%;min-height:0;background:#0f121c"></iframe>
+      <iframe src="/graphify/viewer.html" title="Repo map" style="border:0;flex:1;width:100%;min-height:0;background:#0e1118"></iframe>
     </div></div>`;
   }
   if (state.drawer.kind === 'compare') {

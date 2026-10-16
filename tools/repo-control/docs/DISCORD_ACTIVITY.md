@@ -94,7 +94,7 @@ Map portal `/` → the cloudflared host, then Start Activity against that mappin
 - Voice channel `Repo Control` exists  
 - Activity launches and shows Telivity Repo Control board  
 - Yellow **Discord view-only** mode (no Refresh)  
-- Graphify tile opens inside the Activity  
+- Repo map tile opens inside the Activity  
 - Snapshot data from last analyze  
 
 ## Blockers only you can clear

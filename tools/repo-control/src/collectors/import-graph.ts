@@ -2,13 +2,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { GraphifyInfo } from '../lib/types.js';
 
+export interface InternalLink {
+  source: string;
+  target: string;
+  weight: number;
+  samples: string[];
+}
+
 export interface ImportNode {
   id: string;
   label: string;
+  group: string;
   source_file: string;
   community: string;
   community_name: string;
   fileCount: number;
+  files: string[];
+  internal: InternalLink[];
 }
 
 export interface ImportLink {
@@ -31,19 +41,29 @@ const SKIP_DIRS = new Set([
 const IMPORT_RE =
   /(?:import|export)\s+(?:type\s+)?(?:[^'"\n]*?\sfrom\s+)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g;
 
+const GROUP_ORDER = ['Packages', 'API', 'Dashboard', 'Booking'];
+
 export function buildImportGraph(repoRoot: string): {
   nodes: ImportNode[];
   links: ImportLink[];
 } {
-  const files = listSourceFiles(repoRoot);
+  const files = listSourceFiles(repoRoot).filter((rel) => !isTestFile(rel));
   const fileSet = new Set(files);
-  const folderFiles = new Map<string, number>();
-  const edgeWeight = new Map<string, number>();
-  const edgeSamples = new Map<string, string[]>();
+  const moduleFiles = new Map<string, Set<string>>();
+  const externalWeight = new Map<string, number>();
+  const externalSamples = new Map<string, string[]>();
+  const internalWeight = new Map<string, number>();
+  const internalSamples = new Map<string, string[]>();
 
   for (const rel of files) {
-    const srcNode = path.dirname(rel);
-    folderFiles.set(srcNode, (folderFiles.get(srcNode) ?? 0) + 1);
+    const srcId = communityFor(path.posix.dirname(rel));
+    let bucket = moduleFiles.get(srcId);
+    if (!bucket) {
+      bucket = new Set();
+      moduleFiles.set(srcId, bucket);
+    }
+    bucket.add(rel);
+
     let text = '';
     try {
       text = fs.readFileSync(path.join(repoRoot, rel), 'utf8');
@@ -56,48 +76,78 @@ export function buildImportGraph(repoRoot: string): {
       const spec = match[1] || match[2];
       if (!spec) continue;
       const target = resolveImport(repoRoot, rel, spec, fileSet);
-      if (!target) continue;
-      const dstNode = path.dirname(target);
-      if (dstNode === srcNode) continue;
-      const key = `${srcNode}\n${dstNode}`;
-      edgeWeight.set(key, (edgeWeight.get(key) ?? 0) + 1);
-      const samples = edgeSamples.get(key) ?? [];
+      if (!target || isTestFile(target) || target === rel) continue;
+      const dstId = communityFor(path.posix.dirname(target));
+      if (dstId === srcId) {
+        const key = `${srcId}\n${rel}\n${target}`;
+        internalWeight.set(key, (internalWeight.get(key) ?? 0) + 1);
+        const samples = internalSamples.get(key) ?? [];
+        if (samples.length < 4) {
+          samples.push(`${path.posix.basename(rel)} → ${path.posix.basename(target)}`);
+          internalSamples.set(key, samples);
+        }
+        continue;
+      }
+      const key = `${srcId}\n${dstId}`;
+      externalWeight.set(key, (externalWeight.get(key) ?? 0) + 1);
+      const samples = externalSamples.get(key) ?? [];
       if (samples.length < 6) {
-        samples.push(`${path.basename(rel)} → ${path.basename(target)}`);
-        edgeSamples.set(key, samples);
+        samples.push(`${path.posix.basename(rel)} → ${path.posix.basename(target)}`);
+        externalSamples.set(key, samples);
       }
     }
   }
 
-  const linked = new Set<string>();
+  const internalsByModule = new Map<string, InternalLink[]>();
+  for (const [key, weight] of internalWeight) {
+    const [moduleId, source, target] = key.split('\n');
+    const list = internalsByModule.get(moduleId) ?? [];
+    const root = commonDir([...(moduleFiles.get(moduleId) ?? [])]);
+    list.push({
+      source: stripRoot(source, root),
+      target: stripRoot(target, root),
+      weight,
+      samples: internalSamples.get(key) ?? [],
+    });
+    internalsByModule.set(moduleId, list);
+  }
+
+  const nodes: ImportNode[] = [];
+  for (const [id, fileSetForModule] of moduleFiles) {
+    const listed = [...fileSetForModule].sort();
+    const root = commonDir(listed);
+    const presented = present(id);
+    const internal = (internalsByModule.get(id) ?? []).sort(
+      (a, b) => b.weight - a.weight || a.source.localeCompare(b.source),
+    );
+    nodes.push({
+      id,
+      label: presented.label,
+      group: presented.group,
+      source_file: root || id,
+      community: id,
+      community_name: presented.label,
+      fileCount: listed.length,
+      files: listed.map((file) => stripRoot(file, root)),
+      internal,
+    });
+  }
+
+  const known = new Set(nodes.map((n) => n.id));
   const links: ImportLink[] = [];
-  for (const [key, weight] of edgeWeight) {
+  for (const [key, weight] of externalWeight) {
     const [source, target] = key.split('\n');
-    linked.add(source);
-    linked.add(target);
+    if (!known.has(source) || !known.has(target)) continue;
     links.push({
       source,
       target,
       relationship: 'imports',
       weight,
-      samples: edgeSamples.get(key) ?? [],
+      samples: externalSamples.get(key) ?? [],
     });
   }
 
-  const nodes: ImportNode[] = [];
-  for (const [id, fileCount] of folderFiles) {
-    if (!linked.has(id) && fileCount < 1) continue;
-    const community = communityFor(id);
-    nodes.push({
-      id,
-      label: folderLabel(id),
-      source_file: id,
-      community,
-      community_name: community,
-      fileCount,
-    });
-  }
-  nodes.sort((a, b) => a.community.localeCompare(b.community) || a.label.localeCompare(b.label));
+  nodes.sort((a, b) => groupRank(a.group) - groupRank(b.group) || a.label.localeCompare(b.label));
   links.sort((a, b) => b.weight - a.weight || a.source.localeCompare(b.source));
   return { nodes, links };
 }
@@ -107,20 +157,25 @@ export function writeImportGraph(repoRoot: string, dirAbs: string): GraphifyInfo
   fs.mkdirSync(dirAbs, { recursive: true });
   const jsonPath = path.join(dirAbs, 'graph.json');
   fs.writeFileSync(jsonPath, JSON.stringify({ nodes, links }, null, 2));
-  const communities = new Set(nodes.map((n) => n.community));
+  const internalCount = nodes.reduce((sum, node) => sum + node.internal.length, 0);
   const reportPath = path.join(dirAbs, 'GRAPH_REPORT.md');
-  const top = links.slice(0, 25).map((l) => `- ${l.weight}  ${l.source} → ${l.target}`);
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const top = links.slice(0, 25).map((link) => {
+    const from = byId.get(link.source);
+    const to = byId.get(link.target);
+    return `- ${link.weight}  ${from?.group ?? ''} ${from?.label ?? link.source} → ${to?.group ?? ''} ${to?.label ?? link.target}`;
+  });
   fs.writeFileSync(
     reportPath,
     [
-      '# Import communities',
+      '# Repo map',
       '',
-      `Folders: ${nodes.length}`,
-      `Import edges: ${links.length}`,
-      `Communities: ${communities.size}`,
+      `Modules: ${nodes.length}`,
+      `Cross-module imports: ${links.length}`,
+      `Internal file links: ${internalCount}`,
       '',
       'Built from TypeScript import statements under apps/ and packages/.',
-      'External packages are omitted. Edges connect folders, weighted by import count.',
+      'Test files and external packages are omitted. A module keeps its own files, including dto folders.',
       '',
       '## Strongest links',
       '',
@@ -132,7 +187,7 @@ export function writeImportGraph(repoRoot: string, dirAbs: string): GraphifyInfo
   if (!fs.existsSync(htmlPath)) {
     fs.writeFileSync(
       htmlPath,
-      '<!DOCTYPE html><meta charset="utf-8"><p>Open the Repository Control Graphify viewer.</p>',
+      '<!DOCTYPE html><meta charset="utf-8"><p>Open the Telivity repo map.</p>',
     );
   }
   return {
@@ -143,7 +198,7 @@ export function writeImportGraph(repoRoot: string, dirAbs: string): GraphifyInfo
     reportPath,
     nodeCount: nodes.length,
     edgeCount: links.length,
-    summary: `Import graph: ${nodes.length} folders, ${links.length} import edges, ${communities.size} communities.`,
+    summary: `Repo map: ${nodes.length} modules, ${links.length} cross-module imports, ${internalCount} internal file links.`,
   };
 }
 
@@ -176,6 +231,10 @@ function walk(dir: string, repoRoot: string, out: string[]): void {
     if (ent.name.endsWith('.d.ts')) continue;
     out.push(path.relative(repoRoot, abs).split(path.sep).join('/'));
   }
+}
+
+function isTestFile(rel: string): boolean {
+  return /\.(spec|test)\.(tsx?)$/.test(rel) || rel.includes('/__tests__/');
 }
 
 function resolveImport(
@@ -214,7 +273,9 @@ function resolveImport(
   const cands = [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`];
   for (const cand of cands) {
     const norm = cand.split(path.sep).join('/');
-    if (fileSet.has(norm) || fs.existsSync(path.join(repoRoot, norm))) return norm;
+    if (fileSet.has(norm)) return norm;
+    const abs = path.join(repoRoot, norm);
+    if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return norm;
   }
   return null;
 }
@@ -239,8 +300,49 @@ function communityFor(dir: string): string {
   return dir.split('/').slice(0, 2).join('/') || dir;
 }
 
-function folderLabel(dir: string): string {
-  const parts = dir.split('/').filter(Boolean);
-  if (parts.length >= 2) return parts.slice(-2).join('/');
-  return parts[0] || dir;
+function present(id: string): { group: string; label: string } {
+  const [area, ...rest] = id.split('/');
+  const slug = rest.join('/') || 'entry';
+  const group =
+    area === 'api'
+      ? 'API'
+      : area === 'dashboard'
+        ? 'Dashboard'
+        : area === 'booking'
+          ? 'Booking'
+          : area === 'package'
+            ? 'Packages'
+            : titleCase(area);
+  return { group, label: slug === 'root' ? 'Entry' : titleCase(slug) };
+}
+
+function titleCase(slug: string): string {
+  const special: Record<string, string> = { ui: 'UI', api: 'API', dto: 'DTO', rbac: 'RBAC' };
+  return slug
+    .split(/[/-]/)
+    .filter(Boolean)
+    .map((word) => special[word] || word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function groupRank(group: string): number {
+  const index = GROUP_ORDER.indexOf(group);
+  return index === -1 ? GROUP_ORDER.length : index;
+}
+
+function commonDir(files: string[]): string {
+  if (!files.length) return '';
+  const split = files.map((file) => file.split('/'));
+  const prefix: string[] = [];
+  for (let i = 0; i < split[0].length - 1; i += 1) {
+    if (split.every((parts) => parts[i] === split[0][i])) prefix.push(split[0][i]);
+    else break;
+  }
+  return prefix.join('/');
+}
+
+function stripRoot(file: string, root: string): string {
+  if (!root) return file;
+  const prefix = `${root}/`;
+  return file.startsWith(prefix) ? file.slice(prefix.length) : file;
 }
