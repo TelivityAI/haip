@@ -463,8 +463,13 @@ function mapTokenizedPayment(body: {
   return { success: false, transactionId: paymentId, errorMessage: 'Authorization is not complete' };
 }
 
+const clients = new Map<string, Client>();
+
 function defaultClientFactory(creds: WorldlineMerchantCredentials): Client {
-  return init({
+  const key = `${creds.environment}\0${creds.merchantId}\0${creds.apiKeyId}\0${creds.secretApiKey}`;
+  const cached = clients.get(key);
+  if (cached) return cached;
+  const client = init({
     integrator: 'HAIP',
     host: HOSTS[creds.environment],
     scheme: 'https',
@@ -472,6 +477,8 @@ function defaultClientFactory(creds: WorldlineMerchantCredentials): Client {
     secretApiKey: creds.secretApiKey,
     enableLogging: false,
   });
+  clients.set(key, client);
+  return client;
 }
 
 function callContext(options?: PaymentGatewayCallOptions) {

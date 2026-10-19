@@ -65,6 +65,12 @@ export function mergeRedsysConfig(
 const WORLDLINE_API_SECRET_FIELDS = ['secretApiKey', 'secret_api_key'] as const;
 const WORLDLINE_WEBHOOK_SECRET_FIELDS = ['webhookSecret', 'webhook_secret'] as const;
 
+/** True when a stored row still has a plaintext secret that must be encrypted once. */
+export function worldlineConfigHasPlaintextSecret(config: Record<string, unknown> | null | undefined): boolean {
+  const stored = config ?? {};
+  return [...WORLDLINE_API_SECRET_FIELDS, ...WORLDLINE_WEBHOOK_SECRET_FIELDS].some((key) => Object.hasOwn(stored, key));
+}
+
 function plaintextSecret(
   config: Record<string, unknown> | null | undefined,
   fields: readonly string[],
@@ -148,14 +154,13 @@ export class IntegrationsService {
 
   /** Tenant-scoped migration of plaintext API and webhook secrets. */
   async protectWorldlineCredentials(propertyId: string): Promise<void> {
-    const secretFields = [...WORLDLINE_API_SECRET_FIELDS, ...WORLDLINE_WEBHOOK_SECRET_FIELDS];
     await this.db.transaction(async (tx: any) => {
       const [row] = await tx.select().from(propertyIntegrations)
         .where(and(eq(propertyIntegrations.propertyId, propertyId), eq(propertyIntegrations.catalogSlug, 'worldline')))
         .limit(1).for('update');
       if (!row) return;
       const stored = (row.config ?? {}) as Record<string, unknown>;
-      if (!secretFields.some((key) => Object.hasOwn(stored, key))) return;
+      if (!worldlineConfigHasPlaintextSecret(stored)) return;
       const config = mergeWorldlineConfig({}, stored);
       await tx.update(propertyIntegrations).set({ config, updatedAt: new Date() })
         .where(and(eq(propertyIntegrations.id, row.id), eq(propertyIntegrations.propertyId, propertyId)));

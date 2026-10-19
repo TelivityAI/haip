@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { IntegrationsService } from '../integrations/integrations.service';
+import { IntegrationsService, worldlineConfigHasPlaintextSecret } from '../integrations/integrations.service';
 import {
   worldlineEnvironment,
   type WorldlineMerchantCredentials,
@@ -25,11 +25,18 @@ export class WorldlineCredentialsService {
 
   async resolveForProperty(propertyId: string): Promise<WorldlineMerchantCredentials | null> {
     try {
-      await this.integrationsService.protectWorldlineCredentials(propertyId);
       const connection = await this.integrationsService.getPropertyIntegration(propertyId, 'worldline');
       if (connection.enabled) {
-        const parsed = this.fromConfig((connection.config ?? {}) as Record<string, unknown>);
-        if (parsed) return parsed;
+        const cfg = (connection.config ?? {}) as Record<string, unknown>;
+        if (worldlineConfigHasPlaintextSecret(cfg)) {
+          await this.integrationsService.protectWorldlineCredentials(propertyId);
+          const refreshed = await this.integrationsService.getPropertyIntegration(propertyId, 'worldline');
+          const parsed = this.fromConfig((refreshed.config ?? {}) as Record<string, unknown>);
+          if (parsed) return parsed;
+        } else {
+          const parsed = this.fromConfig(cfg);
+          if (parsed) return parsed;
+        }
       }
     } catch (error) {
       // A stored row that cannot be read must not fall back to another merchant.
@@ -60,9 +67,12 @@ export class WorldlineCredentialsService {
     const match = await this.integrationsService.findWorldlineWebhookConfig(trimmed);
     if (!match) return null;
     try {
-      await this.integrationsService.protectWorldlineCredentials(match.propertyId);
-      const connection = await this.integrationsService.getPropertyIntegration(match.propertyId, 'worldline');
-      const cfg = (connection.config ?? {}) as Record<string, unknown>;
+      let cfg = match.config;
+      if (worldlineConfigHasPlaintextSecret(cfg)) {
+        await this.integrationsService.protectWorldlineCredentials(match.propertyId);
+        const connection = await this.integrationsService.getPropertyIntegration(match.propertyId, 'worldline');
+        cfg = (connection.config ?? {}) as Record<string, unknown>;
+      }
       const secret = decryptField(cfg, 'webhookSecretEncrypted') ?? stringField(cfg, 'webhookSecret', 'webhook_secret');
       const merchantId = stringField(cfg, 'merchantId', 'merchant_id', 'pspid');
       if (!secret || !merchantId) return null;

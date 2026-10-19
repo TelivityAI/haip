@@ -16,7 +16,8 @@ export function worldlineSyncShouldContinue(
   return statuses.some((status) => OPEN.has(status));
 }
 
-export function worldlineSyncToast(statuses: string[]): { tone: 'error' | 'success' | 'info'; message: string } {
+export function worldlineSyncToast(statuses: string[]): { tone: 'error' | 'success' | 'info'; message: string } | null {
+  if (statuses.length === 0) return null;
   if (statuses.includes('failed')) {
     return { tone: 'error', message: 'Card authorization was declined.' };
   }

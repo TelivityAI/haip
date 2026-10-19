@@ -570,6 +570,7 @@ function FolioDetail() {
     if (!worldlineWatch) return;
     let stopped = false;
     const { propertyId: watchPropertyId, folioId, startedAt } = worldlineWatch;
+    let lastSignature = '';
     const read = () => {
       const elapsed = Date.now() - startedAt;
       if (!worldlineSyncShouldContinue(['pending'], elapsed)) {
@@ -584,16 +585,23 @@ function FolioDetail() {
           if (stopped) return;
           const statuses = (res.data?.payments ?? []).map((row) => row.status);
           const notice = worldlineSyncToast(statuses);
-          toast(notice.tone, notice.message);
+          const signature = statuses.slice().sort().join('|');
+          if (notice && signature !== lastSignature) {
+            lastSignature = signature;
+            toast(notice.tone, notice.message);
+          }
           invalidate();
-          if (!worldlineSyncShouldContinue(statuses, Date.now() - startedAt)) {
+          if (!notice || !worldlineSyncShouldContinue(statuses, Date.now() - startedAt)) {
             stopped = true;
             setWorldlineWatch(null);
           }
         })
         .catch(() => {
           if (stopped) return;
-          toast('info', 'Card authorization is still being checked.');
+          if (lastSignature !== 'error') {
+            lastSignature = 'error';
+            toast('info', 'Card authorization is still being checked.');
+          }
           invalidate();
           if (!worldlineSyncShouldContinue(['pending'], Date.now() - startedAt)) {
             stopped = true;
