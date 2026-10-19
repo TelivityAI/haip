@@ -29,7 +29,10 @@
     "harden": "node ops/harden/cli/harden.mjs all",
     "clean": "pnpm -r run clean && rm -rf node_modules",
     "integrations:demo": "bash integrations/demos/run.sh",
-    "integration:link": "pnpm --filter @telivityhaip/database link-integration"
+    "integration:link": "pnpm --filter @telivityhaip/database link-integration",
+    "repo-control:analyze": "pnpm --dir tools/repo-control analyze",
+    "repo-control:serve": "pnpm --dir tools/repo-control serve",
+    "repo-control:test": "pnpm --dir tools/repo-control test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

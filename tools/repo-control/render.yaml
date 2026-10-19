@@ -1,0 +1,43 @@
+# Discord Activity origin + Clerk-gated contributor web host.
+# Not a public unauthenticated product. Do not merge into root HAIP demo blueprint.
+#
+# Secrets in Render dashboard only (never commit):
+#   CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY
+#   DISCORD_CLIENT_ID / VITE_DISCORD_CLIENT_ID
+#   REPO_CONTROL_AUTH_TOKEN (optional)
+#   REPO_CONTROL_OWNER_EMAILS (optional)
+
+services:
+  - type: web
+    name: haip-repo-control
+    runtime: node
+    plan: starter
+    rootDir: tools/repo-control
+    # Install must include runtime build tools (tsx/vite live in dependencies)
+    # so NODE_ENV=production does not skip them.
+    buildCommand: pnpm install --ignore-workspace && pnpm exec tsx src/analyze.ts --skip-checks && pnpm build:ui
+    startCommand: pnpm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "8787"
+      - key: REPO_CONTROL_CONFIG
+        value: config.haip.yaml
+      - key: REPO_CONTROL_DISCORD_PUBLIC_READ
+        value: "true"
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: REPO_CONTROL_OWNER_EMAILS
+        sync: false
+      - key: REPO_CONTROL_AUTH_TOKEN
+        sync: false
+      - key: VITE_DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false

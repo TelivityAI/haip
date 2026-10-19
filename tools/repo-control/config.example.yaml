@@ -1,0 +1,63 @@
+# Repo Control — example config (copy and adapt for another repository)
+
+productName: Example Product
+productSummary: >
+  Short factual description of what this product does, inferred from the repo —
+  not marketing copy.
+
+# Absolute path or leave empty to use the parent of tools/repo-control
+repoRoot: ""
+
+exclusions:
+  - node_modules
+  - dist
+  - coverage
+  - .git
+  - tools/repo-control/snapshots
+  - tools/repo-control/ui/dist
+  - graphify-out/cache
+  - "**/*.tsbuildinfo"
+
+graphifyDir: graphify-out
+graphifyEnabled: true
+graphifyTimeoutMs: 300000
+
+recentCommitLimit: 15
+todoLimit: 40
+largeFileLineThreshold: 800
+staleAfterMinutes: 60
+
+checks:
+  - id: lint
+    label: Lint
+    command: pnpm lint
+    timeoutMs: 120000
+    enabled: true
+  - id: typecheck
+    label: Typecheck
+    command: pnpm typecheck
+    timeoutMs: 180000
+    enabled: true
+  - id: test
+    label: Test
+    command: pnpm test
+    timeoutMs: 600000
+    enabled: false
+  - id: build
+    label: Build
+    command: pnpm build
+    timeoutMs: 300000
+    enabled: false
+
+capabilities:
+  - id: example-api
+    name: Example API
+    requiredPaths:
+      - apps/api/src
+    optionalPaths:
+      - apps/api/src/modules
+    routeHints:
+      - /api
+    testPaths:
+      - apps/api
+    consequence: "Without an API surface, clients cannot operate."

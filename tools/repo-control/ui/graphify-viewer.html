@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Telivity · Repo map</title>
+  <style>
+    :root {
+      --teal: #06bdb4;
+      --orange: #f2641b;
+      --deep-blue: #016491;
+      --purple: #5838c0;
+      --navy: #23273d;
+      --bg: #0e1118;
+      --panel: #161a24;
+      --fg: #f0f0f6;
+      --muted: #9aa0b4;
+      --line: #2a3145;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: Montserrat, "Trebuchet MS", sans-serif; }
+    header {
+      height: 52px; padding: 0 16px; background: var(--navy);
+      border-bottom: 1px solid var(--line);
+      display: flex; gap: 16px; align-items: center;
+    }
+    .brand { display: flex; align-items: baseline; gap: 10px; }
+    .brand strong { color: var(--teal); letter-spacing: 0.14em; font-size: 13px; }
+    .brand span { font-weight: 600; font-size: 14px; }
+    #stats { color: var(--muted); font-size: 12px; }
+    .legend { margin-left: auto; display: flex; gap: 12px; font-size: 11px; color: var(--muted); }
+    .legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+    .legend .out i { background: var(--teal); }
+    .legend .inc i { background: var(--orange); }
+    #layout { display: grid; grid-template-columns: 1fr minmax(300px, 380px); height: calc(100% - 52px); }
+    #stage { position: relative; min-height: 0; overflow: auto; background:
+      radial-gradient(900px 480px at 12% -10%, rgba(6, 189, 180, 0.14), transparent 55%),
+      radial-gradient(700px 420px at 100% 0%, rgba(1, 100, 145, 0.2), transparent 50%),
+      var(--bg); }
+    #scaler { position: relative; transform-origin: 0 0; min-height: 100%; }
+    #wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+    #lanes { position: relative; z-index: 1; padding: 18px 18px 72px; }
+    .lane { margin: 0 0 22px; }
+    .lane h3 {
+      margin: 0 0 10px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 700;
+    }
+    .chips, .filegrid { display: flex; flex-wrap: wrap; gap: 8px; }
+    button.chip, button.filechip {
+      appearance: none; text-align: left; cursor: pointer; color: var(--fg);
+      background: #161a24; border: 1px solid var(--line); border-left-width: 3px;
+      border-radius: 12px; padding: 8px 10px 8px 12px; font: inherit; min-width: 148px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    }
+    button.filechip { min-width: 180px; border-radius: 10px; font-size: 12px; }
+    button.chip:hover, button.filechip:hover { border-color: var(--teal); }
+    button.chip.selected, button.filechip.selected {
+      background: #10242c; border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal), 0 8px 24px rgba(6, 189, 180, 0.18);
+    }
+    button.chip.linked-out { border-color: var(--teal); }
+    button.chip.linked-in { border-color: var(--orange); }
+    button.chip.dim, button.filechip.dim { opacity: 0.38; }
+    .name { display: block; font-weight: 700; font-size: 13px; }
+    .meta { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .badges { display: flex; gap: 4px; margin-top: 6px; }
+    .b-out, .b-inc { font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 6px; }
+    .b-out { color: var(--teal); background: rgba(6, 189, 180, 0.14); }
+    .b-inc { color: var(--orange); background: rgba(242, 100, 27, 0.14); }
+    .inside-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .inside-head h3 { margin: 0; color: var(--teal); font-size: 18px; }
+    button.textbtn, button.action {
+      border: 1px solid var(--line); background: #1c2130; color: var(--teal);
+      border-radius: 8px; padding: 6px 10px; font: 600 12px Montserrat, "Trebuchet MS", sans-serif; cursor: pointer;
+    }
+    button.textbtn:hover, button.action:hover { border-color: var(--teal); }
+    #zoombar {
+      position: sticky; left: 12px; bottom: 12px; width: max-content; margin: -56px 0 12px 12px; z-index: 2;
+      display: flex; gap: 6px; align-items: center;
+      background: rgba(22, 26, 36, 0.94);
+      border: 1px solid var(--line); border-radius: 10px; padding: 6px;
+    }
+    #zoombar button {
+      width: 36px; height: 32px; border-radius: 8px;
+      border: 1px solid var(--line); background: #1c2130; color: var(--fg);
+      font: 600 16px Montserrat, "Trebuchet MS", sans-serif; cursor: pointer;
+    }
+    #zoombar button.wide { width: auto; padding: 0 10px; font-size: 12px; }
+    #zoombar button:hover { border-color: var(--teal); color: var(--teal); }
+    #zlabel { min-width: 44px; text-align: center; font-size: 12px; color: var(--muted); }
+    aside { border-left: 1px solid var(--line); padding: 14px 16px; overflow: auto; background: var(--panel); }
+    h2 { margin: 0 0 6px; font-size: 18px; color: var(--teal); }
+    .muted { color: var(--muted); font-size: 12px; }
+    .path { font-size: 12px; margin: 4px 0 8px; word-break: break-all; }
+    .edge { padding: 7px 0; border-top: 1px solid var(--line); font-size: 12px; }
+    .rel { font-weight: 700; }
+    .rel.out { color: var(--teal); }
+    .rel.inc { color: var(--orange); }
+    input { width: 100%; padding: 8px 10px; margin: 12px 0 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; }
+    button.node { display: block; width: 100%; text-align: left; background: transparent; border: 0; color: var(--fg); padding: 7px 6px; cursor: pointer; border-radius: 6px; font: inherit; }
+    button.node:hover, button.node.active { background: #1c2130; color: var(--teal); }
+    .wire-label { font: 700 10px Montserrat, "Trebuchet MS", sans-serif; fill: var(--fg); }
+    @media (max-width: 800px) {
+      #layout { grid-template-columns: 1fr; grid-template-rows: 1fr 280px; }
+      aside { border-left: 0; border-top: 1px solid var(--line); }
+      .legend { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><strong>TELIVITY</strong><span>Repo map</span></div>
+    <span id="stats"></span>
+    <div class="legend"><span class="out"><i></i>imports</span><span class="inc"><i></i>imported by</span></div>
+  </header>
+  <div id="layout">
+    <div id="stage">
+      <div id="scaler">
+        <svg id="wires"></svg>
+        <div id="lanes"></div>
+      </div>
+      <div id="zoombar">
+        <button id="zout" type="button" title="Zoom out">−</button>
+        <span id="zlabel">100%</span>
+        <button id="zin" type="button" title="Zoom in">+</button>
+        <button id="zreset" class="wide" type="button">Reset</button>
+      </div>
+    </div>
+    <aside>
+      <h2 id="d-title">Repo map</h2>
+      <div id="d-body" class="muted">Click a module. Teal is what it imports. Orange is what imports it. Open files to see the links inside the module.</div>
+      <input id="q" placeholder="Filter modules…" />
+      <div id="list"></div>
+    </aside>
+  </div>
+  <script>
+    const GROUP_COLOR = { Packages: '#06bdb4', API: '#016491', Dashboard: '#f2641b', Booking: '#5838c0' };
+    const GROUP_ORDER = ['Packages', 'API', 'Dashboard', 'Booking'];
+    const lanesEl = document.getElementById('lanes');
+    const svg = document.getElementById('wires');
+    const scaler = document.getElementById('scaler');
+    const titleEl = document.getElementById('d-title');
+    const bodyEl = document.getElementById('d-body');
+    const listEl = document.getElementById('list');
+    const q = document.getElementById('q');
+    const stats = document.getElementById('stats');
+    const zlabel = document.getElementById('zlabel');
+
+    let data = { nodes: [], links: [] };
+    const byId = new Map();
+    let mode = 'modules';
+    let selected = null;
+    let selectedFile = null;
+    let scale = 1;
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+    function labelOf(id) { return byId.get(id)?.label || id; }
+    function groupOf(id) { return byId.get(id)?.group || ''; }
+
+    function degree(id) {
+      let out = 0; let inc = 0; let outW = 0; let incW = 0;
+      for (const e of data.links) {
+        if (e.source === id) { out += 1; outW += e.weight || 1; }
+        if (e.target === id) { inc += 1; incW += e.weight || 1; }
+      }
+      return { out, inc, outW, incW };
+    }
+
+    function linksFor(id) {
+      const out = []; const inc = [];
+      for (const e of data.links) {
+        if (e.source === id) out.push(e);
+        if (e.target === id) inc.push(e);
+      }
+      out.sort((a, b) => b.weight - a.weight);
+      inc.sort((a, b) => b.weight - a.weight);
+      return { out, inc };
+    }
+
+    function edgeRows(rows, verb, otherKey) {
+      if (!rows.length) return '';
+      return '<div style="margin-top:12px;font-weight:700">' + verb + '</div>' + rows.map((r) => {
+        const files = (r.samples || []).slice(0, 4).map((s) => '<div class="muted">' + escapeHtml(s) + '</div>').join('');
+        const cls = verb === 'Imports' ? 'out' : 'inc';
+        const name = (groupOf(r[otherKey]) ? groupOf(r[otherKey]) + ' · ' : '') + labelOf(r[otherKey]);
+        return '<div class="edge"><span class="rel ' + cls + '">' + escapeHtml(name) + '</span> · ' + r.weight + files + '</div>';
+      }).join('');
+    }
+
+    function internalRows(rows) {
+      if (!rows.length) return '<div class="muted" style="margin-top:8px">No file-to-file imports inside this module.</div>';
+      return rows.map((r) => '<div class="edge"><span class="rel out">' + escapeHtml(r.source) + '</span> → ' + escapeHtml(r.target) + ' · ' + r.weight + '</div>').join('');
+    }
+
+    function showModule(id) {
+      const n = byId.get(id);
+      if (!n) return;
+      titleEl.textContent = n.label;
+      const deg = degree(id);
+      const { out, inc } = linksFor(id);
+      const inside = n.internal || [];
+      bodyEl.innerHTML =
+        '<div class="muted">' + escapeHtml(n.group) + ' · ' + n.fileCount + ' files · ' + inside.length + ' internal links</div>' +
+        '<div class="path">' + escapeHtml(n.source_file || n.id) + '</div>' +
+        (mode === 'inside' ? '' : '<button class="action" id="open-files" type="button">Open files inside ' + escapeHtml(n.label) + '</button>') +
+        edgeRows(out, 'Imports', 'target') +
+        edgeRows(inc, 'Imported by', 'source') +
+        '<div style="margin-top:12px;font-weight:700">Inside ' + escapeHtml(n.label) + '</div>' +
+        internalRows(inside);
+      const open = document.getElementById('open-files');
+      if (open) open.addEventListener('click', () => openFiles(id));
+    }
+
+    function showOverview() {
+      titleEl.textContent = 'Repo map';
+      const top = data.links.slice(0, 8);
+      bodyEl.innerHTML =
+        '<div class="muted">Each pill is a module. The teal count is how many modules it imports. The orange count is how many import it. Click one to draw those links and list the files.</div>' +
+        '<div style="margin-top:12px;font-weight:700">Strongest imports</div>' +
+        top.map((e) => '<div class="edge"><button class="node" data-jump="' + escapeHtml(e.source) + '">' +
+          escapeHtml(groupOf(e.source) + ' ' + labelOf(e.source)) + ' → ' + escapeHtml(labelOf(e.target)) + ' · ' + e.weight +
+          '</button></div>').join('');
+      bodyEl.querySelectorAll('[data-jump]').forEach((btn) => {
+        btn.addEventListener('click', () => selectModule(btn.getAttribute('data-jump')));
+      });
+    }
+
+    function showFile(node, file) {
+      titleEl.textContent = file.split('/').pop();
+      const inside = node.internal || [];
+      const out = inside.filter((l) => l.source === file);
+      const inc = inside.filter((l) => l.target === file);
+      bodyEl.innerHTML =
+        '<div class="muted">' + escapeHtml(node.group) + ' · ' + escapeHtml(node.label) + '</div>' +
+        '<div class="path">' + escapeHtml(file) + '</div>' +
+        '<button class="action" id="open-files" type="button">All files in ' + escapeHtml(node.label) + '</button>' +
+        '<div style="margin-top:12px;font-weight:700">Imports inside ' + escapeHtml(node.label) + '</div>' +
+        (out.length ? internalRows(out) : '<div class="muted">This file does not import another file in the module.</div>') +
+        '<div style="margin-top:12px;font-weight:700">Imported by</div>' +
+        (inc.length ? internalRows(inc) : '<div class="muted">No other file in the module imports this one.</div>');
+      document.getElementById('open-files').addEventListener('click', () => openFiles(node.id));
+    }
+
+    function selectModule(id) {
+      selected = id;
+      selectedFile = null;
+      mode = 'modules';
+      render();
+      const chip = lanesEl.querySelector('[data-id="' + CSS.escape(id) + '"]');
+      if (chip) chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+
+    function openFiles(id) {
+      selected = id;
+      selectedFile = null;
+      mode = 'inside';
+      render();
+    }
+
+    function backToModules() {
+      mode = 'modules';
+      selectedFile = null;
+      render();
+    }
+
+    function applyScale() {
+      scaler.style.transform = 'scale(' + scale + ')';
+      zlabel.textContent = Math.round(scale * 100) + '%';
+      const stage = document.getElementById('stage');
+      scaler.style.minWidth = Math.ceil(stage.clientWidth / scale) + 'px';
+      scaler.style.minHeight = Math.ceil((stage.clientHeight - 8) / scale) + 'px';
+    }
+
+    function renderBoard() {
+      lanesEl.innerHTML = '';
+      const term = q.value.trim().toLowerCase();
+      if (mode === 'inside' && selected && byId.get(selected)) {
+        const node = byId.get(selected);
+        const head = document.createElement('div');
+        head.className = 'inside-head';
+        head.innerHTML = '<button class="textbtn" id="back" type="button">All modules</button><h3>' +
+          escapeHtml(node.label) + '</h3><span class="muted">' + escapeHtml(node.group) + ' · ' + node.files.length + ' files</span>';
+        lanesEl.appendChild(head);
+        document.getElementById('back').addEventListener('click', backToModules);
+        const grid = document.createElement('div');
+        grid.className = 'filegrid';
+        const hot = new Set();
+        if (selectedFile) {
+          for (const link of node.internal || []) {
+            if (link.source === selectedFile) hot.add(link.target);
+            if (link.target === selectedFile) hot.add(link.source);
+          }
+        }
+        for (const file of node.files) {
+          if (term && !file.toLowerCase().includes(term) && file !== selectedFile) continue;
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'filechip';
+          b.dataset.file = file;
+          b.style.borderLeftColor = GROUP_COLOR[node.group] || '#06bdb4';
+          b.textContent = file;
+          if (file === selectedFile) b.classList.add('selected');
+          else if (selectedFile && hot.has(file)) b.classList.add('linked-out');
+          else if (selectedFile) b.classList.add('dim');
+          b.addEventListener('click', () => { selectedFile = file; render(); });
+          grid.appendChild(b);
+        }
+        lanesEl.appendChild(grid);
+        return;
+      }
+
+      const groups = new Map();
+      for (const n of data.nodes) {
+        if (term && !n.label.toLowerCase().includes(term) && !n.group.toLowerCase().includes(term) && !(n.source_file || '').toLowerCase().includes(term)) {
+          if (n.id !== selected) continue;
+        }
+        if (!groups.has(n.group)) groups.set(n.group, []);
+        groups.get(n.group).push(n);
+      }
+      const names = [...groups.keys()].sort((a, b) => {
+        const ia = GROUP_ORDER.indexOf(a); const ib = GROUP_ORDER.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
+      });
+      const linked = new Set();
+      if (selected) {
+        for (const e of data.links) {
+          if (e.source === selected) linked.add(e.target);
+          if (e.target === selected) linked.add(e.source);
+        }
+      }
+      for (const name of names) {
+        const lane = document.createElement('section');
+        lane.className = 'lane';
+        const h = document.createElement('h3');
+        h.textContent = name;
+        h.style.color = GROUP_COLOR[name] || '#06bdb4';
+        lane.appendChild(h);
+        const chips = document.createElement('div');
+        chips.className = 'chips';
+        for (const n of groups.get(name)) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'chip';
+          b.dataset.id = n.id;
+          b.style.borderLeftColor = GROUP_COLOR[n.group] || '#06bdb4';
+          const deg = degree(n.id);
+          const badges = (deg.out ? '<span class="b-out" title="modules this imports">' + deg.out + '</span>' : '') +
+            (deg.inc ? '<span class="b-inc" title="modules that import this">' + deg.inc + '</span>' : '');
+          b.innerHTML = '<span class="name">' + escapeHtml(n.label) + '</span><span class="meta">' + n.fileCount + ' files</span>' +
+            (badges ? '<span class="badges">' + badges + '</span>' : '');
+          if (n.id === selected) b.classList.add('selected');
+          else if (selected && linked.has(n.id)) {
+            const { out } = linksFor(selected);
+            b.classList.add(out.some((e) => e.target === n.id) ? 'linked-out' : 'linked-in');
+          } else if (selected) b.classList.add('dim');
+          b.addEventListener('click', () => selectModule(n.id));
+          chips.appendChild(b);
+        }
+        lane.appendChild(chips);
+        lanesEl.appendChild(lane);
+      }
+    }
+
+    function drawWires() {
+      const width = Math.max(lanesEl.scrollWidth, scaler.clientWidth);
+      const height = Math.max(lanesEl.scrollHeight, scaler.clientHeight);
+      svg.setAttribute('width', String(width));
+      svg.setAttribute('height', String(height));
+      svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+      svg.innerHTML =
+        '<defs>' +
+        '<marker id="ah-out" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#06bdb4"/></marker>' +
+        '<marker id="ah-inc" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#f2641b"/></marker>' +
+        '<marker id="ah-dim" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#5c6478"/></marker>' +
+        '</defs>';
+
+      if (mode === 'inside' && selectedFile && byId.get(selected)) {
+        const node = byId.get(selected);
+        const from = lanesEl.querySelector('[data-file="' + CSS.escape(selectedFile) + '"]');
+        if (!from) return;
+        const a = pointOf(from);
+        for (const link of node.internal || []) {
+          let other = null; let incoming = false;
+          if (link.source === selectedFile) other = link.target;
+          else if (link.target === selectedFile) { other = link.source; incoming = true; }
+          if (!other) continue;
+          const el = lanesEl.querySelector('[data-file="' + CSS.escape(other) + '"]');
+          if (!el) continue;
+          paintLine(a, pointOf(el), incoming ? '#f2641b' : '#06bdb4', incoming ? 'ah-inc' : 'ah-out', 2, link.weight);
+        }
+        return;
+      }
+
+      const edges = selected
+        ? data.links.filter((e) => e.source === selected || e.target === selected)
+        : data.links.filter((e) => (e.weight || 1) >= 10).slice(0, 18);
+      for (const e of edges) {
+        const aEl = lanesEl.querySelector('[data-id="' + CSS.escape(e.source) + '"]');
+        const bEl = lanesEl.querySelector('[data-id="' + CSS.escape(e.target) + '"]');
+        if (!aEl || !bEl) continue;
+        const hot = selected && (e.source === selected || e.target === selected);
+        const incoming = selected && e.target === selected;
+        const color = !hot ? '#5c6478' : incoming ? '#f2641b' : '#06bdb4';
+        const marker = !hot ? 'ah-dim' : incoming ? 'ah-inc' : 'ah-out';
+        paintLine(pointOf(aEl), pointOf(bEl), color, marker, hot ? 2.25 : 1.25, hot ? e.weight : null);
+      }
+    }
+
+    function pointOf(el) {
+      const root = scaler.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      return {
+        x: (r.left - root.left) / scale + r.width / scale / 2,
+        y: (r.top - root.top) / scale + r.height / scale / 2,
+      };
+    }
+
+    function paintLine(a, b, color, marker, width, weight) {
+      const dx = b.x - a.x; const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const pad = Math.min(28, len * 0.22);
+      const x1 = a.x + (dx / len) * pad;
+      const y1 = a.y + (dy / len) * pad;
+      const x2 = b.x - (dx / len) * (pad + 6);
+      const y2 = b.y - (dy / len) * (pad + 6);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+      line.setAttribute('stroke', color);
+      line.setAttribute('stroke-width', String(width));
+      line.setAttribute('stroke-linecap', 'round');
+      line.setAttribute('marker-end', 'url(#' + marker + ')');
+      line.setAttribute('opacity', weight == null ? '0.45' : '0.95');
+      svg.appendChild(line);
+      if (weight != null) {
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', (x1 + x2) / 2);
+        label.setAttribute('y', (y1 + y2) / 2 - 4);
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('class', 'wire-label');
+        label.setAttribute('fill', color);
+        label.textContent = String(weight);
+        svg.appendChild(label);
+      }
+    }
+
+    function renderList() {
+      const term = q.value.trim().toLowerCase();
+      listEl.innerHTML = '';
+      const rows = mode === 'inside' && byId.get(selected)
+        ? byId.get(selected).files.map((file) => ({ id: file, text: file, file: true }))
+        : data.nodes.map((n) => ({ id: n.id, text: n.group + ' · ' + n.label, file: false }));
+      rows
+        .filter((row) => !term || row.text.toLowerCase().includes(term))
+        .forEach((row) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'node' + ((row.file ? selectedFile === row.id : selected === row.id) ? ' active' : '');
+          b.textContent = row.text;
+          b.addEventListener('click', () => {
+            if (row.file) { selectedFile = row.id; render(); }
+            else selectModule(row.id);
+          });
+          listEl.appendChild(b);
+        });
+    }
+
+    function render() {
+      applyScale();
+      renderBoard();
+      if (mode === 'inside' && selected) {
+        const node = byId.get(selected);
+        if (selectedFile) showFile(node, selectedFile);
+        else showModule(selected);
+      } else if (selected) showModule(selected);
+      else showOverview();
+      q.placeholder = mode === 'inside' ? 'Filter files…' : 'Filter modules…';
+      renderList();
+      requestAnimationFrame(() => requestAnimationFrame(drawWires));
+    }
+
+    document.getElementById('zin').addEventListener('click', () => { scale = Math.min(1.6, scale * 1.12); render(); });
+    document.getElementById('zout').addEventListener('click', () => { scale = Math.max(0.55, scale / 1.12); render(); });
+    document.getElementById('zreset').addEventListener('click', () => { scale = 1; render(); });
+    q.addEventListener('input', render);
+    window.addEventListener('resize', () => requestAnimationFrame(drawWires));
+
+    async function boot() {
+      const res = await fetch('/graphify/graph.json', { cache: 'no-store' });
+      if (!res.ok) {
+        bodyEl.textContent = 'Repo map failed to load (' + res.status + ').';
+        return;
+      }
+      const raw = await res.json();
+      data = { nodes: raw.nodes || [], links: raw.links || raw.edges || [] };
+      for (const n of data.nodes) {
+        if (!n.group) n.group = (n.community || n.id || '').split('/')[0] || 'Other';
+        if (!n.files) n.files = [];
+        if (!n.internal) n.internal = [];
+        byId.set(n.id, n);
+      }
+      const internal = data.nodes.reduce((sum, n) => sum + (n.internal ? n.internal.length : 0), 0);
+      stats.textContent = data.nodes.length + ' modules · ' + data.links.length + ' cross-imports · ' + internal + ' internal links';
+      render();
+    }
+    boot().catch((err) => { bodyEl.textContent = String(err); });
+  </script>
+</body>
+</html>

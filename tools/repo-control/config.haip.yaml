@@ -1,0 +1,314 @@
+productName: HAIP
+productSummary: >
+  HAIP (Hotel AI Platform) is an API-first hotel PMS: reservation lifecycle,
+  folio/billing, rates, housekeeping, channels, booking engine, payments,
+  auth/RBAC, and built-in AI agents. This dashboard reports what the repository
+  actually contains and what was verified by collectors — not production readiness.
+
+repoRoot: ""
+
+exclusions:
+  - node_modules
+  - dist
+  - coverage
+  - .git
+  - .pnpm-store
+  - tools/repo-control/snapshots
+  - tools/repo-control/ui/dist
+  - tools/repo-control/node_modules
+  - graphify-out/cache
+  - docker-data
+  - "**/*.tsbuildinfo"
+
+graphifyDir: tools/repo-control/graphify-out
+graphifyEnabled: true
+graphifyTimeoutMs: 300000
+
+recentCommitLimit: 15
+todoLimit: 50
+largeFileLineThreshold: 900
+staleAfterMinutes: 60
+
+# Public health only. No logs, error tracker, or production DB credentials.
+runtimeProbes:
+  - id: haip-prod-api
+    url: https://haip-prod-api.onrender.com/api/v1/health
+  - id: haip-cloud-api
+    url: https://haip-cloud-api.onrender.com/api/v1/health
+  - id: haip-cloud-api-v2
+    url: https://haip-cloud-api-v2.onrender.com/api/v1/health
+
+checks:
+  - id: lint
+    label: Lint
+    command: pnpm lint
+    timeoutMs: 180000
+    enabled: true
+  - id: typecheck
+    label: Typecheck
+    command: pnpm typecheck
+    timeoutMs: 240000
+    enabled: true
+  - id: test
+    label: Test
+    command: pnpm test
+    timeoutMs: 900000
+    enabled: false
+  - id: build
+    label: Build
+    command: pnpm build
+    timeoutMs: 600000
+    enabled: false
+
+capabilities:
+  - id: reservations
+    name: Reservations
+    requiredPaths:
+      - apps/api/src/modules/reservation
+      - packages/database/src/schema/reservation.ts
+    optionalPaths:
+      - apps/dashboard/src/pages/Reservations.tsx
+      - apps/dashboard/src/pages/FrontDesk.tsx
+    routeHints:
+      - /reservations
+      - reservation
+    testPaths:
+      - apps/api/src/modules/reservation
+    consequence: "Hotels cannot create or manage stays without a reservation lifecycle."
+
+  - id: inventory-rooms
+    name: Inventory / Rooms
+    requiredPaths:
+      - apps/api/src/modules/room
+      - packages/database/src/schema/room.ts
+    optionalPaths:
+      - apps/dashboard/src/pages/Rooms.tsx
+    routeHints:
+      - /rooms
+    testPaths:
+      - apps/api/src/modules/room
+    consequence: "Room inventory and status cannot be tracked."
+
+  - id: rates
+    name: Rate plans
+    requiredPaths:
+      - apps/api/src/modules/rate-plan
+      - packages/database/src/schema/rate-plan.ts
+    optionalPaths:
+      - apps/dashboard/src/pages/RatePlans.tsx
+    routeHints:
+      - /rate-plans
+    testPaths:
+      - apps/api/src/modules/rate-plan
+    consequence: "Pricing and restrictions cannot be configured."
+
+  - id: guests
+    name: Guests
+    requiredPaths:
+      - apps/api/src/modules/guest
+      - packages/database/src/schema/guest.ts
+    optionalPaths:
+      - apps/dashboard/src/pages/Guests.tsx
+    routeHints:
+      - /guests
+    testPaths:
+      - apps/api/src/modules/guest
+    consequence: "Guest profiles and preferences are unavailable."
+
+  - id: folio-billing
+    name: Folio & billing
+    requiredPaths:
+      - apps/api/src/modules/folio
+      - packages/database/src/schema/folio.ts
+    optionalPaths:
+      - apps/dashboard/src/pages/Folios.tsx
+    routeHints:
+      - /folios
+    testPaths:
+      - apps/api/src/modules/folio
+    consequence: "Charges, payments posting, and settlement cannot run."
+
+  - id: payments
+    name: Payments
+    requiredPaths:
+      - apps/api/src/modules/payment
+    optionalPaths:
+      - apps/api/src/modules/payment/gateways
+      - apps/dashboard/src/components/payment
+    routeHints:
+      - payment
+    testPaths:
+      - apps/api/src/modules/payment
+    stubHints:
+      - apps/api/src/modules/payment/mock-gateway.ts
+      - apps/api/src/modules/payment/mock-saved-payment-method.gateway.ts
+    consequence: "Card capture and PSP settlement cannot complete without a live gateway."
+
+  - id: housekeeping
+    name: Housekeeping
+    requiredPaths:
+      - apps/api/src/modules/housekeeping
+      - packages/database/src/schema/housekeeping.ts
+    optionalPaths:
+      - apps/dashboard/src/pages/Housekeeping.tsx
+    routeHints:
+      - /housekeeping
+    testPaths:
+      - apps/api/src/modules/housekeeping
+    consequence: "Room cleaning workflow and status sync break down."
+
+  - id: reporting
+    name: Reporting
+    requiredPaths:
+      - apps/api/src/modules/reports
+    optionalPaths:
+      - apps/dashboard/src/pages/Reports.tsx
+    routeHints:
+      - /reports
+    testPaths:
+      - apps/api/src/modules/reports
+    consequence: "Operators lack occupancy and revenue visibility."
+
+  - id: channels
+    name: Channel distribution
+    requiredPaths:
+      - apps/api/src/modules/channel
+      - packages/database/src/schema/channel.ts
+    optionalPaths:
+      - apps/dashboard/src/pages/Channels.tsx
+    routeHints:
+      - /channels
+    testPaths:
+      - apps/api/src/modules/channel
+    consequence: "OTA availability and booking sync cannot operate."
+
+  - id: booking-engine
+    name: Direct booking engine
+    requiredPaths:
+      - apps/api/src/modules/booking-engine
+      - apps/booking
+      - packages/database/src/schema/booking-engine.ts
+    optionalPaths:
+      - apps/dashboard/src/components/admin/BookingEngineSettings.tsx
+    routeHints:
+      - booking
+    testPaths:
+      - apps/api/src/modules/booking-engine
+      - apps/booking
+    consequence: "Commission-free website bookings are unavailable."
+
+  - id: auth-rbac
+    name: Authentication & permissions
+    requiredPaths:
+      - apps/api/src/modules/auth
+      - packages/database/src/schema/rbac.ts
+    optionalPaths:
+      - keycloak
+      - apps/dashboard/src/lib/keycloak.ts
+      - apps/dashboard/src/components/admin/RolesSettings.tsx
+    routeHints:
+      - auth
+      - /settings
+    testPaths:
+      - apps/api/src/modules/auth
+    consequence: "Staff access control and property isolation may be off or insecure."
+
+  - id: tenant-isolation
+    name: Tenant isolation
+    requiredPaths:
+      - ops/harden/TENANT_ISOLATION.md
+      - packages/database/src/schema/property.ts
+    optionalPaths:
+      - ops/harden/cli
+      - apps/dashboard/src/components/layout/PropertyScopeBoundary.tsx
+    testPaths:
+      - apps/api
+    consequence: "Cross-property data leakage risk if propertyId scoping is missing."
+
+  - id: housekeeping-agents
+    name: AI agents
+    requiredPaths:
+      - apps/api/src/modules/agent
+      - packages/database/src/schema/agent.ts
+    optionalPaths:
+      - apps/dashboard/src/pages/Revenue.tsx
+      - docs/agents-orchestration.md
+    routeHints:
+      - agent
+      - /revenue
+    testPaths:
+      - apps/api/src/modules/agent
+    consequence: "Agent lifecycle and decision logging are unavailable."
+
+  - id: night-audit
+    name: Night audit
+    requiredPaths:
+      - apps/api/src/modules/night-audit
+    optionalPaths:
+      - apps/dashboard/src/pages/NightAudit.tsx
+      - scripts/cron
+    routeHints:
+      - /night-audit
+    testPaths:
+      - apps/api/src/modules/night-audit
+    consequence: "Daily close and date-roll procedures cannot run."
+
+  - id: groups-commercial
+    name: Groups & commercial
+    requiredPaths:
+      - apps/api/src/modules/groups
+      - packages/database/src/schema/group.ts
+    optionalPaths:
+      - apps/dashboard/src/pages/Groups.tsx
+      - apps/dashboard/src/pages/Commercial.tsx
+    routeHints:
+      - /groups
+      - /commercial
+    testPaths:
+      - apps/api/src/modules/groups
+    consequence: "Allotments and rooming lists cannot be managed."
+
+  - id: accounting-cashier
+    name: Accounting & cashier
+    requiredPaths:
+      - apps/api/src/modules/accounting
+      - apps/api/src/modules/cashier
+    optionalPaths:
+      - packages/database/src/schema/accounts-receivable.ts
+      - packages/database/src/schema/cash-drawer.ts
+      - apps/dashboard/src/pages/Accounting.tsx
+      - apps/dashboard/src/pages/Cashier.tsx
+    routeHints:
+      - /accounting
+      - /cashier
+    testPaths:
+      - apps/api/src/modules/accounting
+      - apps/api/src/modules/cashier
+    consequence: "A/R, deposits, and cash drawers cannot be operated."
+
+  - id: integrations
+    name: Integrations registry
+    requiredPaths:
+      - apps/api/src/modules/integrations
+      - packages/database/src/schema/integration-registry.ts
+    optionalPaths:
+      - docs/INTEGRATIONS.md
+      - apps/dashboard/src/pages/Integrations.tsx
+    routeHints:
+      - /integrations
+    testPaths:
+      - apps/api/src/modules/integrations
+    consequence: "Adapter/provider discovery and linking is incomplete."
+
+  - id: connect-api
+    name: Connect API (OTAIP)
+    requiredPaths:
+      - apps/api/src/modules/connect
+      - packages/database/src/schema/connect.ts
+    optionalPaths:
+      - tools/haip-connect-gpt
+    routeHints:
+      - connect
+    testPaths:
+      - apps/api/src/modules/connect
+    consequence: "External AI agents cannot book or search via Connect."
