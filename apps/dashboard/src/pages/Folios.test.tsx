@@ -275,6 +275,24 @@ describe('Folios — payment corrections', () => {
     expect(await screen.findByText('Card authorization is held.')).toBeInTheDocument();
   });
 
+  it('does not toast when the sync has no pending payment left', async () => {
+    mockGet({
+      '/v1/payments': [{
+        ...PAYMENT,
+        status: 'pending',
+        gatewayProvider: 'worldline',
+        createdAt: new Date().toISOString(),
+      }],
+      '/v1/payments/client-config': { provider: 'worldline', clientMode: 'worldline' },
+    });
+    (api.post as any).mockResolvedValue({ data: { payments: [] } });
+    renderDetail('/folio-1');
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/v1/payments/worldline/sync', null, {
+      params: { propertyId: 'prop-1', folioId: 'folio-1' },
+    }));
+    expect(screen.queryByText('Card authorization is still being checked.')).not.toBeInTheDocument();
+  });
+
   it('does not poll a Worldline challenge that is already past the deadline', async () => {
     mockGet({
       '/v1/payments': [{

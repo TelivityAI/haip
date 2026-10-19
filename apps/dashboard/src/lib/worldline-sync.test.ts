@@ -22,6 +22,7 @@ describe('worldline folio sync poll', () => {
     expect(worldlineSyncToast(['failed']).message).toBe('Card authorization was declined.');
     expect(worldlineSyncToast(['authorized']).message).toBe('Card authorization is held.');
     expect(worldlineSyncToast(['captured']).message).toBe('Card payment was captured.');
-    expect(worldlineSyncToast(['pending']).message).toBe('Card authorization is still being checked.');
+    expect(worldlineSyncToast(['pending'])?.message).toBe('Card authorization is still being checked.');
+    expect(worldlineSyncToast([])).toBeNull();
   });
 });

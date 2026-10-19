@@ -26,7 +26,7 @@ The booking page and the folio authorize screen load `https://<host>/hostedtoken
 
 Missing merchant id, API key id, or secret fails the operation. It does not pretend the payment succeeded.
 
-A property can store the same fields on Integrations → Worldline (`merchantId`, `apiKeyId`, `secretApiKey`, `environment`, `webhookKeyId`, `webhookSecret`). Secrets are encrypted at rest. An invalid ciphertext does not fall back to the process environment.
+A property can store the same fields on Integrations → Worldline (`merchantId`, `apiKeyId`, `secretApiKey`, `environment`, `webhookKeyId`, `webhookSecret`). Secrets are encrypted on save. A later read locks and rewrites the row only when a plaintext secret is still stored. The server SDK client is reused for the same merchant credentials. An invalid ciphertext does not fall back to the process environment.
 
 ## Guest checkout
 
@@ -40,7 +40,7 @@ The browser return is not proof of payment. The booking return status and `POST 
 
 A booking return reports payment status and, once the payment is succeeded or failed, the reservation status. It never includes a confirmation number. A decline cancels a reservation that is still `pending`, with reason "Payment was not authorized", and does not apply a cancellation penalty. The cancellation event includes arrival date, departure date, and room type so availability is released. A reservation that is already confirmed or in-house is left as it is. A non-final authorization (for example `AUTHORIZATION_REQUESTED`) stays pending. A provider error on the status read is unavailable, not pending.
 
-Folio staff return to `?worldline=return` after a bank challenge. The toast follows the sync status. A pending Worldline payment on the open folio is polled every 3 seconds until it is authorized, failed, or captured, the page unmounts, or 30 minutes have passed since that payment was created. A refresh keeps checking. Do not treat the query flag as success.
+Folio staff return to `?worldline=return` after a bank challenge. The toast follows a status change. An empty sync result does not toast. A pending Worldline payment on the open folio is polled every 3 seconds until it is authorized, failed, or captured, the page unmounts, or 30 minutes have passed since that payment was created. A refresh keeps checking. Do not treat the query flag as success.
 
 If the guest closes the bank page, the queued job calls the same sync. An authorized or declined result is stored. If the bank is still pending and a payment id exists, the job cancels that payment at the provider before it fails the row with "Bank challenge was not completed" and cancels the unpaid pending reservation. If that cancel fails, or the read is unavailable, the job retries with backoff and does not cancel the reservation. A signed capture also recalculates the folio balance. A guest who already finished leaves no pending row, so the job does nothing. The deadline worker starts only when `PAYMENT_GATEWAY` is `worldline`.
 
