@@ -42,7 +42,12 @@ export interface LockProvider {
   /** Provision room access for a checked-in reservation. */
   issueCredential(req: AccessCredentialRequest): Promise<AccessCredential>;
   /** Revoke access at check-out. */
-  revokeCredential(req: { propertyId: string; reservationId: string; roomId?: string | null }): Promise<void>;
+  revokeCredential(req: {
+    propertyId: string;
+    reservationId: string;
+    roomId?: string | null;
+    externalLockId?: string | null;
+  }): Promise<void>;
 }
 
 /** Resolved active adapter injected into listeners and services. */

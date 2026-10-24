@@ -55,13 +55,8 @@ export class WebhookLockProvider implements LockProvider {
       provider: this.name,
       credentialId,
       accessCode,
-      // Universal phone unlock affordance — middleware / Wallet can consume the PIN.
-      mobileKey: {
-        type: 'deeplink',
-        deepLink: `haip-access://pin/${accessCode}`,
-        payload: accessCode,
-        label: 'Room access',
-      },
+      // Middleware may attach a real BLE/NFC mobileKey via webhook consumer;
+      // core webhook adapter only issues the PIN.
     };
 
     await this.credentials.recordIssued({

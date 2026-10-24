@@ -2,11 +2,16 @@ import {
   Body,
   Controller,
   Get,
+  ParseUUIDPipe,
   Post,
+  Query,
   Req,
+  Res,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import { ApiHeader, ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiHeader, ApiOperation, ApiQuery, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Public } from '../auth/public.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CheckInMagicGuard, type CheckInPrincipal } from './check-in-magic.guard';
@@ -94,5 +99,44 @@ export class GuestCheckInController {
   @ApiOperation({ summary: 'Room access: PIN, Wallet pass, mobile key' })
   access(@Req() req: any) {
     return this.service.getAccess(this.principal(req));
+  }
+
+  @Post('worldline-tokenization')
+  @Public()
+  @UseGuards(CheckInMagicGuard)
+  @ApiOperation({ summary: 'Start Worldline hosted card fields for check-in payment' })
+  worldlineTokenization(@Req() req: any) {
+    return this.service.createWorldlineTokenization(this.principal(req));
+  }
+
+  @Get('id-photo')
+  @RequirePermissions('frontdesk.access')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'reservationId', required: true })
+  @ApiOperation({ summary: 'Staff: whether guest uploaded an ID photo' })
+  idPhoto(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('reservationId', ParseUUIDPipe) reservationId: string,
+  ) {
+    return this.service.getIdPhotoMeta(propertyId, reservationId);
+  }
+
+  @Get('id-photo/content')
+  @RequirePermissions('frontdesk.access')
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'reservationId', required: true })
+  @ApiOperation({ summary: 'Staff: download / preview guest ID photo bytes' })
+  async idPhotoContent(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('reservationId', ParseUUIDPipe) reservationId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.service.getIdPhotoContent(propertyId, reservationId);
+    res.set({
+      'Content-Type': file.contentType,
+      'Content-Disposition': `inline; filename="${file.filename}"`,
+      'Cache-Control': 'private, no-store',
+    });
+    return new StreamableFile(file.buffer);
   }
 }

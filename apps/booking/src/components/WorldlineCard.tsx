@@ -8,12 +8,23 @@ import type { PaymentResult } from './StripeCard';
  * In-page card field. The tokenizer script mounts an iframe from the payment
  * host. Submit returns a hosted tokenization id. The card number never reaches HAIP.
  */
+type WorldlineSession = {
+  tokenizerScriptUrl: string;
+  hostedTokenizationUrl: string;
+  sri?: string;
+};
+
 export function WorldlineCard({
   onPaid,
   submitting,
+  getSession,
+  submitLabel = 'Pay & confirm booking',
 }: {
   onPaid: (r: PaymentResult & { returnUrl: string }) => void;
   submitting: boolean;
+  /** Override session source (e.g. guest check-in magic-token API). */
+  getSession?: () => Promise<WorldlineSession>;
+  submitLabel?: string;
 }) {
   const reactId = useId();
   const elementId = `worldline-card-${reactId.replace(/:/g, '')}`;
@@ -25,7 +36,7 @@ export function WorldlineCard({
     let cancelled = false;
     (async () => {
       try {
-        const session = await bookingApi.worldlineTokenization();
+        const session = await (getSession ?? (() => bookingApi.worldlineTokenization()))();
         if (cancelled) return;
         await loadWorldlineTokenizer(session.tokenizerScriptUrl, session.sri);
         if (cancelled || !window.Tokenizer) return;
@@ -41,7 +52,7 @@ export function WorldlineCard({
     return () => {
       cancelled = true;
     };
-  }, [elementId]);
+  }, [elementId, getSession]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,7 +82,7 @@ export function WorldlineCard({
       {!tokenizer && !error && <p className="text-sm text-gray-500">Loading card field…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button type="submit" className="w-full" disabled={!tokenizer || creating || submitting}>
-        {creating || submitting ? 'Processing…' : 'Pay & confirm booking'}
+        {creating || submitting ? 'Processing…' : submitLabel}
       </Button>
     </form>
   );

@@ -17,6 +17,7 @@ import {
   defaultTokenTtlSeconds,
   signCheckInToken,
 } from '../../guest-check-in/check-in-token';
+import { resolveCheckInMagicSecret } from '../../guest-check-in/check-in-secret';
 import type {
   HaipAgent,
   AgentContext,
@@ -60,11 +61,7 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
       ''
     ).replace(/\/$/, '');
     if (!origin) return undefined;
-    const secret =
-      this.configService.get<string>('CHECK_IN_MAGIC_SECRET') ||
-      this.configService.get<string>('JWT_SECRET') ||
-      this.configService.get<string>('SESSION_SECRET') ||
-      'dev-check-in-secret-change-me';
+    const secret = resolveCheckInMagicSecret(this.configService);
     const token = signCheckInToken(
       {
         v: 1,

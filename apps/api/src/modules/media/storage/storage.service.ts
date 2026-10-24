@@ -6,9 +6,9 @@ import { LocalDriver } from './local.driver';
 /**
  * Selects and delegates to a storage driver based on env configuration.
  *
- * STORAGE_DRIVER=s3 (with S3_* vars) → S3Driver (lazily imported so the AWS SDK
- * never loads in the default demo). Anything else → LocalDriver (uploads
- * disabled; URL-paste only).
+ * STORAGE_DRIVER=s3 (with S3_* vars) → S3Driver (lazily imported).
+ * Otherwise → LocalDriver writing under LOCAL_STORAGE_PATH / ./data/uploads
+ * so guest ID photos and media uploads work without object storage.
  */
 @Injectable()
 export class StorageService implements OnModuleInit, StorageDriver {
@@ -18,7 +18,12 @@ export class StorageService implements OnModuleInit, StorageDriver {
   constructor(private readonly config: ConfigService) {}
 
   async onModuleInit(): Promise<void> {
+    const localRoot =
+      this.config.get<string>('LOCAL_STORAGE_PATH') || process.env['LOCAL_STORAGE_PATH'];
+    this.driver = new LocalDriver(localRoot || undefined);
+
     if (this.config.get<string>('STORAGE_DRIVER') !== 's3') {
+      this.logger.log(`Object storage: local filesystem (${localRoot || './data/uploads'}).`);
       return;
     }
     const bucket = this.config.get<string>('S3_BUCKET');
@@ -26,11 +31,10 @@ export class StorageService implements OnModuleInit, StorageDriver {
     const secretAccessKey = this.config.get<string>('S3_SECRET_ACCESS_KEY');
     if (!bucket || !accessKeyId || !secretAccessKey) {
       this.logger.warn(
-        'STORAGE_DRIVER=s3 but S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY are missing — uploads disabled.',
+        'STORAGE_DRIVER=s3 but S3 credentials missing — using local filesystem.',
       );
       return;
     }
-    // Lazy import keeps @aws-sdk/client-s3 out of the default demo runtime.
     const { S3Driver } = await import('./s3.driver');
     this.driver = new S3Driver({
       bucket,
@@ -55,5 +59,26 @@ export class StorageService implements OnModuleInit, StorageDriver {
 
   delete(storageKey: string): Promise<void> {
     return this.driver.delete(storageKey);
+  }
+
+  /** Read object bytes when the active driver supports it (local always; S3 optional). */
+  async get(storageKey: string): Promise<Buffer | null> {
+    if (this.driver instanceof LocalDriver) {
+      return this.driver.get(storageKey);
+    }
+    const maybeGet = (this.driver as StorageDriver & { get?: (k: string) => Promise<Buffer | null> })
+      .get;
+    if (typeof maybeGet === 'function') {
+      return maybeGet.call(this.driver, storageKey);
+    }
+    return null;
+  }
+
+  /** Absolute path for local driver keys (staff preview). */
+  localAbsolutePath(storageKey: string): string | null {
+    if (this.driver instanceof LocalDriver) {
+      return this.driver.absolutePath(storageKey);
+    }
+    return null;
   }
 }

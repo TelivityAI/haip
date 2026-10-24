@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac } from 'node:crypto';
+import { createSign } from 'node:crypto';
 
 export interface WalletPassInput {
   propertyName: string;
@@ -19,27 +19,20 @@ export interface WalletPassResult {
   walletEnabled: boolean;
   apple: {
     available: boolean;
-    /** Download path for a signed .pkpass when Apple Pass certs are configured. */
     downloadPath?: string;
-    /** Inline pass fields for UI preview / Add to Wallet when certs are absent. */
     preview: Record<string, string>;
   };
   google: {
     available: boolean;
-    /** Google Wallet save URL when issuer credentials are configured. */
     saveUrl?: string;
     preview: Record<string, string>;
   };
-  /** Vendor BLE / NFC deep link when the lock provider issued a mobile key. */
   mobileKeyDeepLink?: string | null;
 }
 
 /**
- * Builds Apple/Google Wallet pass payloads for room access.
- *
- * Real .pkpass / Google save URLs require operator certificates (APPLE_PASS_* /
- * GOOGLE_WALLET_*). Without them we still return a consistent preview so the
- * guest UI can show "Add to Wallet" with copy-code fallback.
+ * Honest Wallet payloads: only advertise Apple/Google when issuer material exists.
+ * Universal product is always the PIN preview — never a fake save URL.
  */
 @Injectable()
 export class WalletPassService {
@@ -56,26 +49,62 @@ export class WalletPassService {
       instructions: input.instructions ?? '',
     };
 
-    const appleConfigured = Boolean(
-      this.config.get('APPLE_PASS_CERT_PEM') && this.config.get('APPLE_PASS_KEY_PEM'),
-    );
-    const googleIssuer = this.config.get<string>('GOOGLE_WALLET_ISSUER_ID');
-    const googleKey = this.config.get<string>('GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL');
+    // Apple .pkpass packaging needs Pass Type ID certs + a real signer.
+    // Do not advertise downloadPath until a working pkpass endpoint ships —
+    // PIN + Google Save (when issuer SA is configured) are the honest products.
+    const appleConfigured = false;
 
-    let googleSaveUrl: string | undefined;
-    if (googleIssuer && googleKey && input.accessCode) {
-      // Compact JWT-style claim the client can open; full Google Wallet API
-      // signing uses the service account when operators configure it.
+    const googleSaveUrl = this.buildGoogleSaveUrl(input, preview);
+
+    return {
+      walletEnabled: Boolean(googleSaveUrl),
+      apple: {
+        available: appleConfigured,
+        preview,
+      },
+      google: {
+        available: Boolean(googleSaveUrl),
+        saveUrl: googleSaveUrl,
+        preview,
+      },
+      mobileKeyDeepLink: input.mobileKeyDeepLink ?? null,
+    };
+  }
+
+  /**
+   * Google Wallet "Save" JWT when service-account PEM + issuer id are configured.
+   * Uses RS256 signed JWT (not a fake HMAC URL).
+   */
+  private buildGoogleSaveUrl(
+    input: WalletPassInput,
+    preview: Record<string, string>,
+  ): string | undefined {
+    const issuerId = this.config.get<string>('GOOGLE_WALLET_ISSUER_ID')?.trim();
+    const saEmail = this.config.get<string>('GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL')?.trim();
+    const saKey = this.config.get<string>('GOOGLE_WALLET_SERVICE_ACCOUNT_PRIVATE_KEY')?.trim();
+    if (!issuerId || !saEmail || !saKey || !input.accessCode) return undefined;
+
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const header = { alg: 'RS256', typ: 'JWT' };
       const claims = {
-        iss: googleKey,
+        iss: saEmail,
         aud: 'google',
         typ: 'savetowallet',
+        iat: now,
         payload: {
           genericObjects: [
             {
-              id: `${googleIssuer}.${input.reservationId}`,
-              cardTitle: { defaultValue: { language: 'en', value: input.propertyName } },
-              header: { defaultValue: { language: 'en', value: `Room ${preview['roomNumber']}` } },
+              id: `${issuerId}.${input.reservationId}`,
+              cardTitle: {
+                defaultValue: { language: 'en', value: input.propertyName },
+              },
+              header: {
+                defaultValue: {
+                  language: 'en',
+                  value: `Room ${preview['roomNumber']}`,
+                },
+              },
               textModulesData: [
                 { header: 'Access code', body: input.accessCode },
                 ...(input.instructions
@@ -86,33 +115,17 @@ export class WalletPassService {
           ],
         },
       };
-      const body = Buffer.from(JSON.stringify(claims)).toString('base64url');
-      const sig = createHmac(
-        'sha256',
-        this.config.get<string>('GOOGLE_WALLET_HMAC_SECRET') ||
-          this.config.get<string>('CHECK_IN_MAGIC_SECRET') ||
-          'dev-wallet-secret',
-      )
-        .update(body)
-        .digest('base64url');
-      googleSaveUrl = `https://pay.google.com/gp/v/save/${body}.${sig}`;
+      const enc = (obj: unknown) =>
+        Buffer.from(JSON.stringify(obj)).toString('base64url');
+      const unsigned = `${enc(header)}.${enc(claims)}`;
+      const pem = saKey.includes('\\n') ? saKey.replace(/\\n/g, '\n') : saKey;
+      const signer = createSign('RSA-SHA256');
+      signer.update(unsigned);
+      signer.end();
+      const signature = signer.sign(pem).toString('base64url');
+      return `https://pay.google.com/gp/v/save/${unsigned}.${signature}`;
+    } catch {
+      return undefined;
     }
-
-    return {
-      walletEnabled: true,
-      apple: {
-        available: appleConfigured,
-        downloadPath: appleConfigured
-          ? `/api/v1/guest-check-in/wallet/apple.pkpass`
-          : undefined,
-        preview,
-      },
-      google: {
-        available: Boolean(googleSaveUrl),
-        saveUrl: googleSaveUrl,
-        preview,
-      },
-      mobileKeyDeepLink: input.mobileKeyDeepLink ?? null,
-    };
   }
 }

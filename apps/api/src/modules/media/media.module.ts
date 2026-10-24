@@ -8,6 +8,6 @@ import { WebhookModule } from '../webhook/webhook.module';
   imports: [WebhookModule],
   controllers: [MediaController],
   providers: [MediaService, StorageService],
-  exports: [MediaService],
+  exports: [MediaService, StorageService],
 })
 export class MediaModule {}
