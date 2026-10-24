@@ -21,6 +21,7 @@ import {
   GuestPayDto,
   GuestPreRegisterDto,
   IssueCheckInLinkDto,
+  RequestCheckInLinkDto,
 } from './dto/guest-check-in.dto';
 
 @ApiTags('Guest Check-In')
@@ -41,6 +42,15 @@ export class GuestCheckInController {
       dto.reservationId,
       dto.ttlSeconds,
     );
+  }
+
+  @Post('request-link')
+  @Public()
+  @ApiOperation({
+    summary: 'Guest: request a new check-in link by confirmation number + email',
+  })
+  requestLink(@Body() dto: RequestCheckInLinkDto) {
+    return this.service.requestLink(dto);
   }
 
   @Get('session')

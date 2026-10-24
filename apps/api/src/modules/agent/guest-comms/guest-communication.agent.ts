@@ -18,6 +18,7 @@ import {
   signCheckInToken,
 } from '../../guest-check-in/check-in-token';
 import { resolveCheckInMagicSecret } from '../../guest-check-in/check-in-secret';
+import { buildCheckInAppUrl } from '../../guest-check-in/check-in-app-url';
 import type {
   HaipAgent,
   AgentContext,
@@ -71,7 +72,7 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
       },
       secret,
     );
-    return `${origin}/check-in?token=${encodeURIComponent(token)}`;
+    return buildCheckInAppUrl(origin, token);
   }
 
   onModuleInit() {

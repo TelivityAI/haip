@@ -118,3 +118,15 @@ export class IssueCheckInLinkDto {
   @Min(60)
   ttlSeconds?: number;
 }
+
+export class RequestCheckInLinkDto {
+  @ApiProperty({ description: 'Reservation confirmation number' })
+  @IsString()
+  @MaxLength(40)
+  confirmationNumber!: string;
+
+  @ApiProperty({ description: 'Guest email on the reservation' })
+  @IsString()
+  @MaxLength(255)
+  email!: string;
+}

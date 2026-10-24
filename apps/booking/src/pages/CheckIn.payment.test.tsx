@@ -18,6 +18,7 @@ vi.mock('../api/checkInClient', () => ({
     acceptUpsell: vi.fn(),
     selfCheckIn: vi.fn(),
     worldlineTokenization: vi.fn(),
+    requestLink: vi.fn(),
   },
   setCheckInToken: vi.fn(),
   errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
