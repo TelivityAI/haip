@@ -38,8 +38,9 @@ export class TtlockLockProvider implements LockProvider {
     }
   }
 
+  /** OAuth credentials are enough; lock id from room.externalLockId or TTLOCK_LOCK_ID. */
   isConfigured(): boolean {
-    return Boolean(this.clientId && this.clientSecret && this.username && this.password && this.lockId);
+    return Boolean(this.clientId && this.clientSecret && this.username && this.password);
   }
 
   private async ensureAccessToken(): Promise<string> {
@@ -76,12 +77,19 @@ export class TtlockLockProvider implements LockProvider {
     return this.accessToken;
   }
 
+  private resolveLockId(req: { externalLockId?: string | null }): string {
+    const id = (req.externalLockId || this.lockId || '').trim();
+    if (!id) throw new Error('TTLock lock id missing (room.externalLockId or TTLOCK_LOCK_ID)');
+    return id;
+  }
+
   async issueCredential(req: AccessCredentialRequest): Promise<AccessCredential> {
     if (!this.isConfigured()) {
       throw new Error('TTLock not configured');
     }
 
     const accessToken = await this.ensureAccessToken();
+    const lockId = this.resolveLockId(req);
     const accessCode = generateKeypadPin();
     const startDate = req.validFrom ? Date.parse(req.validFrom) : Date.now();
     const endDate = req.validTo ? Date.parse(req.validTo) : startDate + 7 * 24 * 60 * 60 * 1000;
@@ -89,7 +97,7 @@ export class TtlockLockProvider implements LockProvider {
     const body = new URLSearchParams({
       clientId: this.clientId!,
       accessToken,
-      lockId: this.lockId!,
+      lockId,
       keyboardPwd: accessCode,
       keyboardPwdName: `HAIP ${req.reservationId.slice(0, 8)}`,
       startDate: String(startDate),
@@ -127,6 +135,7 @@ export class TtlockLockProvider implements LockProvider {
     propertyId: string;
     reservationId: string;
     roomId?: string | null;
+    externalLockId?: string | null;
   }): Promise<void> {
     if (!this.isConfigured()) {
       throw new Error('TTLock not configured');
@@ -139,7 +148,7 @@ export class TtlockLockProvider implements LockProvider {
       const body = new URLSearchParams({
         clientId: this.clientId!,
         accessToken,
-        lockId: this.lockId!,
+        lockId: this.resolveLockId(req),
         keyboardPwdId,
         deleteType: '2',
       });

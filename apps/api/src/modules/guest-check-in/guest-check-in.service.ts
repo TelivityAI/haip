@@ -5,8 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import {
+  bookingEngineConfig,
   folios,
   guests,
   properties,
@@ -19,10 +20,12 @@ import { ReservationService } from '../reservation/reservation.service';
 import { PaymentService } from '../payment/payment.service';
 import { FolioService } from '../folio/folio.service';
 import { DoorLockService } from '../door-lock/door-lock.service';
+import { StorageService } from '../media/storage/storage.service';
 import {
   defaultTokenTtlSeconds,
   signCheckInToken,
 } from './check-in-token';
+import { resolveCheckInMagicSecret } from './check-in-secret';
 import { WalletPassService } from './wallet-pass.service';
 import type {
   GuestAcceptUpsellDto,
@@ -68,15 +71,11 @@ export class GuestCheckInService {
     private readonly folios: FolioService,
     private readonly doorLock: DoorLockService,
     private readonly wallet: WalletPassService,
+    private readonly storage: StorageService,
   ) {}
 
   private magicSecret(): string {
-    return (
-      this.config.get<string>('CHECK_IN_MAGIC_SECRET') ||
-      this.config.get<string>('JWT_SECRET') ||
-      this.config.get<string>('SESSION_SECRET') ||
-      'dev-check-in-secret-change-me'
-    );
+    return resolveCheckInMagicSecret(this.config);
   }
 
   async issueLinkForReservation(
@@ -252,10 +251,16 @@ export class GuestCheckInService {
       canSelfCheckIn,
       steps: {
         registration: registrationComplete,
-        id: Boolean(ctx.reservation.guestIdDocument),
+        id: Boolean(
+          (ctx.reservation.guestIdDocument as any)?.imageMediaId ||
+            (ctx.reservation.guestIdDocument as any)?.imageStored,
+        ),
         payment: folioBalance <= 0.009 || !configFlags.requirePaymentWhenBalanceDue,
         checkedIn: ['checked_in', 'stayover', 'due_out'].includes(ctx.reservation.status),
       },
+      payment: await this.payments.getClientConfig(principal.propertyId),
+      francePackEnabled: Boolean((ctx.property.settings as any)?.francePack?.enabled),
+      stripePublishableKey: this.config.get<string>('STRIPE_PUBLISHABLE_KEY') ?? null,
     };
   }
 
@@ -278,7 +283,7 @@ export class GuestCheckInService {
     }
     if (ctx.online.requireIdPhoto !== false) {
       const doc = ctx.reservation.guestIdDocument as Record<string, unknown> | null;
-      if (!doc || (!doc['imageMediaId'] && !doc['imageStored'])) {
+      if (!doc?.['imageMediaId']) {
         return { allowed: false, reason: 'ID photo required' };
       }
     }
@@ -353,12 +358,29 @@ export class GuestCheckInService {
       throw new BadRequestException('Online check-in is disabled for this property');
     }
 
+    this.assertFranceFicheFields(ctx, dto.registrationData);
+
+    let imageMediaId: string | undefined;
+    let imageStorageKey: string | undefined;
+    if (dto.idImageBase64) {
+      const stored = await this.storeIdImage(
+        principal.propertyId,
+        principal.reservationId,
+        dto.idImageBase64,
+      );
+      imageMediaId = stored.mediaId;
+      imageStorageKey = stored.storageKey;
+    } else if (ctx.online.requireIdPhoto !== false) {
+      throw new BadRequestException('ID photo is required');
+    }
+
     const registrationData = {
       ...(dto.registrationData ?? {}),
-      ...(dto.idImageBase64
+      ...(imageMediaId
         ? {
             idPhotoCapturedAt: new Date().toISOString(),
             idPhotoPresent: true,
+            imageMediaId,
           }
         : {}),
     };
@@ -376,18 +398,16 @@ export class GuestCheckInService {
       },
     );
 
-    if (dto.idImageBase64) {
-      // Persist a compact flag on the encrypted document blob (photo bytes stay
-      // out of the row — store a truncated fingerprint only for "has photo").
+    if (imageMediaId) {
       const existing = (updated.guestIdDocument ?? {}) as Record<string, unknown>;
-      const imageStored = true;
       await this.db
         .update(reservations)
         .set({
           guestIdDocument: {
             ...existing,
-            imageStored,
-            imageFingerprint: dto.idImageBase64.slice(0, 32),
+            imageMediaId,
+            imageStorageKey,
+            imageStored: true,
           },
           updatedAt: new Date(),
         })
@@ -399,7 +419,49 @@ export class GuestCheckInService {
         );
     }
 
+    // Keep guest profile in sync for France fiche / FD (nationality, contact, names).
+    const rd = registrationData as Record<string, unknown>;
+    if (ctx.guest?.id) {
+      const guestPatch: Record<string, unknown> = { updatedAt: new Date() };
+      if (typeof rd['firstName'] === 'string') guestPatch['firstName'] = rd['firstName'];
+      if (typeof rd['lastName'] === 'string') guestPatch['lastName'] = rd['lastName'];
+      if (typeof rd['email'] === 'string') guestPatch['email'] = rd['email'];
+      if (typeof rd['phone'] === 'string') guestPatch['phone'] = rd['phone'];
+      if (typeof rd['nationality'] === 'string') guestPatch['nationality'] = rd['nationality'];
+      if (typeof rd['dateOfBirth'] === 'string') guestPatch['dateOfBirth'] = new Date(rd['dateOfBirth']);
+      if (typeof rd['address'] === 'string') guestPatch['addressLine1'] = rd['address'];
+      if (dto.idType) guestPatch['idType'] = dto.idType;
+      if (dto.idNumber) guestPatch['idNumber'] = dto.idNumber;
+      if (dto.idCountry) guestPatch['idCountry'] = dto.idCountry;
+      await this.db.update(guests).set(guestPatch).where(eq(guests.id, ctx.guest.id));
+    }
+
     return this.getSession(principal);
+  }
+
+  private async storeIdImage(
+    propertyId: string,
+    reservationId: string,
+    dataUrlOrBase64: string,
+  ): Promise<{ mediaId: string; storageKey: string }> {
+    const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrlOrBase64);
+    const contentType = match?.[1] || 'image/jpeg';
+    const b64 = match?.[2] || dataUrlOrBase64;
+    const buffer = Buffer.from(b64, 'base64');
+    if (buffer.length < 32) {
+      throw new BadRequestException('ID photo is empty or invalid');
+    }
+    if (buffer.length > 8 * 1024 * 1024) {
+      throw new BadRequestException('ID photo must be under 8MB');
+    }
+    const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+    const put = await this.storage.put(buffer, {
+      propertyId,
+      contentType,
+      filename: `guest-id-${reservationId}.${ext}`,
+    });
+    // mediaId = storage key (guest-scoped; not the staff media table).
+    return { mediaId: put.storageKey, storageKey: put.storageKey };
   }
 
   async listUpsells(principal: CheckInPrincipal) {
@@ -425,19 +487,13 @@ export class GuestCheckInService {
             ),
           );
         if (!target) continue;
-        // Inventory: at least one ready/clean room of target type for arrival night.
-        const available = await this.db
-          .select({ id: rooms.id })
-          .from(rooms)
-          .where(
-            and(
-              eq(rooms.propertyId, principal.propertyId),
-              eq(rooms.roomTypeId, c.targetRoomTypeId),
-              eq(rooms.isActive, true),
-              inArray(rooms.status, ['guest_ready', 'vacant_clean']),
-            ),
-          )
-          .limit(1);
+        const available = await this.findAssignableRooms(
+          principal.propertyId,
+          c.targetRoomTypeId,
+          String(ctx.reservation.arrivalDate),
+          String(ctx.reservation.departureDate),
+          principal.reservationId,
+        );
         if (!available.length) continue;
         eligible.push({
           campaignId: c.id,
@@ -567,7 +623,8 @@ export class GuestCheckInService {
       });
     }
 
-    await this.payments.authorizePayment({
+    const returnUrl = dto.returnUrl?.trim();
+    const result = await this.payments.authorizePayment({
       folioId: folio.id,
       propertyId: principal.propertyId,
       amount: Number(dto.amount).toFixed(2),
@@ -576,9 +633,16 @@ export class GuestCheckInService {
       gatewayPaymentToken: token,
       cardLastFour: dto.cardLastFour,
       cardBrand: dto.cardBrand,
+      ...(returnUrl
+        ? { redirectUrlOk: returnUrl, redirectUrlKo: returnUrl }
+        : {}),
     });
 
-    return this.getSession(principal);
+    const session = await this.getSession(principal);
+    return {
+      ...session,
+      ...(result.nextAction ? { nextAction: result.nextAction } : {}),
+    };
   }
 
   async selfCheckIn(principal: CheckInPrincipal) {
@@ -594,6 +658,9 @@ export class GuestCheckInService {
       roomId = await this.autoAssignReadyRoom(
         principal.propertyId,
         ctx.reservation.roomTypeId,
+        String(ctx.reservation.arrivalDate),
+        String(ctx.reservation.departureDate),
+        principal.reservationId,
       );
       await this.reservations.assignRoom(principal.reservationId, principal.propertyId, {
         roomId,
@@ -602,9 +669,19 @@ export class GuestCheckInService {
       throw new BadRequestException('No room assigned');
     }
 
+    const depositRequired = await this.isDepositRequired(principal.propertyId, ctx.property.settings);
+    const balance = await this.folioBalanceForReservation(
+      principal.reservationId,
+      principal.propertyId,
+    );
+    if (depositRequired && balance > 0.009) {
+      throw new BadRequestException('Deposit / balance must be paid before self check-in');
+    }
+
     await this.reservations.checkIn(principal.reservationId, principal.propertyId, {
       registrationSigned: true,
-      skipDepositAuth: true,
+      // Only skip deposit auth when policy does not require it or balance is already clear.
+      skipDepositAuth: !depositRequired || balance <= 0.009,
     });
 
     await this.db
@@ -620,7 +697,34 @@ export class GuestCheckInService {
     return this.getAccess(principal);
   }
 
-  private async autoAssignReadyRoom(propertyId: string, roomTypeId: string): Promise<string> {
+  private async autoAssignReadyRoom(
+    propertyId: string,
+    roomTypeId: string,
+    arrivalDate: string,
+    departureDate: string,
+    excludeReservationId: string,
+  ): Promise<string> {
+    const candidates = await this.findAssignableRooms(
+      propertyId,
+      roomTypeId,
+      arrivalDate,
+      departureDate,
+      excludeReservationId,
+    );
+    if (!candidates[0]) {
+      throw new BadRequestException('No ready room available for self check-in');
+    }
+    return candidates[0].id;
+  }
+
+  /** Clean/ready rooms of type not held by overlapping assigned/in-house stays. */
+  private async findAssignableRooms(
+    propertyId: string,
+    roomTypeId: string,
+    arrivalDate: string,
+    departureDate: string,
+    excludeReservationId: string,
+  ): Promise<Array<{ id: string; number: string; status: string }>> {
     const candidates = await this.db
       .select()
       .from(rooms)
@@ -632,19 +736,32 @@ export class GuestCheckInService {
           inArray(rooms.status, ['guest_ready', 'vacant_clean']),
         ),
       )
-      .limit(20);
+      .limit(50);
 
-    const sorted = [...candidates].sort((a: any, b: any) => {
-      const rank = (s: string) => (s === 'guest_ready' ? 0 : 1);
-      const r = rank(a.status) - rank(b.status);
-      if (r !== 0) return r;
-      return String(a.number).localeCompare(String(b.number));
-    });
+    const held = await this.db
+      .select({ roomId: reservations.roomId })
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.propertyId, propertyId),
+          ne(reservations.id, excludeReservationId),
+          inArray(reservations.status, ['assigned', 'checked_in', 'stayover', 'due_out']),
+          sql`${reservations.arrivalDate} < ${departureDate}`,
+          sql`${reservations.departureDate} > ${arrivalDate}`,
+        ),
+      );
+    const heldIds = new Set(
+      held.map((h: { roomId: string | null }) => h.roomId).filter(Boolean),
+    );
 
-    if (!sorted[0]) {
-      throw new BadRequestException('No ready room available for self check-in');
-    }
-    return sorted[0].id;
+    return [...candidates]
+      .filter((r: any) => !heldIds.has(r.id))
+      .sort((a: any, b: any) => {
+        const rank = (s: string) => (s === 'guest_ready' ? 0 : 1);
+        const r = rank(a.status) - rank(b.status);
+        if (r !== 0) return r;
+        return String(a.number).localeCompare(String(b.number));
+      });
   }
 
   async getAccess(principal: CheckInPrincipal) {
@@ -681,32 +798,28 @@ export class GuestCheckInService {
     }
 
     const accessCode = credential?.accessCode ?? null;
-    const mobileKey =
-      credential?.mobileKey ??
-      (accessCode
-        ? {
-            type: 'deeplink' as const,
-            deepLink: `haip-access://pin/${accessCode}`,
-            label: 'Open with phone',
-          }
-        : null);
+    // Only surface mobileKey when the lock provider actually issued one.
+    const mobileKey = credential?.mobileKey ?? null;
 
-    const wallet = this.wallet.build({
-      propertyName: ctx.property.name,
-      propertyId: principal.propertyId,
-      reservationId: principal.reservationId,
-      roomNumber: ctx.room?.number ?? null,
-      accessCode,
-      guestName: ctx.guest
-        ? `${ctx.guest.firstName} ${ctx.guest.lastName}`.trim()
-        : 'Guest',
-      validFrom: ctx.reservation.checkedInAt?.toISOString?.() ?? null,
-      validTo: ctx.reservation.departureDate
-        ? `${ctx.reservation.departureDate}T${ctx.property.checkOutTime || '11:00'}:00`
-        : null,
-      instructions: ctx.online.accessInstructions ?? null,
-      mobileKeyDeepLink: mobileKey?.deepLink ?? null,
-    });
+    const wallet =
+      ctx.online.walletEnabled === false
+        ? { walletEnabled: false }
+        : this.wallet.build({
+            propertyName: ctx.property.name,
+            propertyId: principal.propertyId,
+            reservationId: principal.reservationId,
+            roomNumber: ctx.room?.number ?? null,
+            accessCode,
+            guestName: ctx.guest
+              ? `${ctx.guest.firstName} ${ctx.guest.lastName}`.trim()
+              : 'Guest',
+            validFrom: ctx.reservation.checkedInAt?.toISOString?.() ?? null,
+            validTo: ctx.reservation.departureDate
+              ? `${ctx.reservation.departureDate}T${ctx.property.checkOutTime || '11:00'}:00`
+              : null,
+            instructions: ctx.online.accessInstructions ?? null,
+            mobileKeyDeepLink: mobileKey?.deepLink ?? null,
+          });
 
     return {
       roomNumber: ctx.room?.number ?? null,
@@ -715,9 +828,103 @@ export class GuestCheckInService {
       instructions: ctx.online.accessInstructions ?? null,
       provider: credential?.provider ?? null,
       mobileKey,
-      wallet: ctx.online.walletEnabled === false ? { walletEnabled: false } : wallet,
+      wallet,
       reservationId: principal.reservationId,
       status: ctx.reservation.status,
     };
+  }
+
+  async createWorldlineTokenization(principal: CheckInPrincipal) {
+    return this.payments.createWorldlineTokenizationSession(principal.propertyId);
+  }
+
+  /** Staff: whether an ID photo object exists for a reservation. */
+  async getIdPhotoMeta(propertyId: string, reservationId: string) {
+    const [row] = await this.db
+      .select({ guestIdDocument: reservations.guestIdDocument })
+      .from(reservations)
+      .where(and(eq(reservations.id, reservationId), eq(reservations.propertyId, propertyId)));
+    const doc = (row?.guestIdDocument ?? {}) as Record<string, unknown>;
+    return {
+      hasIdPhoto: Boolean(doc['imageMediaId']),
+      imageMediaId: (doc['imageMediaId'] as string) || null,
+      contentPath: `/api/v1/guest-check-in/id-photo/content?propertyId=${encodeURIComponent(propertyId)}&reservationId=${encodeURIComponent(reservationId)}`,
+    };
+  }
+
+  /** Staff: load stored ID photo bytes for download/preview. */
+  async getIdPhotoContent(propertyId: string, reservationId: string) {
+    const [row] = await this.db
+      .select({ guestIdDocument: reservations.guestIdDocument })
+      .from(reservations)
+      .where(and(eq(reservations.id, reservationId), eq(reservations.propertyId, propertyId)));
+    if (!row) throw new NotFoundException('Reservation not found');
+    const doc = (row.guestIdDocument ?? {}) as Record<string, unknown>;
+    const key = String(doc['imageStorageKey'] || doc['imageMediaId'] || '');
+    if (!key) throw new NotFoundException('No ID photo on file');
+
+    const buffer = await this.storage.get(key);
+    if (!buffer) throw new NotFoundException('ID photo file missing');
+    const ext = key.split('.').pop()?.toLowerCase();
+    const contentType =
+      ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    return { buffer, contentType, filename: `guest-id-${reservationId}.${ext || 'jpg'}` };
+  }
+
+  private assertFranceFicheFields(
+    ctx: Awaited<ReturnType<GuestCheckInService['loadContext']>>,
+    registrationData?: Record<string, unknown>,
+  ) {
+    const franceEnabled = Boolean((ctx.property.settings as any)?.francePack?.enabled);
+    if (!franceEnabled) return;
+    const rd = registrationData ?? {};
+    const nationality = String(
+      rd['nationality'] ?? ctx.guest?.nationality ?? '',
+    )
+      .trim()
+      .toUpperCase();
+    const isFr = nationality === 'FR' || nationality === 'FRA' || nationality === 'FRANCE';
+    if (!nationality || isFr) return;
+
+    const missing: string[] = [];
+    const need = (key: string, label: string) => {
+      if (!String(rd[key] ?? '').trim()) missing.push(label);
+    };
+    need('firstName', 'first name');
+    need('lastName', 'last name');
+    need('dateOfBirth', 'date of birth');
+    need('placeOfBirth', 'place of birth');
+    need('address', 'home address');
+    need('phone', 'mobile phone');
+    need('email', 'email');
+    if (missing.length) {
+      throw new BadRequestException(
+        `Fiche de police (non-French guest): required — ${missing.join(', ')}`,
+      );
+    }
+  }
+
+  private async isDepositRequired(
+    propertyId: string,
+    propertySettings: unknown,
+  ): Promise<boolean> {
+    const settings = (propertySettings ?? {}) as {
+      depositAuthRequired?: boolean;
+      depositPercentage?: number;
+    };
+    if (settings.depositAuthRequired && Number(settings.depositPercentage ?? 0) > 0) {
+      return true;
+    }
+    try {
+      const [cfg] = await this.db
+        .select({ depositPolicy: bookingEngineConfig.depositPolicy })
+        .from(bookingEngineConfig)
+        .where(eq(bookingEngineConfig.propertyId, propertyId))
+        .limit(1);
+      const policy = (cfg?.depositPolicy ?? {}) as { type?: string };
+      return Boolean(policy.type && policy.type !== 'none');
+    } catch {
+      return false;
+    }
   }
 }

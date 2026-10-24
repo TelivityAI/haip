@@ -87,6 +87,13 @@ export class GuestPayDto {
   @IsString()
   @MaxLength(20)
   cardBrand?: string;
+
+  /** Browser return URL after Redsys/Worldline hosted redirect (back to /check-in). */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  returnUrl?: string;
 }
 
 export class GuestAcceptUpsellDto {

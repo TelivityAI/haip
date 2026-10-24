@@ -31,15 +31,23 @@ export class NukiLockProvider implements LockProvider {
     }
   }
 
+  /** API token is enough; lock id comes from room.externalLockId or NUKI_SMARTLOCK_ID. */
   isConfigured(): boolean {
-    return Boolean(this.token && this.smartlockId);
+    return Boolean(this.token);
+  }
+
+  private resolveLockId(req: { externalLockId?: string | null }): string {
+    const id = (req.externalLockId || this.smartlockId || '').trim();
+    if (!id) throw new Error('Nuki lock id missing (room.externalLockId or NUKI_SMARTLOCK_ID)');
+    return id;
   }
 
   async issueCredential(req: AccessCredentialRequest): Promise<AccessCredential> {
-    if (!this.token || !this.smartlockId) {
+    if (!this.token) {
       throw new Error('Nuki not configured');
     }
 
+    const lockId = this.resolveLockId(req);
     const accessCode = generateKeypadPin();
     const allowedFromDate = req.validFrom ?? new Date().toISOString();
     const body: Record<string, unknown> = {
@@ -50,7 +58,7 @@ export class NukiLockProvider implements LockProvider {
     };
     if (req.validTo) body['allowedUntilDate'] = req.validTo;
 
-    const res = await fetch(`${NUKI_API_BASE}/smartlock/${this.smartlockId}/auth`, {
+    const res = await fetch(`${NUKI_API_BASE}/smartlock/${lockId}/auth`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.token}`,
@@ -82,15 +90,17 @@ export class NukiLockProvider implements LockProvider {
     propertyId: string;
     reservationId: string;
     roomId?: string | null;
+    externalLockId?: string | null;
   }): Promise<void> {
-    if (!this.token || !this.smartlockId) {
+    if (!this.token) {
       throw new Error('Nuki not configured');
     }
 
+    const lockId = this.resolveLockId(req);
     const existing = await this.credentials.findByReservation(req.reservationId, req.propertyId);
     const authId = existing?.credentialId;
     if (authId) {
-      const res = await fetch(`${NUKI_API_BASE}/smartlock/${this.smartlockId}/auth/${authId}`, {
+      const res = await fetch(`${NUKI_API_BASE}/smartlock/${lockId}/auth/${authId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${this.token}` },
       });

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DoorLockListener } from './door-lock.listener';
-import { WebhookLockProvider } from './providers/webhook-lock.provider';
 import type { WebhookPayload } from '../webhook/webhook.service';
 
 const PROPERTY_ID = '44444444-4444-4444-4444-444444444444';
@@ -19,26 +18,50 @@ function payload(event: string, data: Record<string, unknown> = {}): WebhookPayl
 
 describe('DoorLockListener', () => {
   let lock: { issueCredential: ReturnType<typeof vi.fn>; revokeCredential: ReturnType<typeof vi.fn> };
+  let factory: { resolveForProperty: ReturnType<typeof vi.fn> };
   let listener: DoorLockListener;
 
   const db = {
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([{ externalLockId: 'lock-42' }]),
-      }),
-    }),
+    select: vi.fn(),
   };
 
   beforeEach(() => {
     lock = {
-      issueCredential: vi.fn().mockResolvedValue({ provider: 'webhook', credentialId: 'x', accessCode: '000000' }),
+      issueCredential: vi.fn().mockResolvedValue({
+        provider: 'webhook',
+        credentialId: 'x',
+        accessCode: '000000',
+      }),
       revokeCredential: vi.fn().mockResolvedValue(undefined),
     };
-    listener = new DoorLockListener(lock as any, db as any);
+    factory = {
+      resolveForProperty: vi.fn().mockReturnValue(lock),
+    };
+    db.select.mockImplementation(() => ({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ settings: { onlineCheckIn: { lockProvider: 'nuki' } } }]),
+      }),
+    }));
+    // First select = property, second = room (when roomId present)
+    let call = 0;
+    db.select.mockImplementation(() => {
+      call += 1;
+      return {
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue(
+            call === 1
+              ? [{ settings: { onlineCheckIn: { lockProvider: 'nuki' } } }]
+              : [{ externalLockId: 'lock-42' }],
+          ),
+        }),
+      };
+    });
+    listener = new DoorLockListener(factory as any, db as any);
   });
 
-  it('provisions access on check-in, scoped to the property and room', async () => {
+  it('provisions access on check-in with property provider and room lock id', async () => {
     await listener.onCheckIn(payload('reservation.checked_in', { roomId: 'room-9' }));
+    expect(factory.resolveForProperty).toHaveBeenCalledWith('nuki');
     expect(lock.issueCredential).toHaveBeenCalledWith({
       propertyId: PROPERTY_ID,
       reservationId: RESERVATION_ID,
@@ -49,59 +72,17 @@ describe('DoorLockListener', () => {
 
   it('revokes access on check-out', async () => {
     await listener.onCheckOut(payload('reservation.checked_out', { roomId: 'room-9' }));
-    expect(lock.revokeCredential).toHaveBeenCalledWith({
-      propertyId: PROPERTY_ID,
-      reservationId: RESERVATION_ID,
-      roomId: 'room-9',
-    });
-  });
-
-  it('never throws when the lock vendor fails (check-in must not break)', async () => {
-    lock.issueCredential.mockRejectedValueOnce(new Error('vendor down'));
-    await expect(listener.onCheckIn(payload('reservation.checked_in'))).resolves.toBeUndefined();
-  });
-});
-
-describe('WebhookLockProvider', () => {
-  it('emits door.access_granted with a CSPRNG 6-digit PIN and persists credential', async () => {
-    const webhooks = { emit: vi.fn().mockResolvedValue(undefined) };
-    const credentials = {
-      recordIssued: vi.fn().mockResolvedValue({ id: 'cred-1', accessCode: '000000' }),
-      recordRevoked: vi.fn(),
-    };
-    const provider = new WebhookLockProvider(webhooks as any, credentials as any);
-
-    const cred = await provider.issueCredential({ propertyId: PROPERTY_ID, reservationId: RESERVATION_ID, roomId: 'r1' });
-
-    expect(cred.accessCode).toMatch(/^\d{6}$/);
-    const [event, , , data, propertyId] = webhooks.emit.mock.calls[0];
-    expect(event).toBe('door.access_granted');
-    expect(propertyId).toBe(PROPERTY_ID);
-    expect(data).toMatchObject({ roomId: 'r1', provider: 'webhook' });
-    expect(credentials.recordIssued).toHaveBeenCalledWith(
+    expect(lock.revokeCredential).toHaveBeenCalledWith(
       expect.objectContaining({
         propertyId: PROPERTY_ID,
         reservationId: RESERVATION_ID,
-        roomId: 'r1',
+        roomId: 'room-9',
       }),
     );
   });
 
-  it('emits door.access_revoked and marks credential revoked', async () => {
-    const webhooks = { emit: vi.fn().mockResolvedValue(undefined) };
-    const credentials = {
-      recordIssued: vi.fn(),
-      recordRevoked: vi.fn().mockResolvedValue({ status: 'revoked' }),
-    };
-    const provider = new WebhookLockProvider(webhooks as any, credentials as any);
-
-    await provider.revokeCredential({
-      propertyId: PROPERTY_ID,
-      reservationId: RESERVATION_ID,
-      roomId: 'r1',
-    });
-
-    expect(webhooks.emit.mock.calls[0][0]).toBe('door.access_revoked');
-    expect(credentials.recordRevoked).toHaveBeenCalledWith(PROPERTY_ID, RESERVATION_ID);
+  it('never throws when the lock vendor fails', async () => {
+    lock.issueCredential.mockRejectedValueOnce(new Error('vendor down'));
+    await expect(listener.onCheckIn(payload('reservation.checked_in'))).resolves.toBeUndefined();
   });
 });

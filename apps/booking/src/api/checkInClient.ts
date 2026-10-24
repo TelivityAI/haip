@@ -71,6 +71,14 @@ export interface CheckInSession {
     payment: boolean;
     checkedIn: boolean;
   };
+  payment?: {
+    provider: string;
+    clientMode: 'mock' | 'stripe' | 'redsys' | 'worldline' | 'unsupported';
+    redsysConfigured?: boolean;
+    worldlineConfigured?: boolean;
+  };
+  francePackEnabled?: boolean;
+  stripePublishableKey?: string | null;
 }
 
 export interface UpsellOffer {
@@ -133,8 +141,28 @@ export const checkInApi = {
     paymentMethodId?: string;
     gatewayPaymentToken?: string;
     gatewayProvider?: string;
-  }): Promise<CheckInSession> => {
-    const { data } = await checkInApiHttp.post<CheckInSession>('/pay', body);
+    cardLastFour?: string;
+    cardBrand?: string;
+    returnUrl?: string;
+  }): Promise<
+    CheckInSession & {
+      nextAction?: {
+        type: 'redirect';
+        url: string;
+        method: 'POST' | 'GET';
+        formFields?: Record<string, string>;
+      };
+    }
+  > => {
+    const { data } = await checkInApiHttp.post('/pay', body);
+    return data;
+  },
+  worldlineTokenization: async (): Promise<{
+    tokenizerScriptUrl: string;
+    hostedTokenizationUrl: string;
+    sri?: string;
+  }> => {
+    const { data } = await checkInApiHttp.post('/worldline-tokenization');
     return data;
   },
   selfCheckIn: async (): Promise<RoomAccess> => {

@@ -37,8 +37,9 @@ export class SaltoKsLockProvider implements LockProvider {
     }
   }
 
+  /** OAuth credentials are enough; site id from room.externalLockId or SALTO_KS_SITE_ID. */
   isConfigured(): boolean {
-    return Boolean(this.clientId && this.clientSecret && this.siteId);
+    return Boolean(this.clientId && this.clientSecret);
   }
 
   private async ensureAccessToken(): Promise<string> {
@@ -73,12 +74,20 @@ export class SaltoKsLockProvider implements LockProvider {
     return this.accessToken;
   }
 
+  private resolveSiteId(req: { externalLockId?: string | null }): string {
+    // Salto KS is site-scoped; externalLockId may carry a site or lock override.
+    const id = (req.externalLockId || this.siteId || '').trim();
+    if (!id) throw new Error('Salto KS site id missing (room.externalLockId or SALTO_KS_SITE_ID)');
+    return id;
+  }
+
   async issueCredential(req: AccessCredentialRequest): Promise<AccessCredential> {
     if (!this.isConfigured()) {
       throw new Error('Salto KS not configured');
     }
 
     const accessToken = await this.ensureAccessToken();
+    const siteId = this.resolveSiteId(req);
     const accessCode = generateKeypadPin();
     const payload = {
       firstName: 'Guest',
@@ -89,7 +98,7 @@ export class SaltoKsLockProvider implements LockProvider {
       externalId: req.reservationId,
     };
 
-    const res = await fetch(`${SALTO_KS_API_BASE}/v1.1/sites/${this.siteId}/users`, {
+    const res = await fetch(`${SALTO_KS_API_BASE}/v1.1/sites/${siteId}/users`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -121,6 +130,7 @@ export class SaltoKsLockProvider implements LockProvider {
     propertyId: string;
     reservationId: string;
     roomId?: string | null;
+    externalLockId?: string | null;
   }): Promise<void> {
     if (!this.isConfigured()) {
       throw new Error('Salto KS not configured');
@@ -130,7 +140,8 @@ export class SaltoKsLockProvider implements LockProvider {
     const userId = existing?.credentialId;
     if (userId) {
       const accessToken = await this.ensureAccessToken();
-      const res = await fetch(`${SALTO_KS_API_BASE}/v1.1/sites/${this.siteId}/users/${userId}`, {
+      const siteId = this.resolveSiteId(req);
+      const res = await fetch(`${SALTO_KS_API_BASE}/v1.1/sites/${siteId}/users/${userId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${accessToken}` },
       });

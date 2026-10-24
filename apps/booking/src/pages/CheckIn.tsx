@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Elements } from '@stripe/react-stripe-js';
+import { loadStripe } from '@stripe/stripe-js';
 import {
   checkInApi,
   errorMessage,
@@ -11,7 +13,10 @@ import {
 } from '../api/checkInClient';
 import { Button } from '../components/Button';
 import { Field, inputClass } from '../components/Field';
+import { StripeCard, type PaymentResult } from '../components/StripeCard';
+import { WorldlineCard } from '../components/WorldlineCard';
 import { money } from '../lib/format';
+import { submitRedirectNextAction } from '../lib/submit-redirect-next-action';
 
 type Step = 'reg' | 'id' | 'upsell' | 'pay' | 'ready' | 'access';
 
@@ -37,6 +42,8 @@ export function CheckIn() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [nationality, setNationality] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [placeOfBirth, setPlaceOfBirth] = useState('');
   const [address, setAddress] = useState('');
   const [signed, setSigned] = useState(false);
   const [idType, setIdType] = useState('passport');
@@ -80,13 +87,21 @@ export function CheckIn() {
     setPhone((v) => v || session.guest?.phone || '');
     setNationality((v) => v || session.guest?.nationality || '');
     if (session.folioBalance > 0) setPayAmount(String(session.folioBalance.toFixed(2)));
+    const stepParam = params.get('step');
     if (session.steps.checkedIn) {
       setStep('access');
       checkInApi.access().then(setAccess).catch(() => undefined);
+    } else if (
+      stepParam === 'pay' &&
+      session.registrationComplete &&
+      session.folioBalance > 0.009
+    ) {
+      // Return URL / deep-link into the pay step (Redsys/Worldline mid-flow).
+      setStep('pay');
     } else if (session.registrationComplete) {
       setStep('ready');
     }
-  }, [session]);
+  }, [session, params]);
 
   const preRegister = useMutation({
     mutationFn: () =>
@@ -99,6 +114,8 @@ export function CheckIn() {
           phone,
           nationality,
           address,
+          ...(dateOfBirth ? { dateOfBirth } : {}),
+          ...(placeOfBirth ? { placeOfBirth } : {}),
         },
         idType,
         idNumber: idNumber || undefined,
@@ -121,17 +138,34 @@ export function CheckIn() {
   });
 
   const pay = useMutation({
-    mutationFn: () =>
+    mutationFn: (payment: PaymentResult & { returnUrl?: string; gatewayProvider?: string }) =>
       checkInApi.pay({
         amount: Number(payAmount),
-        gatewayPaymentToken: `tok_checkin_${Date.now()}`,
-        gatewayProvider: 'mock',
+        paymentMethodId: payment.paymentToken?.startsWith('pm_')
+          ? payment.paymentToken
+          : undefined,
+        gatewayPaymentToken: payment.paymentToken,
+        gatewayProvider: payment.gatewayProvider,
+        cardLastFour: payment.cardLastFour,
+        cardBrand: payment.cardBrand,
+        returnUrl: payment.returnUrl,
       }),
     onSuccess: (s) => {
+      if (s.nextAction?.type === 'redirect') {
+        submitRedirectNextAction(s.nextAction);
+        return;
+      }
       queryClient.setQueryData(['check-in-session', token], s);
       setStep('ready');
     },
   });
+
+  const worldlineSession = useCallback(() => checkInApi.worldlineTokenization(), []);
+
+  const stripePromise = useMemo(() => {
+    const key = session?.stripePublishableKey?.trim();
+    return key ? loadStripe(key) : null;
+  }, [session?.stripePublishableKey]);
 
   const selfCheckIn = useMutation({
     mutationFn: () => checkInApi.selfCheckIn(),
@@ -205,11 +239,36 @@ export function CheckIn() {
               <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} />
             </Field>
             <Field label="Nationality">
-              <input className={inputClass} value={nationality} onChange={(e) => setNationality(e.target.value)} />
+              <input
+                className={inputClass}
+                placeholder="FR"
+                maxLength={2}
+                value={nationality}
+                onChange={(e) => setNationality(e.target.value.toUpperCase())}
+              />
             </Field>
             <Field label="Address">
               <input className={inputClass} value={address} onChange={(e) => setAddress(e.target.value)} />
             </Field>
+            {session.francePackEnabled && nationality && nationality !== 'FR' && (
+              <>
+                <Field label="Date of birth" required>
+                  <input
+                    className={inputClass}
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                  />
+                </Field>
+                <Field label="Place of birth" required>
+                  <input
+                    className={inputClass}
+                    value={placeOfBirth}
+                    onChange={(e) => setPlaceOfBirth(e.target.value)}
+                  />
+                </Field>
+              </>
+            )}
           </div>
           <label className="flex items-start gap-2 text-sm text-gray-700">
             <input
@@ -222,7 +281,15 @@ export function CheckIn() {
           </label>
           <Button
             className="w-full"
-            disabled={!firstName || !lastName || !signed}
+            disabled={
+              !firstName ||
+              !lastName ||
+              !signed ||
+              (Boolean(session.francePackEnabled) &&
+                Boolean(nationality) &&
+                nationality !== 'FR' &&
+                (!dateOfBirth || !placeOfBirth || !address || !phone || !email))
+            }
             onClick={() => setStep('id')}
           >
             Continue to ID
@@ -371,17 +438,61 @@ export function CheckIn() {
               onChange={(e) => setPayAmount(e.target.value)}
             />
           </Field>
-          <p className="text-xs text-gray-500">
-            Card details are collected via the property&apos;s payment gateway (tokenized — never stored raw).
-          </p>
           {pay.isError && <p className="text-sm text-red-600">{errorMessage(pay.error)}</p>}
-          <Button
-            className="w-full"
-            disabled={pay.isPending || !Number(payAmount)}
-            onClick={() => pay.mutate()}
-          >
-            {pay.isPending ? 'Processing…' : 'Pay now'}
-          </Button>
+          {session.payment?.clientMode === 'redsys' ? (
+            <Button
+              className="w-full"
+              disabled={pay.isPending || !Number(payAmount)}
+              onClick={() =>
+                pay.mutate({
+                  paymentToken: 'redsys_redirect',
+                  gatewayProvider: 'redsys',
+                  returnUrl: `${window.location.origin}/check-in?token=${encodeURIComponent(token)}&step=ready`,
+                })
+              }
+            >
+              {pay.isPending ? 'Redirecting…' : 'Pay securely via Redsys'}
+            </Button>
+          ) : session.payment?.clientMode === 'worldline' ? (
+            <WorldlineCard
+              submitting={pay.isPending}
+              getSession={worldlineSession}
+              submitLabel="Pay now"
+              onPaid={(p) =>
+                pay.mutate({
+                  ...p,
+                  gatewayProvider: 'worldline',
+                  returnUrl: `${window.location.origin}/check-in?token=${encodeURIComponent(token)}&step=ready`,
+                })
+              }
+            />
+          ) : session.payment?.clientMode === 'stripe' && stripePromise ? (
+            <Elements stripe={stripePromise}>
+              <StripeCard
+                submitting={pay.isPending}
+                onPaid={(p) => pay.mutate({ ...p, gatewayProvider: 'stripe' })}
+              />
+            </Elements>
+          ) : session.payment?.clientMode === 'mock' ? (
+            <>
+              <p className="mb-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+                Demo gateway — uses the mock payment token (same as booking demo mode).
+              </p>
+              <Button
+                className="w-full"
+                disabled={pay.isPending || !Number(payAmount)}
+                onClick={() =>
+                  pay.mutate({ paymentToken: 'tok_demo', gatewayProvider: 'mock' })
+                }
+              >
+                {pay.isPending ? 'Processing…' : 'Pay (demo)'}
+              </Button>
+            </>
+          ) : (
+            <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              Payment is not configured for this property. Contact the front desk to settle your balance.
+            </p>
+          )}
         </section>
       )}
 
@@ -428,46 +539,45 @@ export function CheckIn() {
             )}
           </div>
 
-          {session.config.walletEnabled && access.wallet?.walletEnabled !== false && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-gray-800">Add to your phone wallet</p>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                {access.wallet.google?.saveUrl ? (
-                  <a
-                    className="inline-flex flex-1 items-center justify-center rounded-brand border border-gray-300 px-4 py-2 text-sm font-semibold"
-                    href={access.wallet.google.saveUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Add to Google Wallet
-                  </a>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={() => {
-                      const text = `Room ${access.roomNumber} · Code ${access.accessCode}`;
-                      void navigator.clipboard?.writeText(text);
-                    }}
-                  >
-                    Copy for Apple / Google Wallet
-                  </Button>
-                )}
-                {access.mobileKey?.deepLink && (
-                  <a
-                    className="inline-flex flex-1 items-center justify-center rounded-brand px-4 py-2 text-sm font-semibold text-white"
-                    style={{ backgroundColor: 'var(--haip-primary, #06bdb4)' }}
-                    href={access.mobileKey.deepLink}
-                  >
-                    {access.mobileKey.label || 'Open mobile key'}
-                  </a>
-                )}
-              </div>
-              <p className="text-xs text-gray-500">
-                Same PIN everywhere. Tap-to-open / BLE unlocks when your lock provider supports it.
-              </p>
-            </div>
-          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => {
+                const text = `Room ${access.roomNumber} · Code ${access.accessCode}`;
+                void navigator.clipboard?.writeText(text);
+              }}
+            >
+              Copy access code
+            </Button>
+            {access.wallet?.google?.available && access.wallet.google.saveUrl && (
+              <a
+                className="inline-flex flex-1 items-center justify-center rounded-brand border border-gray-300 px-4 py-2 text-sm font-semibold"
+                href={access.wallet.google.saveUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Add to Google Wallet
+              </a>
+            )}
+            {access.wallet?.apple?.available && access.wallet.apple.downloadPath && (
+              <a
+                className="inline-flex flex-1 items-center justify-center rounded-brand border border-gray-300 px-4 py-2 text-sm font-semibold"
+                href={access.wallet.apple.downloadPath}
+              >
+                Add to Apple Wallet
+              </a>
+            )}
+            {access.mobileKey?.deepLink && (
+              <a
+                className="inline-flex flex-1 items-center justify-center rounded-brand px-4 py-2 text-sm font-semibold text-white"
+                style={{ backgroundColor: 'var(--haip-primary, #06bdb4)' }}
+                href={access.mobileKey.deepLink}
+              >
+                {access.mobileKey.label || 'Open mobile key'}
+              </a>
+            )}
+          </div>
         </section>
       )}
     </div>
