@@ -21,16 +21,19 @@ import { PaymentService } from '../payment/payment.service';
 import { FolioService } from '../folio/folio.service';
 import { DoorLockService } from '../door-lock/door-lock.service';
 import { StorageService } from '../media/storage/storage.service';
+import { EmailService } from '../agent/guest-comms/email.service';
 import {
   defaultTokenTtlSeconds,
   signCheckInToken,
 } from './check-in-token';
 import { resolveCheckInMagicSecret } from './check-in-secret';
+import { buildCheckInAppUrl } from './check-in-app-url';
 import { WalletPassService } from './wallet-pass.service';
 import type {
   GuestAcceptUpsellDto,
   GuestPayDto,
   GuestPreRegisterDto,
+  RequestCheckInLinkDto,
 } from './dto/guest-check-in.dto';
 import type { CheckInPrincipal } from './check-in-magic.guard';
 
@@ -46,6 +49,7 @@ interface OnlineCheckInSettings {
   walletEnabled?: boolean;
   lockProvider?: string;
   checkInAppOrigin?: string;
+  privacyPolicyUrl?: string;
 }
 
 interface UpsellCampaign {
@@ -72,6 +76,7 @@ export class GuestCheckInService {
     private readonly doorLock: DoorLockService,
     private readonly wallet: WalletPassService,
     private readonly storage: StorageService,
+    private readonly email: EmailService,
   ) {}
 
   private magicSecret(): string {
@@ -107,7 +112,7 @@ export class GuestCheckInService {
 
     return {
       token,
-      url: `${origin}/check-in?token=${encodeURIComponent(token)}`,
+      url: buildCheckInAppUrl(origin, token),
       expiresAt: new Date(exp * 1000).toISOString(),
     };
   }
@@ -245,10 +250,12 @@ export class GuestCheckInService {
       config: configFlags,
       folioBalance,
       registrationComplete,
-      roomReady:
-        Boolean(roomReady) ||
-        (ctx.reservation.status === 'confirmed' && configFlags.autoAssignRoom),
+      roomReady: Boolean(roomReady),
       canSelfCheckIn,
+      privacyPolicyUrl:
+        (online.privacyPolicyUrl ||
+          (ctx.property as { website?: string | null }).website ||
+          null) ?? null,
       steps: {
         registration: registrationComplete,
         id: Boolean(
@@ -468,6 +475,11 @@ export class GuestCheckInService {
     const ctx = await this.loadContext(principal);
     const campaigns = (ctx.settings.upsellCampaigns ?? []).filter((c) => c.enabled !== false);
     const arrival = String(ctx.reservation.arrivalDate);
+    const accepted = Array.isArray(
+      (ctx.reservation.registrationData as any)?.acceptedUpsellCampaignIds,
+    )
+      ? ((ctx.reservation.registrationData as any).acceptedUpsellCampaignIds as string[])
+      : [];
     const eligible = [];
 
     for (const c of campaigns) {
@@ -504,6 +516,7 @@ export class GuestCheckInService {
           currencyCode: c.currencyCode || ctx.property.currencyCode,
           targetRoomTypeId: target.id,
           targetRoomTypeName: target.name,
+          alreadyAccepted: accepted.includes(c.id),
         });
       } else {
         eligible.push({
@@ -513,6 +526,7 @@ export class GuestCheckInService {
           description: c.description ?? c.name,
           priceDelta: c.priceDelta ?? 0,
           currencyCode: c.currencyCode || ctx.property.currencyCode,
+          alreadyAccepted: accepted.includes(c.id),
         });
       }
     }
@@ -520,12 +534,71 @@ export class GuestCheckInService {
     return { offers: eligible.sort((a, b) => (a.priceDelta ?? 0) - (b.priceDelta ?? 0)) };
   }
 
+  /**
+   * Public: re-send a check-in magic link when confirmation + guest email match.
+   * Always returns a generic success message (no enumeration).
+   */
+  async requestLink(dto: RequestCheckInLinkDto) {
+    const confirmation = dto.confirmationNumber.trim();
+    const email = dto.email.trim().toLowerCase();
+    const [reservation] = await this.db
+      .select()
+      .from(reservations)
+      .where(eq(reservations.confirmationNumber, confirmation))
+      .limit(1);
+    if (reservation) {
+      const [guest] = await this.db
+        .select()
+        .from(guests)
+        .where(eq(guests.id, reservation.guestId))
+        .limit(1);
+      if (guest?.email && String(guest.email).trim().toLowerCase() === email) {
+        const link = await this.issueLinkForReservation(
+          reservation.propertyId,
+          reservation.id,
+        );
+        const [property] = await this.db
+          .select()
+          .from(properties)
+          .where(eq(properties.id, reservation.propertyId));
+        const hotel = property?.staffDisplayName || property?.name || 'your hotel';
+        try {
+          await this.email.send({
+            to: email,
+            subject: `Your check-in link for ${hotel}`,
+            text: `Here is your online check-in link:\n\n${link.url}\n\nThis link expires soon. If you did not request it, you can ignore this email.`,
+            html: `<p>Here is your online check-in link for <strong>${hotel}</strong>:</p><p><a href="${link.url}">Continue check-in</a></p><p>This link expires soon. If you did not request it, you can ignore this email.</p>`,
+          });
+        } catch {
+          // Still return generic OK — do not leak delivery failures.
+        }
+      }
+    }
+    return {
+      ok: true,
+      message: 'If we find a matching reservation, a new check-in link will be emailed shortly.',
+    };
+  }
+
   async acceptUpsell(principal: CheckInPrincipal, dto: GuestAcceptUpsellDto) {
     const ctx = await this.loadContext(principal);
+    if (['checked_in', 'stayover', 'due_out', 'cancelled', 'no_show', 'checked_out'].includes(
+      ctx.reservation.status,
+    )) {
+      throw new BadRequestException('Upsells cannot be added after check-in');
+    }
     const campaign = (ctx.settings.upsellCampaigns ?? []).find(
       (c) => c.id === dto.campaignId && c.enabled !== false,
     );
     if (!campaign) throw new NotFoundException('Upsell campaign not found');
+
+    const regData = (ctx.reservation.registrationData ?? {}) as Record<string, unknown>;
+    const accepted = Array.isArray(regData['acceptedUpsellCampaignIds'])
+      ? (regData['acceptedUpsellCampaignIds'] as string[])
+      : [];
+    if (accepted.includes(dto.campaignId)) {
+      throw new BadRequestException('This upgrade was already added');
+    }
 
     if (campaign.type === 'room_upgrade' && campaign.targetRoomTypeId) {
       await this.db
@@ -552,7 +625,6 @@ export class GuestCheckInService {
         campaign.type === 'room_upgrade' ? (amount * nights).toFixed(2) : amount.toFixed(2);
 
       // Ensure an open folio exists (pre-arrival may not have one yet).
-      let folioId: string | null = null;
       const existing = await this.db
         .select()
         .from(folios)
@@ -564,30 +636,43 @@ export class GuestCheckInService {
           ),
         )
         .limit(1);
-      if (existing[0]) {
-        folioId = existing[0].id;
-      } else {
-        const created = await this.folios.create({
-          propertyId: principal.propertyId,
-          reservationId: principal.reservationId,
-          guestId: ctx.reservation.guestId,
-          type: 'guest',
-          currencyCode: ctx.reservation.currencyCode || ctx.property.currencyCode,
-        });
-        folioId = created.id;
-      }
+      const folioId = existing[0]
+        ? existing[0].id
+        : (
+            await this.folios.create({
+              propertyId: principal.propertyId,
+              reservationId: principal.reservationId,
+              guestId: ctx.reservation.guestId,
+              type: 'guest',
+              currencyCode: ctx.reservation.currencyCode || ctx.property.currencyCode,
+            })
+          ).id;
 
-      if (folioId) {
-        await this.folios.postCharge(folioId, {
-          propertyId: principal.propertyId,
-          type: campaign.type === 'room_upgrade' ? 'fee' : 'incidental',
-          description: campaign.name,
-          amount: chargeAmount,
-          currencyCode: campaign.currencyCode || ctx.property.currencyCode,
-          serviceDate: new Date().toISOString(),
-        });
-      }
+      await this.folios.postCharge(folioId, {
+        propertyId: principal.propertyId,
+        type: campaign.type === 'room_upgrade' ? 'fee' : 'incidental',
+        description: campaign.name,
+        amount: chargeAmount,
+        currencyCode: campaign.currencyCode || ctx.property.currencyCode,
+        serviceDate: new Date().toISOString(),
+      });
     }
+
+    await this.db
+      .update(reservations)
+      .set({
+        registrationData: {
+          ...regData,
+          acceptedUpsellCampaignIds: [...accepted, dto.campaignId],
+        },
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(reservations.id, principal.reservationId),
+          eq(reservations.propertyId, principal.propertyId),
+        ),
+      );
 
     return this.getSession(principal);
   }
@@ -779,8 +864,7 @@ export class GuestCheckInService {
       accessCode?: string | null;
       provider?: string | null;
       mobileKey?: { type?: string; deepLink?: string; payload?: string } | null;
-    } | null = null;
-
+    } | null;
     try {
       credential = await this.doorLock.findByReservation(
         principal.reservationId,

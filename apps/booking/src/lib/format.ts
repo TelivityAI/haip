@@ -58,3 +58,49 @@ export function nightsBetween(checkIn: string, checkOut: string): number {
   const n = Math.round((b - a) / (1000 * 60 * 60 * 24));
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
+
+function parseYmd(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(year, month - 1, day);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+/** Guest stay range: "Sat 24 – Mon 26 Oct" (same year/month compressed). */
+export function stayDateRange(
+  arrival: string,
+  departure: string,
+  locales?: string | string[],
+): string {
+  const a = parseYmd(arrival);
+  const b = parseYmd(departure);
+  if (!a || !b) return `${arrival} – ${departure}`;
+  const loc = locales ?? undefined;
+  try {
+    const weekday = new Intl.DateTimeFormat(loc, { weekday: 'short', timeZone: 'UTC' });
+    const day = new Intl.DateTimeFormat(loc, { day: 'numeric', timeZone: 'UTC' });
+    const month = new Intl.DateTimeFormat(loc, { month: 'short', timeZone: 'UTC' });
+    const sameMonth =
+      a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth();
+    const left = `${weekday.format(a)} ${day.format(a)}`;
+    const right = sameMonth
+      ? `${weekday.format(b)} ${day.format(b)} ${month.format(b)}`
+      : `${weekday.format(b)} ${day.format(b)} ${month.format(b)}`;
+    const leftFull = sameMonth ? left : `${left} ${month.format(a)}`;
+    return `${leftFull} – ${right}`;
+  } catch {
+    return `${arrival} – ${departure}`;
+  }
+}

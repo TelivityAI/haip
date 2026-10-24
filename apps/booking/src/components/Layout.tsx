@@ -10,43 +10,53 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const displayName =
     branding?.displayName ?? config?.displayName ?? 'Book your stay';
 
+  const isCheckIn = pathname === '/check-in' || pathname.startsWith('/check-in');
+
   return (
-    <div className="haip-booking min-h-screen bg-gray-50">
-      <header
-        className="border-b border-gray-200 bg-white"
-        style={{ borderTopWidth: 4, borderTopColor: 'var(--haip-primary, #06bdb4)' }}
-      >
-        <div className={`mx-auto flex items-center justify-between px-4 py-4 ${isRequestFlow ? 'max-w-5xl' : 'max-w-3xl'}`}>
-          <Link
-            to="/"
-            className="text-lg font-semibold text-gray-900"
-            aria-disabled={requestSubmissionStatus === 'pending'}
-            tabIndex={requestSubmissionStatus === 'pending' ? -1 : undefined}
-            onClick={(event) => {
-              if (requestSubmissionStatus === 'pending') {
-                event.preventDefault();
-                return;
-              }
-              if (pathname === '/request/received') reset();
-            }}
-          >
-            {displayName}
-          </Link>
-          {!isRequestFlow && pathname !== '/check-in' && (
+    <div
+      className={`haip-booking min-h-screen ${isCheckIn ? '' : 'bg-gray-50'}`}
+      style={{ background: isCheckIn ? '#f0f0f6' : undefined }}
+      data-haip-check-in={isCheckIn ? 'true' : undefined}
+    >
+      {!isCheckIn && (
+        <header
+          className="border-b border-gray-200 bg-white"
+          style={{ borderTopWidth: 4, borderTopColor: 'var(--haip-primary, #06bdb4)' }}
+        >
+          <div className={`mx-auto flex items-center justify-between px-4 py-4 ${isRequestFlow ? 'max-w-5xl' : 'max-w-3xl'}`}>
             <Link
-              to="/manage"
-              className="text-sm font-medium"
-              style={{ color: 'var(--haip-accent, #f2641b)' }}
+              to="/"
+              className="text-lg font-semibold text-gray-900"
+              aria-disabled={requestSubmissionStatus === 'pending'}
+              tabIndex={requestSubmissionStatus === 'pending' ? -1 : undefined}
+              onClick={(event) => {
+                if (requestSubmissionStatus === 'pending') {
+                  event.preventDefault();
+                  return;
+                }
+                if (pathname === '/request/received') reset();
+              }}
             >
-              Manage booking
+              {displayName}
             </Link>
-          )}
-        </div>
-      </header>
+            {!isRequestFlow && (
+              <Link
+                to="/manage"
+                className="text-sm font-medium"
+                style={{ color: 'var(--haip-accent, #f2641b)' }}
+              >
+                Manage booking
+              </Link>
+            )}
+          </div>
+        </header>
+      )}
       <main className={`mx-auto px-4 py-6 ${isRequestFlow ? 'max-w-5xl' : 'max-w-3xl'}`}>{children}</main>
-      <footer className={`mx-auto px-4 py-6 text-center text-xs text-gray-400 ${isRequestFlow ? 'max-w-5xl' : 'max-w-3xl'}`}>
-        Commission-free direct booking · Powered by HAIP
-      </footer>
+      {!isCheckIn && (
+        <footer className={`mx-auto px-4 py-6 text-center text-xs text-gray-400 ${isRequestFlow ? 'max-w-5xl' : 'max-w-3xl'}`}>
+          Commission-free direct booking · Powered by HAIP
+        </footer>
+      )}
     </div>
   );
 }

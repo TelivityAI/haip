@@ -79,6 +79,7 @@ export interface CheckInSession {
   };
   francePackEnabled?: boolean;
   stripePublishableKey?: string | null;
+  privacyPolicyUrl?: string | null;
 }
 
 export interface UpsellOffer {
@@ -89,6 +90,7 @@ export interface UpsellOffer {
   priceDelta: number;
   currencyCode: string;
   targetRoomTypeName?: string;
+  alreadyAccepted?: boolean;
 }
 
 export interface RoomAccess {
@@ -171,6 +173,13 @@ export const checkInApi = {
   },
   access: async (): Promise<RoomAccess> => {
     const { data } = await checkInApiHttp.get<RoomAccess>('/access');
+    return data;
+  },
+  requestLink: async (body: {
+    confirmationNumber: string;
+    email: string;
+  }): Promise<{ ok: boolean; message: string }> => {
+    const { data } = await checkInApiHttp.post('/request-link', body);
     return data;
   },
 };

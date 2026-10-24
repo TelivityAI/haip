@@ -145,6 +145,7 @@ describe('GuestCheckInService', () => {
       doorLock as any,
       wallet as any,
       storage as any,
+      { send: vi.fn().mockResolvedValue({ status: 'sent' }) } as any,
     );
   });
 

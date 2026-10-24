@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40" role="img" aria-label="Add to Apple Wallet">
+  <rect width="120" height="40" rx="6" fill="#000"/>
+  <text x="60" y="16" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="8">Add to</text>
+  <text x="60" y="30" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="12" font-weight="600">Apple Wallet</text>
+</svg>
