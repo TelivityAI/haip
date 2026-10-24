@@ -178,6 +178,9 @@ export const reservations = pgTable('reservations', {
   // Registration card acknowledgment
   registrationSignedAt: timestamp('registration_signed_at', { withTimezone: true }),
 
+  /** Set when the guest completed self check-in on their phone (null for desk-only). */
+  onlineCheckInCompletedAt: timestamp('online_check_in_completed_at', { withTimezone: true }),
+
   /** When true, room moves are blocked unless explicitly overridden. */
   doNotMove: boolean('do_not_move').notNull().default(false),
 

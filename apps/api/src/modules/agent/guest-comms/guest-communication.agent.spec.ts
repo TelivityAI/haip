@@ -31,6 +31,7 @@ describe('GuestCommunicationAgent', () => {
       db as any,
       { getOrCreateConfig } as any,
       emailService as any,
+      { get: vi.fn().mockReturnValue(undefined) } as any,
     );
   });
 

@@ -1,4 +1,5 @@
 import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { eq, and, gte, not, inArray } from 'drizzle-orm';
 import {
   reservations,
@@ -12,6 +13,10 @@ import {
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
 import { EmailService } from './email.service';
+import {
+  defaultTokenTtlSeconds,
+  signCheckInToken,
+} from '../../guest-check-in/check-in-token';
 import type {
   HaipAgent,
   AgentContext,
@@ -43,7 +48,34 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
     @Inject(DRIZZLE) private readonly db: any,
     private readonly agentService: AgentService,
     private readonly emailService: EmailService,
+    private readonly configService: ConfigService,
   ) {}
+
+  private buildCheckInUrl(property: any, reservationId: string): string | undefined {
+    const online = (property.settings as any)?.onlineCheckIn;
+    if (online?.enabled === false) return undefined;
+    const origin = (
+      online?.checkInAppOrigin ||
+      this.configService.get<string>('BOOKING_APP_ORIGIN') ||
+      ''
+    ).replace(/\/$/, '');
+    if (!origin) return undefined;
+    const secret =
+      this.configService.get<string>('CHECK_IN_MAGIC_SECRET') ||
+      this.configService.get<string>('JWT_SECRET') ||
+      this.configService.get<string>('SESSION_SECRET') ||
+      'dev-check-in-secret-change-me';
+    const token = signCheckInToken(
+      {
+        v: 1,
+        reservationId,
+        propertyId: property.id,
+        exp: Math.floor(Date.now() / 1000) + defaultTokenTtlSeconds(),
+      },
+      secret,
+    );
+    return `${origin}/check-in?token=${encodeURIComponent(token)}`;
+  }
 
   onModuleInit() {
     this.agentService.registerAgent(this);
@@ -335,6 +367,10 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
         const daysSinceDeparture = daysSinceDate(res.departureDate);
 
         for (const type of typesToGenerate) {
+          const checkInUrl =
+            type === 'pre_arrival' || type === 'day_of'
+              ? this.buildCheckInUrl(property, res.id)
+              : undefined;
           const draft = generateEmailDraft(
             type,
             guestCtx,
@@ -342,7 +378,10 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
             propCtx,
             commConfig,
             previousTypes,
-            type === 'win_back' ? { daysSinceDeparture } : undefined,
+            {
+              ...(type === 'win_back' ? { daysSinceDeparture } : {}),
+              ...(checkInUrl ? { checkInUrl } : {}),
+            },
           );
           if (!draft) continue;
 

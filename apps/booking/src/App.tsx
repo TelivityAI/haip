@@ -9,6 +9,7 @@ import { Payment } from './pages/Payment';
 import { PaymentReturn } from './pages/PaymentReturn';
 import { Confirmation } from './pages/Confirmation';
 import { ManageBooking } from './pages/ManageBooking';
+import { CheckIn } from './pages/CheckIn';
 import { RequestApplication } from './pages/RequestApplication';
 import { RequestPayment } from './pages/RequestPayment';
 import { RequestReceived } from './pages/RequestReceived';
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/payment" element={<Payment />} />
         <Route path="/payment-return" element={<PaymentReturn />} />
         <Route path="/confirmation" element={<Confirmation />} />
+        <Route path="/check-in" element={<CheckIn />} />
         {requestRoutesEnabled && (
           <>
             <Route path="/request/application" element={<RequestApplication />} />
