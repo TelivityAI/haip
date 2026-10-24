@@ -42,6 +42,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { PosModule } from './modules/pos/pos.module';
 import { DoorLockModule } from './modules/door-lock/door-lock.module';
+import { GuestCheckInModule } from './modules/guest-check-in/guest-check-in.module';
 import { LlmModule } from './modules/llm/llm.module';
 import { SearchModule } from './modules/search/search.module';
 import { StaffNotificationsModule } from './modules/staff-notifications/staff-notifications.module';
@@ -104,6 +105,7 @@ const imports: any[] = [
   PosModule,
   FolioInboundModule,
   DoorLockModule,
+  GuestCheckInModule,
   LlmModule,
   SearchModule,
   StaffNotificationsModule,

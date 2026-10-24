@@ -9,9 +9,21 @@ export interface AccessCredentialRequest {
   propertyId: string;
   reservationId: string;
   roomId?: string | null;
+  /** Vendor lock/device id for the room when mapped. */
+  externalLockId?: string | null;
   /** ISO timestamps bounding when the credential is valid. */
   validFrom?: string;
   validTo?: string;
+}
+
+export interface MobileKeyPayload {
+  /** How the guest phone unlocks — BLE app deep-link, NFC Wallet, or vendor eKey. */
+  type: 'ble' | 'nfc' | 'ekey' | 'deeplink';
+  /** Opaque vendor payload / credential id for the mobile key. */
+  payload?: string;
+  /** Deep link into vendor app or Wallet add URL when available. */
+  deepLink?: string;
+  label?: string;
 }
 
 export interface AccessCredential {
@@ -19,6 +31,8 @@ export interface AccessCredential {
   credentialId: string;
   /** Optional human-presentable code (PIN) for keypad locks. */
   accessCode?: string;
+  /** Optional mobile / Wallet / BLE key when the provider supports it. */
+  mobileKey?: MobileKeyPayload;
 }
 
 export interface LockProvider {

@@ -102,6 +102,9 @@ export const rooms = pgTable('rooms', {
   maintenanceNotes: text('maintenance_notes'),
   lastInspectedAt: timestamp('last_inspected_at', { withTimezone: true }),
 
+  /** Vendor lock/device id for contactless access (Nuki / TTLock / Salto / webhook). */
+  externalLockId: varchar('external_lock_id', { length: 100 }),
+
   // Status
   isActive: boolean('is_active').notNull().default(true),
 

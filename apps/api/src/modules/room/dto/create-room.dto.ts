@@ -56,4 +56,12 @@ export class CreateRoomDto {
   @IsArray()
   @IsString({ each: true })
   amenities?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Vendor lock/device id for contactless room access',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  externalLockId?: string;
 }

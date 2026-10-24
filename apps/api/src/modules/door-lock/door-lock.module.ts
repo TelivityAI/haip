@@ -53,6 +53,6 @@ import { DoorLockController } from './door-lock.controller';
     },
     DoorLockListener,
   ],
-  exports: [LOCK_PROVIDER, DoorLockCredentialService],
+  exports: [LOCK_PROVIDER, DoorLockCredentialService, DoorLockService],
 })
 export class DoorLockModule {}

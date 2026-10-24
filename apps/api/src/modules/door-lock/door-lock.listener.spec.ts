@@ -21,12 +21,20 @@ describe('DoorLockListener', () => {
   let lock: { issueCredential: ReturnType<typeof vi.fn>; revokeCredential: ReturnType<typeof vi.fn> };
   let listener: DoorLockListener;
 
+  const db = {
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ externalLockId: 'lock-42' }]),
+      }),
+    }),
+  };
+
   beforeEach(() => {
     lock = {
       issueCredential: vi.fn().mockResolvedValue({ provider: 'webhook', credentialId: 'x', accessCode: '000000' }),
       revokeCredential: vi.fn().mockResolvedValue(undefined),
     };
-    listener = new DoorLockListener(lock as any);
+    listener = new DoorLockListener(lock as any, db as any);
   });
 
   it('provisions access on check-in, scoped to the property and room', async () => {
@@ -35,6 +43,7 @@ describe('DoorLockListener', () => {
       propertyId: PROPERTY_ID,
       reservationId: RESERVATION_ID,
       roomId: 'room-9',
+      externalLockId: 'lock-42',
     });
   });
 

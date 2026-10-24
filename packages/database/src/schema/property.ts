@@ -81,6 +81,39 @@ export const properties = pgTable('properties', {
       revpar?: { warnBelow?: number };
       totalRevenue?: { warnBelow?: number };
     };
+    /** Phone online check-in + contactless access (guest-facing). */
+    onlineCheckIn?: {
+      enabled?: boolean;
+      selfCheckInEnabled?: boolean;
+      /** HH:MM — guests cannot self check-in before this (defaults to property.checkInTime). */
+      checkInStartTime?: string;
+      autoAssignRoom?: boolean;
+      requireIdPhoto?: boolean;
+      requirePaymentWhenBalanceDue?: boolean;
+      accessMode?: 'smart_lock' | 'pin_instructions' | 'unconfigured';
+      accessInstructions?: string;
+      walletEnabled?: boolean;
+      /** Preferred lock adapter name for this property (webhook | nuki | ttlock | salto_ks). */
+      lockProvider?: string;
+      /** Absolute origin of the booking/check-in app for magic links. */
+      checkInAppOrigin?: string;
+    };
+    /** Operator-configured upsell campaigns shown during online check-in. */
+    upsellCampaigns?: Array<{
+      id: string;
+      name: string;
+      enabled?: boolean;
+      type: 'room_upgrade' | 'addon';
+      /** Target room type for upgrades. */
+      targetRoomTypeId?: string;
+      /** Flat amount charged per night (upgrade) or once (addon). */
+      priceDelta?: number;
+      currencyCode?: string;
+      description?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      sortOrder?: number;
+    }>;
   }>(),
 
   // Status

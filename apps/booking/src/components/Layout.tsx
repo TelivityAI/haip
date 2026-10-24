@@ -32,7 +32,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           >
             {displayName}
           </Link>
-          {!isRequestFlow && (
+          {!isRequestFlow && pathname !== '/check-in' && (
             <Link
               to="/manage"
               className="text-sm font-medium"
