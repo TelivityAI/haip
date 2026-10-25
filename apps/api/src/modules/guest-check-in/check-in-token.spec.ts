@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { signCheckInToken, verifyCheckInToken } from './check-in-token';
+import {
+  defaultTokenTtlSeconds,
+  maxTokenTtlSeconds,
+  signCheckInToken,
+  verifyCheckInToken,
+} from './check-in-token';
 
 describe('check-in-token', () => {
   const secret = 'test-secret-for-check-in';
+
+  it('uses a 48h default TTL capped at 7 days', () => {
+    expect(defaultTokenTtlSeconds()).toBe(48 * 60 * 60);
+    expect(maxTokenTtlSeconds()).toBe(7 * 24 * 60 * 60);
+  });
 
   it('round-trips a valid payload', () => {
     const payload = {

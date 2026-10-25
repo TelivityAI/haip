@@ -8,6 +8,7 @@ import { EmailModule } from '../agent/guest-comms/email.module';
 import { GuestCheckInController } from './guest-check-in.controller';
 import { GuestCheckInService } from './guest-check-in.service';
 import { CheckInMagicGuard } from './check-in-magic.guard';
+import { CheckInThrottleGuard } from './check-in-throttle.guard';
 import { WalletPassService } from './wallet-pass.service';
 
 @Module({
@@ -20,7 +21,12 @@ import { WalletPassService } from './wallet-pass.service';
     EmailModule,
   ],
   controllers: [GuestCheckInController],
-  providers: [GuestCheckInService, CheckInMagicGuard, WalletPassService],
+  providers: [
+    GuestCheckInService,
+    CheckInMagicGuard,
+    CheckInThrottleGuard,
+    WalletPassService,
+  ],
   exports: [GuestCheckInService],
 })
 export class GuestCheckInModule {}

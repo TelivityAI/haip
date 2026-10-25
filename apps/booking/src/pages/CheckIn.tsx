@@ -15,6 +15,7 @@ import { Button } from '../components/Button';
 import { Field, inputClass } from '../components/Field';
 import { StripeCard, type PaymentResult } from '../components/StripeCard';
 import { WorldlineCard } from '../components/WorldlineCard';
+import { useConfig } from '../context/ConfigContext';
 import { money, stayDateRange } from '../lib/format';
 import { checkInCopy, resolveCheckInLocale } from '../lib/checkInCopy';
 import { resizeImageToDataUrl } from '../lib/resizeImage';
@@ -41,8 +42,11 @@ function walletAsset(name: string): string {
 }
 
 export function CheckIn() {
-  const [params] = useSearchParams();
-  const token = params.get('token') ?? '';
+  const [params, setParams] = useSearchParams();
+  const urlToken = params.get('token') ?? '';
+  const [heldToken, setHeldToken] = useState('');
+  const token = heldToken || urlToken;
+  const { config } = useConfig();
   const queryClient = useQueryClient();
   const copy = useMemo(() => checkInCopy(resolveCheckInLocale()), []);
   const bootstrapped = useRef(false);
@@ -71,9 +75,15 @@ export function CheckIn() {
   const [payAmount, setPayAmount] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Bootstrap from magic-link / payment-return ?token=, then strip it from the URL.
   useEffect(() => {
-    if (token) setCheckInToken(token);
-  }, [token]);
+    if (!urlToken) return;
+    setCheckInToken(urlToken);
+    setHeldToken(urlToken);
+    const next = new URLSearchParams(params);
+    next.delete('token');
+    setParams(next, { replace: true });
+  }, [urlToken, params, setParams]);
 
   const sessionQuery = useQuery({
     queryKey: ['check-in-session', token],
@@ -191,13 +201,33 @@ export function CheckIn() {
   });
 
   const requestLink = useMutation({
-    mutationFn: () =>
-      checkInApi.requestLink({
+    mutationFn: () => {
+      const propertyId = config?.propertyId;
+      if (!propertyId) {
+        throw new Error('Property is still loading. Try again in a moment.');
+      }
+      return checkInApi.requestLink({
+        propertyId,
         confirmationNumber: reqConfirmation,
         email: reqEmail,
-      }),
+      });
+    },
     onSuccess: () => setReqDone(true),
   });
+
+  const ficheNeeded =
+    Boolean(sessionQuery.data?.francePackEnabled) &&
+    (!nationality || (nationality !== 'FR' && nationality !== 'FRA' && nationality !== 'FRANCE'));
+
+  const paymentUiReady = useMemo(() => {
+    const p = sessionQuery.data?.payment;
+    if (!p) return false;
+    if (p.clientMode === 'mock') return true;
+    if (p.clientMode === 'stripe') return Boolean(sessionQuery.data?.stripePublishableKey);
+    if (p.clientMode === 'redsys') return p.redsysConfigured === true;
+    if (p.clientMode === 'worldline') return p.worldlineConfigured === true;
+    return false;
+  }, [sessionQuery.data]);
 
   const worldlineSession = useCallback(() => checkInApi.worldlineTokenization(), []);
 
@@ -275,7 +305,12 @@ export function CheckIn() {
             </Field>
             <Button
               className="w-full"
-              disabled={!reqConfirmation.trim() || !reqEmail.trim() || requestLink.isPending}
+              disabled={
+                !reqConfirmation.trim() ||
+                !reqEmail.trim() ||
+                !config?.propertyId ||
+                requestLink.isPending
+              }
               onClick={() => requestLink.mutate()}
             >
               {copy.requestLink}
@@ -348,7 +383,7 @@ export function CheckIn() {
             <Field label={copy.phone}>
               <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} />
             </Field>
-            <Field label={copy.nationality}>
+            <Field label={copy.nationality} required={Boolean(session.francePackEnabled)}>
               <input
                 className={inputClass}
                 placeholder="FR"
@@ -357,10 +392,10 @@ export function CheckIn() {
                 onChange={(e) => setNationality(e.target.value.toUpperCase())}
               />
             </Field>
-            <Field label={copy.address}>
+            <Field label={copy.address} required={ficheNeeded}>
               <input className={inputClass} value={address} onChange={(e) => setAddress(e.target.value)} />
             </Field>
-            {session.francePackEnabled && nationality && nationality !== 'FR' && (
+            {ficheNeeded && (
               <>
                 <Field label={copy.dateOfBirth} required>
                   <input
@@ -395,10 +430,8 @@ export function CheckIn() {
               !firstName ||
               !lastName ||
               !signed ||
-              (Boolean(session.francePackEnabled) &&
-                Boolean(nationality) &&
-                nationality !== 'FR' &&
-                (!dateOfBirth || !placeOfBirth || !address || !phone || !email))
+              (Boolean(session.francePackEnabled) && !nationality) ||
+              (ficheNeeded && (!dateOfBirth || !placeOfBirth || !address || !phone || !email))
             }
             onClick={() => setStep('id')}
           >
@@ -564,7 +597,11 @@ export function CheckIn() {
             />
           </Field>
           {pay.isError && <p className="text-sm text-red-600">{errorMessage(pay.error)}</p>}
-          {session.payment?.clientMode === 'redsys' ? (
+          {!paymentUiReady ? (
+            <p className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {copy.paymentNotConfigured}
+            </p>
+          ) : session.payment?.clientMode === 'redsys' ? (
             <Button
               className="w-full"
               disabled={pay.isPending || !Number(payAmount)}

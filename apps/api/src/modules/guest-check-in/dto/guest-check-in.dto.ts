@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -112,14 +113,19 @@ export class IssueCheckInLinkDto {
   @IsUUID()
   reservationId!: string;
 
-  @ApiPropertyOptional({ description: 'Token TTL in seconds (default 14 days)' })
+  @ApiPropertyOptional({ description: 'Token TTL in seconds (default 48 hours, max 7 days)' })
   @IsOptional()
   @IsNumber()
   @Min(60)
+  @Max(7 * 24 * 60 * 60)
   ttlSeconds?: number;
 }
 
 export class RequestCheckInLinkDto {
+  @ApiProperty({ description: 'Property id (scopes confirmation lookup to this hotel)' })
+  @IsUUID()
+  propertyId!: string;
+
   @ApiProperty({ description: 'Reservation confirmation number' })
   @IsString()
   @MaxLength(40)

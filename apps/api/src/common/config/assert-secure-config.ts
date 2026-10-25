@@ -22,6 +22,9 @@ export function assertSecureConfig(env: NodeJS.ProcessEnv = process.env): void {
   if (isPaymentGatewayMockMode(env)) {
     problems.push('PAYMENT_GATEWAY=mock (or STRIPE_MODE=mock when PAYMENT_GATEWAY unset)');
   }
+  if (!env['ID_ENCRYPTION_KEY']?.trim()) {
+    problems.push('ID_ENCRYPTION_KEY is unset (required to encrypt guest ID photos at rest)');
+  }
   if (problems.length > 0) {
     throw new Error(
       `Refusing to start in production with insecure config: ${problems.join(', ')}. ` +

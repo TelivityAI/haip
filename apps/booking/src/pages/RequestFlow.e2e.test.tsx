@@ -100,6 +100,7 @@ const quote: QuoteResponse = {
 
 function config(bookingMode: BookingConfig['bookingMode']): BookingConfig {
   return {
+    propertyId: '44444444-4444-4444-8444-444444444444',
     isEnabled: true,
     displayName: 'Hotel Vertical',
     depositPolicy: { type: 'percentage', percentage: 30, refundable: true },

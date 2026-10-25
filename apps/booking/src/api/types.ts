@@ -50,6 +50,7 @@ export type BookingApplicationAnswer = string | string[] | boolean;
 export type BookingApplicationAnswers = Record<string, BookingApplicationAnswer>;
 
 export interface BookingConfig {
+  propertyId: string;
   isEnabled: boolean;
   displayName?: string | null;
   logoMediaId?: string | null;

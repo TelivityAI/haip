@@ -133,7 +133,7 @@ describe('CheckIn payment modes', () => {
     payMock.mockResolvedValue({ ...baseSession, nextAction });
     renderPay({
       ...baseSession,
-      payment: { provider: 'redsys', clientMode: 'redsys' },
+      payment: { provider: 'redsys', clientMode: 'redsys', redsysConfigured: true },
     });
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Pay securely via Redsys/i })).toBeTruthy(),
@@ -154,5 +154,16 @@ describe('CheckIn payment modes', () => {
       expect(screen.getByText(/Payment is not configured/i)).toBeTruthy(),
     );
     expect(screen.queryByRole('button', { name: /Pay \(demo\)/i })).toBeNull();
+  });
+
+  it('hides redsys pay when credentials are missing', async () => {
+    renderPay({
+      ...baseSession,
+      payment: { provider: 'redsys', clientMode: 'redsys', redsysConfigured: false },
+    });
+    await waitFor(() =>
+      expect(screen.getByText(/Payment is not configured/i)).toBeTruthy(),
+    );
+    expect(screen.queryByRole('button', { name: /Redsys/i })).toBeNull();
   });
 });

@@ -15,6 +15,7 @@ import type { Response } from 'express';
 import { Public } from '../auth/public.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CheckInMagicGuard, type CheckInPrincipal } from './check-in-magic.guard';
+import { CheckInThrottleGuard } from './check-in-throttle.guard';
 import { GuestCheckInService } from './guest-check-in.service';
 import {
   GuestAcceptUpsellDto,
@@ -46,6 +47,7 @@ export class GuestCheckInController {
 
   @Post('request-link')
   @Public()
+  @UseGuards(CheckInThrottleGuard)
   @ApiOperation({
     summary: 'Guest: request a new check-in link by confirmation number + email',
   })

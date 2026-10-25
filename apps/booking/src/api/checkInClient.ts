@@ -98,6 +98,7 @@ export interface RoomAccess {
   accessCode: string | null;
   accessMode: string;
   instructions: string | null;
+  accessUnavailableReason?: string | null;
   provider: string | null;
   mobileKey: { type?: string; deepLink?: string; label?: string } | null;
   wallet: {
@@ -176,6 +177,7 @@ export const checkInApi = {
     return data;
   },
   requestLink: async (body: {
+    propertyId: string;
     confirmationNumber: string;
     email: string;
   }): Promise<{ ok: boolean; message: string }> => {

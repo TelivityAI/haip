@@ -21,6 +21,7 @@ describe('assertSecureConfig', () => {
         AUTH_ENABLED: 'true',
         STRIPE_MODE: 'mock',
         PAYMENT_GATEWAY: 'adyen',
+        ID_ENCRYPTION_KEY: 'a'.repeat(64),
       } as any),
     ).not.toThrow();
   });
@@ -35,7 +36,20 @@ describe('assertSecureConfig', () => {
     ).not.toThrow();
   });
 
+  it('refuses to boot in production without ID_ENCRYPTION_KEY', () => {
+    expect(() =>
+      assertSecureConfig({ NODE_ENV: 'production', AUTH_ENABLED: 'true', STRIPE_MODE: 'live' } as any),
+    ).toThrow(/ID_ENCRYPTION_KEY/);
+  });
+
   it('passes a properly-configured production', () => {
-    expect(() => assertSecureConfig({ NODE_ENV: 'production', AUTH_ENABLED: 'true', STRIPE_MODE: 'live' } as any)).not.toThrow();
+    expect(() =>
+      assertSecureConfig({
+        NODE_ENV: 'production',
+        AUTH_ENABLED: 'true',
+        STRIPE_MODE: 'live',
+        ID_ENCRYPTION_KEY: 'a'.repeat(64),
+      } as any),
+    ).not.toThrow();
   });
 });

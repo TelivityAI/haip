@@ -136,12 +136,14 @@ describe('GuestCheckInService', () => {
       }),
     };
     config = {
-      get: vi.fn((key: string) => {
+      get: vi.fn((key: string, def?: string) => {
         if (key === 'CHECK_IN_MAGIC_SECRET') return 'test-secret';
         if (key === 'NODE_ENV') return 'test';
         if (key === 'STRIPE_PUBLISHABLE_KEY') return null;
         if (key === 'BOOKING_APP_ORIGIN') return 'http://localhost:5174';
-        return undefined;
+        if (key === 'PAYMENT_GATEWAY') return undefined;
+        if (key === 'STRIPE_MODE') return def ?? 'mock';
+        return def;
       }),
     };
 
@@ -239,6 +241,25 @@ describe('GuestCheckInService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('rejects France fiche pre-register when nationality is empty', async () => {
+    mockLoadContext({ guest: { ...baseGuest, nationality: null as any } });
+    await expect(
+      service.preRegister(principal, {
+        registrationSigned: true,
+        registrationData: {
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          email: 'ada@example.com',
+          phone: '+331',
+          address: 'Paris',
+          dateOfBirth: '1990-01-01',
+          placeOfBirth: 'London',
+        },
+        idImageBase64: `data:image/jpeg;base64,${Buffer.alloc(64, 1).toString('base64')}`,
+      }),
+    ).rejects.toThrow(/nationality/i);
+  });
+
   it('stores ID photo via StorageService and persists imageMediaId', async () => {
     mockLoadContext();
     reservations.preRegister.mockResolvedValue({
@@ -280,6 +301,16 @@ describe('GuestCheckInService', () => {
   });
 
   it('pay passes redirect URLs and returns nextAction without treating failure as success', async () => {
+    const prevGateway = process.env['PAYMENT_GATEWAY'];
+    process.env['PAYMENT_GATEWAY'] = 'redsys';
+    config.get.mockImplementation((key: string, def?: string) => {
+      if (key === 'PAYMENT_GATEWAY') return 'redsys';
+      if (key === 'CHECK_IN_MAGIC_SECRET') return 'test-secret';
+      if (key === 'STRIPE_MODE') return 'live';
+      if (key === 'BOOKING_APP_ORIGIN') return 'http://localhost:5174';
+      return def;
+    });
+
     mockLoadContext({
       reservation: {
         registrationSubmittedAt: new Date(),
@@ -324,21 +355,64 @@ describe('GuestCheckInService', () => {
       return chain([]);
     });
 
-    const result = await service.pay(principal, {
-      amount: 50,
-      gatewayPaymentToken: 'redsys_redirect',
-      gatewayProvider: 'redsys',
-      returnUrl: 'https://book.example/check-in?token=abc&step=ready',
-    });
-
-    expect(payments.authorizePayment).toHaveBeenCalledWith(
-      expect.objectContaining({
-        redirectUrlOk: 'https://book.example/check-in?token=abc&step=ready',
-        redirectUrlKo: 'https://book.example/check-in?token=abc&step=ready',
+    try {
+      const result = await service.pay(principal, {
+        amount: 50,
+        gatewayPaymentToken: 'redsys_redirect',
         gatewayProvider: 'redsys',
+        returnUrl: 'https://book.example/check-in?token=abc&step=ready',
+      });
+
+      expect(payments.authorizePayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          redirectUrlOk: 'https://book.example/check-in?token=abc&step=ready',
+          redirectUrlKo: 'https://book.example/check-in?token=abc&step=ready',
+          gatewayProvider: 'redsys',
+        }),
+      );
+      expect(result.nextAction?.url).toContain('sis.example');
+    } finally {
+      if (prevGateway === undefined) delete process.env['PAYMENT_GATEWAY'];
+      else process.env['PAYMENT_GATEWAY'] = prevGateway;
+    }
+  });
+
+  it('rejects mock gatewayProvider outside mock mode', async () => {
+    const prevGateway = process.env['PAYMENT_GATEWAY'];
+    process.env['PAYMENT_GATEWAY'] = 'stripe';
+    config.get.mockImplementation((key: string, def?: string) => {
+      if (key === 'PAYMENT_GATEWAY') return 'stripe';
+      if (key === 'STRIPE_MODE') return 'live';
+      return def;
+    });
+    mockLoadContext({
+      folios: [{ id: 'folio-1', status: 'open', balance: '10.00' }],
+    });
+    try {
+      await expect(
+        service.pay(principal, {
+          amount: 10,
+          gatewayPaymentToken: 'tok_demo',
+          gatewayProvider: 'mock',
+        }),
+      ).rejects.toThrow(/Mock payment gateway is not enabled/i);
+    } finally {
+      if (prevGateway === undefined) delete process.env['PAYMENT_GATEWAY'];
+      else process.env['PAYMENT_GATEWAY'] = prevGateway;
+    }
+  });
+
+  it('rejects payment amount above folio balance', async () => {
+    mockLoadContext({
+      folios: [{ id: 'folio-1', status: 'open', balance: '10.00' }],
+    });
+    await expect(
+      service.pay(principal, {
+        amount: 50,
+        gatewayPaymentToken: 'tok_demo',
+        gatewayProvider: 'mock',
       }),
-    );
-    expect(result.nextAction?.url).toContain('sis.example');
+    ).rejects.toThrow(/exceeds outstanding balance/i);
   });
 
   it('pay failure does not call getSession success path inconsistently', async () => {
@@ -353,6 +427,34 @@ describe('GuestCheckInService', () => {
         gatewayProvider: 'mock',
       }),
     ).rejects.toThrow(/Authorization failed|declined/i);
+  });
+
+  it('getAccess refuses checked_out stays and suppresses console PIN in smart_lock mode', async () => {
+    mockLoadContext({
+      reservation: { status: 'checked_out' },
+    });
+    await expect(service.getAccess(principal)).rejects.toThrow(/no longer available/i);
+
+    mockLoadContext({
+      reservation: {
+        status: 'checked_in',
+        roomId: 'room-1',
+        checkedInAt: new Date(),
+      },
+      room: { id: 'room-1', number: '101', status: 'occupied' },
+      property: {
+        settings: {
+          onlineCheckIn: { accessMode: 'smart_lock', walletEnabled: true },
+        },
+      },
+    });
+    doorLock.findByReservation.mockResolvedValue({
+      accessCode: '999999',
+      provider: 'console',
+    });
+    const access = await service.getAccess(principal);
+    expect(access.accessCode).toBeNull();
+    expect(access.accessUnavailableReason).toMatch(/unavailable/i);
   });
 
   it('findAssignableRooms excludes rooms held by overlapping assigned stays', async () => {
