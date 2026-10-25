@@ -23,7 +23,7 @@ describe('OpenAPI schema', () => {
     expect(resProps.paymentMode.enum).toEqual(['charge', 'authorize', 'guarantee']);
   });
 
-  it('uses Ligare Hotels branding', () => {
-    expect(String(spec.info.title)).toMatch(/Ligare/i);
+  it('uses HAIP Connect branding', () => {
+    expect(String(spec.info.title)).toMatch(/HAIP Connect/i);
   });
 });

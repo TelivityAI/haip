@@ -9,7 +9,7 @@ export const indexHtml = `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Ligare Hotels — AI Booking Gateway</title>
+    <title>HAIP Connect — Agent Gateway</title>
     <style>
       :root { color-scheme: light dark; }
       body {
@@ -25,10 +25,10 @@ export const indexHtml = `<!doctype html>
     </style>
   </head>
   <body>
-    <h1>Ligare Hotels</h1>
-    <p class="tag">ChatGPT Actions + Claude/Gemini MCP gateway for opted-in HAIP properties.</p>
+    <h1>HAIP Connect agent gateway</h1>
+    <p class="tag">Reference ChatGPT Actions + MCP adapter for the open-source HAIP Connect API.</p>
     <p>
-      This service exposes hotel search and booking to ChatGPT, Claude, and Gemini. It proxies the
+      This service exposes hotel search and booking to AI assistants. It proxies the
       HAIP Connect API and returns guest-facing selling prices only.
     </p>
     <ul>
@@ -49,7 +49,7 @@ export const privacyHtml = `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Privacy — Ligare Hotels</title>
+    <title>Privacy — HAIP Connect agent gateway</title>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;

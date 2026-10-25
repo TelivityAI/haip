@@ -1,9 +1,8 @@
 # HAIP Connect GPT gateway
 
-A thin, standalone gateway that exposes HAIP hotel search and booking as a **ChatGPT
-Custom GPT Action**. It mirrors the OTAIP/Ligare pattern: wrap a domain engine, expose
-it to ChatGPT as tools via an OpenAPI spec, host a tiny backend, and log every tool call
-for training.
+A thin, standalone **reference** gateway that exposes HAIP hotel search and booking as a
+ChatGPT Custom GPT Action (and MCP). Wrap the Connect API, expose tools via OpenAPI,
+host a tiny backend, and optionally log tool calls for debugging.
 
 HAIP's "domain engine" is its already-built **Connect API** (`/api/v1/connect/*`). This
 gateway is a typed HTTP client over it — it does **not** reimplement hotel logic.

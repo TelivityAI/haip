@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Staging E2E smoke for Ligare Hotels gateway.
+ * E2E smoke for the HAIP Connect agent gateway.
  *
  * Env:
  *   GATEWAY_BASE_URL  — public gateway URL

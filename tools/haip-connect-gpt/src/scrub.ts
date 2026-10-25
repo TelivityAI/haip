@@ -9,7 +9,7 @@
  *
  *  - stripNetRate()  — removes any wholesale/net/cost-basis fields from upstream
  *    responses before they reach ChatGPT. HAIP's Connect API already returns
- *    selling prices only, so this is defense-in-depth: it enforces the OTAIP rule
+ *    selling prices only, so this is defense-in-depth: it enforces the selling-price-only rule
  *    ("the GPT sees the selling price only") even if a future HAIP change starts
  *    returning a net field.
  */
