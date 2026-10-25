@@ -21,10 +21,17 @@ describe('SaltoKsLockProvider', () => {
     process.env = { ...env };
   });
 
-  it('reports not configured without site id', () => {
-    delete process.env['SALTO_KS_SITE_ID'];
+  it('reports not configured without OAuth client credentials', () => {
+    delete process.env['SALTO_KS_CLIENT_ID'];
+    delete process.env['SALTO_KS_CLIENT_SECRET'];
     const provider = new SaltoKsLockProvider({} as any);
     expect(provider.isConfigured()).toBe(false);
+  });
+
+  it('is configured with OAuth credentials even when site id is per-room', () => {
+    delete process.env['SALTO_KS_SITE_ID'];
+    const provider = new SaltoKsLockProvider({} as any);
+    expect(provider.isConfigured()).toBe(true);
   });
 
   it('creates site user after OAuth token', async () => {
