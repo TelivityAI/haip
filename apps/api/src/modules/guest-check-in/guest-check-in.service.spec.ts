@@ -34,9 +34,12 @@ describe('GuestCheckInService', () => {
 
   const principal = { v: 1 as const, reservationId: RESERVATION_ID, propertyId: PROPERTY_ID, exp: 9e9 };
 
+  const BOOKING_ID = 'd0000001-0000-4000-d000-000000000001';
+
   const baseReservation = {
     id: RESERVATION_ID,
     propertyId: PROPERTY_ID,
+    bookingId: BOOKING_ID,
     guestId: GUEST_ID,
     status: 'confirmed',
     roomId: null,
@@ -46,13 +49,19 @@ describe('GuestCheckInService', () => {
     nights: 2,
     totalAmount: '200.00',
     currencyCode: 'EUR',
-    confirmationNumber: 'CNF1',
     registrationSubmittedAt: null,
     registrationSignedAt: null,
     registrationData: null,
     guestIdDocument: null,
     onlineCheckInCompletedAt: null,
     checkedInAt: null,
+  };
+
+  const baseBooking = {
+    id: BOOKING_ID,
+    propertyId: PROPERTY_ID,
+    guestId: GUEST_ID,
+    confirmationNumber: 'CNF1',
   };
 
   const baseProperty = {
@@ -178,19 +187,20 @@ describe('GuestCheckInService', () => {
     let call = 0;
     db.select.mockImplementation(() => {
       call += 1;
-      // loadContext: reservation, property, guest, [room], roomType
+      // loadContext: reservation, booking, property, guest, [room], roomType
       // getSession also: folios for balance, payments getClientConfig is separate
       if (call === 1) return chain([reservation]);
-      if (call === 2) return chain([property]);
-      if (call === 3) return chain(guest ? [guest] : []);
+      if (call === 2) return chain([baseBooking]);
+      if (call === 3) return chain([property]);
+      if (call === 4) return chain(guest ? [guest] : []);
       if (reservation.roomId) {
-        if (call === 4) return chain(room ? [room] : []);
-        if (call === 5) return chain([roomType]);
-        if (call === 6) return chain(folioRows);
+        if (call === 5) return chain(room ? [room] : []);
+        if (call === 6) return chain([roomType]);
+        if (call === 7) return chain(folioRows);
         return chain([]);
       }
-      if (call === 4) return chain([roomType]);
-      if (call === 5) return chain(folioRows);
+      if (call === 5) return chain([roomType]);
+      if (call === 6) return chain(folioRows);
       // booking engine deposit / assign helpers
       return chain([]);
     });
@@ -297,17 +307,20 @@ describe('GuestCheckInService', () => {
         registrationSubmittedAt: new Date(),
         registrationSignedAt: new Date(),
       };
+      // loadContext: reservation, booking, property, guest, roomType (+ folio for balance)
       if (n === 1) return chain([reservation]);
-      if (n === 2) return chain([baseProperty]);
-      if (n === 3) return chain([baseGuest]);
-      if (n === 4) return chain([{ id: 'rt-1', name: 'Deluxe' }]);
-      if (n === 5) return chain([{ id: 'folio-1', status: 'open', balance: '50.00' }]);
+      if (n === 2) return chain([baseBooking]);
+      if (n === 3) return chain([baseProperty]);
+      if (n === 4) return chain([baseGuest]);
+      if (n === 5) return chain([{ id: 'rt-1', name: 'Deluxe' }]);
+      if (n === 6) return chain([{ id: 'folio-1', status: 'open', balance: '50.00' }]);
       // second getSession after authorize
-      if (n === 6) return chain([reservation]);
-      if (n === 7) return chain([baseProperty]);
-      if (n === 8) return chain([baseGuest]);
-      if (n === 9) return chain([{ id: 'rt-1', name: 'Deluxe' }]);
-      if (n === 10) return chain([{ id: 'folio-1', status: 'open', balance: '50.00' }]);
+      if (n === 7) return chain([reservation]);
+      if (n === 8) return chain([baseBooking]);
+      if (n === 9) return chain([baseProperty]);
+      if (n === 10) return chain([baseGuest]);
+      if (n === 11) return chain([{ id: 'rt-1', name: 'Deluxe' }]);
+      if (n === 12) return chain([{ id: 'folio-1', status: 'open', balance: '50.00' }]);
       return chain([]);
     });
 

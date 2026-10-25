@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import {
   bookingEngineConfig,
+  bookings,
   folios,
   guests,
   properties,
@@ -129,6 +130,17 @@ export class GuestCheckInService {
       );
     if (!reservation) throw new NotFoundException('Reservation not found');
 
+    const [booking] = await this.db
+      .select()
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.id, reservation.bookingId),
+          eq(bookings.propertyId, principal.propertyId),
+        ),
+      )
+      .limit(1);
+
     const [property] = await this.db
       .select()
       .from(properties)
@@ -167,7 +179,7 @@ export class GuestCheckInService {
     };
     const online: OnlineCheckInSettings = { ...(settings.onlineCheckIn ?? {}) };
 
-    return { reservation, property, guest, room, roomType, online, settings };
+    return { reservation, booking: booking ?? null, property, guest, room, roomType, online, settings };
   }
 
   async getSession(principal: CheckInPrincipal) {
@@ -221,7 +233,7 @@ export class GuestCheckInService {
       },
       reservation: {
         id: ctx.reservation.id,
-        confirmationNumber: ctx.reservation.confirmationNumber,
+        confirmationNumber: ctx.booking?.confirmationNumber ?? ctx.reservation.id.slice(0, 8),
         status: ctx.reservation.status,
         arrivalDate: ctx.reservation.arrivalDate,
         departureDate: ctx.reservation.departureDate,
@@ -541,36 +553,49 @@ export class GuestCheckInService {
   async requestLink(dto: RequestCheckInLinkDto) {
     const confirmation = dto.confirmationNumber.trim();
     const email = dto.email.trim().toLowerCase();
-    const [reservation] = await this.db
+    // Confirmation numbers live on bookings (party wrapper), not reservations.
+    const [booking] = await this.db
       .select()
-      .from(reservations)
-      .where(eq(reservations.confirmationNumber, confirmation))
+      .from(bookings)
+      .where(eq(bookings.confirmationNumber, confirmation))
       .limit(1);
-    if (reservation) {
-      const [guest] = await this.db
+    if (booking) {
+      const [reservation] = await this.db
         .select()
-        .from(guests)
-        .where(eq(guests.id, reservation.guestId))
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.bookingId, booking.id),
+            eq(reservations.propertyId, booking.propertyId),
+          ),
+        )
         .limit(1);
-      if (guest?.email && String(guest.email).trim().toLowerCase() === email) {
-        const link = await this.issueLinkForReservation(
-          reservation.propertyId,
-          reservation.id,
-        );
-        const [property] = await this.db
+      if (reservation) {
+        const [guest] = await this.db
           .select()
-          .from(properties)
-          .where(eq(properties.id, reservation.propertyId));
-        const hotel = property?.staffDisplayName || property?.name || 'your hotel';
-        try {
-          await this.email.send({
-            to: email,
-            subject: `Your check-in link for ${hotel}`,
-            text: `Here is your online check-in link:\n\n${link.url}\n\nThis link expires soon. If you did not request it, you can ignore this email.`,
-            html: `<p>Here is your online check-in link for <strong>${hotel}</strong>:</p><p><a href="${link.url}">Continue check-in</a></p><p>This link expires soon. If you did not request it, you can ignore this email.</p>`,
-          });
-        } catch {
-          // Still return generic OK — do not leak delivery failures.
+          .from(guests)
+          .where(eq(guests.id, reservation.guestId))
+          .limit(1);
+        if (guest?.email && String(guest.email).trim().toLowerCase() === email) {
+          const link = await this.issueLinkForReservation(
+            reservation.propertyId,
+            reservation.id,
+          );
+          const [property] = await this.db
+            .select()
+            .from(properties)
+            .where(eq(properties.id, reservation.propertyId));
+          const hotel = property?.staffDisplayName || property?.name || 'your hotel';
+          try {
+            await this.email.send({
+              to: email,
+              subject: `Your check-in link for ${hotel}`,
+              text: `Here is your online check-in link:\n\n${link.url}\n\nThis link expires soon. If you did not request it, you can ignore this email.`,
+              html: `<p>Here is your online check-in link for <strong>${hotel}</strong>:</p><p><a href="${link.url}">Continue check-in</a></p><p>This link expires soon. If you did not request it, you can ignore this email.</p>`,
+            });
+          } catch {
+            // Still return generic OK — do not leak delivery failures.
+          }
         }
       }
     }
