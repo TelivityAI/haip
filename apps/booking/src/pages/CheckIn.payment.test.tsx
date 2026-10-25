@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CheckIn } from './CheckIn';
+import type { CheckInSession } from '../api/checkInClient';
 
 const sessionMock = vi.fn();
 const payMock = vi.fn();
@@ -32,7 +33,7 @@ vi.mock('@stripe/stripe-js', () => ({
   loadStripe: vi.fn().mockResolvedValue(null),
 }));
 
-const baseSession = {
+const baseSession: CheckInSession = {
   property: {
     id: 'p1',
     name: 'Demo',
@@ -77,12 +78,12 @@ const baseSession = {
   roomReady: true,
   canSelfCheckIn: { allowed: false, reason: 'Outstanding balance must be paid' },
   steps: { registration: true, id: true, payment: false, checkedIn: false },
-  payment: { provider: 'mock', clientMode: 'mock' as const },
+  payment: { provider: 'mock', clientMode: 'mock' },
   francePackEnabled: false,
   stripePublishableKey: null,
 };
 
-function renderPay(session: typeof baseSession, search = '?token=tok&step=pay') {
+function renderPay(session: CheckInSession, search = '?token=tok&step=pay') {
   sessionMock.mockResolvedValue(session);
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

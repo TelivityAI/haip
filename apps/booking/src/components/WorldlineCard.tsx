@@ -38,7 +38,7 @@ export function WorldlineCard({
       try {
         const session = await (getSession ?? (() => bookingApi.worldlineTokenization()))();
         if (cancelled) return;
-        await loadWorldlineTokenizer(session.tokenizerScriptUrl, session.sri);
+        await loadWorldlineTokenizer(session.tokenizerScriptUrl, session.sri ?? null);
         if (cancelled || !window.Tokenizer) return;
         const next = new window.Tokenizer(session.hostedTokenizationUrl, elementId, {
           hideCardholderName: false,
