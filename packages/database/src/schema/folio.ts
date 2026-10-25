@@ -99,7 +99,8 @@ export const charges = pgTable('charges', {
 
   // Tax breakdown (posted separately per KB 5.10)
   taxAmount: numeric('tax_amount', { precision: 12, scale: 2 }).notNull().default('0'),
-  taxRate: numeric('tax_rate', { precision: 5, scale: 4 }), // e.g., 0.0875 for 8.75%
+  // Same scale as tax_rules.rate (percent or fraction).
+  taxRate: numeric('tax_rate', { precision: 8, scale: 4 }),
   taxCode: varchar('tax_code', { length: 20 }), // "TOURIST_TAX", "VAT", "OCCUPANCY"
 
   // Reference
