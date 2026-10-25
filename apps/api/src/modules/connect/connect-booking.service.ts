@@ -1,4 +1,11 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Optional,
+} from '@nestjs/common';
 import { eq, and, ne } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@telivityhaip/database';
@@ -11,6 +18,8 @@ import { PolicyService } from '../policy/policy.service';
 import type { AgentBookDto } from './dto/agent-book.dto';
 import type { AgentModifyDto } from './dto/agent-modify.dto';
 import { generateConfirmationToken } from '../../common/crypto/confirmation-number';
+import { ConnectPaymentService } from './connect-payment.service';
+import { hashBookRequest } from './connect-payment.helpers';
 
 @Injectable()
 export class ConnectBookingService {
@@ -21,13 +30,64 @@ export class ConnectBookingService {
     private readonly webhookService: WebhookService,
     private readonly ratePlanService: RatePlanService,
     private readonly policyService: PolicyService,
+    @Optional() private readonly connectPayment?: ConnectPaymentService,
   ) {}
 
   /**
    * Book a room — Agent 4.5 (Hotel Booking Agent).
-   * Agent bookings auto-confirm (skip pending status).
+   * pay_at_property / legacy prepaid: auto-confirm.
+   * hosted_checkout: pending until PSP payment / guarantee completes.
    */
   async book(dto: AgentBookDto) {
+    const hosted = dto.paymentMethod === 'hosted_checkout';
+    if (hosted) {
+      if (!dto.guestEmail) {
+        throw new BadRequestException('guestEmail is required for hosted_checkout');
+      }
+      if (!dto.idempotencyKey) {
+        throw new BadRequestException('idempotencyKey is required for hosted_checkout');
+      }
+      if (!this.connectPayment) {
+        throw new BadRequestException('Hosted checkout is not available');
+      }
+    }
+
+    // Idempotent replay for hosted checkout
+    if (hosted && this.connectPayment && dto.idempotencyKey) {
+      const requestHash = this.buildRequestHash(dto);
+      const existing = await this.connectPayment.findByIdempotency(dto.propertyId, dto.idempotencyKey);
+      if (existing) {
+        if (existing.requestHash !== requestHash) {
+          throw new ConflictException('Idempotency-Key reused with a different booking payload');
+        }
+        const pay = this.connectPayment.toPublicSession(existing);
+        return {
+          success: true,
+          confirmationNumber: existing.confirmationNumber,
+          externalReference: dto.externalReference,
+          reservationId: existing.reservationId,
+          status: existing.status === 'paid' ? 'confirmed' : 'pending_payment',
+          confirmationCodes: {
+            pms: existing.confirmationNumber,
+            external: dto.externalReference,
+          },
+          totalAmount: undefined,
+          currencyCode: existing.currencyCode,
+          nightlyBreakdown: [],
+          cancellationPolicy: (
+            await this.policyService.getPolicySummary(dto.propertyId, dto.ratePlanId)
+          ).description,
+          paymentStatus: pay.paymentStatus,
+          paymentMode: pay.paymentMode,
+          paymentUrl: pay.paymentUrl,
+          depositAmount: pay.depositDue,
+          bookedAt: existing.createdAt instanceof Date
+            ? existing.createdAt.toISOString()
+            : new Date().toISOString(),
+        };
+      }
+    }
+
     // 1. Verify rate is still available
     const availability = await this.availabilityService.searchAvailability(
       dto.propertyId,
@@ -67,20 +127,28 @@ export class ConnectBookingService {
     // 3. Find or create guest
     const guest = await this.findOrCreateGuest(dto);
 
-    // 4. Calculate nights and total
+    // 4. Calculate nights and tax-inclusive total (match Connect search)
     const arrival = new Date(dto.checkIn);
     const departure = new Date(dto.checkOut);
     const nights = Math.ceil((departure.getTime() - arrival.getTime()) / (1000 * 60 * 60 * 24));
-    // Monetary math via Decimal (baseAmount is a numeric string from PG)
+    const settings = await this.getPropertySettings(dto.propertyId);
+    const taxRate = (settings['taxRate'] as number) ?? 0;
     const baseAmountDec = new Decimal(ratePlan.baseAmount);
-    const totalAmountDec = baseAmountDec.times(nights);
+    const baseTotalDec = baseAmountDec.times(nights);
+    const taxTotalDec = baseTotalDec.times(taxRate).div(100);
+    const totalAmountDec = baseTotalDec.plus(taxTotalDec);
     const baseAmount = baseAmountDec.toNumber();
-    const totalAmount = totalAmountDec.toNumber();
+    const totalAmount = Number(totalAmountDec.toFixed(2));
+    const taxAmount = Number(taxTotalDec.toFixed(2));
 
     // 5. Generate confirmation number. High-entropy (128 bits from randomBytes,
     // Crockford base32, no ambiguous chars) so it can't be enumerated/guessed —
     // the confirmation number is itself a bearer credential for the booking.
     const confirmationNumber = `HAIP-${generateConfirmationToken()}`;
+
+    const channelCode = dto.agentId ?? (hosted ? 'LIGARE' : 'otaip');
+    const externalRef = dto.externalReference
+      ?? (dto.clientPlatform ? `${dto.clientPlatform}:${confirmationNumber}` : undefined);
 
     // 6. Create booking
     const [booking] = await this.db
@@ -89,13 +157,13 @@ export class ConnectBookingService {
         propertyId: dto.propertyId,
         guestId: guest.id,
         confirmationNumber,
-        externalConfirmation: dto.externalReference,
+        externalConfirmation: externalRef,
         source: 'agent',
-        channelCode: dto.agentId ?? 'otaip',
+        channelCode,
       })
       .returning();
 
-    // 7. Create reservation — auto-confirm for agent bookings
+    // 7. Create reservation — pending for hosted checkout, confirmed otherwise
     const [reservation] = await this.db
       .insert(reservations)
       .values({
@@ -112,21 +180,40 @@ export class ConnectBookingService {
         adults: dto.adults,
         children: dto.children ?? 0,
         specialRequests: dto.specialRequests,
-        status: 'confirmed', // Agent bookings skip pending
+        status: hosted ? 'pending' : 'confirmed',
       })
       .returning();
 
     // 8. Build nightly breakdown
-    const settings = await this.getPropertySettings(dto.propertyId);
-    const taxRate = (settings['taxRate'] as number) ?? 0;
     const nightlyBreakdown = this.buildNightlyBreakdown(baseAmount, nights, arrival, taxRate);
 
-    // 9. Determine payment status
-    let paymentStatus: 'none' | 'authorized' | 'charged' = 'none';
+    // 9. Hosted payment session or legacy payment flags
+    let paymentStatus: string = 'none';
     let depositAmount: number | undefined;
+    let paymentUrl: string | null | undefined;
+    let paymentMode: string | undefined;
 
-    if (dto.paymentMethod === 'prepaid' || dto.paymentMethod === 'virtual_card') {
-      // In a real system, process payment via paymentService
+    if (hosted && this.connectPayment && dto.idempotencyKey && dto.guestEmail) {
+      const pay = await this.connectPayment.createHostedSession({
+        propertyId: dto.propertyId,
+        confirmationNumber,
+        reservationId: reservation.id,
+        bookingId: booking.id,
+        guestId: guest.id,
+        currencyCode: ratePlan.currencyCode,
+        grandTotal: totalAmountDec,
+        nights,
+        idempotencyKey: dto.idempotencyKey,
+        requestHash: this.buildRequestHash(dto),
+        clientPlatform: dto.clientPlatform,
+        guestEmail: dto.guestEmail,
+      });
+      paymentStatus = pay.paymentStatus;
+      depositAmount = pay.depositDue;
+      paymentUrl = pay.paymentUrl;
+      paymentMode = pay.paymentMode;
+    } else if (dto.paymentMethod === 'prepaid' || dto.paymentMethod === 'virtual_card') {
+      // Legacy stub — prefer hosted_checkout for real money movement
       paymentStatus = 'authorized';
       depositAmount = totalAmount;
     }
@@ -139,8 +226,10 @@ export class ConnectBookingService {
       {
         confirmationNumber,
         agentId: dto.agentId,
-        externalReference: dto.externalReference,
+        externalReference: externalRef,
         totalAmount,
+        taxAmount,
+        paymentMode,
       },
       dto.propertyId,
     );
@@ -148,23 +237,42 @@ export class ConnectBookingService {
     return {
       success: true,
       confirmationNumber,
-      externalReference: dto.externalReference,
+      externalReference: externalRef,
       reservationId: reservation.id,
-      status: 'confirmed',
+      status: hosted ? 'pending_payment' : 'confirmed',
       confirmationCodes: {
         pms: confirmationNumber,
-        external: dto.externalReference,
+        external: externalRef,
       },
-      totalAmount: Math.round(totalAmount * 100) / 100,
+      totalAmount,
+      taxAmount,
       currencyCode: ratePlan.currencyCode,
       nightlyBreakdown,
       cancellationPolicy: (
         await this.policyService.getPolicySummary(dto.propertyId, dto.ratePlanId)
       ).description,
       paymentStatus,
+      paymentMode,
+      paymentUrl,
       depositAmount,
       bookedAt: new Date().toISOString(),
     };
+  }
+
+  private buildRequestHash(dto: AgentBookDto): string {
+    return hashBookRequest({
+      propertyId: dto.propertyId,
+      roomTypeId: dto.roomTypeId,
+      ratePlanId: dto.ratePlanId,
+      checkIn: dto.checkIn,
+      checkOut: dto.checkOut,
+      guestFirstName: dto.guestFirstName,
+      guestLastName: dto.guestLastName,
+      guestEmail: dto.guestEmail ?? null,
+      adults: dto.adults,
+      children: dto.children ?? 0,
+      paymentMethod: dto.paymentMethod ?? null,
+    });
   }
 
   /**

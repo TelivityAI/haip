@@ -9,7 +9,7 @@ export const indexHtml = `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Telivity HAIP — Hotel Booking Gateway</title>
+    <title>Ligare Hotels — AI Booking Gateway</title>
     <style>
       :root { color-scheme: light dark; }
       body {
@@ -25,19 +25,20 @@ export const indexHtml = `<!doctype html>
     </style>
   </head>
   <body>
-    <h1>Telivity HAIP</h1>
-    <p class="tag">ChatGPT gateway for the HAIP (Hotel AI Platform) Connect API.</p>
+    <h1>Ligare Hotels</h1>
+    <p class="tag">ChatGPT Actions + Claude/Gemini MCP gateway for opted-in HAIP properties.</p>
     <p>
-      This service exposes hotel search and booking as a ChatGPT Action. It proxies the
+      This service exposes hotel search and booking to ChatGPT, Claude, and Gemini. It proxies the
       HAIP Connect API and returns guest-facing selling prices only.
     </p>
     <ul>
-      <li><a href="/openapi.json">/openapi.json</a> — the OpenAPI 3.1 spec to import as a ChatGPT Action</li>
+      <li><a href="/openapi.json">/openapi.json</a> — ChatGPT Actions schema</li>
+      <li><a href="/mcp">/mcp</a> — MCP for Claude &amp; Gemini</li>
       <li><a href="/health">/health</a> — liveness</li>
       <li><a href="/privacy">/privacy</a> — privacy policy</li>
     </ul>
     <p>Available operations: <code>searchHotels</code>, <code>getProperty</code>,
-      <code>createReservation</code>, <code>getReservation</code>,
+      <code>prepareBooking</code>, <code>confirmPayment</code>, <code>getReservation</code>,
       <code>modifyReservation</code>, <code>cancelReservation</code>.</p>
     <footer>© Telivity. HAIP is an open-source, API-first hotel PMS.</footer>
   </body>
@@ -48,7 +49,7 @@ export const privacyHtml = `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Privacy — Telivity HAIP</title>
+    <title>Privacy — Ligare Hotels</title>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -96,7 +97,7 @@ export const privacyHtml = `<!doctype html>
 
     <h2>Data sharing</h2>
     <p>
-      We do not sell your data. Booking details are shared only with the hotel platform
+      Guests pay on the hotel's hosted payment page — card data never passes through this gateway or the LLM. We do not sell your data. Booking details are shared only with the hotel platform
       (HAIP) needed to fulfil your reservation.
     </p>
 

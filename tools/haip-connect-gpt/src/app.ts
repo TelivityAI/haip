@@ -1,14 +1,13 @@
 /**
- * Fastify app: ChatGPT action endpoints + /openapi.json + /health + /privacy + landing.
+ * Fastify app: Ligare Hotels LLM gateway (ChatGPT Actions + Claude/Gemini MCP).
  *
- * Every action route is wrapped by `action()`, which times the call, scrubs the
- * request and response, and logs the tool call to Supabase. The upstream HAIP
- * `x-api-key` is injected by the adapter and never appears in the spec or here.
+ * Allow-list: search may cache ≤60s; getProperty / prepareBooking always live.
+ * Cards never enter the schema — hosted paymentUrl + confirmPayment only.
  */
 
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, randomUUID } from 'node:crypto';
 import {
   HaipConnectAdapter,
   UpstreamError,
@@ -20,20 +19,17 @@ import { buildOpenApiSpec } from './openapi.js';
 import { logToolCall } from './events.js';
 import { redactForLog } from './scrub.js';
 import { indexHtml, privacyHtml } from './pages.js';
+import { AllowList, createAllowListFromEnv } from './allow-list.js';
+import { handleMcpRequest, listMcpTools } from './mcp.js';
 
 export interface AppOptions {
   adapter: HaipConnectAdapter;
   publicBaseUrl: string;
-  /**
-   * Credential the caller (the ChatGPT Action) must present to reach the action
-   * routes — sent as `Authorization: Bearer <key>` or `x-api-key`. The gateway
-   * holds HAIP's privileged upstream Connect key, so without this anyone on the
-   * internet who finds the URL can drive the Connect API. Configure via GATEWAY_API_KEY.
-   */
   gatewayApiKey?: string;
+  allowList?: AllowList;
+  defaultClientPlatform?: BookInput['clientPlatform'];
 }
 
-/** Public routes that never require a caller credential. */
 const PUBLIC_PATHS = new Set(['/health', '/openapi.json', '/', '/privacy']);
 
 function timingSafeEqualStr(a: string, b: string): boolean {
@@ -43,7 +39,6 @@ function timingSafeEqualStr(a: string, b: string): boolean {
   return timingSafeEqual(ab, bb);
 }
 
-/** Extract the caller credential from `Authorization: Bearer` or `x-api-key`. */
 function extractCredential(req: FastifyRequest): string | null {
   const auth = req.headers['authorization'];
   if (typeof auth === 'string' && auth.startsWith('Bearer ')) return auth.slice(7).trim();
@@ -53,22 +48,35 @@ function extractCredential(req: FastifyRequest): string | null {
   return null;
 }
 
+function extractIdempotencyKey(req: FastifyRequest): string | undefined {
+  const h = req.headers['idempotency-key'];
+  if (typeof h === 'string' && h.trim()) return h.trim();
+  if (Array.isArray(h) && h[0]) return h[0].trim();
+  const body = req.body as { idempotencyKey?: string } | undefined;
+  return body?.idempotencyKey?.trim() || undefined;
+}
+
+function propertyIdFromUnknown(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const o = value as Record<string, unknown>;
+  if (typeof o['propertyId'] === 'string') return o['propertyId'];
+  if (typeof o['sourcePropertyId'] === 'string') return o['sourcePropertyId'];
+  return null;
+}
+
 export function buildApp(opts: AppOptions): FastifyInstance {
   const { adapter, publicBaseUrl } = opts;
+  const allowList = opts.allowList ?? createAllowListFromEnv();
   const app = Fastify({ logger: true });
 
   app.register(cors, { origin: true });
 
-  // Caller auth on the action routes. This is a demo/template gateway, so it is
-  // OPEN by default — the public demo shows hotels how to connect their own GPT
-  // with zero setup. A real deployment locks it down simply by setting
-  // GATEWAY_API_KEY: when a key is configured it is REQUIRED (Authorization:
-  // Bearer <key> or x-api-key), validated timing-safe. The gateway holds HAIP's
-  // upstream Connect key, so anyone enabling this in production should set a key.
   app.addHook('onRequest', async (req, reply) => {
-    if (!opts.gatewayApiKey) return; // no key configured → open (demo posture)
+    if (!opts.gatewayApiKey) return;
     const path = (req.url.split('?')[0] ?? req.url).replace(/\/+$/, '') || '/';
     if (PUBLIC_PATHS.has(path)) return;
+    // MCP may authenticate via same gateway key on non-public methods
+    if (path === '/mcp' && req.method === 'GET') return;
     const provided = extractCredential(req);
     if (!provided || !timingSafeEqualStr(provided, opts.gatewayApiKey)) {
       reply.code(401).send({ error: 'unauthorized', message: 'A valid gateway credential is required.' });
@@ -77,7 +85,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.get('/health', async () => ({
     status: 'ok',
-    service: 'haip-connect-gpt',
+    service: 'ligare-hotels-gateway',
     upstreamHealthy: await adapter.upstreamHealthy(),
     timestamp: new Date().toISOString(),
   }));
@@ -89,21 +97,70 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.get('/', async (_req, reply) => reply.type('text/html').send(indexHtml));
   app.get('/privacy', async (_req, reply) => reply.type('text/html').send(privacyHtml));
 
-  // --- ChatGPT action endpoints (paths mirror the OpenAPI spec) ---
+  app.get('/mcp', async (_req, reply) => {
+    reply.send({
+      name: 'ligare-hotels',
+      transport: 'streamable-http',
+      tools: listMcpTools().map((t) => t.name),
+      endpoint: '/mcp',
+    });
+  });
+
+  app.post('/mcp', async (req, reply) => {
+    const result = await handleMcpRequest(req.body, {
+      searchHotels: (input) => searchHotelsFiltered(adapter, allowList, input),
+      getProperty: (id) => getPropertyGuarded(adapter, allowList, id),
+      prepareBooking: (input, idem) =>
+        prepareBookingGuarded(adapter, allowList, input, idem, opts.defaultClientPlatform),
+      confirmPayment: (cn) => adapter.confirmPayment(cn),
+      getReservation: (cn) => adapter.getReservation(cn),
+      modifyReservation: (cn, body) => adapter.modifyReservation(cn, body),
+      cancelReservation: (cn, reason) => adapter.cancelReservation(cn, reason),
+    });
+    reply.send(result);
+  });
 
   app.post(
     '/hotels/search',
-    action('searchHotels', (req) => adapter.searchHotels(req.body as SearchInput)),
+    action('searchHotels', (req) =>
+      searchHotelsFiltered(adapter, allowList, req.body as SearchInput),
+    ),
   );
 
   app.get(
     '/hotels/:propertyId',
-    action('getProperty', (req) => adapter.getProperty((req.params as { propertyId: string }).propertyId)),
+    action('getProperty', (req) =>
+      getPropertyGuarded(
+        adapter,
+        allowList,
+        (req.params as { propertyId: string }).propertyId,
+      ),
+    ),
   );
 
   app.post(
     '/reservations',
-    action('createReservation', (req) => adapter.createReservation(req.body as BookInput), 201),
+    action(
+      'prepareBooking',
+      (req) =>
+        prepareBookingGuarded(
+          adapter,
+          allowList,
+          req.body as BookInput,
+          extractIdempotencyKey(req),
+          opts.defaultClientPlatform,
+        ),
+      201,
+    ),
+  );
+
+  app.post(
+    '/reservations/:confirmationNumber/confirm-payment',
+    action('confirmPayment', (req) =>
+      adapter.confirmPayment(
+        (req.params as { confirmationNumber: string }).confirmationNumber,
+      ),
+    ),
   );
 
   app.get(
@@ -136,10 +193,82 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   return app;
 }
 
-/**
- * Wraps an action handler with timing, PII-scrubbed logging, and error mapping.
- * Upstream (HAIP) errors are forwarded with their original status + body.
- */
+async function searchHotelsFiltered(
+  adapter: HaipConnectAdapter,
+  allowList: AllowList,
+  input: SearchInput,
+): Promise<unknown> {
+  if (input.propertyId) {
+    const ok = await allowList.isEnabledCached(input.propertyId);
+    if (!ok) {
+      return { searchId: randomUUID(), totalResults: 0, results: [] };
+    }
+  }
+  const raw = (await adapter.searchHotels(input)) as {
+    results?: Array<Record<string, unknown>>;
+    totalResults?: number;
+    searchId?: string;
+    [k: string]: unknown;
+  };
+  const results = Array.isArray(raw.results) ? raw.results : [];
+  const enabled = await allowList.getCachedEnabledIds();
+  // If allow-all sentinel (isEnabled always true with empty list), skip filter when empty+allow-all
+  const filtered =
+    enabled.size === 0 && process.env['LIGARE_ALLOW_ALL'] === 'true'
+      ? results
+      : results.filter((r) => {
+          const id = String(r['sourcePropertyId'] ?? r['propertyId'] ?? '');
+          return enabled.has(id);
+        });
+  return {
+    ...raw,
+    results: filtered,
+    totalResults: filtered.length,
+  };
+}
+
+async function getPropertyGuarded(
+  adapter: HaipConnectAdapter,
+  allowList: AllowList,
+  propertyId: string,
+): Promise<unknown> {
+  const ok = await allowList.isPropertyEnabledLive(propertyId);
+  if (!ok) {
+    throw new UpstreamError(404, { error: 'not_found', message: 'Property is not bookable in Ligare' });
+  }
+  return adapter.getProperty(propertyId);
+}
+
+async function prepareBookingGuarded(
+  adapter: HaipConnectAdapter,
+  allowList: AllowList,
+  input: BookInput,
+  idempotencyKey: string | undefined,
+  defaultPlatform?: BookInput['clientPlatform'],
+): Promise<unknown> {
+  const ok = await allowList.isPropertyEnabledLive(input.propertyId);
+  if (!ok) {
+    throw new UpstreamError(404, { error: 'not_found', message: 'Property is not bookable in Ligare' });
+  }
+  if (!input.guestEmail) {
+    throw new UpstreamError(400, { error: 'guest_email_required', message: 'guestEmail is required' });
+  }
+  const key = idempotencyKey ?? input.idempotencyKey;
+  if (!key) {
+    throw new UpstreamError(400, {
+      error: 'idempotency_key_required',
+      message: 'Idempotency-Key header or idempotencyKey body field is required',
+    });
+  }
+  return adapter.createReservation({
+    ...input,
+    idempotencyKey: key,
+    paymentMethod: 'hosted_checkout',
+    clientPlatform: input.clientPlatform ?? defaultPlatform ?? 'ligare',
+    agentId: 'LIGARE',
+  });
+}
+
 function action(
   tool: string,
   run: (req: FastifyRequest) => Promise<unknown>,
@@ -149,15 +278,17 @@ function action(
     const start = Date.now();
     const sessionId = sessionFrom(req);
     const requestPayload = { params: req.params, query: req.query, body: req.body };
+    const propertyId =
+      propertyIdFromUnknown(req.params) ??
+      propertyIdFromUnknown(req.body) ??
+      null;
 
-    // logToolCall is awaited (not fire-and-forget): on serverless the instance
-    // can be frozen the moment the response is sent, which would drop the
-    // insert. It is still best-effort — logToolCall never throws.
     try {
       const result = await run(req);
       await logToolCall({
         tool,
         sessionId,
+        propertyId,
         request: redactForLog(requestPayload),
         response: redactForLog(result),
         status: 'ok',
@@ -173,6 +304,7 @@ function action(
       await logToolCall({
         tool,
         sessionId,
+        propertyId,
         request: redactForLog(requestPayload),
         response: null,
         status: 'error',
@@ -184,9 +316,8 @@ function action(
   };
 }
 
-/** ChatGPT sends a per-conversation pseudonymous id in this header. */
 function sessionFrom(req: FastifyRequest): string | null {
-  const raw = req.headers['openai-ephemeral-user-id'];
+  const raw = req.headers['openai-ephemeral-user-id'] ?? req.headers['x-session-id'];
   if (Array.isArray(raw)) return raw[0] ?? null;
-  return raw ?? null;
+  return (raw as string | undefined) ?? null;
 }

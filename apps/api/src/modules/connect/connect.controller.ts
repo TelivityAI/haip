@@ -21,6 +21,7 @@ import { ConnectContentService } from './connect-content.service';
 import { ConnectBookingService } from './connect-booking.service';
 import { ConnectEventsService } from './connect-events.service';
 import { ConnectInsightsService } from './connect-insights.service';
+import { ConnectPaymentService } from './connect-payment.service';
 import { AgentSearchDto } from './dto/agent-search.dto';
 import { AgentBookDto } from './dto/agent-book.dto';
 import { AgentModifyDto, AgentCancelDto } from './dto/agent-modify.dto';
@@ -47,6 +48,7 @@ export class ConnectController {
     private readonly bookingService: ConnectBookingService,
     private readonly eventsService: ConnectEventsService,
     private readonly insightsService: ConnectInsightsService,
+    private readonly paymentService: ConnectPaymentService,
   ) {}
 
   // --- Search & Content (Agent 4.1, 4.2, 4.3) ---
@@ -123,6 +125,36 @@ export class ConnectController {
     @Body() dto: AgentCancelDto,
   ) {
     return this.bookingService.cancel(confirmationNumber, dto.reason);
+  }
+
+  @Get('bookings/:confirmationNumber/payment-status')
+  @ApiOperation({ summary: 'Payment status for hosted Connect / Ligare bookings (PSP-reconciled)' })
+  async paymentStatus(@Param('confirmationNumber') confirmationNumber: string) {
+    return this.paymentService.getPaymentStatus(confirmationNumber);
+  }
+
+  @Post('bookings/:confirmationNumber/confirm-payment')
+  @ApiOperation({ summary: 'Idempotent confirm after guest pays (LLM confirmPayment)' })
+  async confirmPayment(@Param('confirmationNumber') confirmationNumber: string) {
+    return this.paymentService.confirmPayment(confirmationNumber);
+  }
+
+  @Post('bookings/:confirmationNumber/mock-pay')
+  @ApiOperation({ summary: 'Dev/staging mock pay — only when PAYMENT_GATEWAY is mock' })
+  async mockPay(@Param('confirmationNumber') confirmationNumber: string) {
+    return this.paymentService.mockPay(confirmationNumber);
+  }
+
+  @Get('bookings/:confirmationNumber/payment-return')
+  @ApiOperation({ summary: 'Guest return from hosted Checkout — reconcile then show status' })
+  async paymentReturn(@Param('confirmationNumber') confirmationNumber: string) {
+    const status = await this.paymentService.getPaymentStatus(confirmationNumber);
+    return {
+      ...status,
+      message: status.paymentStatus === 'paid'
+        ? 'Payment complete. You can return to the chat.'
+        : 'Payment still pending. Return to the chat and ask the assistant to confirm.',
+    };
   }
 
   // --- Event Subscriptions ---

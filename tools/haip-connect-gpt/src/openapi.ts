@@ -77,9 +77,9 @@ export function buildOpenApiSpec(publicBaseUrl: string): Record<string, unknown>
   return {
     openapi: '3.1.0',
     info: {
-      title: 'Telivity HAIP — Hotel Booking',
+      title: 'Ligare Hotels — Book in ChatGPT, Claude, Gemini',
       description:
-        'Search hotels, price rooms, and create, look up, modify, or cancel reservations through the HAIP (Hotel AI Platform) Connect API. All prices are guest-facing selling prices.',
+        'Search opted-in hotels, prepare a booking with hosted payment (no card data), confirm payment, then look up / modify / cancel. Selling prices are tax-inclusive.',
       version: '1.0.0',
       contact: { name: 'Telivity', url: server },
     },
@@ -177,10 +177,10 @@ export function buildOpenApiSpec(publicBaseUrl: string): Record<string, unknown>
       },
       '/reservations': {
         post: {
-          operationId: 'createReservation',
-          summary: 'Create (book) a reservation',
+          operationId: 'prepareBooking',
+          summary: 'Prepare a reservation (hosted payment)',
           description:
-            'Book a specific room type and rate plan returned by searchHotels. Returns a confirmationNumber used to look up, modify, or cancel the booking. Always confirm the cancellation policy and total selling price with the guest before booking.',
+            'Create a pending booking and return paymentUrl + paymentMode. Guest pays on the hotel PSP hosted page — never send card data. Then call confirmPayment. Requires guestEmail and idempotencyKey.',
           requestBody: {
             required: true,
             content: {
@@ -195,7 +195,9 @@ export function buildOpenApiSpec(publicBaseUrl: string): Record<string, unknown>
                     'checkOut',
                     'guestFirstName',
                     'guestLastName',
+                    'guestEmail',
                     'adults',
+                    'idempotencyKey',
                   ],
                   properties: {
                     propertyId: { type: 'string', format: 'uuid' },
@@ -211,9 +213,18 @@ export function buildOpenApiSpec(publicBaseUrl: string): Record<string, unknown>
                     adults: { type: 'integer', minimum: 1 },
                     children: { type: 'integer', minimum: 0, default: 0 },
                     specialRequests: { type: 'string' },
+                    idempotencyKey: {
+                      type: 'string',
+                      description: 'Stable key per guest booking intent (also send Idempotency-Key header).',
+                    },
+                    clientPlatform: {
+                      type: 'string',
+                      enum: ['chatgpt', 'claude', 'gemini', 'ligare'],
+                    },
                     paymentMethod: {
                       type: 'string',
-                      enum: ['pay_at_property', 'prepaid', 'virtual_card'],
+                      enum: ['hosted_checkout', 'pay_at_property'],
+                      default: 'hosted_checkout',
                     },
                   },
                 },
@@ -232,12 +243,31 @@ export function buildOpenApiSpec(publicBaseUrl: string): Record<string, unknown>
                       confirmationNumber: { type: 'string' },
                       status: { type: 'string' },
                       totalAmount: { type: 'number' },
+                      taxAmount: { type: 'number' },
                       currencyCode: { type: 'string' },
+                      paymentUrl: { type: 'string' },
+                      paymentMode: { type: 'string', enum: ['charge', 'authorize', 'guarantee'] },
+                      paymentStatus: { type: 'string' },
                       cancellationPolicy,
                     },
                   },
                 },
               },
+            },
+          },
+        },
+      },
+      '/reservations/{confirmationNumber}/confirm-payment': {
+        post: {
+          operationId: 'confirmPayment',
+          summary: 'Confirm payment after hosted checkout',
+          description:
+            'Reconcile with the hotel PSP and confirm the reservation. Idempotent — safe to poll. Never invent a confirmation; only succeed when this returns paid/confirmed.',
+          parameters: [confirmationParam()],
+          responses: {
+            '200': {
+              description: 'Payment status after reconcile.',
+              content: { 'application/json': { schema: { type: 'object', additionalProperties: true } } },
             },
           },
         },

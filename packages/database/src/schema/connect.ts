@@ -7,6 +7,7 @@ import {
   jsonb,
   integer,
   text,
+  numeric,
   pgEnum,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
@@ -98,3 +99,41 @@ export const connectCredentials = pgTable('connect_credentials', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
 });
+
+/** Hosted payment session for Connect / Ligare LLM bookings. */
+export type ConnectPaymentMode = 'charge' | 'authorize' | 'guarantee';
+export type ConnectPaymentSessionStatus =
+  | 'pending'
+  | 'paid'
+  | 'failed'
+  | 'expired'
+  | 'voided';
+
+export const connectPaymentSessions = pgTable('connect_payment_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  confirmationNumber: varchar('confirmation_number', { length: 64 }).notNull(),
+  reservationId: uuid('reservation_id').notNull(),
+  bookingId: uuid('booking_id').notNull(),
+  folioId: uuid('folio_id'),
+  paymentId: uuid('payment_id'),
+  idempotencyKey: varchar('idempotency_key', { length: 200 }).notNull(),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
+  paymentMode: varchar('payment_mode', { length: 20 }).$type<ConnectPaymentMode>().notNull(),
+  status: varchar('status', { length: 20 }).$type<ConnectPaymentSessionStatus>().notNull().default('pending'),
+  psp: varchar('psp', { length: 40 }).notNull(),
+  pspSessionId: varchar('psp_session_id', { length: 200 }),
+  paymentUrl: text('payment_url'),
+  depositAmount: numeric('deposit_amount', { precision: 12, scale: 2 }).notNull().default('0.00'),
+  currencyCode: varchar('currency_code', { length: 3 }).notNull().default('EUR'),
+  clientPlatform: varchar('client_platform', { length: 40 }),
+  pspEventIds: jsonb('psp_event_ids').$type<string[]>().notNull().default([]),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  idempotencyUnique: uniqueIndex('connect_payment_sessions_idempotency_uq')
+    .on(table.propertyId, table.idempotencyKey),
+  confirmationUnique: uniqueIndex('connect_payment_sessions_confirmation_uq')
+    .on(table.confirmationNumber),
+}));
