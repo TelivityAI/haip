@@ -62,8 +62,12 @@ export interface BookInput {
   adults: number;
   children?: number;
   specialRequests?: string;
-  paymentMethod?: 'pay_at_property' | 'prepaid' | 'virtual_card';
-  paymentToken?: string;
+  paymentMethod?: 'pay_at_property' | 'hosted_checkout';
+  /** Required for hosted_checkout — stable per guest intent. */
+  idempotencyKey?: string;
+  clientPlatform?: 'chatgpt' | 'claude' | 'gemini' | 'ligare';
+  agentId?: string;
+  externalReference?: string;
 }
 
 export interface ModifyInput {
@@ -134,7 +138,29 @@ export class HaipConnectAdapter {
   }
 
   createReservation(input: BookInput): Promise<unknown> {
-    return this.call('POST', '/api/v1/connect/book', input);
+    const body = {
+      ...input,
+      paymentMethod: input.paymentMethod ?? 'hosted_checkout',
+      agentId: input.agentId ?? 'LIGARE',
+      clientPlatform: input.clientPlatform ?? 'ligare',
+    };
+    // Never forward card tokens from an LLM client.
+    delete (body as { paymentToken?: string }).paymentToken;
+    return this.call('POST', '/api/v1/connect/book', body);
+  }
+
+  confirmPayment(confirmationNumber: string): Promise<unknown> {
+    return this.call(
+      'POST',
+      `/api/v1/connect/bookings/${encodeURIComponent(confirmationNumber)}/confirm-payment`,
+    );
+  }
+
+  getPaymentStatus(confirmationNumber: string): Promise<unknown> {
+    return this.call(
+      'GET',
+      `/api/v1/connect/bookings/${encodeURIComponent(confirmationNumber)}/payment-status`,
+    );
   }
 
   getReservation(confirmationNumber: string): Promise<unknown> {

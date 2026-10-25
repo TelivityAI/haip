@@ -36,14 +36,20 @@ function mkController() {
     getGuestTriggers: vi.fn(),
     getHousekeepingInsights: vi.fn(),
   };
+  const payment = {
+    getPaymentStatus: vi.fn(),
+    confirmPayment: vi.fn(),
+    mockPay: vi.fn(),
+  };
   const c = new ConnectController(
     search as any,
     content as any,
     booking as any,
     events as any,
     insights as any,
+    payment as any,
   );
-  return { c, search, content, booking, events, insights };
+  return { c, search, content, booking, events, insights, payment };
 }
 
 describe('ConnectController — search pinning', () => {

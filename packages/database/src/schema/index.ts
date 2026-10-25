@@ -147,6 +147,11 @@ export {
   webhookDeliveryStatusEnum,
   webhookDeliveries,
   connectCredentials,
+  connectPaymentSessions,
+} from './connect.js';
+export type {
+  ConnectPaymentMode,
+  ConnectPaymentSessionStatus,
 } from './connect.js';
 
 // Integration catalog (global) + per-property enablement
