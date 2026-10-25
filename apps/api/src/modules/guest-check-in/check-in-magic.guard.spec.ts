@@ -98,10 +98,43 @@ describe('CheckInMagicGuard', () => {
       'other-secret',
     );
     const req: any = {
+      method: 'GET',
       headers: { 'x-check-in-token': good },
       query: { token: bad },
     };
     expect(guard.canActivate(ctx(req))).toBe(true);
     expect(req.checkIn.reservationId).toBe('from-header');
+  });
+
+  it('accepts query token on GET for magic-link bootstrap', () => {
+    const guard = new CheckInMagicGuard(config);
+    const token = signCheckInToken(
+      {
+        v: 1,
+        reservationId: 'r1',
+        propertyId: 'p1',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+      secret,
+    );
+    const req: any = { method: 'GET', headers: {}, query: { token } };
+    expect(guard.canActivate(ctx(req))).toBe(true);
+    expect(req.checkIn.reservationId).toBe('r1');
+  });
+
+  it('rejects query token on mutating POST', () => {
+    const guard = new CheckInMagicGuard(config);
+    const token = signCheckInToken(
+      {
+        v: 1,
+        reservationId: 'r1',
+        propertyId: 'p1',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+      secret,
+    );
+    expect(() =>
+      guard.canActivate(ctx({ method: 'POST', headers: {}, query: { token } })),
+    ).toThrow(UnauthorizedException);
   });
 });

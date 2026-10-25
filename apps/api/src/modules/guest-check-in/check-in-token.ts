@@ -56,7 +56,12 @@ export function verifyCheckInToken(token: string, secret: string): CheckInTokenP
   }
 }
 
+/** Default magic-link lifetime (48 hours). Staff may request up to 7 days. */
 export function defaultTokenTtlSeconds(): number {
-  // 14 days — covers typical pre-arrival window.
-  return 14 * 24 * 60 * 60;
+  return 48 * 60 * 60;
+}
+
+/** Upper bound for staff-issued check-in link TTL (7 days). */
+export function maxTokenTtlSeconds(): number {
+  return 7 * 24 * 60 * 60;
 }

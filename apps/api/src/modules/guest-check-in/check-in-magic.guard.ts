@@ -35,8 +35,13 @@ export class CheckInMagicGuard implements CanActivate {
     if (typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ')) {
       return auth.slice(7).trim();
     }
-    const q = req.query?.token;
-    if (typeof q === 'string' && q.length > 0) return q;
+    // Query tokens are bootstrap-only (magic link / payment return). Mutating
+    // methods must use the header after the booking UI strips ?token=.
+    const method = String(req.method || 'GET').toUpperCase();
+    if (method === 'GET') {
+      const q = req.query?.token;
+      if (typeof q === 'string' && q.length > 0) return q;
+    }
     return undefined;
   }
 }

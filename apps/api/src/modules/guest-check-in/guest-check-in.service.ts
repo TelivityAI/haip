@@ -25,11 +25,20 @@ import { StorageService } from '../media/storage/storage.service';
 import { EmailService } from '../agent/guest-comms/email.service';
 import {
   defaultTokenTtlSeconds,
+  maxTokenTtlSeconds,
   signCheckInToken,
 } from './check-in-token';
 import { resolveCheckInMagicSecret } from './check-in-secret';
 import { buildCheckInAppUrl } from './check-in-app-url';
 import { WalletPassService } from './wallet-pass.service';
+import {
+  decryptIdImageBuffer,
+  encryptIdImageBuffer,
+} from './id-image-encryption';
+import {
+  isPaymentGatewayMockMode,
+  resolvePaymentGatewayProvider,
+} from '../payment/payment-gateway.factory';
 import type {
   GuestAcceptUpsellDto,
   GuestPayDto,
@@ -95,7 +104,10 @@ export class GuestCheckInService {
       .where(eq(properties.id, propertyId));
     if (!property) throw new NotFoundException('Property not found');
 
-    const ttl = ttlSeconds ?? defaultTokenTtlSeconds();
+    const ttl = Math.min(
+      Math.max(ttlSeconds ?? defaultTokenTtlSeconds(), 60),
+      maxTokenTtlSeconds(),
+    );
     const exp = Math.floor(Date.now() / 1000) + ttl;
     const token = signCheckInToken(
       { v: 1, reservationId, propertyId, exp },
@@ -381,6 +393,7 @@ export class GuestCheckInService {
 
     let imageMediaId: string | undefined;
     let imageStorageKey: string | undefined;
+    let imageEncrypted = false;
     if (dto.idImageBase64) {
       const stored = await this.storeIdImage(
         principal.propertyId,
@@ -389,6 +402,7 @@ export class GuestCheckInService {
       );
       imageMediaId = stored.mediaId;
       imageStorageKey = stored.storageKey;
+      imageEncrypted = stored.encrypted;
     } else if (ctx.online.requireIdPhoto !== false) {
       throw new BadRequestException('ID photo is required');
     }
@@ -427,6 +441,7 @@ export class GuestCheckInService {
             imageMediaId,
             imageStorageKey,
             imageStored: true,
+            imageEncrypted,
           },
           updatedAt: new Date(),
         })
@@ -462,7 +477,7 @@ export class GuestCheckInService {
     propertyId: string,
     reservationId: string,
     dataUrlOrBase64: string,
-  ): Promise<{ mediaId: string; storageKey: string }> {
+  ): Promise<{ mediaId: string; storageKey: string; encrypted: boolean }> {
     const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrlOrBase64);
     const contentType = match?.[1] || 'image/jpeg';
     const b64 = match?.[2] || dataUrlOrBase64;
@@ -473,14 +488,19 @@ export class GuestCheckInService {
     if (buffer.length > 8 * 1024 * 1024) {
       throw new BadRequestException('ID photo must be under 8MB');
     }
+    const sealed = encryptIdImageBuffer(buffer, contentType);
     const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
-    const put = await this.storage.put(buffer, {
+    const put = await this.storage.put(sealed.buffer, {
       propertyId,
-      contentType,
-      filename: `guest-id-${reservationId}.${ext}`,
+      contentType: sealed.encrypted ? 'application/octet-stream' : contentType,
+      filename: `guest-id-${reservationId}.${sealed.encrypted ? 'bin' : ext}`,
     });
     // mediaId = storage key (guest-scoped; not the staff media table).
-    return { mediaId: put.storageKey, storageKey: put.storageKey };
+    return {
+      mediaId: put.storageKey,
+      storageKey: put.storageKey,
+      encrypted: sealed.encrypted,
+    };
   }
 
   async listUpsells(principal: CheckInPrincipal) {
@@ -553,56 +573,70 @@ export class GuestCheckInService {
   async requestLink(dto: RequestCheckInLinkDto) {
     const confirmation = dto.confirmationNumber.trim();
     const email = dto.email.trim().toLowerCase();
+    const propertyId = dto.propertyId;
+    const generic = {
+      ok: true as const,
+      message: 'If we find a matching reservation, a new check-in link will be emailed shortly.',
+    };
+
+    const [property] = await this.db
+      .select()
+      .from(properties)
+      .where(eq(properties.id, propertyId))
+      .limit(1);
+    if (!property) return generic;
+
+    const online = ((property.settings ?? {}) as { onlineCheckIn?: OnlineCheckInSettings })
+      .onlineCheckIn;
+    if (online?.enabled === false) return generic;
+
     // Confirmation numbers live on bookings (party wrapper), not reservations.
     const [booking] = await this.db
       .select()
       .from(bookings)
-      .where(eq(bookings.confirmationNumber, confirmation))
+      .where(
+        and(
+          eq(bookings.confirmationNumber, confirmation),
+          eq(bookings.propertyId, propertyId),
+        ),
+      )
       .limit(1);
-    if (booking) {
-      const [reservation] = await this.db
-        .select()
-        .from(reservations)
-        .where(
-          and(
-            eq(reservations.bookingId, booking.id),
-            eq(reservations.propertyId, booking.propertyId),
-          ),
-        )
-        .limit(1);
-      if (reservation) {
-        const [guest] = await this.db
-          .select()
-          .from(guests)
-          .where(eq(guests.id, reservation.guestId))
-          .limit(1);
-        if (guest?.email && String(guest.email).trim().toLowerCase() === email) {
-          const link = await this.issueLinkForReservation(
-            reservation.propertyId,
-            reservation.id,
-          );
-          const [property] = await this.db
-            .select()
-            .from(properties)
-            .where(eq(properties.id, reservation.propertyId));
-          const hotel = property?.staffDisplayName || property?.name || 'your hotel';
-          try {
-            await this.email.send({
-              to: email,
-              subject: `Your check-in link for ${hotel}`,
-              text: `Here is your online check-in link:\n\n${link.url}\n\nThis link expires soon. If you did not request it, you can ignore this email.`,
-              html: `<p>Here is your online check-in link for <strong>${hotel}</strong>:</p><p><a href="${link.url}">Continue check-in</a></p><p>This link expires soon. If you did not request it, you can ignore this email.</p>`,
-            });
-          } catch {
-            // Still return generic OK — do not leak delivery failures.
-          }
-        }
-      }
+    if (!booking) return generic;
+
+    const [reservation] = await this.db
+      .select()
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.bookingId, booking.id),
+          eq(reservations.propertyId, propertyId),
+        ),
+      )
+      .limit(1);
+    if (!reservation) return generic;
+
+    const [guest] = await this.db
+      .select()
+      .from(guests)
+      .where(eq(guests.id, reservation.guestId))
+      .limit(1);
+    if (!guest?.email || String(guest.email).trim().toLowerCase() !== email) {
+      return generic;
     }
-    return {
-      ok: true,
-      message: 'If we find a matching reservation, a new check-in link will be emailed shortly.',
-    };
+
+    const link = await this.issueLinkForReservation(propertyId, reservation.id);
+    const hotel = property.staffDisplayName || property.name || 'your hotel';
+    try {
+      await this.email.send({
+        to: email,
+        subject: `Your check-in link for ${hotel}`,
+        text: `Here is your online check-in link:\n\n${link.url}\n\nThis link expires soon. If you did not request it, you can ignore this email.`,
+        html: `<p>Here is your online check-in link for <strong>${hotel}</strong>:</p><p><a href="${link.url}">Continue check-in</a></p><p>This link expires soon. If you did not request it, you can ignore this email.</p>`,
+      });
+    } catch {
+      // Still return generic OK — do not leak delivery failures.
+    }
+    return generic;
   }
 
   async acceptUpsell(principal: CheckInPrincipal, dto: GuestAcceptUpsellDto) {
@@ -709,6 +743,14 @@ export class GuestCheckInService {
       throw new BadRequestException('paymentMethodId or gatewayPaymentToken is required');
     }
 
+    const configuredProvider = resolvePaymentGatewayProvider(this.config);
+    const requestedProvider = (dto.gatewayProvider ?? configuredProvider).toLowerCase();
+    if (requestedProvider === 'mock' && !isPaymentGatewayMockMode()) {
+      throw new BadRequestException('Mock payment gateway is not enabled');
+    }
+    // Prefer server-configured gateway; mock only when mock mode is enabled.
+    const gatewayProvider = isPaymentGatewayMockMode() ? 'mock' : configuredProvider;
+
     let folio = (
       await this.db
         .select()
@@ -733,13 +775,24 @@ export class GuestCheckInService {
       });
     }
 
+    const balance = Number(folio.balance ?? 0);
+    const amount = Number(dto.amount);
+    if (!Number.isFinite(amount) || amount < 0.01) {
+      throw new BadRequestException('Payment amount is invalid');
+    }
+    if (amount > balance + 0.009) {
+      throw new BadRequestException(
+        `Payment amount exceeds outstanding balance (${balance.toFixed(2)})`,
+      );
+    }
+
     const returnUrl = dto.returnUrl?.trim();
     const result = await this.payments.authorizePayment({
       folioId: folio.id,
       propertyId: principal.propertyId,
-      amount: Number(dto.amount).toFixed(2),
+      amount: amount.toFixed(2),
       currencyCode: ctx.reservation.currencyCode || ctx.property.currencyCode,
-      gatewayProvider: dto.gatewayProvider ?? 'stripe',
+      gatewayProvider,
       gatewayPaymentToken: token,
       cardLastFour: dto.cardLastFour,
       cardBrand: dto.cardBrand,
@@ -876,6 +929,9 @@ export class GuestCheckInService {
 
   async getAccess(principal: CheckInPrincipal) {
     const ctx = await this.loadContext(principal);
+    if (['checked_out', 'cancelled', 'no_show'].includes(ctx.reservation.status)) {
+      throw new BadRequestException('Room access is no longer available for this stay');
+    }
     if (!['checked_in', 'stayover', 'due_out'].includes(ctx.reservation.status)) {
       throw new BadRequestException('Access is available after check-in');
     }
@@ -906,9 +962,21 @@ export class GuestCheckInService {
       }
     }
 
-    const accessCode = credential?.accessCode ?? null;
-    // Only surface mobileKey when the lock provider actually issued one.
-    const mobileKey = credential?.mobileKey ?? null;
+    // Never surface a console/demo PIN as a smart-lock digital key.
+    let accessCode = credential?.accessCode ?? null;
+    let mobileKey = credential?.mobileKey ?? null;
+    let provider = credential?.provider ?? null;
+    let accessUnavailableReason: string | null = null;
+    if (accessMode === 'smart_lock') {
+      const providerName = String(provider || '').toLowerCase();
+      if (!accessCode || providerName === 'console' || !credential) {
+        accessCode = null;
+        mobileKey = null;
+        provider = providerName === 'console' ? null : provider;
+        accessUnavailableReason =
+          'Digital room key is unavailable. Please contact the front desk.';
+      }
+    }
 
     const wallet =
       ctx.online.walletEnabled === false
@@ -935,11 +1003,12 @@ export class GuestCheckInService {
       accessCode,
       accessMode,
       instructions: ctx.online.accessInstructions ?? null,
-      provider: credential?.provider ?? null,
+      provider,
       mobileKey,
       wallet,
       reservationId: principal.reservationId,
       status: ctx.reservation.status,
+      ...(accessUnavailableReason ? { accessUnavailableReason } : {}),
     };
   }
 
@@ -972,12 +1041,21 @@ export class GuestCheckInService {
     const key = String(doc['imageStorageKey'] || doc['imageMediaId'] || '');
     if (!key) throw new NotFoundException('No ID photo on file');
 
-    const buffer = await this.storage.get(key);
-    if (!buffer) throw new NotFoundException('ID photo file missing');
-    const ext = key.split('.').pop()?.toLowerCase();
+    const stored = await this.storage.get(key);
+    if (!stored) throw new NotFoundException('ID photo file missing');
+    const decrypted = decryptIdImageBuffer(stored);
+    const buffer = decrypted.buffer;
+    const extFromKey = key.split('.').pop()?.toLowerCase();
     const contentType =
-      ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-    return { buffer, contentType, filename: `guest-id-${reservationId}.${ext || 'jpg'}` };
+      decrypted.contentType ||
+      (extFromKey === 'png'
+        ? 'image/png'
+        : extFromKey === 'webp'
+          ? 'image/webp'
+          : 'image/jpeg');
+    const ext =
+      contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+    return { buffer, contentType, filename: `guest-id-${reservationId}.${ext}` };
   }
 
   private assertFranceFicheFields(
@@ -993,9 +1071,11 @@ export class GuestCheckInService {
       .trim()
       .toUpperCase();
     const isFr = nationality === 'FR' || nationality === 'FRA' || nationality === 'FRANCE';
-    if (!nationality || isFr) return;
+    // Empty nationality is treated as incomplete (matches front-desk fiche guards).
+    if (isFr) return;
 
     const missing: string[] = [];
+    if (!nationality) missing.push('nationality');
     const need = (key: string, label: string) => {
       if (!String(rd[key] ?? '').trim()) missing.push(label);
     };

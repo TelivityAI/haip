@@ -131,6 +131,7 @@ function requestConfig(
   formQuestions = questions,
 ): BookingConfig {
   return {
+    propertyId: '44444444-4444-4444-8444-444444444444',
     isEnabled: true,
     displayName: 'Hotel Mirador',
     primaryColor: '#0D9488',
