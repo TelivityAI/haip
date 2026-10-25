@@ -18,7 +18,7 @@ export interface McpToolHandlers {
 const TOOL_DEFS = [
   {
     name: 'searchHotels',
-    description: 'Search Ligare-enabled hotels with live availability and tax-inclusive rates.',
+    description: 'Search allow-listed hotels with live availability and tax-inclusive rates.',
     inputSchema: {
       type: 'object',
       required: ['checkIn', 'checkOut'],
@@ -34,7 +34,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'getProperty',
-    description: 'Get property detail (404 if not opted into Ligare).',
+    description: 'Get property detail (404 if not on the allow-list).',
     inputSchema: {
       type: 'object',
       required: ['propertyId'],
@@ -71,7 +71,7 @@ const TOOL_DEFS = [
         adults: { type: 'number' },
         children: { type: 'number' },
         idempotencyKey: { type: 'string' },
-        clientPlatform: { type: 'string', enum: ['chatgpt', 'claude', 'gemini', 'ligare'] },
+        clientPlatform: { type: 'string', enum: ['chatgpt', 'claude', 'gemini', 'other'] },
         specialRequests: { type: 'string' },
       },
     },
@@ -153,7 +153,7 @@ export async function handleMcpRequest(
       result: {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'ligare-hotels', version: '1.0.0' },
+        serverInfo: { name: 'haip-connect', version: '1.0.0' },
       },
     };
   }

@@ -77,7 +77,7 @@ export function buildOpenApiSpec(publicBaseUrl: string): Record<string, unknown>
   return {
     openapi: '3.1.0',
     info: {
-      title: 'Ligare Hotels — Book in ChatGPT, Claude, Gemini',
+      title: 'HAIP Connect — Agent booking API',
       description:
         'Search opted-in hotels, prepare a booking with hosted payment (no card data), confirm payment, then look up / modify / cancel. Selling prices are tax-inclusive.',
       version: '1.0.0',
@@ -219,7 +219,7 @@ export function buildOpenApiSpec(publicBaseUrl: string): Record<string, unknown>
                     },
                     clientPlatform: {
                       type: 'string',
-                      enum: ['chatgpt', 'claude', 'gemini', 'ligare'],
+                      enum: ['chatgpt', 'claude', 'gemini', 'other'],
                     },
                     paymentMethod: {
                       type: 'string',

@@ -1,5 +1,5 @@
 /**
- * HaipConnectAdapter — the equivalent of OTAIP/Ligare's duffel-connect-adapter,
+ * HaipConnectAdapter — typed HTTP client over HAIP Connect,
  * but the "domain engine" here is HAIP's already-built Connect API. Each method is
  * a single typed HTTP call to `${baseUrl}/api/v1/connect/*`, with the gateway's
  * `x-api-key` injected server-side (the GPT never sees it).
@@ -65,7 +65,7 @@ export interface BookInput {
   paymentMethod?: 'pay_at_property' | 'hosted_checkout';
   /** Required for hosted_checkout — stable per guest intent. */
   idempotencyKey?: string;
-  clientPlatform?: 'chatgpt' | 'claude' | 'gemini' | 'ligare';
+  clientPlatform?: 'chatgpt' | 'claude' | 'gemini' | 'other';
   agentId?: string;
   externalReference?: string;
 }
@@ -141,8 +141,8 @@ export class HaipConnectAdapter {
     const body = {
       ...input,
       paymentMethod: input.paymentMethod ?? 'hosted_checkout',
-      agentId: input.agentId ?? 'LIGARE',
-      clientPlatform: input.clientPlatform ?? 'ligare',
+      agentId: input.agentId ?? 'HAIP_AGENT',
+      clientPlatform: input.clientPlatform ?? 'chatgpt',
     };
     // Never forward card tokens from an LLM client.
     delete (body as { paymentToken?: string }).paymentToken;

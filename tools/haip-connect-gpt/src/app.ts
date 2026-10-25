@@ -1,5 +1,5 @@
 /**
- * Fastify app: Ligare Hotels LLM gateway (ChatGPT Actions + Claude/Gemini MCP).
+ * Fastify app: reference HAIP Connect agent gateway (ChatGPT Actions + MCP).
  *
  * Allow-list: search may cache ≤60s; getProperty / prepareBooking always live.
  * Cards never enter the schema — hosted paymentUrl + confirmPayment only.
@@ -85,7 +85,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.get('/health', async () => ({
     status: 'ok',
-    service: 'ligare-hotels-gateway',
+    service: 'haip-connect-agent-gateway',
     upstreamHealthy: await adapter.upstreamHealthy(),
     timestamp: new Date().toISOString(),
   }));
@@ -99,7 +99,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.get('/mcp', async (_req, reply) => {
     reply.send({
-      name: 'ligare-hotels',
+      name: 'haip-connect',
       transport: 'streamable-http',
       tools: listMcpTools().map((t) => t.name),
       endpoint: '/mcp',
@@ -214,7 +214,7 @@ async function searchHotelsFiltered(
   const enabled = await allowList.getCachedEnabledIds();
   // If allow-all sentinel (isEnabled always true with empty list), skip filter when empty+allow-all
   const filtered =
-    enabled.size === 0 && process.env['LIGARE_ALLOW_ALL'] === 'true'
+    enabled.size === 0 && process.env['ALLOW_ALL_PROPERTIES'] === 'true'
       ? results
       : results.filter((r) => {
           const id = String(r['sourcePropertyId'] ?? r['propertyId'] ?? '');
@@ -234,7 +234,7 @@ async function getPropertyGuarded(
 ): Promise<unknown> {
   const ok = await allowList.isPropertyEnabledLive(propertyId);
   if (!ok) {
-    throw new UpstreamError(404, { error: 'not_found', message: 'Property is not bookable in Ligare' });
+    throw new UpstreamError(404, { error: 'not_found', message: 'Property is not on the allow-list' });
   }
   return adapter.getProperty(propertyId);
 }
@@ -248,7 +248,7 @@ async function prepareBookingGuarded(
 ): Promise<unknown> {
   const ok = await allowList.isPropertyEnabledLive(input.propertyId);
   if (!ok) {
-    throw new UpstreamError(404, { error: 'not_found', message: 'Property is not bookable in Ligare' });
+    throw new UpstreamError(404, { error: 'not_found', message: 'Property is not on the allow-list' });
   }
   if (!input.guestEmail) {
     throw new UpstreamError(400, { error: 'guest_email_required', message: 'guestEmail is required' });
@@ -264,8 +264,8 @@ async function prepareBookingGuarded(
     ...input,
     idempotencyKey: key,
     paymentMethod: 'hosted_checkout',
-    clientPlatform: input.clientPlatform ?? defaultPlatform ?? 'ligare',
-    agentId: 'LIGARE',
+    clientPlatform: input.clientPlatform ?? defaultPlatform ?? 'chatgpt',
+    agentId: process.env['HAIP_AGENT_ID'] ?? 'HAIP_AGENT',
   });
 }
 

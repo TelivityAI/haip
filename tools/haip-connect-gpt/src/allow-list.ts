@@ -1,5 +1,5 @@
 /**
- * Per-property Ligare / AI distribution allow-list.
+ * Per-property AI distribution allow-list.
  *
  * Search may use a ≤60s cache. Detail and prepareBooking MUST call
  * isPropertyEnabledLive() so a hotel toggled OFF is immediately 404.
@@ -114,7 +114,7 @@ export function createAllowListFromEnv(env: NodeJS.ProcessEnv = process.env): Al
       distributionAllowListSource({ baseUrl: distributionUrl, serviceToken: token }),
     );
   }
-  const staticIds = (env['LIGARE_ALLOWED_PROPERTY_IDS'] ?? '')
+  const staticIds = (env['ALLOWED_PROPERTY_IDS'] ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
@@ -122,8 +122,8 @@ export function createAllowListFromEnv(env: NodeJS.ProcessEnv = process.env): Al
     return new AllowList(staticAllowListSource(staticIds));
   }
   // Fail-closed when no source configured: empty allow-list.
-  // Set LIGARE_ALLOW_ALL=true only for local Connect demos without an allow-list API.
-  if (env['LIGARE_ALLOW_ALL'] === 'true') {
+  // Set ALLOW_ALL_PROPERTIES=true only for local Connect demos without an allow-list API.
+  if (env['ALLOW_ALL_PROPERTIES'] === 'true') {
     return new AllowList({
       async listEnabled() {
         return [];
