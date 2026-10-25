@@ -23,10 +23,16 @@ describe('TtlockLockProvider', () => {
     process.env = { ...env };
   });
 
-  it('reports not configured when env is incomplete', () => {
-    delete process.env['TTLOCK_LOCK_ID'];
+  it('reports not configured when OAuth env is incomplete', () => {
+    delete process.env['TTLOCK_USERNAME'];
     const provider = new TtlockLockProvider({} as any);
     expect(provider.isConfigured()).toBe(false);
+  });
+
+  it('is configured with OAuth credentials even when lock id is per-room', () => {
+    delete process.env['TTLOCK_LOCK_ID'];
+    const provider = new TtlockLockProvider({} as any);
+    expect(provider.isConfigured()).toBe(true);
   });
 
   it('obtains token and adds keyboard PIN', async () => {
