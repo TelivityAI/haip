@@ -8,6 +8,7 @@ import {
   Inject,
   Optional,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
@@ -24,6 +25,10 @@ import {
   type BookingRequestStripeHandler,
   type BookingRequestStripePaymentRow,
 } from './booking-request-stripe-handler.interface';
+import {
+  CONNECT_CHECKOUT_STRIPE_HANDLER,
+  type ConnectCheckoutStripeHandler,
+} from './connect-checkout-stripe-handler.interface';
 import { classifyHaipMetadata } from './stripe-financial-state';
 import Stripe from 'stripe';
 
@@ -51,6 +56,7 @@ export class StripeWebhookController {
     private readonly webhookService: WebhookService,
     private readonly folioService: FolioService,
     private readonly configService: ConfigService,
+    private readonly moduleRef: ModuleRef,
     @Optional()
     @Inject(BOOKING_REQUEST_STRIPE_HANDLER)
     private readonly bookingRequestStripeHandler?: BookingRequestStripeHandler,
@@ -137,6 +143,26 @@ export class StripeWebhookController {
         case 'charge.refunded':
           await this.handleChargeRefunded(event.data.object as Stripe.Charge);
           break;
+
+        case 'checkout.session.completed': {
+          // Resolved lazily to avoid PaymentModule ↔ ConnectModule circular imports.
+          let handler: ConnectCheckoutStripeHandler | undefined;
+          try {
+            handler = this.moduleRef.get<ConnectCheckoutStripeHandler>(
+              CONNECT_CHECKOUT_STRIPE_HANDLER,
+              { strict: false },
+            );
+          } catch {
+            handler = undefined;
+          }
+          if (handler) {
+            await handler.handleCheckoutSessionCompleted(
+              event.id,
+              event.data.object as Stripe.Checkout.Session,
+            );
+          }
+          break;
+        }
 
         default:
           this.logger.debug(`Unhandled event type: ${event.type}`);

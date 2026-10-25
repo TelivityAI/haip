@@ -7,6 +7,7 @@ import {
   IsEmail,
   IsIn,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -41,8 +42,9 @@ export class AgentBookDto {
   guestLastName!: string;
 
   @ApiPropertyOptional({ example: 'john@example.com' })
-  @IsOptional()
+  @ValidateIf((o: AgentBookDto) => o.paymentMethod === 'hosted_checkout')
   @IsEmail()
+  @IsOptional()
   guestEmail?: string;
 
   @ApiPropertyOptional({ example: '+1-555-0100' })
@@ -72,24 +74,42 @@ export class AgentBookDto {
   @IsString()
   specialRequests?: string;
 
-  // Payment
-  @ApiPropertyOptional({ enum: ['pay_at_property', 'prepaid', 'virtual_card'] })
+  // Payment — LLM schemas expose hosted_checkout | pay_at_property only.
+  // prepaid/virtual_card kept for backward compatibility but do not charge.
+  @ApiPropertyOptional({
+    enum: ['pay_at_property', 'hosted_checkout', 'prepaid', 'virtual_card'],
+  })
   @IsOptional()
-  @IsIn(['pay_at_property', 'prepaid', 'virtual_card'])
-  paymentMethod?: 'pay_at_property' | 'prepaid' | 'virtual_card';
+  @IsIn(['pay_at_property', 'hosted_checkout', 'prepaid', 'virtual_card'])
+  paymentMethod?: 'pay_at_property' | 'hosted_checkout' | 'prepaid' | 'virtual_card';
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Deprecated for LLM clients — cards never pass through Connect tools',
+  })
   @IsOptional()
   @IsString()
   paymentToken?: string;
 
+  /** Required for hosted_checkout — LLM-stable key per guest intent. */
+  @ApiPropertyOptional({ description: 'Idempotency key (required for hosted_checkout)' })
+  @ValidateIf((o: AgentBookDto) => o.paymentMethod === 'hosted_checkout')
+  @IsString()
+  @IsOptional()
+  idempotencyKey?: string;
+
+  /** chatgpt | claude | gemini — stored for attribution UI */
+  @ApiPropertyOptional({ enum: ['chatgpt', 'claude', 'gemini', 'ligare'] })
+  @IsOptional()
+  @IsIn(['chatgpt', 'claude', 'gemini', 'ligare'])
+  clientPlatform?: 'chatgpt' | 'claude' | 'gemini' | 'ligare';
+
   // Agent metadata
-  @ApiPropertyOptional({ description: 'OTAIP agent that made this booking' })
+  @ApiPropertyOptional({ description: 'Agent / channel id (use LIGARE for Ligare Hotels)' })
   @IsOptional()
   @IsString()
   agentId?: string;
 
-  @ApiPropertyOptional({ description: 'OTAIP booking reference' })
+  @ApiPropertyOptional({ description: 'External booking reference / platform tag' })
   @IsOptional()
   @IsString()
   externalReference?: string;

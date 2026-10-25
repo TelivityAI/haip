@@ -14,6 +14,7 @@ import postgres from 'postgres';
 export interface ToolCallLog {
   tool: string;
   sessionId: string | null;
+  propertyId?: string | null;
   request: unknown;
   response: unknown;
   status: 'ok' | 'error';
@@ -40,12 +41,13 @@ export function isLoggingEnabled(): boolean {
 export async function logToolCall(entry: ToolCallLog): Promise<void> {
   if (!sql) return;
   try {
+    // property_id column is optional on older haip_tool_calls tables — stored in request JSON too.
     await sql`
       insert into haip_tool_calls (tool, session_id, request, response, status, error, latency_ms)
       values (
         ${entry.tool},
         ${entry.sessionId},
-        ${sql.json(entry.request as never)},
+        ${sql.json({ ...(entry.request as object), _propertyId: entry.propertyId ?? null } as never)},
         ${sql.json(entry.response as never)},
         ${entry.status},
         ${entry.error ?? null},
