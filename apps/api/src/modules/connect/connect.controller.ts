@@ -128,7 +128,7 @@ export class ConnectController {
   }
 
   @Get('bookings/:confirmationNumber/payment-status')
-  @ApiOperation({ summary: 'Payment status for hosted Connect / Ligare bookings (PSP-reconciled)' })
+  @ApiOperation({ summary: 'Payment status for hosted Connect bookings (PSP-reconciled)' })
   async paymentStatus(@Param('confirmationNumber') confirmationNumber: string) {
     return this.paymentService.getPaymentStatus(confirmationNumber);
   }

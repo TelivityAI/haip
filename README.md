@@ -41,7 +41,7 @@
 
 The hotel industry runs on closed-source, legacy PMS platforms that charge per-room fees, lock data behind proprietary APIs, and treat integrations as an afterthought. Hotels pay $5–15/room/month just for the privilege of managing their own operations.
 
-HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, groups & commercial (allotment + rooming lists), accounting & cashiering (A/R, deposits, cash drawers, GL codes), channel distribution to 450+ OTAs, a **full commission-free direct booking engine** (guest-facing widget + public booking API) so hotels take reservations straight from their own website, **pluggable payment gateways** (Stripe and other PSPs), Keycloak authentication, local user & role administration, media management for property and room photos, tax calculation, fiscal invoicing & guest-registration providers, an **integration registry** for adapters and providers, door-lock credential hooks, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. It even ships a **ChatGPT gateway** so guests can search and book a room by chatting. Dashboard locales include English, German, and Portuguese (BR). All open source under Apache 2.0.
+HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, groups & commercial (allotment + rooming lists), accounting & cashiering (A/R, deposits, cash drawers, GL codes), channel distribution to 450+ OTAs, a **full commission-free direct booking engine** (guest-facing widget + public booking API) so hotels take reservations straight from their own website, **pluggable payment gateways** (Stripe and other PSPs), Keycloak authentication, local user & role administration, media management for property and room photos, tax calculation, fiscal invoicing & guest-registration providers, an **integration registry** for adapters and providers, door-lock credential hooks, revenue management — and **12 built-in AI agents** that orchestrate revenue strategy, optimize pricing, predict cancellations, detect audit anomalies, prioritize receivables collections, forecast group pickup, schedule housekeeping, automate guest communications, and draft review responses. External AI assistants book through the **Connect API**. Dashboard locales include English, German, and Portuguese (BR). All open source under Apache 2.0.
 
 What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and per-property calibration (deterministic engines that learn each hotel's own rates from its history — not LLMs pretending to be agents). HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
@@ -58,7 +58,6 @@ graph TB
     subgraph Clients
         Dashboard["React Dashboard<br/>(Vite + TanStack Query)"]
         BookingWidget["Booking Widget<br/>(Direct Booking Engine)"]
-        ChatGPT["ChatGPT Gateway<br/>(Connect GPT Actions)"]
         OTAIP["OTAIP Agents<br/>(Hotel Search · Rate Compare · Booking)"]
         ThirdParty["Third-Party Systems<br/>(Webhooks · Adapters)"]
     end
@@ -121,7 +120,6 @@ graph TB
     Dashboard -->|HTTP + WebSocket| REST
     Dashboard -->|Real-time| WS
     BookingWidget -->|HTTP| BookingEngine
-    ChatGPT -->|REST| Connect
     OTAIP -->|REST| Connect
     ThirdParty -->|REST| REST
     ThirdParty -->|REST| Integrations
@@ -464,13 +462,6 @@ Operator notes for activating existing adapters, metasearch landings on the dire
 - HMAC-signed deliveries with retries; permanent failures raise a critical staff notification
 - See **[`docs/webhooks.md`](./docs/webhooks.md)** for the integration guide (signature verification, payload conventions, fiscal documents, regional compliance examples)
 
-### ChatGPT Gateway (Connect GPT)
-- A standalone, deployable **gateway that exposes HAIP hotel search & booking as a ChatGPT Custom GPT Action** (`tools/haip-connect-gpt`) — guests search availability and create/modify/cancel reservations by chatting
-- A thin, typed client over HAIP's existing **Connect API** (`/api/v1/connect/*`) — no hotel logic is reimplemented; it builds a ChatGPT-importable **OpenAPI 3.1** spec for 6 operations (`searchHotels`, `getProperty`, `create`/`get`/`modify`/`cancelReservation`)
-- **Secure by design** — the gateway injects HAIP's API key server-side (the GPT never sees it), and response guards ensure **only selling prices** reach the model (net/wholesale/cost stripped)
-- **PII-scrubbed tool-call logging** for training, with an optional Supabase/Postgres sink
-- Host-agnostic — ships as a **Vercel** serverless function, a plain Node server, or a Docker container
-
 ### Admin Dashboard
 - React SPA including Dashboard, Front Desk, Reservations, Guests, Rooms, Housekeeping, Folios, Groups, **Commercial**, Cashier, House Accounts, Accounting, Tax, Rate Plans, Night Audit, Reports, Channel Manager, Revenue Management, Communications, Reviews, Settings
 - Revenue Management page: KPI cards, pending AI recommendations with approve/reject, agent performance metrics, per-agent configuration
@@ -752,8 +743,7 @@ haip/
 │   │   └── src/schema/             # Table files (property, room, guest, agent, etc.)
 │   ├── shared/                     # Shared types, enums, webhook events
 │   └── booking-requests/           # Optional request-first booking (flag-gated)
-├── tools/
-│   └── haip-connect-gpt/           # ChatGPT Custom GPT gateway over the Connect API (Vercel)
+├── tools/                          # Repo-control and operator tooling
 ├── docker-compose.yml              # PostgreSQL + Redis + Keycloak + API
 ├── CLAUDE.md                       # AI agent constitution
 └── .env.example                    # Environment template
@@ -1096,9 +1086,7 @@ OTAIP's `packages/connect` will have a HAIP adapter (like `AmadeusAdapter`, `Duf
 OTAIP Agent → ConnectAdapter (HAIP) → Connect API → HAIP PMS → PostgreSQL
 ```
 
-The PMS is the product. OTAIP agents are the intelligence on top.
-
-> **ChatGPT too** — `tools/haip-connect-gpt` wraps this same Connect API as a ChatGPT Custom GPT Action (OpenAPI 3.1, server-side key injection, selling-price-only responses), so a guest can search and book straight from ChatGPT. See [`tools/haip-connect-gpt/README.md`](./tools/haip-connect-gpt/README.md).
+The PMS is the product. OTAIP agents are the intelligence on top. External platforms (assistants, aggregators) use the same Connect API with a scoped API key — see [`docs/connect-external-booking.md`](./docs/connect-external-booking.md).
 
 ---
 

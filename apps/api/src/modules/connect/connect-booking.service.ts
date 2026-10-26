@@ -146,7 +146,9 @@ export class ConnectBookingService {
     // the confirmation number is itself a bearer credential for the booking.
     const confirmationNumber = `HAIP-${generateConfirmationToken()}`;
 
-    const channelCode = dto.agentId ?? (hosted ? 'LIGARE' : 'otaip');
+    // Prefer explicit agentId from the client (external gateways send their own
+    // channel codes). Neutral default for hosted checkout when omitted.
+    const channelCode = dto.agentId ?? (hosted ? 'connect' : 'otaip');
     const externalRef = dto.externalReference
       ?? (dto.clientPlatform ? `${dto.clientPlatform}:${confirmationNumber}` : undefined);
 
