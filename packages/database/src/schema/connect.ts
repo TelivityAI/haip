@@ -100,7 +100,7 @@ export const connectCredentials = pgTable('connect_credentials', {
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
 });
 
-/** Hosted payment session for Connect / Ligare LLM bookings. */
+/** Hosted payment session for Connect agent / LLM bookings. */
 export type ConnectPaymentMode = 'charge' | 'authorize' | 'guarantee';
 export type ConnectPaymentSessionStatus =
   | 'pending'

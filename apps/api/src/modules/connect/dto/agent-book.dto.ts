@@ -97,14 +97,18 @@ export class AgentBookDto {
   @IsOptional()
   idempotencyKey?: string;
 
-  /** chatgpt | claude | gemini — stored for attribution UI */
-  @ApiPropertyOptional({ enum: ['chatgpt', 'claude', 'gemini', 'ligare'] })
+  /** Free-text client/platform tag for attribution (no fixed product enum). */
+  @ApiPropertyOptional({
+    description: 'Client platform identifier (free-text; e.g. assistant or integrator name)',
+  })
   @IsOptional()
-  @IsIn(['chatgpt', 'claude', 'gemini', 'ligare'])
-  clientPlatform?: 'chatgpt' | 'claude' | 'gemini' | 'ligare';
+  @IsString()
+  clientPlatform?: string;
 
   // Agent metadata
-  @ApiPropertyOptional({ description: 'Agent / channel id (use LIGARE for Ligare Hotels)' })
+  @ApiPropertyOptional({
+    description: 'Agent / channel id written to booking.channelCode when provided',
+  })
   @IsOptional()
   @IsString()
   agentId?: string;

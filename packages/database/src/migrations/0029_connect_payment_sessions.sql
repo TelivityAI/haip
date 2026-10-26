@@ -1,4 +1,4 @@
--- Connect LLM / agent hosted payment sessions (Ligare Hotels).
+-- Connect LLM / agent hosted payment sessions.
 -- Tracks pending → paid/failed/expired with idempotency and PSP event dedupe.
 
 CREATE TABLE IF NOT EXISTS connect_payment_sessions (

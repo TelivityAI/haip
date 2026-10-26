@@ -305,8 +305,6 @@ capabilities:
     requiredPaths:
       - apps/api/src/modules/connect
       - packages/database/src/schema/connect.ts
-    optionalPaths:
-      - tools/haip-connect-gpt
     routeHints:
       - connect
     testPaths:
