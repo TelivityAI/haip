@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsDateString,
+  IsIn,
   IsNumber,
   IsObject,
   IsOptional,
@@ -13,7 +14,14 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GuestPreRegisterDto {
-  @ApiPropertyOptional()
+  /**
+   * Fallback when no digital signature image is captured (e.g. paper sign at desk).
+   * Prefer `signatureImageBase64` for online check-in — that sets registrationSignedAt.
+   */
+  @ApiPropertyOptional({
+    description:
+      'Fallback: guest signed on paper / no digital pad. Prefer signatureImageBase64 for online.',
+  })
   @IsOptional()
   @IsBoolean()
   registrationSigned?: boolean;
@@ -51,6 +59,19 @@ export class GuestPreRegisterDto {
   @IsOptional()
   @IsString()
   idImageBase64?: string;
+
+  /** Base64 data-URL or raw base64 of the registration signature (canvas pad). */
+  @ApiPropertyOptional({
+    description: 'PNG/JPEG data-URL of the guest signature pad capture',
+  })
+  @IsOptional()
+  @IsString()
+  signatureImageBase64?: string;
+
+  @ApiPropertyOptional({ enum: ['online', 'front_desk'], default: 'online' })
+  @IsOptional()
+  @IsIn(['online', 'front_desk'])
+  capturedVia?: 'online' | 'front_desk';
 }
 
 export class GuestPayDto {

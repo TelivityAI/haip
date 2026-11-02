@@ -292,8 +292,10 @@ export function generateEmailDraft(
   previousEmailTypes: EmailType[] = [],
   options?: { daysSinceDeparture?: number; checkInUrl?: string },
 ): EmailDraft | null {
-  // GDPR: check opt-out
-  if (!guest.gdprConsentMarketing && emailType !== 'confirmation') {
+  // GDPR: marketing types require consent. Transactional lifecycle mail
+  // (confirmation / pre_arrival / day_of — check-in links, stay logistics) always sends.
+  const transactionalTypes: EmailType[] = ['confirmation', 'pre_arrival', 'day_of'];
+  if (!guest.gdprConsentMarketing && !transactionalTypes.includes(emailType)) {
     return null;
   }
 

@@ -70,7 +70,15 @@ export class GuestCheckInController {
   @UseGuards(CheckInMagicGuard)
   @ApiOperation({ summary: 'Submit registration card, signature, and ID from phone' })
   preRegister(@Req() req: any, @Body() dto: GuestPreRegisterDto) {
-    return this.service.preRegister(this.principal(req), dto);
+    const fwd = req.headers?.['x-forwarded-for'];
+    const ip =
+      (typeof fwd === 'string' ? fwd.split(',')[0]?.trim() : undefined) ||
+      req.ip ||
+      req.socket?.remoteAddress ||
+      undefined;
+    const userAgent =
+      typeof req.headers?.['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
+    return this.service.preRegister(this.principal(req), dto, { ip, userAgent });
   }
 
   @Get('upsells')

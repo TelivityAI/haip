@@ -300,6 +300,100 @@ describe('GuestCheckInService', () => {
     );
   });
 
+  it('stores signature under registration_data.signature and sets registrationSigned', async () => {
+    mockLoadContext({
+      property: { city: 'Paris' } as any,
+    });
+    storage.put.mockResolvedValue({
+      storageKey: `${PROPERTY_ID}/guest-signature.bin`,
+      url: 'local://sig',
+    });
+    reservations.preRegister.mockResolvedValue({
+      ...baseReservation,
+      guestIdDocument: { idType: 'passport' },
+    });
+    vi.spyOn(service, 'getSession').mockResolvedValue({
+      reservation: { hasSignature: true },
+      steps: { id: true },
+    } as any);
+
+    const idB64 = `data:image/jpeg;base64,${Buffer.alloc(64, 3).toString('base64')}`;
+    const sigB64 = `data:image/png;base64,${Buffer.alloc(64, 9).toString('base64')}`;
+    await service.preRegister(
+      principal,
+      {
+        registrationData: {
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          nationality: 'FR',
+          email: 'ada@example.com',
+          phone: '+331',
+          address: 'Paris',
+        },
+        idImageBase64: idB64,
+        signatureImageBase64: sigB64,
+        capturedVia: 'online',
+      },
+      { ip: '203.0.113.10', userAgent: 'TestAgent/1.0' },
+    );
+
+    expect(reservations.preRegister).toHaveBeenCalledWith(
+      RESERVATION_ID,
+      PROPERTY_ID,
+      expect.objectContaining({
+        registrationSigned: true,
+        registrationData: expect.objectContaining({
+          signature: expect.objectContaining({
+            imageMediaId: `${PROPERTY_ID}/guest-signature.bin`,
+            storageKey: `${PROPERTY_ID}/guest-signature.bin`,
+            signedAt: expect.any(String),
+            ip: '203.0.113.10',
+            userAgent: 'TestAgent/1.0',
+            place: expect.stringContaining('Demo Hotel'),
+            capturedVia: 'online',
+          }),
+        }),
+      }),
+    );
+    expect(storage.put).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      expect.objectContaining({
+        propertyId: PROPERTY_ID,
+        filename: expect.stringContaining('guest-signature-'),
+      }),
+    );
+  });
+
+  it('still accepts registrationSigned checkbox without signature image (fallback)', async () => {
+    mockLoadContext();
+    reservations.preRegister.mockResolvedValue({ ...baseReservation });
+    vi.spyOn(service, 'getSession').mockResolvedValue({ steps: { registration: true } } as any);
+
+    await service.preRegister(principal, {
+      registrationSigned: true,
+      registrationData: {
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        nationality: 'FR',
+        email: 'ada@example.com',
+        phone: '+331',
+        address: 'Paris',
+      },
+      idImageBase64: `data:image/jpeg;base64,${Buffer.alloc(64, 1).toString('base64')}`,
+    });
+
+    expect(reservations.preRegister).toHaveBeenCalledWith(
+      RESERVATION_ID,
+      PROPERTY_ID,
+      expect.objectContaining({
+        registrationSigned: true,
+        registrationData: expect.not.objectContaining({
+          signature: expect.anything(),
+        }),
+      }),
+    );
+  });
+
   it('pay passes redirect URLs and returns nextAction without treating failure as success', async () => {
     const prevGateway = process.env['PAYMENT_GATEWAY'];
     process.env['PAYMENT_GATEWAY'] = 'redsys';

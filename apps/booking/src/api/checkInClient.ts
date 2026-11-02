@@ -40,6 +40,8 @@ export interface CheckInSession {
     registrationSubmittedAt: string | null;
     registrationSignedAt: string | null;
     registrationData: Record<string, unknown> | null;
+    /** True when a digital signature was stored (image not exposed to guests). */
+    hasSignature?: boolean;
     onlineCheckInCompletedAt: string | null;
     hasIdDocument: boolean;
   };

@@ -106,6 +106,7 @@ export class SmtpEmailProvider implements EmailProvider {
       subject: message.subject,
       html: message.html,
       text: message.text,
+      ...(message.replyTo?.trim() ? { replyTo: message.replyTo.trim() } : {}),
       messageId: message.messageId,
       headers: message.idempotencyKey
         ? { 'X-HAIP-Idempotency-Key': message.idempotencyKey }

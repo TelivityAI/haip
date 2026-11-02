@@ -13,6 +13,7 @@ import {
 } from '../api/checkInClient';
 import { Button } from '../components/Button';
 import { Field, inputClass } from '../components/Field';
+import { SignaturePad } from '../components/SignaturePad';
 import { StripeCard, type PaymentResult } from '../components/StripeCard';
 import { WorldlineCard } from '../components/WorldlineCard';
 import { useConfig } from '../context/ConfigContext';
@@ -68,6 +69,8 @@ export function CheckIn() {
   const [placeOfBirth, setPlaceOfBirth] = useState('');
   const [address, setAddress] = useState('');
   const [signed, setSigned] = useState(false);
+  const [signatureImage, setSignatureImage] = useState<string | null>(null);
+  const [paperSignedFallback, setPaperSignedFallback] = useState(false);
   const [idType, setIdType] = useState('passport');
   const [idNumber, setIdNumber] = useState('');
   const [idCountry, setIdCountry] = useState('');
@@ -142,10 +145,17 @@ export function CheckIn() {
     [],
   );
 
+  const registrationRequired = Boolean(sessionQuery.data?.property.guestRegistrationRequired);
+  // Pad preferred; paper checkbox is the documented fallback when no digital capture.
+  const signatureOk = Boolean(signatureImage) || paperSignedFallback;
+
   const preRegister = useMutation({
     mutationFn: () =>
       checkInApi.preRegister({
-        registrationSigned: signed,
+        // Digital pad is preferred; paper checkbox is the fallback only.
+        registrationSigned: Boolean(signatureImage) || paperSignedFallback || signed,
+        signatureImageBase64: signatureImage || undefined,
+        capturedVia: 'online',
         registrationData: {
           firstName,
           lastName,
@@ -424,12 +434,37 @@ export function CheckIn() {
             />
             <span>{copy.terms}</span>
           </label>
+          <SignaturePad
+            label={copy.signature}
+            clearLabel={copy.signatureClear}
+            hint={copy.signatureHint}
+            value={signatureImage}
+            onChange={setSignatureImage}
+            borderColor={BORDER}
+            strokeColor={SLATE}
+            backgroundColor="#fff"
+          />
+          {!signatureImage && (
+            <label className="flex items-start gap-2 text-xs" style={{ color: LABEL }}>
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={paperSignedFallback}
+                onChange={(e) => setPaperSignedFallback(e.target.checked)}
+              />
+              <span>{copy.paperSignedFallback}</span>
+            </label>
+          )}
+          {registrationRequired && !signatureOk && (
+            <p className="text-sm text-red-600">{copy.signatureRequired}</p>
+          )}
           <Button
             className="w-full"
             disabled={
               !firstName ||
               !lastName ||
               !signed ||
+              (registrationRequired && !signatureOk) ||
               (Boolean(session.francePackEnabled) && !nationality) ||
               (ficheNeeded && (!dateOfBirth || !placeOfBirth || !address || !phone || !email))
             }
@@ -520,7 +555,8 @@ export function CheckIn() {
               disabled={
                 preRegister.isPending ||
                 (session.config.requireIdPhoto && !idImage) ||
-                !signed
+                !signed ||
+                (registrationRequired && !signatureOk)
               }
               onClick={() => preRegister.mutate()}
             >

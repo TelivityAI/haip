@@ -42,7 +42,7 @@ export class SesEmailProvider implements EmailProvider {
       );
     }
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       FromEmailAddress: message.from ?? this.from,
       Destination: { ToAddresses: [message.to] },
       Content: {
@@ -58,6 +58,9 @@ export class SesEmailProvider implements EmailProvider {
         },
       },
     };
+    if (message.replyTo?.trim()) {
+      payload['ReplyToAddresses'] = [message.replyTo.trim()];
+    }
 
     try {
       const { response: res, body } = await boundedEmailFetch(

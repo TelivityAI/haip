@@ -13,6 +13,7 @@ import {
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
 import { EmailService } from './email.service';
+import { formatNamedFrom, resolvePlatformFromAddress } from './email-from';
 import {
   defaultTokenTtlSeconds,
   signCheckInToken,
@@ -394,6 +395,8 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
               bodyHtml: draft.bodyHtml,
               bodyText: draft.bodyText,
               personalizationTokens: draft.personalizationTokens,
+              propertyName: property.name,
+              propertyEmail: property.email ?? null,
             },
             confidence: 0.90,
             inputSnapshot: {
@@ -421,11 +424,26 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
       };
     }
 
+    const platformFrom = resolvePlatformFromAddress();
+    const propertyName =
+      typeof rec.propertyName === 'string' && rec.propertyName.trim()
+        ? rec.propertyName.trim()
+        : undefined;
+    const propertyEmail =
+      typeof rec.propertyEmail === 'string' && rec.propertyEmail.trim()
+        ? rec.propertyEmail.trim()
+        : undefined;
+
     const result = await this.emailService.send({
       to: rec.to,
       subject: rec.subject,
       html: rec.bodyHtml,
       text: rec.bodyText,
+      // Hotel display name on the verified platform From; Reply-To = property contact.
+      ...(propertyName && platformFrom
+        ? { from: formatNamedFrom(propertyName, platformFrom) }
+        : {}),
+      ...(propertyEmail ? { replyTo: propertyEmail } : {}),
     });
 
     return {

@@ -227,6 +227,31 @@ export class GuestCheckInService {
 
     const canSelfCheckIn = this.evaluateSelfCheckIn(ctx, registrationComplete, folioBalance);
 
+    const rawRegData = (ctx.reservation.registrationData ?? null) as Record<string, unknown> | null;
+    const signatureMeta = (rawRegData?.['signature'] ?? null) as Record<string, unknown> | null;
+    const hasSignature = Boolean(
+      signatureMeta?.['imageMediaId'] || signatureMeta?.['storageKey'],
+    );
+    // Guests get confirmation that a signature exists — not storage keys / media ids.
+    const guestSafeRegistrationData = rawRegData
+      ? (() => {
+          const { signature: _sig, ...rest } = rawRegData;
+          return {
+            ...rest,
+            ...(hasSignature
+              ? {
+                  signature: {
+                    signedAt: signatureMeta?.['signedAt'] ?? null,
+                    place: signatureMeta?.['place'] ?? null,
+                    capturedVia: signatureMeta?.['capturedVia'] ?? null,
+                    present: true,
+                  },
+                }
+              : {}),
+          };
+        })()
+      : null;
+
     return {
       property: {
         id: ctx.property.id,
@@ -258,7 +283,8 @@ export class GuestCheckInService {
         roomNumber: ctx.room?.number ?? null,
         registrationSubmittedAt: ctx.reservation.registrationSubmittedAt,
         registrationSignedAt: ctx.reservation.registrationSignedAt,
-        registrationData: ctx.reservation.registrationData ?? null,
+        registrationData: guestSafeRegistrationData,
+        hasSignature,
         onlineCheckInCompletedAt: ctx.reservation.onlineCheckInCompletedAt ?? null,
         hasIdDocument: Boolean(ctx.reservation.guestIdDocument),
       },
@@ -383,7 +409,11 @@ export class GuestCheckInService {
     return rows.reduce((sum: number, f: any) => sum + Number(f.balance ?? 0), 0);
   }
 
-  async preRegister(principal: CheckInPrincipal, dto: GuestPreRegisterDto) {
+  async preRegister(
+    principal: CheckInPrincipal,
+    dto: GuestPreRegisterDto,
+    meta: { ip?: string; userAgent?: string } = {},
+  ) {
     const ctx = await this.loadContext(principal);
     if (ctx.online.enabled === false) {
       throw new BadRequestException('Online check-in is disabled for this property');
@@ -395,16 +425,39 @@ export class GuestCheckInService {
     let imageStorageKey: string | undefined;
     let imageEncrypted = false;
     if (dto.idImageBase64) {
-      const stored = await this.storeIdImage(
+      const stored = await this.storeEncryptedGuestImage(
         principal.propertyId,
         principal.reservationId,
         dto.idImageBase64,
+        'id',
       );
       imageMediaId = stored.mediaId;
       imageStorageKey = stored.storageKey;
       imageEncrypted = stored.encrypted;
     } else if (ctx.online.requireIdPhoto !== false) {
       throw new BadRequestException('ID photo is required');
+    }
+
+    let signatureBlock: Record<string, unknown> | undefined;
+    if (dto.signatureImageBase64) {
+      const stored = await this.storeEncryptedGuestImage(
+        principal.propertyId,
+        principal.reservationId,
+        dto.signatureImageBase64,
+        'signature',
+      );
+      const signedAt = new Date().toISOString();
+      const place = [ctx.property.city, ctx.property.name].filter(Boolean).join(' · ') ||
+        ctx.property.name;
+      signatureBlock = {
+        imageMediaId: stored.mediaId,
+        storageKey: stored.storageKey,
+        signedAt,
+        ip: meta.ip ?? null,
+        userAgent: meta.userAgent ?? null,
+        place,
+        capturedVia: dto.capturedVia === 'front_desk' ? 'front_desk' : 'online',
+      };
     }
 
     const registrationData = {
@@ -416,13 +469,17 @@ export class GuestCheckInService {
             imageMediaId,
           }
         : {}),
+      ...(signatureBlock ? { signature: signatureBlock } : {}),
     };
+
+    // Digital signature implies signed; boolean remains a paper/no-pad fallback.
+    const registrationSigned = Boolean(signatureBlock) || (dto.registrationSigned ?? false);
 
     const updated = await this.reservations.preRegister(
       principal.reservationId,
       principal.propertyId,
       {
-        registrationSigned: dto.registrationSigned ?? true,
+        registrationSigned,
         registrationData,
         idType: dto.idType,
         idNumber: dto.idNumber,
@@ -473,27 +530,30 @@ export class GuestCheckInService {
     return this.getSession(principal);
   }
 
-  private async storeIdImage(
+  /** Encrypted media path shared by ID photos and registration signatures. */
+  private async storeEncryptedGuestImage(
     propertyId: string,
     reservationId: string,
     dataUrlOrBase64: string,
+    kind: 'id' | 'signature',
   ): Promise<{ mediaId: string; storageKey: string; encrypted: boolean }> {
     const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrlOrBase64);
-    const contentType = match?.[1] || 'image/jpeg';
+    const contentType = match?.[1] || (kind === 'signature' ? 'image/png' : 'image/jpeg');
     const b64 = match?.[2] || dataUrlOrBase64;
     const buffer = Buffer.from(b64, 'base64');
+    const label = kind === 'signature' ? 'Signature' : 'ID photo';
     if (buffer.length < 32) {
-      throw new BadRequestException('ID photo is empty or invalid');
+      throw new BadRequestException(`${label} is empty or invalid`);
     }
     if (buffer.length > 8 * 1024 * 1024) {
-      throw new BadRequestException('ID photo must be under 8MB');
+      throw new BadRequestException(`${label} must be under 8MB`);
     }
     const sealed = encryptIdImageBuffer(buffer, contentType);
     const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
     const put = await this.storage.put(sealed.buffer, {
       propertyId,
       contentType: sealed.encrypted ? 'application/octet-stream' : contentType,
-      filename: `guest-id-${reservationId}.${sealed.encrypted ? 'bin' : ext}`,
+      filename: `guest-${kind}-${reservationId}.${sealed.encrypted ? 'bin' : ext}`,
     });
     // mediaId = storage key (guest-scoped; not the staff media table).
     return {

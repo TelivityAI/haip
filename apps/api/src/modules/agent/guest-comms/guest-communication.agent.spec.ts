@@ -105,6 +105,65 @@ describe('GuestCommunicationAgent', () => {
     expect(result.changes[0].action).toBe('sent');
   });
 
+  it('execute brands From with property name and sets Reply-To from property email', async () => {
+    const prevFrom = process.env['SENDGRID_FROM'];
+    process.env['SENDGRID_FROM'] = 'noreply@haip.dev';
+    emailService.isConfigured.mockReturnValue(true);
+    emailService.send.mockResolvedValue({ status: 'sent', sent: true, provider: 'sendgrid' });
+
+    try {
+      await agent.execute({
+        recommendation: {
+          to: 'guest@example.com',
+          subject: 'Hi',
+          bodyHtml: '<p>Hi</p>',
+          bodyText: 'Hi',
+          emailType: 'pre_arrival',
+          propertyName: 'Sample Hotel',
+          propertyEmail: 'reception@example.com',
+        },
+      } as any);
+
+      expect(emailService.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: '"Sample Hotel" <noreply@haip.dev>',
+          replyTo: 'reception@example.com',
+        }),
+      );
+    } finally {
+      if (prevFrom === undefined) delete process.env['SENDGRID_FROM'];
+      else process.env['SENDGRID_FROM'] = prevFrom;
+    }
+  });
+
+  it('execute omits Reply-To when property email is null', async () => {
+    const prevFrom = process.env['SENDGRID_FROM'];
+    process.env['SENDGRID_FROM'] = 'noreply@haip.dev';
+    emailService.isConfigured.mockReturnValue(true);
+    emailService.send.mockResolvedValue({ status: 'sent', sent: true, provider: 'sendgrid' });
+
+    try {
+      await agent.execute({
+        recommendation: {
+          to: 'guest@example.com',
+          subject: 'Hi',
+          bodyHtml: '<p>Hi</p>',
+          bodyText: 'Hi',
+          emailType: 'confirmation',
+          propertyName: 'Demo Hotel',
+          propertyEmail: null,
+        },
+      } as any);
+
+      const payload = emailService.send.mock.calls[0]?.[0];
+      expect(payload.from).toBe('"Demo Hotel" <noreply@haip.dev>');
+      expect(payload.replyTo).toBeUndefined();
+    } finally {
+      if (prevFrom === undefined) delete process.env['SENDGRID_FROM'];
+      else process.env['SENDGRID_FROM'] = prevFrom;
+    }
+  });
+
   it('execute drafts when no email provider configured', async () => {
     emailService.isConfigured.mockReturnValue(false);
     const result = await agent.execute({

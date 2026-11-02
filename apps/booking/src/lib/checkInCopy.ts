@@ -28,6 +28,12 @@ const en = {
   dateOfBirth: 'Date of birth',
   placeOfBirth: 'Place of birth',
   terms: 'I confirm these details are accurate and agree to the property terms.',
+  signature: 'Your signature',
+  signatureHint: 'Sign with your finger or mouse. Required to complete registration.',
+  signatureClear: 'Clear',
+  signatureRequired: 'Please sign before continuing.',
+  paperSignedFallback:
+    'Guest signed on paper — no digital signature captured (front desk use)',
   continueToId: 'Continue to ID',
   photoId: 'Photo ID',
   idWhy:
@@ -97,6 +103,12 @@ const fr: typeof en = {
   dateOfBirth: 'Date de naissance',
   placeOfBirth: 'Lieu de naissance',
   terms: 'Je confirme que ces informations sont exactes et j’accepte les conditions de l’établissement.',
+  signature: 'Votre signature',
+  signatureHint: 'Signez avec le doigt ou la souris. Obligatoire pour finaliser l’enregistrement.',
+  signatureClear: 'Effacer',
+  signatureRequired: 'Veuillez signer avant de continuer.',
+  paperSignedFallback:
+    'Client a signé sur papier — aucune signature numérique (usage réception)',
   continueToId: 'Continuer vers la pièce d’identité',
   photoId: 'Pièce d’identité',
   idWhy:
