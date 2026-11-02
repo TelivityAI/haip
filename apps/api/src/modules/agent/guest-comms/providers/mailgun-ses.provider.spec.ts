@@ -46,6 +46,30 @@ describe('MailgunEmailProvider', () => {
     expect(form.get('v:haip-idempotency-key')).toBe('stable-delivery-1');
   });
 
+  it('Mailgun includes named From and Reply-To when provided', async () => {
+    process.env['MAILGUN_API_KEY'] = 'key';
+    process.env['MAILGUN_DOMAIN'] = 'mg.example.com';
+    process.env['MAILGUN_FROM'] = 'noreply@mg.example.com';
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: '<mailgun-2>' }),
+    }) as any;
+
+    const { MailgunEmailProvider } = await import('./mailgun-email.provider');
+    const provider = new MailgunEmailProvider();
+    await provider.send({
+      to: 'guest@example.com',
+      subject: 'S',
+      html: 'h',
+      text: 't',
+      from: '"Demo Hotel" <noreply@mg.example.com>',
+      replyTo: 'desk@hotel.example',
+    });
+    const form = new URLSearchParams(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body));
+    expect(form.get('from')).toBe('"Demo Hotel" <noreply@mg.example.com>');
+    expect(form.get('h:Reply-To')).toBe('desk@hotel.example');
+  });
+
   it('returns at the hard HTTP deadline even when fetch ignores abort', async () => {
     vi.useFakeTimers();
     process.env['MAILGUN_API_KEY'] = 'key';

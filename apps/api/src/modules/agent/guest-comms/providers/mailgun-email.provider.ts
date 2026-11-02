@@ -47,6 +47,7 @@ export class MailgunEmailProvider implements EmailProvider {
     form.set('subject', message.subject);
     form.set('text', message.text);
     form.set('html', message.html);
+    if (message.replyTo?.trim()) form.set('h:Reply-To', message.replyTo.trim());
     if (message.messageId) form.set('h:Message-Id', message.messageId);
     if (message.idempotencyKey) {
       form.set('v:haip-idempotency-key', message.idempotencyKey);

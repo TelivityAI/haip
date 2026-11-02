@@ -12,6 +12,7 @@ import {
   sentEmailResult,
   unknownTimeoutResult,
 } from './bounded-email-transport';
+import { parseNamedFrom } from '../email-from';
 
 /**
  * SendGrid Email API reference adapter.
@@ -49,7 +50,7 @@ export class SendgridEmailProvider implements EmailProvider {
       return notSentEmailResult(this.name, 'SendGrid not configured');
     }
 
-    const from = message.from ?? this.defaultFrom!;
+    const parsedFrom = parseNamedFrom(message.from ?? this.defaultFrom!);
     const personalization: {
       to: Array<{ email: string }>;
       headers?: Record<string, string>;
@@ -59,15 +60,20 @@ export class SendgridEmailProvider implements EmailProvider {
     if (message.idempotencyKey) {
       personalization.custom_args = { haip_idempotency_key: message.idempotencyKey };
     }
-    const payload = {
+    const payload: Record<string, unknown> = {
       personalizations: [personalization],
-      from: { email: from },
+      from: parsedFrom.name
+        ? { email: parsedFrom.email, name: parsedFrom.name }
+        : { email: parsedFrom.email },
       subject: message.subject,
       content: [
         { type: 'text/plain', value: message.text },
         { type: 'text/html', value: message.html },
       ],
     };
+    if (message.replyTo?.trim()) {
+      payload['reply_to'] = { email: message.replyTo.trim() };
+    }
 
     try {
       const { response: res, failureBody } = await boundedEmailFetch(

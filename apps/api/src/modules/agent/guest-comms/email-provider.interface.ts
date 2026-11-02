@@ -3,7 +3,14 @@ export interface EmailMessage {
   subject: string;
   html: string;
   text: string;
+  /**
+   * Sender. May be a bare address or display-name form
+   * (`"Property Name" <noreply@platform>`). When omitted, providers use their
+   * platform default From env (SENDGRID_FROM / MAILGUN_FROM / SES_FROM / SMTP_FROM).
+   */
   from?: string;
+  /** Hotel contact address — guests reply here; omit when property.email is unset. */
+  replyTo?: string;
   /**
    * Correlation key forwarded to providers as custom metadata
    * (e.g. Mailgun `v:haip-idempotency-key`, SendGrid custom_args). Useful for
