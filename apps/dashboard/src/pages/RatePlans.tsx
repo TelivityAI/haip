@@ -184,7 +184,7 @@ function RatePlanList() {
               <tr key={p.id} onClick={() => navigate(`/rate-plans/${p.id}`)} className={`border-b border-gray-50 cursor-pointer hover:bg-telivity-light-grey/50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
                 <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{p.name}</td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{p.code}</td>
-                <td className="px-4 py-3"><StatusBadge status={p.type === 'bar' ? 'info' : p.type === 'derived' ? 'warning' : 'success'} label={p.type} /></td>
+                <td className="px-4 py-3"><StatusBadge status={p.type === 'bar' ? 'info' : p.type === 'derived' ? 'warning' : 'success'} label={t(`ratePlans.types.${p.type}`, { defaultValue: p.type })} /></td>
                 <td className="px-4 py-3 text-sm text-telivity-slate">{p.roomTypeName ?? '—'}</td>
                 <td className="px-4 py-3 text-sm text-right font-medium">{p.baseAmount != null ? formatMoney(p.baseAmount, currencyCode) : '—'}</td>
                 <td className="px-4 py-3"><StatusBadge status={p.isActive !== false ? 'success' : 'completed'} label={p.isActive !== false ? t('common.active') : t('common.inactive')} /></td>
@@ -207,7 +207,10 @@ function RatePlanList() {
             <div>
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('ratePlans.type')}</label>
               <select value={type} onChange={(e) => setType(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal">
-                <option value="bar">BAR</option><option value="derived">Derived</option><option value="negotiated">Negotiated</option><option value="package">Package</option>
+                <option value="bar">{t('ratePlans.types.bar')}</option>
+                <option value="derived">{t('ratePlans.types.derived')}</option>
+                <option value="negotiated">{t('ratePlans.types.negotiated')}</option>
+                <option value="package">{t('ratePlans.types.package')}</option>
               </select>
             </div>
             <div><label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('ratePlans.baseAmount')}</label><input type="number" step="0.01" value={baseAmount} onChange={(e) => setBaseAmount(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" /></div>
@@ -365,11 +368,11 @@ function RestrictionsPanel({ ratePlanId }: { ratePlanId: string }) {
             <tr className="border-b border-gray-100">
               <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('ratePlans.startDate')}</th>
               <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('ratePlans.endDate')}</th>
-              <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('ratePlans.minLos')}</th>
-              <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('ratePlans.maxLos')}</th>
-              <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('ratePlans.cta')}</th>
-              <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('ratePlans.ctd')}</th>
-              <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('ratePlans.isClosed')}</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase" title={t('ratePlans.minLosHint')}>{t('ratePlans.minLos')}</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase" title={t('ratePlans.maxLosHint')}>{t('ratePlans.maxLos')}</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase" title={t('ratePlans.ctaHint')}>{t('ratePlans.cta')}</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase" title={t('ratePlans.ctdHint')}>{t('ratePlans.ctd')}</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase" title={t('ratePlans.stopSellHint')}>{t('ratePlans.isClosed')}</th>
               <th className="px-2 py-2 text-left text-xs font-semibold text-telivity-slate uppercase">{t('ratePlans.dayOfWeekOverrides')}</th>
               <th className="px-2 py-2 text-right text-xs font-semibold text-telivity-slate uppercase">{t('common.actions')}</th>
             </tr>
@@ -437,22 +440,24 @@ function RestrictionsPanel({ ratePlanId }: { ratePlanId: string }) {
             <div>
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('ratePlans.minLos')}</label>
               <input type="number" min={1} value={form.minLos} onChange={(e) => setForm({ ...form, minLos: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              <p className="text-[11px] text-telivity-mid-grey mt-1">{t('ratePlans.minLosHint')}</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('ratePlans.maxLos')}</label>
               <input type="number" min={1} value={form.maxLos} onChange={(e) => setForm({ ...form, maxLos: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              <p className="text-[11px] text-telivity-mid-grey mt-1">{t('ratePlans.maxLosHint')}</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-4 text-sm">
-            <label className="inline-flex items-center gap-2">
+            <label className="inline-flex items-center gap-2 cursor-pointer" title={t('ratePlans.ctaHint')}>
               <input type="checkbox" checked={form.closedToArrival} onChange={(e) => setForm({ ...form, closedToArrival: e.target.checked })} />
               {t('ratePlans.cta')}
             </label>
-            <label className="inline-flex items-center gap-2">
+            <label className="inline-flex items-center gap-2 cursor-pointer" title={t('ratePlans.ctdHint')}>
               <input type="checkbox" checked={form.closedToDeparture} onChange={(e) => setForm({ ...form, closedToDeparture: e.target.checked })} />
               {t('ratePlans.ctd')}
             </label>
-            <label className="inline-flex items-center gap-2">
+            <label className="inline-flex items-center gap-2 cursor-pointer" title={t('ratePlans.stopSellHint')}>
               <input type="checkbox" checked={form.isClosed} onChange={(e) => setForm({ ...form, isClosed: e.target.checked })} />
               {t('ratePlans.isClosed')}
             </label>
@@ -564,7 +569,7 @@ function RatePlanDetail() {
         <button onClick={() => navigate('/rate-plans')} className="p-1.5 rounded hover:bg-telivity-light-grey"><ChevronLeft size={20} /></button>
         <BadgeDollarSign size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">{plan.name}</h1>
-        <StatusBadge status={plan.type === 'bar' ? 'info' : 'warning'} label={plan.type} />
+        <StatusBadge status={plan.type === 'bar' ? 'info' : 'warning'} label={t(`ratePlans.types.${plan.type}`, { defaultValue: plan.type })} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -603,7 +608,7 @@ function RatePlanDetail() {
           <h2 className="text-sm font-semibold text-telivity-navy mb-3">{t('ratePlans.calculator')}</h2>
           <div className="flex gap-2 flex-wrap">
             <input type="date" value={testDate} onChange={(e) => setTestDate(e.target.value)} className="flex-1 min-w-[140px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
-            <input type="number" min={1} value={testNights} onChange={(e) => setTestNights(e.target.value)} placeholder="Nights" className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
+            <input type="number" min={1} value={testNights} onChange={(e) => setTestNights(e.target.value)} placeholder={t('ratePlans.nights')} className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal" />
             <button onClick={() => testMutation.mutate()} disabled={!testDate || !propertyId || testMutation.isPending} className="bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">{t('ratePlans.calculate')}</button>
           </div>
           {effectiveRate != null && (
