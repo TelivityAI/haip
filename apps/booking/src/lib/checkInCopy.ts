@@ -1,7 +1,20 @@
 export type CheckInLocale = 'en' | 'fr';
 
-export function resolveCheckInLocale(lang = typeof navigator !== 'undefined' ? navigator.language : 'en'): CheckInLocale {
-  return lang.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+/**
+ * Prefer the property's default language (e.g. Herse → fr), then an explicit
+ * override, then the browser language. English remains available when the
+ * property language is not French.
+ */
+export function resolveCheckInLocale(
+  lang?: string | null,
+  opts?: { propertyDefaultLanguage?: string | null },
+): CheckInLocale {
+  const fromProperty = opts?.propertyDefaultLanguage;
+  if (fromProperty && fromProperty.toLowerCase().startsWith('fr')) return 'fr';
+  if (fromProperty && fromProperty.trim()) return 'en';
+  const fallback =
+    lang ?? (typeof navigator !== 'undefined' ? navigator.language : 'en');
+  return fallback.toLowerCase().startsWith('fr') ? 'fr' : 'en';
 }
 
 const en = {

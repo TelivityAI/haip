@@ -7,6 +7,15 @@ describe('checkInCopy signature strings', () => {
     expect(resolveCheckInLocale('en-US')).toBe('en');
   });
 
+  it('prefers property default language over browser', () => {
+    expect(
+      resolveCheckInLocale('en-US', { propertyDefaultLanguage: 'fr' }),
+    ).toBe('fr');
+    expect(
+      resolveCheckInLocale('fr-FR', { propertyDefaultLanguage: 'en' }),
+    ).toBe('en');
+  });
+
   it('exposes EN + FR signature pad copy', () => {
     const en = checkInCopy('en');
     const fr = checkInCopy('fr');
