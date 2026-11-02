@@ -132,15 +132,37 @@ describe('generateEmailDraft', () => {
     expect(repeat!.personalizationTokens).toContain('repeat_guest');
   });
 
-  it('blocks non-confirmation emails when GDPR opt-out', () => {
+  it('allows transactional emails when GDPR marketing opt-out; blocks marketing types', () => {
     const guest = makeGuest({ gdprConsentMarketing: false });
     const confirmation = generateEmailDraft('confirmation', guest, makeReservation(), makeProperty(), makeConfig());
     const preArrival = generateEmailDraft('pre_arrival', guest, makeReservation(), makeProperty(), makeConfig());
+    const dayOf = generateEmailDraft('day_of', guest, makeReservation(), makeProperty(), makeConfig());
+    const welcome = generateEmailDraft('welcome', guest, makeReservation(), makeProperty(), makeConfig());
     const postStay = generateEmailDraft('post_stay', guest, makeReservation(), makeProperty(), makeConfig());
+    const winBack = generateEmailDraft('win_back', guest, makeReservation(), makeProperty(), makeConfig());
 
-    expect(confirmation).not.toBeNull(); // confirmation always sent
-    expect(preArrival).toBeNull();
+    // Transactional: confirmation / pre_arrival / day_of skip gdprConsentMarketing
+    expect(confirmation).not.toBeNull();
+    expect(preArrival).not.toBeNull();
+    expect(dayOf).not.toBeNull();
+    // Marketing / engagement stay gated
+    expect(welcome).toBeNull();
     expect(postStay).toBeNull();
+    expect(winBack).toBeNull();
+  });
+
+  it('includes check-in URL in pre_arrival for marketing opt-out guests', () => {
+    const draft = generateEmailDraft(
+      'pre_arrival',
+      makeGuest({ gdprConsentMarketing: false }),
+      makeReservation(),
+      makeProperty(),
+      makeConfig(),
+      [],
+      { checkInUrl: 'https://booking.example/check-in?token=abc' },
+    );
+    expect(draft).not.toBeNull();
+    expect(draft!.bodyText).toContain('https://booking.example/check-in?token=abc');
   });
 
   it('prevents duplicate emails for same event', () => {
