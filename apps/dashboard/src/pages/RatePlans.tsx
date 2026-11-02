@@ -488,9 +488,14 @@ function RatePlanDetail() {
   const { propertyId , currencyCode } = useProperty();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [testDate, setTestDate] = useState('');
   const [testNights, setTestNights] = useState('7');
   const [effectiveRate, setEffectiveRate] = useState<number | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editBaseAmount, setEditBaseAmount] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
 
   const { data } = useQuery({
     queryKey: ['rate-plans', id, propertyId],
@@ -499,6 +504,34 @@ function RatePlanDetail() {
   });
 
   const plan: RatePlan | null = data?.data ?? data ?? null;
+
+  const openEditPlan = () => {
+    if (!plan) return;
+    setEditName(plan.name ?? '');
+    setEditBaseAmount(plan.baseAmount != null ? String(plan.baseAmount) : '');
+    setEditIsActive(plan.isActive !== false);
+    setEditOpen(true);
+  };
+
+  const updatePlanMutation = useMutation({
+    mutationFn: async () => {
+      requirePropertyId(propertyId);
+      return api.patch(
+        `/v1/rate-plans/${id}`,
+        {
+          name: editName,
+          baseAmount: editBaseAmount,
+          isActive: editIsActive,
+        },
+        { params: { propertyId } },
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rate-plans', id] });
+      queryClient.invalidateQueries({ queryKey: ['rate-plans', propertyId] });
+      setEditOpen(false);
+    },
+  });
 
   const testMutation = useMutation({
     mutationFn: () => {
@@ -536,7 +569,15 @@ function RatePlanDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm p-6 space-y-3">
-          <h2 className="text-sm font-semibold text-telivity-navy">{t('ratePlans.details')}</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-telivity-navy">{t('ratePlans.details')}</h2>
+            <button
+              onClick={openEditPlan}
+              className="flex items-center gap-1.5 text-telivity-teal hover:text-telivity-navy text-xs font-semibold px-2.5 py-1 rounded-lg border border-telivity-teal/30 hover:bg-telivity-teal/5 transition-colors"
+            >
+              <Pencil size={13} /> {t('common.edit')}
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.code')}</p><p className="text-sm font-medium">{plan.code}</p></div>
             <div><p className="text-xs text-telivity-mid-grey">{t('ratePlans.baseAmount')}</p><p className="text-sm font-medium">{plan.baseAmount != null ? formatMoney(plan.baseAmount, currencyCode) : '—'}</p></div>
@@ -582,6 +623,47 @@ function RatePlanDetail() {
           baseAmount={Number(plan.baseAmount ?? 0)}
         />
       )}
+
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={t('ratePlans.details')}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('ratePlans.nameRequired')}</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('ratePlans.baseAmount')}</label>
+            <input
+              type="number"
+              step="0.01"
+              value={editBaseAmount}
+              onChange={(e) => setEditBaseAmount(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="editIsActive"
+              checked={editIsActive}
+              onChange={(e) => setEditIsActive(e.target.checked)}
+              className="rounded text-telivity-teal focus:ring-telivity-teal"
+            />
+            <label htmlFor="editIsActive" className="text-sm text-telivity-navy">{t('common.active')}</label>
+          </div>
+          <button
+            onClick={() => updatePlanMutation.mutate()}
+            disabled={!editName || !editBaseAmount || updatePlanMutation.isPending}
+            className="w-full bg-telivity-teal text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {t('common.save')}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
