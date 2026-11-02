@@ -24,9 +24,11 @@ const VALID_TRANSITIONS: Record<RoomStatus, RoomStatus[]> = {
   // found dirty" path — the desk must be able to send a room back to HK.
   vacant_clean: ['occupied', 'vacant_dirty', 'out_of_order', 'out_of_service'],
   vacant_dirty: ['clean', 'out_of_order'],
-  clean: ['inspected', 'vacant_clean', 'out_of_order'],
-  inspected: ['guest_ready', 'out_of_order'],
-  guest_ready: ['occupied', 'out_of_order'],
+  // clean → vacant_dirty: inspection failed / return to housekeeping
+  clean: ['inspected', 'vacant_clean', 'vacant_dirty', 'out_of_order'],
+  // inspected / guest_ready → vacant_dirty: ready inventory found dirty
+  inspected: ['guest_ready', 'vacant_dirty', 'out_of_order'],
+  guest_ready: ['occupied', 'vacant_dirty', 'out_of_order'],
   occupied: ['vacant_dirty'],
   out_of_order: ['vacant_dirty'],
   out_of_service: ['vacant_dirty'],
