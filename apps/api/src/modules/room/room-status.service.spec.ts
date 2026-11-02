@@ -192,6 +192,75 @@ describe('RoomStatusService', () => {
       const result = await svc.transitionStatus('room-001', 'prop-001', 'occupied');
       expect(result.status).toBe('occupied');
     });
+
+    it('should transition clean → vacant_dirty (inspection failed)', async () => {
+      const room = { ...mockRoom, status: 'clean' };
+      const db = createMockDb([room]);
+      db.update = vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ ...room, status: 'vacant_dirty' }]),
+          }),
+        }),
+      });
+      const module = await Test.createTestingModule({
+        providers: [
+          RoomStatusService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<RoomStatusService>(RoomStatusService);
+
+      const result = await svc.transitionStatus('room-001', 'prop-001', 'vacant_dirty');
+      expect(result.status).toBe('vacant_dirty');
+    });
+
+    it('should transition inspected → vacant_dirty (ready found dirty)', async () => {
+      const room = { ...mockRoom, status: 'inspected' };
+      const db = createMockDb([room]);
+      db.update = vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ ...room, status: 'vacant_dirty' }]),
+          }),
+        }),
+      });
+      const module = await Test.createTestingModule({
+        providers: [
+          RoomStatusService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<RoomStatusService>(RoomStatusService);
+
+      const result = await svc.transitionStatus('room-001', 'prop-001', 'vacant_dirty');
+      expect(result.status).toBe('vacant_dirty');
+    });
+
+    it('should transition guest_ready → vacant_dirty (ready found dirty)', async () => {
+      const room = { ...mockRoom, status: 'guest_ready' };
+      const db = createMockDb([room]);
+      db.update = vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ ...room, status: 'vacant_dirty' }]),
+          }),
+        }),
+      });
+      const module = await Test.createTestingModule({
+        providers: [
+          RoomStatusService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<RoomStatusService>(RoomStatusService);
+
+      const result = await svc.transitionStatus('room-001', 'prop-001', 'vacant_dirty');
+      expect(result.status).toBe('vacant_dirty');
+    });
   });
 
   describe('invalid transitions', () => {
