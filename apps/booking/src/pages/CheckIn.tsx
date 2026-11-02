@@ -49,7 +49,6 @@ export function CheckIn() {
   const token = heldToken || urlToken;
   const { config } = useConfig();
   const queryClient = useQueryClient();
-  const copy = useMemo(() => checkInCopy(resolveCheckInLocale()), []);
   const bootstrapped = useRef(false);
 
   const [step, setStep] = useState<Step>('reg');
@@ -70,7 +69,6 @@ export function CheckIn() {
   const [address, setAddress] = useState('');
   const [signed, setSigned] = useState(false);
   const [signatureImage, setSignatureImage] = useState<string | null>(null);
-  const [paperSignedFallback, setPaperSignedFallback] = useState(false);
   const [idType, setIdType] = useState('passport');
   const [idNumber, setIdNumber] = useState('');
   const [idCountry, setIdCountry] = useState('');
@@ -102,6 +100,16 @@ export function CheckIn() {
   });
 
   const session = sessionQuery.data;
+
+  const copy = useMemo(
+    () =>
+      checkInCopy(
+        resolveCheckInLocale(undefined, {
+          propertyDefaultLanguage: session?.property.defaultLanguage,
+        }),
+      ),
+    [session?.property.defaultLanguage],
+  );
 
   useEffect(() => {
     if (!session) return;
@@ -146,14 +154,13 @@ export function CheckIn() {
   );
 
   const registrationRequired = Boolean(sessionQuery.data?.property.guestRegistrationRequired);
-  // Pad preferred; paper checkbox is the documented fallback when no digital capture.
-  const signatureOk = Boolean(signatureImage) || paperSignedFallback;
+  // Guest magic-link flow: digital pad only (paper fallback is front-desk only).
+  const signatureOk = Boolean(signatureImage);
 
   const preRegister = useMutation({
     mutationFn: () =>
       checkInApi.preRegister({
-        // Digital pad is preferred; paper checkbox is the fallback only.
-        registrationSigned: Boolean(signatureImage) || paperSignedFallback || signed,
+        registrationSigned: Boolean(signatureImage) || signed,
         signatureImageBase64: signatureImage || undefined,
         capturedVia: 'online',
         registrationData: {
@@ -371,7 +378,9 @@ export function CheckIn() {
           reg: session.steps.registration || ['id', 'upsell', 'pay', 'ready', 'access'].includes(step),
           id: session.steps.id || ['upsell', 'pay', 'ready', 'access'].includes(step),
           upsell: ['pay', 'ready', 'access'].includes(step),
-          pay: session.steps.payment || ['ready', 'access'].includes(step),
+          // Do not treat "payment not required / zero balance" as done while still
+          // on Details/ID/Extras — only mark Pay complete once past that step.
+          pay: ['ready', 'access'].includes(step),
           ready: session.steps.checkedIn,
         }}
         current={progressCurrent}
@@ -444,17 +453,6 @@ export function CheckIn() {
             strokeColor={SLATE}
             backgroundColor="#fff"
           />
-          {!signatureImage && (
-            <label className="flex items-start gap-2 text-xs" style={{ color: LABEL }}>
-              <input
-                type="checkbox"
-                className="mt-0.5"
-                checked={paperSignedFallback}
-                onChange={(e) => setPaperSignedFallback(e.target.checked)}
-              />
-              <span>{copy.paperSignedFallback}</span>
-            </label>
-          )}
           {registrationRequired && !signatureOk && (
             <p className="text-sm text-red-600">{copy.signatureRequired}</p>
           )}

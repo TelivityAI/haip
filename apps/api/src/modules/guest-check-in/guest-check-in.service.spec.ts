@@ -71,6 +71,7 @@ describe('GuestCheckInService', () => {
     checkOutTime: '11:00',
     timezone: 'UTC',
     currencyCode: 'EUR',
+    defaultLanguage: 'en',
     guestRegistrationRequired: true,
     staffDisplayName: 'Demo',
     staffPrimaryColor: null,

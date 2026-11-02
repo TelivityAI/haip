@@ -260,6 +260,7 @@ export class GuestCheckInService {
         checkOutTime: ctx.property.checkOutTime,
         timezone: ctx.property.timezone,
         currencyCode: ctx.property.currencyCode,
+        defaultLanguage: ctx.property.defaultLanguage ?? null,
         guestRegistrationRequired: ctx.property.guestRegistrationRequired,
         branding: {
           // Guest branding comes from booking engine in the UI; expose basics here.

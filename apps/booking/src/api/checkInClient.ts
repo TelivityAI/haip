@@ -19,6 +19,8 @@ export interface CheckInSession {
     checkOutTime: string;
     timezone: string;
     currencyCode: string;
+    /** BCP 47 property default (drives guest SPA locale). */
+    defaultLanguage?: string | null;
     guestRegistrationRequired: boolean;
     branding: {
       displayName?: string | null;
