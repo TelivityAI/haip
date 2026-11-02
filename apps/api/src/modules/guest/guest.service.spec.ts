@@ -38,9 +38,11 @@ const mockGuest = {
 function createMockDb(options: {
   selectData?: any[];
   reservationLink?: any[]; // rows returned by the .limit(1) precheck
+  staysData?: any[];
 } = {}) {
   const selectData = options.selectData ?? [mockGuest];
   const reservationLink = options.reservationLink ?? [{ id: 'res-1' }];
+  const staysData = options.staysData ?? [{ id: 'res-1', confirmationNumber: 'CONF1' }];
 
   const mutateChain = () => ({
     values: vi.fn().mockReturnValue({
@@ -71,6 +73,13 @@ function createMockDb(options: {
         }),
         // Direct resolution for findById / count
         then: (resolve: any) => resolve(selectData),
+      }),
+      innerJoin: vi.fn().mockReturnValue({
+        leftJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockResolvedValue(staysData),
+          }),
+        }),
       }),
     }),
   }));
@@ -145,6 +154,31 @@ describe('GuestService', () => {
       const emptyDb = createMockDb({ selectData: [] });
       const svc = await makeService(emptyDb);
       await expect(svc.findById('nonexistent', PROPERTY_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('findStays', () => {
+    it('should return stays when guest is linked to the property', async () => {
+      const result = await service.findStays(mockGuest.id, PROPERTY_ID);
+      expect(result).toEqual([{ id: 'res-1', confirmationNumber: 'CONF1' }]);
+    });
+
+    it('should throw NotFoundException when guest has no reservation link at property', async () => {
+      const scopedDb = createMockDb({ reservationLink: [] });
+      const svc = await makeService(scopedDb);
+      await expect(svc.findStays(mockGuest.id, PROPERTY_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw NotFoundException when guest is marked deleted (GDPR erased)', async () => {
+      const erasedDb = createMockDb({
+        selectData: [{ ...mockGuest, isDeleted: true }],
+      });
+      const svc = await makeService(erasedDb);
+      await expect(svc.findStays(mockGuest.id, PROPERTY_ID)).rejects.toThrow(
         NotFoundException,
       );
     });

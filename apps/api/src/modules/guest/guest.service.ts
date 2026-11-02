@@ -1,6 +1,6 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, ilike, or, and, sql, inArray } from 'drizzle-orm';
-import { guests, reservations, reservationGuests, auditLogs } from '@telivityhaip/database';
+import { eq, ilike, or, and, sql, inArray, desc } from 'drizzle-orm';
+import { guests, reservations, reservationGuests, auditLogs, bookings, rooms } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { CreateGuestDto } from './dto/create-guest.dto';
@@ -94,6 +94,72 @@ export class GuestService {
       throw new NotFoundException(`Guest ${id} not found`);
     }
     return guest;
+  }
+
+  async findStays(id: string, propertyId: string) {
+    await this.assertGuestAtProperty(id, propertyId);
+
+    const [guest] = await this.db
+      .select({ isDeleted: guests.isDeleted })
+      .from(guests)
+      .where(eq(guests.id, id));
+    if (!guest || guest.isDeleted) {
+      throw new NotFoundException(`Guest ${id} not found`);
+    }
+
+    const rows = await this.db
+      .select({
+        id: reservations.id,
+        bookingId: reservations.bookingId,
+        confirmationNumber: bookings.confirmationNumber,
+        arrivalDate: reservations.arrivalDate,
+        departureDate: reservations.departureDate,
+        nights: reservations.nights,
+        status: reservations.status,
+        roomId: reservations.roomId,
+        roomNumber: rooms.number,
+        totalAmount: reservations.totalAmount,
+        currencyCode: reservations.currencyCode,
+        createdAt: reservations.createdAt,
+      })
+      .from(reservations)
+      .innerJoin(
+        bookings,
+        and(
+          eq(reservations.bookingId, bookings.id),
+          eq(bookings.propertyId, propertyId),
+        ),
+      )
+      .leftJoin(
+        rooms,
+        and(
+          eq(reservations.roomId, rooms.id),
+          eq(rooms.propertyId, propertyId),
+        ),
+      )
+      .where(
+        and(
+          eq(reservations.propertyId, propertyId),
+          or(
+            eq(reservations.guestId, id),
+            inArray(
+              reservations.id,
+              this.db
+                .select({ reservationId: reservationGuests.reservationId })
+                .from(reservationGuests)
+                .where(
+                  and(
+                    eq(reservationGuests.guestId, id),
+                    eq(reservationGuests.propertyId, propertyId),
+                  ),
+                ),
+            ),
+          ),
+        ),
+      )
+      .orderBy(desc(reservations.arrivalDate));
+
+    return rows;
   }
 
   async update(id: string, propertyId: string, dto: UpdateGuestDto) {
