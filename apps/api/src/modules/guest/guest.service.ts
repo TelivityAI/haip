@@ -66,6 +66,14 @@ export class GuestService {
     if (dto.gdprConsentMarketing) {
       values['gdprConsentDate'] = new Date();
     }
+    if (dto.dateOfBirth) {
+      const parsed = new Date(dto.dateOfBirth);
+      values['dateOfBirth'] = isNaN(parsed.getTime()) ? null : parsed;
+    }
+    if (dto.idExpiry) {
+      const parsed = new Date(dto.idExpiry);
+      values['idExpiry'] = isNaN(parsed.getTime()) ? null : parsed;
+    }
     const [guest] = await db.insert(guests).values(values).returning();
     return guest;
   }
@@ -99,6 +107,22 @@ export class GuestService {
       throw new NotFoundException(`Guest ${id} not found`);
     }
     const values: Record<string, unknown> = { ...dto, updatedAt: new Date() };
+    if (dto.dateOfBirth !== undefined) {
+      if (dto.dateOfBirth) {
+        const parsed = new Date(dto.dateOfBirth);
+        values['dateOfBirth'] = isNaN(parsed.getTime()) ? null : parsed;
+      } else {
+        values['dateOfBirth'] = null;
+      }
+    }
+    if (dto.idExpiry !== undefined) {
+      if (dto.idExpiry) {
+        const parsed = new Date(dto.idExpiry);
+        values['idExpiry'] = isNaN(parsed.getTime()) ? null : parsed;
+      } else {
+        values['idExpiry'] = null;
+      }
+    }
     if (dto.isDnr === true && !dto.dnrReason) {
       // Keep existing reason if not provided
     }

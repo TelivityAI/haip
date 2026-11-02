@@ -110,6 +110,21 @@ describe('GuestService', () => {
       expect(result).toEqual(mockGuest);
       expect(mockDb.insert).toHaveBeenCalled();
     });
+
+    it('should convert dateOfBirth and idExpiry string values to Date instances', async () => {
+      await service.create({
+        firstName: 'John',
+        lastName: 'Smith',
+        dateOfBirth: '1995-11-11',
+        idExpiry: '2030-05-20',
+      });
+
+      const inserted = mockDb.insert.mock.results[0].value.values.mock.calls[0][0];
+      expect(inserted.dateOfBirth).toBeInstanceOf(Date);
+      expect(inserted.dateOfBirth.toISOString()).toContain('1995-11-11');
+      expect(inserted.idExpiry).toBeInstanceOf(Date);
+      expect(inserted.idExpiry.toISOString()).toContain('2030-05-20');
+    });
   });
 
   describe('findById', () => {
@@ -142,6 +157,19 @@ describe('GuestService', () => {
       });
       expect(result).toEqual(mockGuest);
       expect(mockDb.update).toHaveBeenCalled();
+    });
+
+    it('should convert dateOfBirth and idExpiry string values to Date instances on update', async () => {
+      await service.update(mockGuest.id, PROPERTY_ID, {
+        dateOfBirth: '1995-11-11',
+        idExpiry: '2030-05-20',
+      });
+
+      const updated = mockDb.update.mock.results[0].value.set.mock.calls[0][0];
+      expect(updated.dateOfBirth).toBeInstanceOf(Date);
+      expect(updated.dateOfBirth.toISOString()).toContain('1995-11-11');
+      expect(updated.idExpiry).toBeInstanceOf(Date);
+      expect(updated.idExpiry.toISOString()).toContain('2030-05-20');
     });
 
     it('should throw NotFoundException when not linked to property', async () => {
