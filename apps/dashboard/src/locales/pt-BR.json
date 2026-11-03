@@ -1447,6 +1447,8 @@
     "room": "Quarto",
     "roomNumber": "Quarto nº",
     "roomType": "Tipo de Quarto",
+    "search": "Buscar",
+    "searchPlaceholder": "Buscar por confirmação, hóspede, quarto…",
     "searchAvailability": "Buscar disponibilidade",
     "searchAvailabilityStep": "Etapa 1: Buscar disponibilidade",
     "searching": "Buscando…",
