@@ -1634,6 +1634,8 @@
     "importResult": "{{created}} criadas, {{failed}} falharam",
     "importRowError": "Linha {{row}}: {{error}}",
     "importing": "Importando…",
+    "in": "Entrada",
+    "out": "Saída",
     "markNoShow": "Marcar No-Show",
     "noAvailableRooms": "Nenhum quarto disponível compatível com esta reserva.",
     "noShowFailed": "Não foi possível marcar como no-show",

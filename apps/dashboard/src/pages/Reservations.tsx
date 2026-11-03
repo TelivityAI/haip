@@ -14,6 +14,7 @@ import {
 import { CalendarDays, Plus, ChevronLeft, ChevronRight, ArrowUpDown, X, MoreHorizontal, Eye, Pencil, Ban, DoorOpen, LogIn, LogOut, Upload, UserX, Trash2, Check } from 'lucide-react';
 import { format, addDays, eachDayOfInterval, parseISO } from 'date-fns';
 import { useTranslation } from 'react-i18next';
+import { getDateLocale } from '../lib/date-locale';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
@@ -811,7 +812,8 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 // ---- Tape Chart / Calendar ----
 function AvailabilityCalendar() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const dateLocale = getDateLocale(i18n.resolvedLanguage);
   const { propertyId } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -1055,7 +1057,7 @@ function AvailabilityCalendar() {
           <div className="flex items-center gap-3 text-sm">
             <span className="font-semibold text-telivity-navy">{t('reservations.selectedRange')}:</span>
             <span className="text-telivity-slate">
-              Room {rooms.find((r) => r.id === selectionRange.roomId)?.number} &bull; {selectionRange.start} {t('common.to', { defaultValue: 'to' })} {selectionRange.end}
+              {t('reservations.room', { defaultValue: 'Room' })} {rooms.find((r) => r.id === selectionRange.roomId)?.number} &bull; {selectionRange.start} {t('common.to', { defaultValue: 'to' })} {selectionRange.end}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -1087,7 +1089,7 @@ function AvailabilityCalendar() {
               <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate w-24 sticky left-0 bg-telivity-teal/5">{t('reservations.room')}</th>
               {days.map((d) => (
                 <th key={d.toISOString()} className="px-1 py-2 text-center text-xs font-medium text-telivity-slate min-w-[60px]">
-                  <div>{format(d, 'EEE')}</div>
+                  <div className="capitalize">{format(d, 'EEE', { locale: dateLocale })}</div>
                   <div className="text-telivity-mid-grey">{format(d, 'd')}</div>
                 </th>
               ))}
@@ -1130,7 +1132,7 @@ function AvailabilityCalendar() {
                               : 'bg-telivity-teal/30 text-telivity-navy'
                           }`}
                         >
-                          <span className="opacity-75">{isRangeStart ? 'In' : isRangeEnd ? 'Out' : ''}</span>
+                          <span className="opacity-75">{isRangeStart ? t('reservations.in', { defaultValue: 'In' }) : isRangeEnd ? t('reservations.out', { defaultValue: 'Out' }) : ''}</span>
                         </div>
                       ) : (
                         <div className="h-6 w-full" />

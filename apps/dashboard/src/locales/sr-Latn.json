@@ -1604,7 +1604,9 @@
     "guestMoved": "Gost je premešten u drugu sobu",
     "siblingRooms": "Ostale sobe u okviru ove rezervacije",
     "siblingRoomLine": "Soba {{room}} — {{guest}} ({{status}})",
-    "siblingUnassignedLine": "{{type}} — {{guest}} ({{status}})"
+    "siblingUnassignedLine": "{{type}} — {{guest}} ({{status}})",
+    "in": "Prijava",
+    "out": "Odjava"
   },
   "revenue": {
     "activeAgents": "Aktivni agenti",
@@ -2001,13 +2003,30 @@
       "error": "Zahtev nije mogao biti prihvaćen. Pregledajte trenutnu dostupnost i pokušajte ponovo."
     },
     "modifyStay": {
-      "action": "Izmeni boravak", "title": "Izmeni prihvaćeni boravak", "activeStay": "Aktivni boravak", "proposedStay": "Predloženi boravak", "originalRequest": "Prvobitni zahtev",
-      "arrivalDate": "Datum dolaska", "departureDate": "Datum odlaska", "invalidDates": "Odlazak mora biti posle dolaska, a oba datuma moraju biti ispravna.",
-      "checking": "Provera celog boravka i trenutne ponude…", "previewError": "Ovaj boravak trenutno nije moguće obračunati. Proverite dostupnost i pokušajte ponovo.",
-      "priceChoice": "Osnova cene za izmenjeni boravak", "prior": "Prethodna prihvaćena osnova", "priorDescription": "Datumi koji se preklapaju zadržavaju prihvaćene stavke; dodate noći koriste najbližu graničnu prihvaćenu cenu.",
-      "current": "Trenutna ponuda", "currentDescription": "Koristite merodavne cene koje su sada dostupne za ceo predloženi boravak.", "custom": "Prilagođeni total", "customDescription": "Postavite pozitivan operativni zbir i zabeležite razlog.",
-      "awaitingQuote": "Ponuda se čeka", "enterAmount": "Unesite iznos", "customTotal": "Prilagođeni total", "customReason": "Razlog za prilagođeni total",
-      "apply": "Primeni izmenu boravka", "applying": "Izmena je u toku…", "commitError": "Boravak nije mogao biti izmenjen. Pregledajte najnoviju dostupnost i ponudu."
+      "action": "Izmeni boravak",
+      "title": "Izmeni prihvaćeni boravak",
+      "activeStay": "Aktivni boravak",
+      "proposedStay": "Predloženi boravak",
+      "originalRequest": "Prvobitni zahtev",
+      "arrivalDate": "Datum dolaska",
+      "departureDate": "Datum odlaska",
+      "invalidDates": "Odlazak mora biti posle dolaska, a oba datuma moraju biti ispravna.",
+      "checking": "Provera celog boravka i trenutne ponude…",
+      "previewError": "Ovaj boravak trenutno nije moguće obračunati. Proverite dostupnost i pokušajte ponovo.",
+      "priceChoice": "Osnova cene za izmenjeni boravak",
+      "prior": "Prethodna prihvaćena osnova",
+      "priorDescription": "Datumi koji se preklapaju zadržavaju prihvaćene stavke; dodate noći koriste najbližu graničnu prihvaćenu cenu.",
+      "current": "Trenutna ponuda",
+      "currentDescription": "Koristite merodavne cene koje su sada dostupne za ceo predloženi boravak.",
+      "custom": "Prilagođeni total",
+      "customDescription": "Postavite pozitivan operativni zbir i zabeležite razlog.",
+      "awaitingQuote": "Ponuda se čeka",
+      "enterAmount": "Unesite iznos",
+      "customTotal": "Prilagođeni total",
+      "customReason": "Razlog za prilagođeni total",
+      "apply": "Primeni izmenu boravka",
+      "applying": "Izmena je u toku…",
+      "commitError": "Boravak nije mogao biti izmenjen. Pregledajte najnoviju dostupnost i ponudu."
     },
     "deny": {
       "title": "Odbijte zahtev za rezervaciju",
