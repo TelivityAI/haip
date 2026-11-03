@@ -16,7 +16,7 @@ import { format, addDays, eachDayOfInterval, parseISO } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { getDateLocale } from '../lib/date-locale';
 import { api } from '../lib/api';
-import { moneyString, requirePropertyId } from '../lib/api-helpers';
+import { moneyString, requirePropertyId, requireCurrency } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import { useToast } from '../components/ui/Toast';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -898,7 +898,7 @@ function Detail({ label, value }: { label: string; value: string }) {
 function AvailabilityCalendar() {
   const { t, i18n } = useTranslation();
   const dateLocale = getDateLocale(i18n.resolvedLanguage);
-  const { propertyId } = useProperty();
+  const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -941,7 +941,7 @@ function AvailabilityCalendar() {
   const { data: ratePlansData } = useQuery({
     queryKey: ['rate-plans', propertyId],
     queryFn: () => api.get('/v1/rate-plans', { params: { propertyId } }).then((r) => r.data),
-    enabled: !!propertyId && bookModalOpen,
+    enabled: !!propertyId,
   });
 
   const rooms = (roomsData?.data ?? roomsData ?? []) as { id: string; number: string; roomTypeId?: string }[];
@@ -1075,22 +1075,68 @@ function AvailabilityCalendar() {
     setBookModalOpen(true);
   };
 
+  const stayNights = useMemo(() => {
+    if (!bookCheckIn || !bookCheckOut) return 0;
+    try {
+      return Math.max(
+        0,
+        Math.round(
+          (new Date(bookCheckOut).getTime() - new Date(bookCheckIn).getTime()) /
+            (1000 * 60 * 60 * 24),
+        ),
+      );
+    } catch {
+      return 0;
+    }
+  }, [bookCheckIn, bookCheckOut]);
+
+  const selectedRatePlan = useMemo(
+    () => ratePlans.find((p) => p.id === bookRatePlanId),
+    [ratePlans, bookRatePlanId],
+  );
+
+  const estimatedTotal = useMemo(() => {
+    if (!selectedRatePlan || stayNights <= 0) return null;
+    const nightly = Number(selectedRatePlan.baseAmount ?? 0);
+    return nightly * stayNights;
+  }, [selectedRatePlan, stayNights]);
+
   const quickBookMutation = useMutation({
     mutationFn: async () => {
+      requirePropertyId(propertyId);
       if (!bookGuest || !bookRoomId || !bookCheckIn || !bookCheckOut) return;
       const targetRoom = rooms.find((r) => r.id === bookRoomId);
+      if (!targetRoom?.roomTypeId) {
+        throw new Error('Room does not have an assigned room type');
+      }
+
+      const selectedPlan = ratePlans.find((p) => p.id === bookRatePlanId);
+      const currency = selectedPlan?.currencyCode || currencyCode;
+      requireCurrency(currency);
+
+      const nights = Math.max(
+        1,
+        Math.round(
+          (new Date(bookCheckOut).getTime() - new Date(bookCheckIn).getTime()) /
+            (1000 * 60 * 60 * 24),
+        ),
+      );
+      const nightly = Number(selectedPlan?.baseAmount ?? 0);
+      const totalAmount = moneyString(nightly * nights);
+
       const res = await api.post('/v1/reservations', {
         propertyId,
         guestId: bookGuest.id,
-        roomId: bookRoomId,
-        roomTypeId: targetRoom?.roomTypeId,
+        roomTypeId: targetRoom.roomTypeId,
         ratePlanId: bookRatePlanId || undefined,
         arrivalDate: bookCheckIn,
         departureDate: bookCheckOut,
         adults: bookAdults,
+        totalAmount,
+        currencyCode: currency,
         source: 'direct',
       });
-      const reservationId = res.data?.id ?? res.data?.reservation?.id;
+      const reservationId = res.data?.id ?? res.data?.data?.id ?? res.data?.reservation?.id;
       if (reservationId) {
         await api.patch(
           `/v1/reservations/${reservationId}/confirm`,
@@ -1106,7 +1152,7 @@ function AvailabilityCalendar() {
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reservations', 'calendar'] });
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
       toast('success', t('reservations.createdSuccess', { defaultValue: 'Reservation created' }));
       setBookModalOpen(false);
       setDragRoomId(null);
@@ -1114,7 +1160,9 @@ function AvailabilityCalendar() {
       setDragEndDate(null);
     },
     onError: (err: any) => {
-      toast('error', err?.response?.data?.message ?? err?.message ?? 'Failed to create reservation');
+      const msg = err?.response?.data?.message;
+      const errorText = Array.isArray(msg) ? msg.join(', ') : (msg ?? err?.message ?? 'Failed to create reservation');
+      toast('error', errorText);
     },
   });
 
@@ -1348,6 +1396,17 @@ function AvailabilityCalendar() {
               )}
             </div>
           </div>
+
+          {estimatedTotal !== null && (
+            <div className="flex justify-between items-center text-sm px-3 py-2 bg-gray-50 rounded-lg">
+              <span className="text-telivity-slate">
+                {t('reservations.total')}:
+              </span>
+              <span className="font-semibold text-telivity-navy">
+                {formatMoney(estimatedTotal, selectedRatePlan?.currencyCode || currencyCode)}
+              </span>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
             <button
