@@ -61,11 +61,12 @@ const STATUS_CARD_COLORS: Record<string, string> = {
   out_of_service: 'border-telivity-mid-grey bg-gray-50',
 };
 
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  vacant_dirty: ['clean'],
-  clean: ['inspected', 'out_of_order', 'out_of_service'],
-  inspected: ['guest_ready', 'out_of_order'],
-  guest_ready: ['occupied', 'out_of_order', 'out_of_service'],
+export const VALID_TRANSITIONS: Record<string, string[]> = {
+  vacant_clean: ['occupied', 'vacant_dirty', 'out_of_order', 'out_of_service'],
+  vacant_dirty: ['clean', 'out_of_order'],
+  clean: ['inspected', 'vacant_clean', 'vacant_dirty', 'out_of_order'],
+  inspected: ['guest_ready', 'vacant_dirty', 'out_of_order'],
+  guest_ready: ['occupied', 'vacant_dirty', 'out_of_order'],
   occupied: ['vacant_dirty'],
   out_of_order: ['vacant_dirty'],
   out_of_service: ['vacant_dirty'],
@@ -249,6 +250,7 @@ function RoomDetailPanel({
 function RoomList() {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const today = format(new Date(), 'yyyy-MM-dd');
   const [view, setView] = useState<'rack' | 'list'>('rack');
@@ -320,6 +322,11 @@ function RoomList() {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       setDetailRoom(null);
     },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      const errorText = Array.isArray(msg) ? msg.join(', ') : (msg ?? err?.message ?? 'Failed to update room status');
+      toast('error', errorText);
+    },
   });
 
   const createMutation = useMutation({
@@ -358,21 +365,15 @@ function RoomList() {
   const buildRoomMenuItems = (room: Room): ActionMenuItem[] => {
     const allowedTransitions = VALID_TRANSITIONS[room.status] ?? [];
 
-    const markAsChildren: ActionMenuItem[] = ALL_ROOM_STATUSES.map((statusKey) => {
-      const isCurrent = room.status === statusKey;
-      const isAllowed = isCurrent || allowedTransitions.includes(statusKey);
-
-      return {
+    const markAsChildren: ActionMenuItem[] = ALL_ROOM_STATUSES
+      .filter((statusKey) => allowedTransitions.includes(statusKey))
+      .map((statusKey) => ({
         id: `status-${statusKey}`,
-        label: t(`dashboard.roomStatuses.${statusKey}`, { defaultValue: statusKey }),
-        disabled: isCurrent,
-        variant: isCurrent ? 'emphasized' : undefined,
-        icon: isCurrent ? <CheckCircle2 size={13} className="text-telivity-teal" /> : undefined,
+        label: t(`dashboard.roomStatuses.${statusKey}`, { defaultValue: statusKey.replace(/_/g, ' ') }),
         onClick: () => {
           statusMutation.mutate({ roomId: room.id, newStatus: statusKey });
         },
-      };
-    });
+      }));
 
     return [
       {
@@ -381,12 +382,16 @@ function RoomList() {
         icon: <Eye size={14} />,
         onClick: () => setDetailRoom(room),
       },
-      {
-        id: 'mark-as',
-        label: t('rooms.markAs'),
-        icon: <DoorOpen size={14} />,
-        children: markAsChildren,
-      },
+      ...(markAsChildren.length > 0
+        ? [
+            {
+              id: 'mark-as',
+              label: t('rooms.markAs'),
+              icon: <DoorOpen size={14} />,
+              children: markAsChildren,
+            },
+          ]
+        : []),
     ];
   };
 
@@ -470,7 +475,7 @@ function RoomList() {
                   >
                     <div className="flex items-start justify-between">
                       <p className="text-sm font-semibold text-telivity-navy">{room.number}</p>
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity -mr-1 -mt-1">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity -mr-1 -mt-1" onClick={(e) => e.stopPropagation()}>
                         <QuickActionButton
                           items={roomMenuItems}
                           triggerIcon={<MoreVertical size={14} />}

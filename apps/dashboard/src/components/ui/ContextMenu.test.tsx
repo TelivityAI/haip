@@ -48,4 +48,29 @@ describe('ContextMenu', () => {
     await userEvent.click(screen.getByText('Actions'));
     expect(screen.getByText('Action A')).toBeInTheDocument();
   });
+
+  it('renders nested submenu items on hover', async () => {
+    const onChildClick = vi.fn();
+    const items: ActionMenuItem[] = [
+      {
+        id: 'parent',
+        label: 'Parent Menu',
+        children: [
+          { id: 'child-1', label: 'Child Item 1', onClick: onChildClick },
+          { id: 'child-2', label: 'Child Item 2' },
+        ],
+      },
+    ];
+
+    render(<ContextMenu items={items} position={{ x: 100, y: 100 }} onClose={() => {}} />);
+    expect(screen.getByText('Parent Menu')).toBeInTheDocument();
+    expect(screen.queryByText('Child Item 1')).not.toBeInTheDocument();
+
+    await userEvent.hover(screen.getByText('Parent Menu'));
+    expect(await screen.findByText('Child Item 1')).toBeInTheDocument();
+    expect(screen.getByText('Child Item 2')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Child Item 1'));
+    expect(onChildClick).toHaveBeenCalledOnce();
+  });
 });
