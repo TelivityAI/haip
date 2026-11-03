@@ -194,7 +194,7 @@ function RoomDetailPanel({
               <div className="flex gap-2 pt-1 border-t border-telivity-teal/10">
                 {diary.id && (
                   <Link
-                    to={`/reservations?id=${encodeURIComponent(diary.id)}${diary.confirmationNumber ? `&search=${encodeURIComponent(diary.confirmationNumber)}` : ''}`}
+                    to={`/reservations?id=${encodeURIComponent(diary.id)}`}
                     className="inline-flex items-center gap-1 text-xs text-telivity-teal font-medium hover:underline"
                   >
                     <ExternalLink size={12} /> {t('rooms.viewReservation')}

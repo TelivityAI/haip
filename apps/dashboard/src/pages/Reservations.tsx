@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { formatMoney } from '../lib/money';
 import { Routes, Route, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -124,7 +124,16 @@ function ReservationList() {
 
   // URL query params
   const targetReservationId = searchParams.get('id') || searchParams.get('reservationId');
-  const searchParam = searchParams.get('search');
+
+  // Track the ID that was explicitly closed by the user so we do not auto-reopen it
+  const closedTargetRef = useRef<string | null>(null);
+
+  // When targetReservationId changes or disappears, reset closedTargetRef if it doesn't match
+  useEffect(() => {
+    if (!targetReservationId) {
+      closedTargetRef.current = null;
+    }
+  }, [targetReservationId]);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('');
@@ -176,65 +185,75 @@ function ReservationList() {
   // so a new identity remounts every cell (and drops in-flight interactions).
   const reservations: Reservation[] = useMemo(() => data?.data ?? data ?? [], [data]);
 
-  // Open reservation details if target ID (or exact match) is present in query parameters
+  // Open reservation details if target ID is present in query parameters
   useEffect(() => {
-    if (!propertyId || isLoading) return;
+    if (!propertyId || isLoading || !targetReservationId) return;
 
-    const target = targetReservationId || (searchParam && searchParam.trim() ? searchParam.trim() : null);
-    if (!target) return;
-    if (detailRes && (detailRes.id === target || detailRes.confirmationNumber === target)) return;
+    if (closedTargetRef.current === targetReservationId) return;
+    if (detailRes && detailRes.id === targetReservationId) return;
 
     // 1. Check in currently loaded reservations
-    const matched = reservations.find(
-      (r) => r.id === target || r.confirmationNumber?.toLowerCase() === target.toLowerCase(),
-    );
+    const matched = reservations.find((r) => r.id === targetReservationId);
     if (matched) {
       setDetailRes(matched);
       return;
     }
 
     // 2. Fetch by ID if targetReservationId was explicitly given
+    let active = true;
+    api
+      .get(`/v1/reservations/${targetReservationId}`, { params: { propertyId } })
+      .then((res) => {
+        if (!active || !res?.data) return;
+        const raw = res.data?.data ?? res.data;
+        const d = Array.isArray(raw) ? raw[0] : raw;
+        if (!d) return;
+        const rData = d.reservation ?? d;
+        const mapped: Reservation = {
+          ...rData,
+          status: rData.status ?? 'confirmed',
+          confirmationNumber: d.confirmationNumber ?? rData.confirmationNumber ?? '—',
+          guestName: d.guest ? `${d.guest.firstName} ${d.guest.lastName}`.trim() : (rData.guestName ?? '—'),
+          guest: d.guest ?? undefined,
+          roomNumber: d.room?.number ?? rData.roomNumber,
+          roomTypeName: d.roomType?.name ?? rData.roomTypeName,
+          ratePlanName: d.ratePlan?.name ?? rData.ratePlanName,
+        };
+        setDetailRes(mapped);
+      })
+      .catch(() => {
+        // Keep quiet on 404
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [propertyId, isLoading, targetReservationId, reservations, detailRes]);
+
+  const closeDetail = useCallback(() => {
     if (targetReservationId) {
-      let active = true;
-      api
-        .get(`/v1/reservations/${targetReservationId}`, { params: { propertyId } })
-        .then((res) => {
-          if (!active || !res?.data) return;
-          const raw = res.data?.data ?? res.data;
-          const d = Array.isArray(raw) ? raw[0] : raw;
-          if (!d) return;
-          const rData = d.reservation ?? d;
-          const mapped: Reservation = {
-            ...rData,
-            status: rData.status ?? 'confirmed',
-            confirmationNumber: d.confirmationNumber ?? rData.confirmationNumber ?? '—',
-            guestName: d.guest ? `${d.guest.firstName} ${d.guest.lastName}`.trim() : (rData.guestName ?? '—'),
-            guest: d.guest ?? undefined,
-            roomNumber: d.room?.number ?? rData.roomNumber,
-            roomTypeName: d.roomType?.name ?? rData.roomTypeName,
-            ratePlanName: d.ratePlan?.name ?? rData.ratePlanName,
-          };
-          setDetailRes(mapped);
-        })
-        .catch(() => {
-          // Keep quiet on 404
-        });
-
-      return () => {
-        active = false;
-      };
+      closedTargetRef.current = targetReservationId;
     }
-  }, [propertyId, isLoading, targetReservationId, searchParam, reservations, detailRes]);
-
-  const closeDetail = () => {
     setDetailRes(null);
-    if (searchParams.has('id') || searchParams.has('reservationId')) {
+    if (searchParams.has('id') || searchParams.has('reservationId') || searchParams.has('search')) {
       const next = new URLSearchParams(searchParams);
       next.delete('id');
       next.delete('reservationId');
+      next.delete('search');
       setSearchParams(next, { replace: true });
     }
-  };
+  }, [targetReservationId, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!detailRes) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeDetail();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [detailRes, closeDetail]);
 
   const searchAvailMutation = useMutation({
     mutationFn: async () => {
