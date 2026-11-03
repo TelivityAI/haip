@@ -12,7 +12,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table';
 import { CalendarDays, Plus, ChevronLeft, ChevronRight, ArrowUpDown, X, MoreHorizontal, Eye, Pencil, Ban, DoorOpen, LogIn, LogOut, Upload, UserX, Trash2, Check } from 'lucide-react';
-import { format, addDays, eachDayOfInterval } from 'date-fns';
+import { format, addDays, eachDayOfInterval, parseISO } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId } from '../lib/api-helpers';
@@ -814,8 +814,25 @@ function AvailabilityCalendar() {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [startDate, setStartDate] = useState(new Date());
   const days = eachDayOfInterval({ start: startDate, end: addDays(startDate, 13) });
+
+  // Drag selection state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragRoomId, setDragRoomId] = useState<string | null>(null);
+  const [dragStartDate, setDragStartDate] = useState<string | null>(null);
+  const [dragEndDate, setDragEndDate] = useState<string | null>(null);
+
+  // Quick book modal state
+  const [bookModalOpen, setBookModalOpen] = useState(false);
+  const [bookRoomId, setBookRoomId] = useState<string>('');
+  const [bookCheckIn, setBookCheckIn] = useState<string>('');
+  const [bookCheckOut, setBookCheckOut] = useState<string>('');
+  const [bookGuest, setBookGuest] = useState<Guest | null>(null);
+  const [bookAdults, setBookAdults] = useState<number>(1);
+  const [bookRatePlanId, setBookRatePlanId] = useState<string>('');
 
   const { data: roomsData } = useQuery({
     queryKey: ['rooms', propertyId],
@@ -826,11 +843,6 @@ function AvailabilityCalendar() {
   const { data: resData } = useQuery({
     queryKey: ['reservations', 'calendar', propertyId, format(startDate, 'yyyy-MM-dd')],
     queryFn: () => api.get('/v1/reservations', {
-      // OVERLAP, not arrival-within. Filtering on arrivalDateFrom asks "who
-      // arrives during this fortnight", which silently omits every guest who
-      // arrived before it and is still in the hotel — the people most likely to
-      // be looked up on a tape chart. A stay overlaps the window when it
-      // arrives before the window ends AND departs after it starts.
       params: {
         propertyId,
         arrivalDateTo: format(addDays(startDate, 13), 'yyyy-MM-dd'),
@@ -840,19 +852,116 @@ function AvailabilityCalendar() {
     enabled: !!propertyId,
   });
 
-  const rooms = roomsData?.data ?? roomsData ?? [];
+  const { data: ratePlansData } = useQuery({
+    queryKey: ['rate-plans', propertyId],
+    queryFn: () => api.get('/v1/rate-plans', { params: { propertyId } }).then((r) => r.data),
+    enabled: !!propertyId && bookModalOpen,
+  });
+
+  const rooms = (roomsData?.data ?? roomsData ?? []) as { id: string; number: string; roomTypeId?: string }[];
   const reservations: Reservation[] = resData?.data ?? resData ?? [];
+  const ratePlans: any[] = ratePlansData?.data ?? (Array.isArray(ratePlansData) ? ratePlansData : []);
 
   function getResForCell(roomId: string, date: string) {
     return reservations.find((r) => r.roomId === roomId && r.arrivalDate <= date && r.departureDate > date);
   }
+
+  // Normalized selection dates
+  const selectionRange = useMemo(() => {
+    if (!dragRoomId || !dragStartDate || !dragEndDate) return null;
+    const start = dragStartDate < dragEndDate ? dragStartDate : dragEndDate;
+    const end = dragStartDate < dragEndDate ? dragEndDate : dragStartDate;
+    return { roomId: dragRoomId, start, end };
+  }, [dragRoomId, dragStartDate, dragEndDate]);
+
+  const handleCellMouseDown = (roomId: string, dateStr: string) => {
+    if (getResForCell(roomId, dateStr)) return;
+    setIsDragging(true);
+    setDragRoomId(roomId);
+    setDragStartDate(dateStr);
+    setDragEndDate(dateStr);
+  };
+
+  const handleCellMouseEnter = (roomId: string, dateStr: string) => {
+    if (!isDragging || dragRoomId !== roomId) return;
+    if (getResForCell(roomId, dateStr)) return;
+    setDragEndDate(dateStr);
+  };
+
+  const handleMouseUp = () => {
+    if (isDragging) {
+      setIsDragging(false);
+    }
+  };
+
+  const openBookModal = () => {
+    if (!selectionRange) return;
+    const targetRoom = rooms.find((r) => r.id === selectionRange.roomId);
+    setBookRoomId(selectionRange.roomId);
+    setBookCheckIn(selectionRange.start);
+    // Departure is checkout day, at least next day
+    const checkOut =
+      selectionRange.start === selectionRange.end
+        ? format(addDays(parseISO(selectionRange.start), 1), 'yyyy-MM-dd')
+        : selectionRange.end;
+    setBookCheckOut(checkOut);
+    setBookGuest(null);
+    setBookAdults(1);
+
+    const matchingPlan = ratePlans.find((p) => !targetRoom?.roomTypeId || p.roomTypeId === targetRoom.roomTypeId);
+    setBookRatePlanId(matchingPlan?.id ?? ratePlans[0]?.id ?? '');
+    setBookModalOpen(true);
+  };
+
+  const quickBookMutation = useMutation({
+    mutationFn: async () => {
+      if (!bookGuest || !bookRoomId || !bookCheckIn || !bookCheckOut) return;
+      const targetRoom = rooms.find((r) => r.id === bookRoomId);
+      const res = await api.post('/v1/reservations', {
+        propertyId,
+        guestId: bookGuest.id,
+        roomId: bookRoomId,
+        roomTypeId: targetRoom?.roomTypeId,
+        ratePlanId: bookRatePlanId || undefined,
+        arrivalDate: bookCheckIn,
+        departureDate: bookCheckOut,
+        adults: bookAdults,
+        source: 'direct',
+      });
+      const reservationId = res.data?.id ?? res.data?.reservation?.id;
+      if (reservationId) {
+        await api.patch(
+          `/v1/reservations/${reservationId}/confirm`,
+          {},
+          { params: { propertyId }, skipErrorToast: true },
+        );
+        await api.patch(
+          `/v1/reservations/${reservationId}/assign-room`,
+          { roomId: bookRoomId },
+          { params: { propertyId }, skipErrorToast: true },
+        );
+      }
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reservations', 'calendar'] });
+      toast('success', t('reservations.createdSuccess', { defaultValue: 'Reservation created' }));
+      setBookModalOpen(false);
+      setDragRoomId(null);
+      setDragStartDate(null);
+      setDragEndDate(null);
+    },
+    onError: (err: any) => {
+      toast('error', err?.response?.data?.message ?? err?.message ?? 'Failed to create reservation');
+    },
+  });
 
   if (!propertyId) {
     return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('common.selectProperty')}</div>;
   }
 
   return (
-    <div>
+    <div onMouseUp={handleMouseUp}>
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => navigate('/reservations')} className="p-1.5 rounded hover:bg-telivity-light-grey">
           <ChevronLeft size={20} />
@@ -872,8 +981,39 @@ function AvailabilityCalendar() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
-        <table className="w-full min-w-[900px]">
+      {/* Floating selection action bar */}
+      {selectionRange && (
+        <div className="mb-4 bg-telivity-teal/10 border border-telivity-teal/30 rounded-xl p-3 flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center gap-3 text-sm">
+            <span className="font-semibold text-telivity-navy">{t('reservations.selectedRange')}:</span>
+            <span className="text-telivity-slate">
+              Room {rooms.find((r) => r.id === selectionRange.roomId)?.number} &bull; {selectionRange.start} {t('common.to', { defaultValue: 'to' })} {selectionRange.end}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setDragRoomId(null);
+                setDragStartDate(null);
+                setDragEndDate(null);
+              }}
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 text-telivity-slate hover:bg-gray-100 transition-colors"
+            >
+              {t('reservations.clearSelection')}
+            </button>
+            <button
+              onClick={openBookModal}
+              className="text-xs px-3 py-1.5 rounded-lg bg-telivity-teal text-white font-medium hover:bg-telivity-teal/90 transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus size={14} />
+              {t('reservations.bookSelectedDates')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm overflow-x-auto select-none">
+        <table className="w-full min-w-[900px] border-collapse">
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
               <th className="px-3 py-2 text-left text-xs font-semibold text-telivity-slate w-24 sticky left-0 bg-telivity-teal/5">{t('reservations.room')}</th>
@@ -888,17 +1028,45 @@ function AvailabilityCalendar() {
           <tbody>
             {(rooms as { id: string; number: string }[]).map((room, i) => (
               <tr key={room.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                <td className="px-3 py-2 text-xs font-medium text-telivity-navy sticky left-0 bg-white">{room.number}</td>
+                <td className="px-3 py-2 text-xs font-medium text-telivity-navy sticky left-0 bg-white shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">{room.number}</td>
                 {days.map((d) => {
                   const dateStr = format(d, 'yyyy-MM-dd');
                   const res = getResForCell(room.id, dateStr);
+
+                  // Range selection calculation
+                  const isSelected = selectionRange && selectionRange.roomId === room.id && dateStr >= selectionRange.start && dateStr <= selectionRange.end;
+                  const isRangeStart = isSelected && dateStr === selectionRange?.start;
+                  const isRangeEnd = isSelected && dateStr === selectionRange?.end;
+                  const isSingleDay = isRangeStart && isRangeEnd;
+
                   return (
-                    <td key={dateStr} className={`px-0.5 py-2 text-center ${res ? '' : 'cursor-pointer hover:bg-telivity-teal/5'}`}>
+                    <td
+                      key={dateStr}
+                      onMouseDown={() => handleCellMouseDown(room.id, dateStr)}
+                      onMouseEnter={() => handleCellMouseEnter(room.id, dateStr)}
+                      className={`px-0.5 py-2 text-center relative ${res ? '' : 'cursor-pointer hover:bg-telivity-teal/5'}`}
+                    >
                       {res ? (
-                        <div className="bg-telivity-teal/20 text-telivity-navy text-[10px] font-medium rounded px-1 py-0.5 truncate" title={`${res.confirmationNumber}`}>
+                        <div className="bg-telivity-teal/20 text-telivity-navy text-[10px] font-medium rounded px-1 py-0.5 truncate select-none" title={`${res.confirmationNumber}`}>
                           {res.confirmationNumber?.slice(-4) ?? '—'}
                         </div>
-                      ) : null}
+                      ) : isSelected ? (
+                        <div
+                          className={`h-6 text-[10px] font-medium flex items-center justify-center transition-all ${
+                            isSingleDay
+                              ? 'bg-telivity-teal/40 rounded text-telivity-navy'
+                              : isRangeStart
+                              ? 'bg-gradient-to-r from-transparent via-telivity-teal/30 to-telivity-teal/40 rounded-l text-telivity-navy'
+                              : isRangeEnd
+                              ? 'bg-gradient-to-r from-telivity-teal/40 via-telivity-teal/30 to-transparent rounded-r text-telivity-navy'
+                              : 'bg-telivity-teal/30 text-telivity-navy'
+                          }`}
+                        >
+                          <span className="opacity-75">{isRangeStart ? 'In' : isRangeEnd ? 'Out' : ''}</span>
+                        </div>
+                      ) : (
+                        <div className="h-6 w-full" />
+                      )}
                     </td>
                   );
                 })}
@@ -910,6 +1078,120 @@ function AvailabilityCalendar() {
           </tbody>
         </table>
       </div>
+
+      {/* Book Selected Dates Modal */}
+      <Modal
+        open={bookModalOpen}
+        onClose={() => setBookModalOpen(false)}
+        title={t('reservations.bookSelectedDates')}
+      >
+        <div className="space-y-4">
+          <div className="bg-telivity-teal/5 p-3 rounded-lg flex items-center justify-between text-sm">
+            <div>
+              <span className="text-telivity-mid-grey">{t('reservations.room')}: </span>
+              <span className="font-semibold text-telivity-navy">
+                {rooms.find((r) => r.id === bookRoomId)?.number}
+              </span>
+            </div>
+            <div>
+              <span className="text-telivity-mid-grey">{t('reservations.dates')}: </span>
+              <span className="font-semibold text-telivity-navy">
+                {bookCheckIn} &rarr; {bookCheckOut}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-telivity-navy mb-1.5">
+              {t('reservations.guest')} *
+            </label>
+            <FindGuest
+              selectedGuest={bookGuest}
+              onSelectGuest={(g: Guest | null) => setBookGuest(g)}
+              placeholder={t('reservations.searchGuestPlaceholder', { defaultValue: 'Search or add guest...' })}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-telivity-slate mb-1">
+                {t('reservations.checkIn')}
+              </label>
+              <input
+                type="date"
+                value={bookCheckIn}
+                onChange={(e) => setBookCheckIn(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-telivity-slate mb-1">
+                {t('reservations.checkOut')}
+              </label>
+              <input
+                type="date"
+                value={bookCheckOut}
+                onChange={(e) => setBookCheckOut(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-telivity-slate mb-1">
+                {t('reservations.adults')}
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={bookAdults}
+                onChange={(e) => setBookAdults(parseInt(e.target.value) || 1)}
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm"
+              />
+            </div>
+            {ratePlans.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-telivity-slate mb-1">
+                  {t('reservations.ratePlan')}
+                </label>
+                <select
+                  value={bookRatePlanId}
+                  onChange={(e) => setBookRatePlanId(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm"
+                >
+                  <option value="">{t('common.select', { defaultValue: 'Default Rate' })}</option>
+                  {ratePlans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setBookModalOpen(false)}
+              className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-telivity-slate hover:bg-gray-50"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              disabled={!bookGuest || quickBookMutation.isPending}
+              onClick={() => quickBookMutation.mutate()}
+              className="px-4 py-1.5 text-sm font-medium rounded-lg bg-telivity-teal text-white hover:bg-telivity-teal/90 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {quickBookMutation.isPending && <span className="animate-spin">&bull;</span>}
+              {t('reservations.confirmBooking', { defaultValue: 'Confirm Booking' })}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
