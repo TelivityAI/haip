@@ -1662,7 +1662,10 @@
       "count": "{{count}} divergência(s)"
     },
     "diaryCaption": "Atribuições de hóspedes de hoje — {{date}}",
-    "diaryStay": "Estadia"
+    "diaryStay": "Estadia",
+    "activeStay": "Estadia Ativa",
+    "viewReservation": "Ver Reserva",
+    "viewGuest": "Ver Perfil do Hóspede"
   },
   "search": {
     "allPropertiesPlaceholder": "Pesquisar todas as propriedades…",
