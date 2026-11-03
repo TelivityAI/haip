@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote, UserRound, Plus, X } from 'lucide-react';
+import { ConciergeBell, LogIn, Users, LogOut, UserPlus, UsersRound, ArrowRightLeft, StickyNote, UserRound, Plus, X, MoreVertical, FileText } from 'lucide-react';
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { api } from '../lib/api';
 import { moneyString, requirePropertyId, requireCurrency } from '../lib/api-helpers';
@@ -11,6 +11,7 @@ import Modal from '../components/ui/Modal';
 import FindGuest from '../components/guests/FindGuest';
 import IdSwipeCapture from '../components/guests/IdSwipeCapture';
 import GuestDetailsModal from '../components/front-desk/GuestDetailsModal';
+import { ContextMenu, QuickActionButton, type ActionMenuItem, type ContextMenuPosition } from '../components/ui/ContextMenu';
 import type { ParsedIdDocument } from '../lib/id-document-swipe';
 import type { Guest } from '../types/guest';
 import { formatMoney } from '../lib/money';
@@ -777,6 +778,86 @@ export default function FrontDesk() {
   const currentList = tab === 'arrivals' ? arrList : tab === 'in-house' ? ihList : depList;
   const partyGroups = useMemo(() => groupByBooking(currentList), [currentList]);
 
+  const [contextMenuState, setContextMenuState] = useState<{
+    position: ContextMenuPosition | null;
+    reservation: Reservation | null;
+  }>({ position: null, reservation: null });
+
+  const buildReservationMenuItems = (r: Reservation): ActionMenuItem[] => {
+    const items: ActionMenuItem[] = [
+      {
+        id: 'view-details',
+        label: t('frontDesk.guestDetails'),
+        icon: <UserRound size={14} />,
+        onClick: () => setDetailsModal(r),
+      },
+      {
+        id: 'notes',
+        label: t('frontDesk.notes'),
+        icon: <StickyNote size={14} />,
+        onClick: () => {
+          setNotesModal(r);
+          setNoteBody('');
+        },
+      },
+    ];
+
+    if (tab === 'arrivals') {
+      items.push({
+        id: 'check-in',
+        label: t('frontDesk.checkIn'),
+        icon: <LogIn size={14} />,
+        variant: 'emphasized',
+        onClick: () => openCheckIn(r),
+      });
+    } else if (tab === 'in-house') {
+      items.push(
+        {
+          id: 'move-room',
+          label: t('frontDesk.moveRoom'),
+          icon: <ArrowRightLeft size={14} />,
+          onClick: () => {
+            setMoveModal(r);
+            setMoveRoomId('');
+            setOverrideDoNotMove(false);
+            setMoveReason('');
+          },
+        },
+        {
+          id: 'view-folio',
+          label: t('frontDesk.viewFolio'),
+          icon: <FileText size={14} />,
+          onClick: () => {
+            window.location.href = `/folios?reservationId=${r.id}`;
+          },
+        },
+      );
+    } else if (tab === 'departures') {
+      items.push(
+        {
+          id: 'check-out',
+          label: t('frontDesk.checkOut'),
+          icon: <LogOut size={14} />,
+          variant: 'emphasized',
+          onClick: () => setCheckOutModal(r),
+        },
+        {
+          id: 'express-checkout',
+          label: t('frontDesk.express'),
+          icon: <LogOut size={14} />,
+          variant: 'danger',
+          onClick: () => {
+            if (confirm(t('frontDesk.expressCheckoutConfirm'))) {
+              expressCheckoutMutation.mutate(r.id);
+            }
+          },
+        },
+      );
+    }
+
+    return items;
+  };
+
   const tabs: { key: Tab; label: string; icon: typeof LogIn; count: number }[] = [
     {
       key: 'arrivals',
@@ -955,13 +1036,24 @@ export default function FrontDesk() {
                       </td>
                     </tr>
                   )}
-                  {group.members.map((r, i) => (
+                  {group.members.map((r, i) => {
+                    const reservationMenuItems = buildReservationMenuItems(r);
+                    return (
                     <tr
                       key={r.id}
-                      className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''} hover:bg-telivity-light-grey/50 transition-colors ${showPartyHeader ? 'border-l-2 border-l-telivity-teal/40' : ''}`}
+                      onClick={() => setDetailsModal(r)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setContextMenuState({
+                          position: { x: e.clientX, y: e.clientY },
+                          reservation: r,
+                        });
+                      }}
+                      className={`border-b border-gray-50 cursor-pointer ${i % 2 === 1 ? 'bg-gray-50/50' : ''} hover:bg-telivity-light-grey/50 transition-colors ${showPartyHeader ? 'border-l-2 border-l-telivity-teal/40' : ''}`}
                     >
                       {tab === 'arrivals' && (
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             checked={selectedForGroup.includes(r.id)}
@@ -1016,8 +1108,8 @@ export default function FrontDesk() {
                           {formatMoney(r.balance ?? 0, currencyCode)}
                         </td>
                       )}
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex gap-2 justify-end flex-wrap">
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex gap-2 justify-end flex-wrap items-center">
                           <button
                             onClick={() => {
                               setNotesModal(r);
@@ -1088,10 +1180,15 @@ export default function FrontDesk() {
                               </button>
                             </>
                           )}
+                          <QuickActionButton
+                            items={reservationMenuItems}
+                            triggerIcon={<MoreVertical size={14} />}
+                          />
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </Fragment>
               );
             })}
@@ -1957,6 +2054,15 @@ export default function FrontDesk() {
           </div>
         )}
       </Modal>
+
+      {/* Global Context Menu for Right-Click on Front Desk Rows */}
+      {contextMenuState.reservation && (
+        <ContextMenu
+          items={buildReservationMenuItems(contextMenuState.reservation)}
+          position={contextMenuState.position}
+          onClose={() => setContextMenuState({ position: null, reservation: null })}
+        />
+      )}
     </div>
   );
 }
