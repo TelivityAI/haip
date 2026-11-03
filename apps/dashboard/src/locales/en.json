@@ -1573,6 +1573,8 @@
     "roomNumber": "Room #",
     "roomType": "Room Type",
     "saveNote": "Save note",
+    "search": "Search",
+    "searchPlaceholder": "Search by confirmation, guest, room…",
     "searchAvailability": "Search Availability",
     "searchAvailabilityStep": "Step 1: Search Availability",
     "searching": "Searching…",

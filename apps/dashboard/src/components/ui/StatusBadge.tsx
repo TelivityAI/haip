@@ -37,7 +37,8 @@ const STATUS_COLORS: Record<string, string> = {
   error: 'bg-telivity-orange text-white',
 };
 
-function formatLabel(status: string): string {
+function formatLabel(status?: string): string {
+  if (!status) return '';
   return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
@@ -51,7 +52,7 @@ export default function StatusBadge({ status, label, className = '' }: StatusBad
   const { t } = useTranslation();
   const colors = STATUS_COLORS[status] ?? 'bg-telivity-mid-grey text-white';
   
-  const defaultLabel = formatLabel(status);
+  const defaultLabel = status ? formatLabel(status) : '';
   const resolvedLabel = label ?? t([
     `dashboard.roomStatuses.${status}`,
     `housekeeping.statuses.${status}`,

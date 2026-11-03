@@ -215,7 +215,7 @@ export default function ReservationPartyPanel({
 
   const otherSiblings = siblings.filter((s) => s.id !== reservationId);
   const guestLabel = (o: Occupant) =>
-    `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim() || o.guestId.slice(0, 8);
+    `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim() || (o.guestId ? o.guestId.slice(0, 8) : '—');
 
   const toggleSplitGuest = (guestId: string) => {
     setSplitGuestIds((prev) =>

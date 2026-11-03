@@ -1,11 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon, AlertTriangle, ExternalLink, Calendar, User } from 'lucide-react';
 import { api } from '../lib/api';
-import { moneyString, requirePropertyId } from '../lib/api-helpers';
 import { useProperty } from '../context/PropertyContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
@@ -194,20 +193,20 @@ function RoomDetailPanel({
               </div>
               <div className="flex gap-2 pt-1 border-t border-telivity-teal/10">
                 {diary.id && (
-                  <a
-                    href={`/reservations?search=${encodeURIComponent(diary.confirmationNumber || diary.id)}`}
+                  <Link
+                    to={`/reservations?id=${encodeURIComponent(diary.id)}${diary.confirmationNumber ? `&search=${encodeURIComponent(diary.confirmationNumber)}` : ''}`}
                     className="inline-flex items-center gap-1 text-xs text-telivity-teal font-medium hover:underline"
                   >
                     <ExternalLink size={12} /> {t('rooms.viewReservation')}
-                  </a>
+                  </Link>
                 )}
                 {diary.guestId && (
-                  <a
-                    href={`/guests/${diary.guestId}`}
+                  <Link
+                    to={`/guests/${diary.guestId}`}
                     className="inline-flex items-center gap-1 text-xs text-telivity-slate font-medium hover:text-telivity-teal hover:underline ml-auto"
                   >
                     <User size={12} /> {t('rooms.viewGuest')}
-                  </a>
+                  </Link>
                 )}
               </div>
             </div>
