@@ -157,3 +157,76 @@ describe('Reservations — unassigned queue', () => {
     );
   });
 });
+
+describe('Reservations — query parameter navigation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/v1/reservations') {
+        return Promise.resolve({ data: [RES_ROW] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+  });
+
+  it('automatically opens reservation detail slide-over when id matches an in-memory reservation', async () => {
+    renderAt('/?id=res-1');
+
+    await waitFor(() => {
+      expect(screen.getAllByText('HAIP-0001')).toHaveLength(2);
+      expect(screen.getByRole('heading', { name: 'Reservation Details' })).toBeInTheDocument();
+    });
+  });
+
+  it('fetches and opens reservation detail slide-over when id is not in current list', async () => {
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/v1/reservations') {
+        return Promise.resolve({ data: [] });
+      }
+      if (url === '/v1/reservations/res-remote') {
+        return Promise.resolve({
+          data: {
+            reservation: {
+              id: 'res-remote',
+              confirmationNumber: 'HAIP-9999',
+              status: 'confirmed',
+              arrivalDate: '2026-07-01',
+              departureDate: '2026-07-05',
+              adults: 2,
+              children: 1,
+            },
+            guest: { id: 'g-1', firstName: 'Alice', lastName: 'Smith' },
+            room: { id: 'rm-102', number: '102' },
+            roomType: { id: 'rt-2', name: 'Deluxe' },
+          },
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderAt('/?id=res-remote');
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith('/v1/reservations/res-remote', {
+        params: { propertyId: 'prop-1' },
+      });
+      expect(screen.getByText('HAIP-9999')).toBeInTheDocument();
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+    });
+  });
+
+  it('closes reservation detail slide-over when close button is clicked and does not reopen', async () => {
+    renderAt('/?id=res-1');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Reservation Details' })).toBeInTheDocument();
+    });
+
+    const closeBtn = screen.getByRole('heading', { name: 'Reservation Details' }).parentElement!.querySelector('button')!;
+    await userEvent.click(closeBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Reservation Details' })).not.toBeInTheDocument();
+    });
+  });
+});

@@ -1318,8 +1318,14 @@
     "endDate": "Data final",
     "fixed": "Valor fixo",
     "isClosed": "Fechado (stop-sell)",
-    "maxLos": "MaxLOS",
-    "minLos": "MinLOS",
+    "stopSellHint": "Stop-sell — Bloqueia vendas e novas reservas no período",
+    "maxLos": "Estadia máxima (MaxLOS)",
+    "maxLosHint": "Máximo de noites consecutivas permitidas para a reserva",
+    "maxLosShort": "Máx",
+    "minLos": "Estadia mínima (MinLOS)",
+    "minLosHint": "Mínimo de noites consecutivas obrigatórias para a reserva",
+    "minLosShort": "Mín",
+    "nights": "Noites",
     "nameRequired": "Nome *",
     "new": "Novo plano de tarifa",
     "noRestrictions": "Nenhuma restrição neste plano",
@@ -1334,6 +1340,17 @@
     "startDate": "Data inicial",
     "title": "Planos Tarifários",
     "type": "Tipo",
+    "types": {
+      "bar": "BAR (Melhor Tarifa Disponível)",
+      "derived": "Derivado",
+      "negotiated": "Negociado",
+      "package": "Pacote"
+    },
+    "badges": {
+      "closed": "Fechado",
+      "cta": "CTA",
+      "ctd": "CTD"
+    },
     "calendar": "Calendário de tarifas",
     "calendarEmpty": "Selecione um intervalo de datas válido",
     "effectiveRate": "Tarifa efetiva"
@@ -1430,6 +1447,8 @@
     "room": "Quarto",
     "roomNumber": "Quarto nº",
     "roomType": "Tipo de Quarto",
+    "search": "Buscar",
+    "searchPlaceholder": "Buscar por confirmação, hóspede, quarto…",
     "searchAvailability": "Buscar disponibilidade",
     "searchAvailabilityStep": "Etapa 1: Buscar disponibilidade",
     "searching": "Buscando…",
@@ -1645,7 +1664,10 @@
       "count": "{{count}} divergência(s)"
     },
     "diaryCaption": "Atribuições de hóspedes de hoje — {{date}}",
-    "diaryStay": "Estadia"
+    "diaryStay": "Estadia",
+    "activeStay": "Estadia Ativa",
+    "viewReservation": "Ver Reserva",
+    "viewGuest": "Ver Perfil do Hóspede"
   },
   "search": {
     "allPropertiesPlaceholder": "Pesquisar todas as propriedades…",
