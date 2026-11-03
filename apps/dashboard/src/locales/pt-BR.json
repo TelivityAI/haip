@@ -1661,6 +1661,8 @@
       "vacantWithReservation": "Vago com reserva em casa",
       "count": "{{count}} divergência(s)"
     },
+    "markAs": "Marcar como",
+    "viewDetails": "Ver detalhes",
     "diaryCaption": "Atribuições de hóspedes de hoje — {{date}}",
     "diaryStay": "Estadia"
   },

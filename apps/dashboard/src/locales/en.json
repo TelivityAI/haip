@@ -1782,6 +1782,8 @@
       "vacantWithReservation": "Vacant with in-house reservation",
       "count": "{{count}} discrepancy(ies)"
     },
+    "markAs": "Mark as",
+    "viewDetails": "View Details",
     "diaryCaption": "Today's guest assignments — {{date}}",
     "diaryStay": "Stay"
   },
