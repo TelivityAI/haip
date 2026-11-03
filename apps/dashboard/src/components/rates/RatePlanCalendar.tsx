@@ -48,6 +48,7 @@ function buildCalendarDays(
   dates: string[],
   baseRate: number,
   restrictions: RateRestriction[],
+  t?: (key: string, opts?: Record<string, unknown>) => string,
 ): CalendarDay[] {
   return dates.map((date) => {
     const matching = restrictions.filter((r) => restrictionCovers(r, date));
@@ -62,11 +63,11 @@ function buildCalendarDays(
 
     const badges: string[] = [];
     for (const r of matching) {
-      if (r.isClosed) badges.push('Closed');
-      if (r.closedToArrival) badges.push('CTA');
-      if (r.closedToDeparture) badges.push('CTD');
-      if (r.minLos) badges.push(`MinLOS ${r.minLos}`);
-      if (r.maxLos) badges.push(`MaxLOS ${r.maxLos}`);
+      if (r.isClosed) badges.push(t ? t('ratePlans.badges.closed') : 'Closed');
+      if (r.closedToArrival) badges.push(t ? t('ratePlans.badges.cta') : 'CTA');
+      if (r.closedToDeparture) badges.push(t ? t('ratePlans.badges.ctd') : 'CTD');
+      if (r.minLos) badges.push(`${t ? t('ratePlans.minLosShort') : 'MinLOS'} ${r.minLos}`);
+      if (r.maxLos) badges.push(`${t ? t('ratePlans.maxLosShort') : 'MaxLOS'} ${r.maxLos}`);
     }
 
     return {
@@ -118,8 +119,8 @@ export default function RatePlanCalendar({ ratePlanId, propertyId, baseAmount }:
 
   const days = useMemo(() => {
     if (!startDate || !endDate || startDate > endDate) return [];
-    return buildCalendarDays(eachDateInclusive(startDate, endDate), chainBaseRate, restrictions);
-  }, [startDate, endDate, chainBaseRate, restrictions]);
+    return buildCalendarDays(eachDateInclusive(startDate, endDate), chainBaseRate, restrictions, t);
+  }, [startDate, endDate, chainBaseRate, restrictions, t]);
 
   const loading = restrictionsLoading || effectiveLoading;
 
