@@ -2,6 +2,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateProfessionDto {
+  @ApiPropertyOptional({ description: 'Tenant property id' })
+  @IsOptional()
+  @IsString()
+  propertyId?: string;
+
   @ApiProperty({ description: 'Name/title of the profession or occupation', example: 'Software Engineer' })
   @IsString()
   @IsNotEmpty()
