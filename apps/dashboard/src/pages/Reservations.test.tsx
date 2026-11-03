@@ -214,4 +214,19 @@ describe('Reservations — query parameter navigation', () => {
       expect(screen.getByText('Alice Smith')).toBeInTheDocument();
     });
   });
+
+  it('closes reservation detail slide-over when close button is clicked and does not reopen', async () => {
+    renderAt('/?id=res-1');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Reservation Details' })).toBeInTheDocument();
+    });
+
+    const closeBtn = screen.getByRole('heading', { name: 'Reservation Details' }).parentElement!.querySelector('button')!;
+    await userEvent.click(closeBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Reservation Details' })).not.toBeInTheDocument();
+    });
+  });
 });
