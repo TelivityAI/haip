@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,7 +8,7 @@ import Reservations from './Reservations';
 
 // Mock the property context so pages have a propertyId without PropertyProvider.
 vi.mock('../context/PropertyContext', () => ({
-  useProperty: () => ({ propertyId: 'prop-1' }),
+  useProperty: () => ({ propertyId: 'prop-1', currencyCode: 'USD' }),
 }));
 
 // Mock the API client.
@@ -155,5 +155,116 @@ describe('Reservations — unassigned queue', () => {
     await waitFor(() =>
       expect(api.patch).toHaveBeenCalledWith('/v1/reservations/res-1/assign-room', { roomId: 'room-1' }),
     );
+  });
+});
+
+describe('Reservations — Availability Calendar quick booking', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.get as any).mockImplementation((url: string) => {
+      if (url === '/v1/rooms') {
+        return Promise.resolve({
+          data: [{ id: 'room-1', number: '101', roomTypeId: 'rt-1' }],
+        });
+      }
+      if (url === '/v1/reservations') {
+        return Promise.resolve({ data: [] });
+      }
+      if (url === '/v1/rate-plans') {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'rp-1',
+              name: 'Standard Rate',
+              roomTypeId: 'rt-1',
+              baseAmount: '150.00',
+              currencyCode: 'USD',
+              isActive: true,
+            },
+          ],
+        });
+      }
+      if (url.startsWith('/v1/guests')) {
+        return Promise.resolve({
+          data: [
+            { id: 'g-1', firstName: 'John', lastName: 'Doe', email: 'john@example.com' },
+          ],
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+    (api.post as any).mockImplementation((url: string) => {
+      if (url === '/v1/reservations') {
+        return Promise.resolve({ data: { id: 'new-res-1' } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    (api.patch as any).mockResolvedValue({ data: {} });
+  });
+
+  it('submits a valid reservation payload without roomId, then confirms and assigns room', async () => {
+    renderAt('/calendar');
+
+    // Wait for rooms to load
+    const roomHeader = await screen.findByText('101');
+    expect(roomHeader).toBeInTheDocument();
+
+    // The td cell for that room
+    const cell = roomHeader.closest('tr')?.querySelectorAll('td')[1];
+    expect(cell).toBeDefined();
+
+    // Trigger drag selection on the cell
+    fireEvent.mouseDown(cell!);
+    fireEvent.mouseUp(window);
+
+    // Click "Book Selected Dates"
+    const bookButton = await screen.findByRole('button', { name: /book selected dates/i });
+    await userEvent.click(bookButton);
+
+    // Search and select guest
+    const guestInput = screen.getByPlaceholderText(/search/i);
+    await userEvent.type(guestInput, 'John');
+    const guestOption = await screen.findByText('John Doe');
+    await userEvent.click(guestOption);
+
+    // Click confirm booking
+    const confirmBtn = screen.getByRole('button', { name: /confirm booking/i });
+    await userEvent.click(confirmBtn);
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        '/v1/reservations',
+        expect.objectContaining({
+          propertyId: 'prop-1',
+          guestId: 'g-1',
+          roomTypeId: 'rt-1',
+          ratePlanId: 'rp-1',
+          adults: 1,
+          totalAmount: '150.00',
+          currencyCode: 'USD',
+          source: 'direct',
+        }),
+      ),
+    );
+
+    // Verify roomId was NOT sent in the create payload
+    const postPayload = (api.post as any).mock.calls.find(
+      (call: any[]) => call[0] === '/v1/reservations',
+    )?.[1];
+    expect(postPayload).not.toHaveProperty('roomId');
+
+    // Verify confirm and assign room were called
+    await waitFor(() => {
+      expect(api.patch).toHaveBeenCalledWith(
+        '/v1/reservations/new-res-1/confirm',
+        {},
+        expect.objectContaining({ params: { propertyId: 'prop-1' } }),
+      );
+      expect(api.patch).toHaveBeenCalledWith(
+        '/v1/reservations/new-res-1/assign-room',
+        { roomId: 'room-1' },
+        expect.objectContaining({ params: { propertyId: 'prop-1' } }),
+      );
+    });
   });
 });

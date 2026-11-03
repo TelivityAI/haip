@@ -276,7 +276,7 @@
     "removeConnection": "Remove connection",
     "removeWarning": "This deactivates the connection and stops new synchronisation. Existing records and sync history are retained.",
     "removeFailed": "The connection could not be removed. Check your access and try again.",
-    "removing": "Removing\u2026",
+    "removing": "Removing…",
     "connectionRemoved": "Connection removed.",
     "action": "Action",
     "adapter": "Adapter",
@@ -388,7 +388,9 @@
     "yes": "Yes",
     "delete": "Delete",
     "close": "Close",
-    "remove": "Remove"
+    "remove": "Remove",
+    "select": "Select",
+    "to": "to"
   },
   "commercial": {
     "arLedgers": "A/R ledgers",
@@ -738,7 +740,10 @@
     "partyRoomsHint": "Include other rooms on this booking in the same check-in.",
     "partyRoomOverflow": "Only {{count}} rooms can be checked in together. Check in the rest separately.",
     "confirmCheckInParty": "Confirm Check-In ({{count}} rooms)",
-    "preAssignedRoom": "Pre-assigned {{room}}"
+    "preAssignedRoom": "Pre-assigned {{room}}",
+    "viewProfile": "View Profile",
+    "profile": "Profile",
+    "earlyCheckout": "Early Check-Out"
   },
   "groups": {
     "allotmentBlocks": "Allotment Blocks",
@@ -978,7 +983,10 @@
     "title": "Guests",
     "totalStays": "Total Stays",
     "updatedAtLabel": "Last Updated",
-    "vipLevel": "VIP Level"
+    "vipLevel": "VIP Level",
+    "email": "Email",
+    "phone": "Phone",
+    "nationality": "Nationality"
   },
   "header": {
     "language": "Language",
@@ -989,7 +997,9 @@
     "selectProperty": "Select Property",
     "statusLive": "Live",
     "statusOffline": "Offline",
-    "user": "user"
+    "user": "user",
+    "allProperties": "All Properties",
+    "help": "Help"
   },
   "houseAccounts": {
     "accounts": "Accounts",
@@ -1174,7 +1184,8 @@
     "saved": "Integration settings saved",
     "selectProperty": "Select a property to manage integrations.",
     "subtitle": "Browse the public catalog and enable connections for this property.",
-    "title": "Integrations"
+    "title": "Integrations",
+    "saveFailed": "Could not save integration."
   },
   "import": {
     "choose": "1. Choose what to import",
@@ -1401,8 +1412,14 @@
     "endDate": "End date",
     "fixed": "Fixed amount",
     "isClosed": "Closed (stop-sell)",
-    "maxLos": "MaxLOS",
-    "minLos": "MinLOS",
+    "stopSellHint": "Stop-sell — No sales or bookings accepted for this period",
+    "maxLos": "Max stay (MaxLOS)",
+    "maxLosHint": "Maximum length of stay (nights)",
+    "maxLosShort": "Max",
+    "minLos": "Min stay (MinLOS)",
+    "minLosHint": "Minimum length of stay (nights)",
+    "minLosShort": "Min",
+    "nights": "Nights",
     "nameRequired": "Name *",
     "new": "New Rate Plan",
     "noRestrictions": "No restrictions for this rate plan",
@@ -1417,9 +1434,23 @@
     "startDate": "Start date",
     "title": "Rate Plans",
     "type": "Type",
+    "types": {
+      "bar": "BAR (Best Available Rate)",
+      "derived": "Derived",
+      "negotiated": "Negotiated",
+      "package": "Package"
+    },
+    "badges": {
+      "closed": "Closed",
+      "cta": "CTA",
+      "ctd": "CTD"
+    },
     "calendar": "Rate Calendar",
     "calendarEmpty": "Select a valid date range",
-    "effectiveRate": "Effective Rate"
+    "effectiveRate": "Effective Rate",
+    "noPlansForRoomType": "No tariffs available for this room",
+    "ctaHint": "Arrival restriction applies on this date",
+    "ctdHint": "Departure restriction applies on this date"
   },
   "reports": {
     "addFavorite": "Add favorite",
@@ -1487,6 +1518,9 @@
     "assignFailed": "Assignment failed",
     "assignRoom": "Assign Room",
     "availabilityCalendar": "Availability Calendar",
+    "selectedRange": "Selected Range",
+    "bookSelectedDates": "Book Selected Dates",
+    "clearSelection": "Clear Selection",
     "back": "Back",
     "bulkCancel": "Cancel",
     "bulkCheckIn": "Check In",
@@ -1522,6 +1556,7 @@
     "importResult": "{{created}} created, {{failed}} failed",
     "importRowError": "Row {{row}}: {{error}}",
     "importing": "Importing…",
+    "in": "In",
     "lastName": "Last Name",
     "markNoShow": "Mark No-Show",
     "marketingMessage": "Marketing message (requires guest consent)",
@@ -1545,6 +1580,7 @@
     "occupancy": "Occupancy",
     "occupancySummary": "{{adults}} adults, {{children}} children",
     "opsNotes": "Operational notes",
+    "out": "Out",
     "pagination": "Page {{page}} of {{total}} ({{count}} results)",
     "ratePlan": "Rate Plan",
     "reactivateNote": "Reopen",
@@ -1610,7 +1646,10 @@
     "guestMoved": "Guest moved to the other room",
     "siblingRooms": "Other rooms on this booking",
     "siblingRoomLine": "Room {{room}} — {{guest}} ({{status}})",
-    "siblingUnassignedLine": "{{type}} — {{guest}} ({{status}})"
+    "siblingUnassignedLine": "{{type}} — {{guest}} ({{status}})",
+    "confirmBooking": "Confirm Booking",
+    "searchGuestPlaceholder": "Search or add guest...",
+    "createdSuccess": "Reservation created successfully"
   },
   "revenue": {
     "activeAgents": "Active Agents",
