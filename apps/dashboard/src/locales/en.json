@@ -681,6 +681,7 @@
     "selectRatePlan": "Select rate plan",
     "selectRoom": "Select room",
     "selectRoomType": "Select room type",
+    "otherAvailableRooms": "Other available rooms",
     "title": "Front Desk",
     "transportModes": {
       "bus": "Bus",
@@ -1401,8 +1402,14 @@
     "endDate": "End date",
     "fixed": "Fixed amount",
     "isClosed": "Closed (stop-sell)",
-    "maxLos": "MaxLOS",
-    "minLos": "MinLOS",
+    "stopSellHint": "Stop-sell — No sales or bookings accepted for this period",
+    "maxLos": "Max stay (MaxLOS)",
+    "maxLosHint": "Maximum length of stay (nights)",
+    "maxLosShort": "Max",
+    "minLos": "Min stay (MinLOS)",
+    "minLosHint": "Minimum length of stay (nights)",
+    "minLosShort": "Min",
+    "nights": "Nights",
     "nameRequired": "Name *",
     "new": "New Rate Plan",
     "noRestrictions": "No restrictions for this rate plan",
@@ -1417,6 +1424,17 @@
     "startDate": "Start date",
     "title": "Rate Plans",
     "type": "Type",
+    "types": {
+      "bar": "BAR (Best Available Rate)",
+      "derived": "Derived",
+      "negotiated": "Negotiated",
+      "package": "Package"
+    },
+    "badges": {
+      "closed": "Closed",
+      "cta": "CTA",
+      "ctd": "CTD"
+    },
     "calendar": "Rate Calendar",
     "calendarEmpty": "Select a valid date range",
     "effectiveRate": "Effective Rate"

@@ -11,7 +11,7 @@ import {
   Query,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { AuditActorCtx, type AuditActor } from '../../common/audit/audit-actor';
 import { GuestService } from './guest.service';
@@ -37,6 +37,18 @@ export class GuestController {
     @Query() dto: SearchGuestsDto,
   ) {
     return this.guestService.search(propertyId, dto);
+  }
+
+  @Get(':id/stays')
+  @ApiOperation({ summary: 'Get stay history for a guest at a property' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 200, description: 'List of stays for this guest' })
+  @ApiResponse({ status: 404, description: 'Guest not found at this property' })
+  getGuestStays(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.guestService.findStays(id, propertyId);
   }
 
   @Get(':id')
