@@ -1783,7 +1783,10 @@
       "count": "{{count}} discrepancy(ies)"
     },
     "diaryCaption": "Today's guest assignments — {{date}}",
-    "diaryStay": "Stay"
+    "diaryStay": "Stay",
+    "activeStay": "Active Stay",
+    "viewReservation": "View Reservation",
+    "viewGuest": "View Guest Profile"
   },
   "search": {
     "allPropertiesPlaceholder": "Search all properties…",
