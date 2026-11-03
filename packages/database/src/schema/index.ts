@@ -44,6 +44,9 @@ export {
 // Guests
 export { vipLevelEnum, guests } from './guest.js';
 
+// Professions
+export { professions } from './profession.js';
+
 // Reservations & Bookings
 export {
   reservationStatusEnum,
