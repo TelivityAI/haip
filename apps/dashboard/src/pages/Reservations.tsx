@@ -1043,6 +1043,14 @@ function AvailabilityCalendar() {
     }
   };
 
+  useEffect(() => {
+    const onWindowMouseUp = () => {
+      setIsDragging(false);
+    };
+    window.addEventListener('mouseup', onWindowMouseUp);
+    return () => window.removeEventListener('mouseup', onWindowMouseUp);
+  }, []);
+
   const openBookModal = () => {
     if (!selectionRange) return;
     const target = rooms.find((r) => r.id === selectionRange.roomId);
@@ -1135,38 +1143,7 @@ function AvailabilityCalendar() {
         </div>
       </div>
 
-      {/* Floating selection action bar */}
-      {selectionRange && (
-        <div className="mb-4 bg-telivity-teal/10 border border-telivity-teal/30 rounded-xl p-3 flex items-center justify-between animate-fadeIn">
-          <div className="flex items-center gap-3 text-sm">
-            <span className="font-semibold text-telivity-navy">{t('reservations.selectedRange')}:</span>
-            <span className="text-telivity-slate">
-              {t('reservations.room', { defaultValue: 'Room' })} {rooms.find((r) => r.id === selectionRange.roomId)?.number} &bull; {selectionRange.start} {t('common.to', { defaultValue: 'to' })} {selectionRange.end}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setDragRoomId(null);
-                setDragStartDate(null);
-                setDragEndDate(null);
-              }}
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 text-telivity-slate hover:bg-gray-100 transition-colors"
-            >
-              {t('reservations.clearSelection')}
-            </button>
-            <button
-              onClick={openBookModal}
-              className="text-xs px-3 py-1.5 rounded-lg bg-telivity-teal text-white font-medium hover:bg-telivity-teal/90 transition-colors flex items-center gap-1.5 shadow-sm"
-            >
-              <Plus size={14} />
-              {t('reservations.bookSelectedDates')}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white rounded-xl shadow-sm overflow-x-auto select-none">
+      <div className="bg-white rounded-xl shadow-sm overflow-x-auto select-none mb-16">
         <table className="w-full min-w-[900px] border-collapse">
           <thead>
             <tr className="bg-telivity-teal/5 border-b border-gray-100">
@@ -1232,6 +1209,37 @@ function AvailabilityCalendar() {
           </tbody>
         </table>
       </div>
+
+      {/* Floating selection action bar: fixed dock at bottom center to prevent layout shift */}
+      {selectionRange && !isDragging && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/95 backdrop-blur-sm border border-telivity-teal/40 shadow-2xl rounded-2xl px-5 py-3 flex items-center gap-6">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-semibold text-telivity-navy">{t('reservations.selectedRange')}:</span>
+            <span className="text-telivity-slate font-medium">
+              {t('reservations.room', { defaultValue: 'Room' })} {rooms.find((r) => r.id === selectionRange.roomId)?.number} &bull; {selectionRange.start} {t('common.to', { defaultValue: 'to' })} {selectionRange.end}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setDragRoomId(null);
+                setDragStartDate(null);
+                setDragEndDate(null);
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-telivity-slate hover:bg-gray-100 transition-colors font-medium"
+            >
+              {t('reservations.clearSelection')}
+            </button>
+            <button
+              onClick={openBookModal}
+              className="text-xs px-3.5 py-1.5 rounded-lg bg-telivity-teal text-white font-medium hover:bg-telivity-teal/90 transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus size={14} />
+              {t('reservations.bookSelectedDates')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Book Selected Dates Modal */}
       <Modal
