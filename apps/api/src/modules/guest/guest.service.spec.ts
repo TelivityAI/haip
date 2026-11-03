@@ -38,9 +38,11 @@ const mockGuest = {
 function createMockDb(options: {
   selectData?: any[];
   reservationLink?: any[]; // rows returned by the .limit(1) precheck
+  staysData?: any[];
 } = {}) {
   const selectData = options.selectData ?? [mockGuest];
   const reservationLink = options.reservationLink ?? [{ id: 'res-1' }];
+  const staysData = options.staysData ?? [{ id: 'res-1', confirmationNumber: 'CONF1' }];
 
   const mutateChain = () => ({
     values: vi.fn().mockReturnValue({
@@ -71,6 +73,13 @@ function createMockDb(options: {
         }),
         // Direct resolution for findById / count
         then: (resolve: any) => resolve(selectData),
+      }),
+      innerJoin: vi.fn().mockReturnValue({
+        leftJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockResolvedValue(staysData),
+          }),
+        }),
       }),
     }),
   }));
@@ -110,6 +119,21 @@ describe('GuestService', () => {
       expect(result).toEqual(mockGuest);
       expect(mockDb.insert).toHaveBeenCalled();
     });
+
+    it('should convert dateOfBirth and idExpiry string values to Date instances', async () => {
+      await service.create({
+        firstName: 'John',
+        lastName: 'Smith',
+        dateOfBirth: '1995-11-11',
+        idExpiry: '2030-05-20',
+      });
+
+      const inserted = mockDb.insert.mock.results[0].value.values.mock.calls[0][0];
+      expect(inserted.dateOfBirth).toBeInstanceOf(Date);
+      expect(inserted.dateOfBirth.toISOString()).toContain('1995-11-11');
+      expect(inserted.idExpiry).toBeInstanceOf(Date);
+      expect(inserted.idExpiry.toISOString()).toContain('2030-05-20');
+    });
   });
 
   describe('findById', () => {
@@ -135,6 +159,31 @@ describe('GuestService', () => {
     });
   });
 
+  describe('findStays', () => {
+    it('should return stays when guest is linked to the property', async () => {
+      const result = await service.findStays(mockGuest.id, PROPERTY_ID);
+      expect(result).toEqual([{ id: 'res-1', confirmationNumber: 'CONF1' }]);
+    });
+
+    it('should throw NotFoundException when guest has no reservation link at property', async () => {
+      const scopedDb = createMockDb({ reservationLink: [] });
+      const svc = await makeService(scopedDb);
+      await expect(svc.findStays(mockGuest.id, PROPERTY_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw NotFoundException when guest is marked deleted (GDPR erased)', async () => {
+      const erasedDb = createMockDb({
+        selectData: [{ ...mockGuest, isDeleted: true }],
+      });
+      const svc = await makeService(erasedDb);
+      await expect(svc.findStays(mockGuest.id, PROPERTY_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('update', () => {
     it('should update and return the guest when linked to property', async () => {
       const result = await service.update(mockGuest.id, PROPERTY_ID, {
@@ -142,6 +191,19 @@ describe('GuestService', () => {
       });
       expect(result).toEqual(mockGuest);
       expect(mockDb.update).toHaveBeenCalled();
+    });
+
+    it('should convert dateOfBirth and idExpiry string values to Date instances on update', async () => {
+      await service.update(mockGuest.id, PROPERTY_ID, {
+        dateOfBirth: '1995-11-11',
+        idExpiry: '2030-05-20',
+      });
+
+      const updated = mockDb.update.mock.results[0].value.set.mock.calls[0][0];
+      expect(updated.dateOfBirth).toBeInstanceOf(Date);
+      expect(updated.dateOfBirth.toISOString()).toContain('1995-11-11');
+      expect(updated.idExpiry).toBeInstanceOf(Date);
+      expect(updated.idExpiry.toISOString()).toContain('2030-05-20');
     });
 
     it('should throw NotFoundException when not linked to property', async () => {
