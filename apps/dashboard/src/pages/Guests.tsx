@@ -250,7 +250,7 @@ function GuestDetail() {
 
   const { data: stays = [] } = useQuery({
     queryKey: ['guest-stays', id, propertyId],
-    queryFn: () => api.get(`/v1/guests/${id}/stays`, { params: { propertyId } }).then((r) => r.data),
+    queryFn: () => api.get(`/v1/guests/${id}/stays`, { params: { propertyId } }).then((r) => r.data?.data ?? r.data ?? []),
     enabled: !!id && !!propertyId,
   });
 

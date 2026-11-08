@@ -1,6 +1,6 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, ilike, or, and, sql, inArray } from 'drizzle-orm';
-import { guests, reservations, reservationGuests, auditLogs } from '@telivityhaip/database';
+import { eq, ilike, or, and, sql, inArray, desc } from 'drizzle-orm';
+import { guests, reservations, reservationGuests, auditLogs, bookings, rooms } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { CreateGuestDto } from './dto/create-guest.dto';
@@ -66,6 +66,14 @@ export class GuestService {
     if (dto.gdprConsentMarketing) {
       values['gdprConsentDate'] = new Date();
     }
+    if (dto.dateOfBirth) {
+      const parsed = new Date(dto.dateOfBirth);
+      values['dateOfBirth'] = isNaN(parsed.getTime()) ? null : parsed;
+    }
+    if (dto.idExpiry) {
+      const parsed = new Date(dto.idExpiry);
+      values['idExpiry'] = isNaN(parsed.getTime()) ? null : parsed;
+    }
     const [guest] = await db.insert(guests).values(values).returning();
     return guest;
   }
@@ -88,6 +96,72 @@ export class GuestService {
     return guest;
   }
 
+  async findStays(id: string, propertyId: string) {
+    await this.assertGuestAtProperty(id, propertyId);
+
+    const [guest] = await this.db
+      .select({ isDeleted: guests.isDeleted })
+      .from(guests)
+      .where(eq(guests.id, id));
+    if (!guest || guest.isDeleted) {
+      throw new NotFoundException(`Guest ${id} not found`);
+    }
+
+    const rows = await this.db
+      .select({
+        id: reservations.id,
+        bookingId: reservations.bookingId,
+        confirmationNumber: bookings.confirmationNumber,
+        arrivalDate: reservations.arrivalDate,
+        departureDate: reservations.departureDate,
+        nights: reservations.nights,
+        status: reservations.status,
+        roomId: reservations.roomId,
+        roomNumber: rooms.number,
+        totalAmount: reservations.totalAmount,
+        currencyCode: reservations.currencyCode,
+        createdAt: reservations.createdAt,
+      })
+      .from(reservations)
+      .innerJoin(
+        bookings,
+        and(
+          eq(reservations.bookingId, bookings.id),
+          eq(bookings.propertyId, propertyId),
+        ),
+      )
+      .leftJoin(
+        rooms,
+        and(
+          eq(reservations.roomId, rooms.id),
+          eq(rooms.propertyId, propertyId),
+        ),
+      )
+      .where(
+        and(
+          eq(reservations.propertyId, propertyId),
+          or(
+            eq(reservations.guestId, id),
+            inArray(
+              reservations.id,
+              this.db
+                .select({ reservationId: reservationGuests.reservationId })
+                .from(reservationGuests)
+                .where(
+                  and(
+                    eq(reservationGuests.guestId, id),
+                    eq(reservationGuests.propertyId, propertyId),
+                  ),
+                ),
+            ),
+          ),
+        ),
+      )
+      .orderBy(desc(reservations.arrivalDate));
+
+    return rows;
+  }
+
   async update(id: string, propertyId: string, dto: UpdateGuestDto) {
     await this.assertGuestAtProperty(id, propertyId);
     // Bug 4: once erased, treat the row as gone.
@@ -99,6 +173,22 @@ export class GuestService {
       throw new NotFoundException(`Guest ${id} not found`);
     }
     const values: Record<string, unknown> = { ...dto, updatedAt: new Date() };
+    if (dto.dateOfBirth !== undefined) {
+      if (dto.dateOfBirth) {
+        const parsed = new Date(dto.dateOfBirth);
+        values['dateOfBirth'] = isNaN(parsed.getTime()) ? null : parsed;
+      } else {
+        values['dateOfBirth'] = null;
+      }
+    }
+    if (dto.idExpiry !== undefined) {
+      if (dto.idExpiry) {
+        const parsed = new Date(dto.idExpiry);
+        values['idExpiry'] = isNaN(parsed.getTime()) ? null : parsed;
+      } else {
+        values['idExpiry'] = null;
+      }
+    }
     if (dto.isDnr === true && !dto.dnrReason) {
       // Keep existing reason if not provided
     }
