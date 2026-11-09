@@ -3,7 +3,20 @@ import { useTranslation } from 'react-i18next';
 import { Routes, Route, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { DoorOpen, LayoutGrid, List, Plus, X, Image as ImageIcon, AlertTriangle, ExternalLink, Calendar, User } from 'lucide-react';
+import {
+  DoorOpen,
+  LayoutGrid,
+  List,
+  Plus,
+  X,
+  Image as ImageIcon,
+  AlertTriangle,
+  ExternalLink,
+  Calendar,
+  User,
+  MoreVertical,
+  Eye,
+} from 'lucide-react';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
 import { useAuth } from '../context/AuthContext';
@@ -12,6 +25,7 @@ import { useMediaList } from '../hooks/useMedia';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import MediaGallery from '../components/media/MediaGallery';
+import { ContextMenu, QuickActionButton, type ActionMenuItem, type ContextMenuPosition } from '../components/ui/ContextMenu';
 
 interface Room {
   id: string;
@@ -62,11 +76,12 @@ const STATUS_CARD_COLORS: Record<string, string> = {
   out_of_service: 'border-telivity-mid-grey bg-gray-50',
 };
 
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  vacant_dirty: ['clean'],
-  clean: ['inspected', 'out_of_order', 'out_of_service'],
-  inspected: ['guest_ready', 'out_of_order'],
-  guest_ready: ['occupied', 'out_of_order', 'out_of_service'],
+export const VALID_TRANSITIONS: Record<string, string[]> = {
+  vacant_clean: ['occupied', 'vacant_dirty', 'out_of_order', 'out_of_service'],
+  vacant_dirty: ['clean', 'out_of_order'],
+  clean: ['inspected', 'vacant_clean', 'vacant_dirty', 'out_of_order'],
+  inspected: ['guest_ready', 'vacant_dirty', 'out_of_order'],
+  guest_ready: ['occupied', 'vacant_dirty', 'out_of_order'],
   occupied: ['vacant_dirty'],
   out_of_order: ['vacant_dirty'],
   out_of_service: ['vacant_dirty'],
@@ -286,6 +301,7 @@ function RoomDetailPanel({
 function RoomList() {
   const { t } = useTranslation();
   const { propertyId } = useProperty();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const today = format(new Date(), 'yyyy-MM-dd');
   const [view, setView] = useState<'rack' | 'list'>('rack');
@@ -357,6 +373,11 @@ function RoomList() {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       setDetailRoom(null);
     },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      const errorText = Array.isArray(msg) ? msg.join(', ') : (msg ?? err?.message ?? 'Failed to update room status');
+      toast('error', errorText);
+    },
   });
 
   const createMutation = useMutation({
@@ -375,6 +396,55 @@ function RoomList() {
     (acc[floor] ??= []).push(r);
     return acc;
   }, {});
+
+  const [contextMenuState, setContextMenuState] = useState<{
+    position: ContextMenuPosition | null;
+    room: Room | null;
+  }>({ position: null, room: null });
+
+  const ALL_ROOM_STATUSES = [
+    'vacant_clean',
+    'vacant_dirty',
+    'clean',
+    'inspected',
+    'guest_ready',
+    'occupied',
+    'out_of_order',
+    'out_of_service',
+  ];
+
+  const buildRoomMenuItems = (room: Room): ActionMenuItem[] => {
+    const allowedTransitions = VALID_TRANSITIONS[room.status] ?? [];
+
+    const markAsChildren: ActionMenuItem[] = ALL_ROOM_STATUSES
+      .filter((statusKey) => allowedTransitions.includes(statusKey))
+      .map((statusKey) => ({
+        id: `status-${statusKey}`,
+        label: t(`dashboard.roomStatuses.${statusKey}`, { defaultValue: statusKey.replace(/_/g, ' ') }),
+        onClick: () => {
+          statusMutation.mutate({ roomId: room.id, newStatus: statusKey });
+        },
+      }));
+
+    return [
+      {
+        id: 'view-details',
+        label: t('rooms.viewDetails'),
+        icon: <Eye size={14} />,
+        onClick: () => setDetailRoom(room),
+      },
+      ...(markAsChildren.length > 0
+        ? [
+            {
+              id: 'mark-as',
+              label: t('rooms.markAs'),
+              icon: <DoorOpen size={14} />,
+              children: markAsChildren,
+            },
+          ]
+        : []),
+    ];
+  };
 
   if (!propertyId) {
     return <div className="flex items-center justify-center h-64 text-telivity-mid-grey">{t('rooms.selectProperty')}</div>;
@@ -439,13 +509,30 @@ function RoomList() {
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                 {floorRooms.sort((a, b) => a.number.localeCompare(b.number)).map((room) => {
                   const diary = diaryByRoomId.get(room.id);
+                  const roomMenuItems = buildRoomMenuItems(room);
                   return (
                   <div
                     key={room.id}
                     onClick={() => setDetailRoom(room)}
-                    className={`border-2 rounded-xl p-3 cursor-pointer transition-all hover:shadow-md ${STATUS_CARD_COLORS[room.status] ?? 'border-gray-200'}`}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setContextMenuState({
+                        position: { x: e.clientX, y: e.clientY },
+                        room,
+                      });
+                    }}
+                    className={`group relative border-2 rounded-xl p-3 cursor-pointer transition-all hover:shadow-md ${STATUS_CARD_COLORS[room.status] ?? 'border-gray-200'}`}
                   >
-                    <p className="text-sm font-semibold text-telivity-navy">{room.number}</p>
+                    <div className="flex items-start justify-between">
+                      <p className="text-sm font-semibold text-telivity-navy">{room.number}</p>
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity -mr-1 -mt-1" onClick={(e) => e.stopPropagation()}>
+                        <QuickActionButton
+                          items={roomMenuItems}
+                          triggerIcon={<MoreVertical size={14} />}
+                        />
+                      </div>
+                    </div>
                     <p className="text-[10px] text-telivity-mid-grey truncate">{room.roomTypeName ?? ''}</p>
                     <StatusBadge status={room.status} label={t(`dashboard.roomStatuses.${room.status}`, { defaultValue: room.status })} className="mt-1.5 text-[9px] px-1.5 py-0" />
                     {diary ? (
@@ -481,13 +568,27 @@ function RoomList() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.guest')}</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">{t('rooms.diaryStay')}</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-telivity-slate uppercase">ADA</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-telivity-slate uppercase"></th>
               </tr>
             </thead>
             <tbody>
               {rooms.map((r, i) => {
                 const diary = diaryByRoomId.get(r.id);
+                const roomMenuItems = buildRoomMenuItems(r);
                 return (
-                <tr key={r.id} onClick={() => setDetailRoom(r)} className={`border-b border-gray-50 cursor-pointer hover:bg-telivity-light-grey/50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
+                <tr
+                  key={r.id}
+                  onClick={() => setDetailRoom(r)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setContextMenuState({
+                      position: { x: e.clientX, y: e.clientY },
+                      room: r,
+                    });
+                  }}
+                  className={`border-b border-gray-50 cursor-pointer hover:bg-telivity-light-grey/50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}
+                >
                   <td className="px-4 py-3 text-sm font-medium text-telivity-navy">{r.number}</td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.roomTypeName ?? '—'}</td>
                   <td className="px-4 py-3 text-sm text-telivity-slate">{r.floor ?? '—'}</td>
@@ -497,6 +598,14 @@ function RoomList() {
                     {diary ? `${diary.arrivalDate} → ${diary.departureDate}` : '—'}
                   </td>
                   <td className="px-4 py-3 text-sm">{r.isAccessible ? t('common.yes') : '—'}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <QuickActionButton
+                        items={roomMenuItems}
+                        triggerIcon={<MoreVertical size={14} />}
+                      />
+                    </div>
+                  </td>
                 </tr>
                 );
               })}
@@ -541,6 +650,15 @@ function RoomList() {
           </button>
         </div>
       </Modal>
+
+      {/* Global Context Menu for Right-Click on Rooms */}
+      {contextMenuState.room && (
+        <ContextMenu
+          items={buildRoomMenuItems(contextMenuState.room)}
+          position={contextMenuState.position}
+          onClose={() => setContextMenuState({ position: null, room: null })}
+        />
+      )}
     </div>
   );
 }
