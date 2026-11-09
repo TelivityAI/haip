@@ -1573,6 +1573,8 @@
     "roomNumber": "Room #",
     "roomType": "Room Type",
     "saveNote": "Save note",
+    "search": "Search",
+    "searchPlaceholder": "Search by confirmation, guest, room…",
     "searchAvailability": "Search Availability",
     "searchAvailabilityStep": "Step 1: Search Availability",
     "searching": "Searching…",
@@ -1783,7 +1785,10 @@
       "count": "{{count}} discrepancy(ies)"
     },
     "diaryCaption": "Today's guest assignments — {{date}}",
-    "diaryStay": "Stay"
+    "diaryStay": "Stay",
+    "activeStay": "Active Stay",
+    "viewReservation": "View Reservation",
+    "viewGuest": "View Guest Profile"
   },
   "search": {
     "allPropertiesPlaceholder": "Search all properties…",

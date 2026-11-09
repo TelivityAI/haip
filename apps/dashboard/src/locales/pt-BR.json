@@ -1447,6 +1447,8 @@
     "room": "Quarto",
     "roomNumber": "Quarto nº",
     "roomType": "Tipo de Quarto",
+    "search": "Buscar",
+    "searchPlaceholder": "Buscar por confirmação, hóspede, quarto…",
     "searchAvailability": "Buscar disponibilidade",
     "searchAvailabilityStep": "Etapa 1: Buscar disponibilidade",
     "searching": "Buscando…",
@@ -1662,7 +1664,10 @@
       "count": "{{count}} divergência(s)"
     },
     "diaryCaption": "Atribuições de hóspedes de hoje — {{date}}",
-    "diaryStay": "Estadia"
+    "diaryStay": "Estadia",
+    "activeStay": "Estadia Ativa",
+    "viewReservation": "Ver Reserva",
+    "viewGuest": "Ver Perfil do Hóspede"
   },
   "search": {
     "allPropertiesPlaceholder": "Pesquisar todas as propriedades…",

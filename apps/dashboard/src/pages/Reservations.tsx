@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { formatMoney } from '../lib/money';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useReactTable,
@@ -108,12 +108,32 @@ function parseImportRows(text: string): Record<string, unknown>[] {
     });
 }
 
+function guestName(r: Reservation) {
+  if (r.guestName) return r.guestName;
+  if (r.guest) return `${r.guest.firstName} ${r.guest.lastName}`.trim();
+  return '—';
+}
+
 // ---- Reservation List ----
 function ReservationList() {
   const { t } = useTranslation();
   const { propertyId, currencyCode } = useProperty();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL query params
+  const targetReservationId = searchParams.get('id') || searchParams.get('reservationId');
+
+  // Track the ID that was explicitly closed by the user so we do not auto-reopen it
+  const closedTargetRef = useRef<string | null>(null);
+
+  // When targetReservationId changes or disappears, reset closedTargetRef if it doesn't match
+  useEffect(() => {
+    if (!targetReservationId) {
+      closedTargetRef.current = null;
+    }
+  }, [targetReservationId]);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('');
@@ -154,7 +174,7 @@ function ReservationList() {
   if (dateFrom) params.arrivalDateFrom = dateFrom;
   if (dateTo) params.arrivalDateTo = dateTo;
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['reservations', params],
     queryFn: () => api.get('/v1/reservations', { params }).then((r) => r.data),
     enabled: !!propertyId,
@@ -164,6 +184,76 @@ function ReservationList() {
   // renders — its cell renderers are the element *type* passed to flexRender,
   // so a new identity remounts every cell (and drops in-flight interactions).
   const reservations: Reservation[] = useMemo(() => data?.data ?? data ?? [], [data]);
+
+  // Open reservation details if target ID is present in query parameters
+  useEffect(() => {
+    if (!propertyId || isLoading || !targetReservationId) return;
+
+    if (closedTargetRef.current === targetReservationId) return;
+    if (detailRes && detailRes.id === targetReservationId) return;
+
+    // 1. Check in currently loaded reservations
+    const matched = reservations.find((r) => r.id === targetReservationId);
+    if (matched) {
+      setDetailRes(matched);
+      return;
+    }
+
+    // 2. Fetch by ID if targetReservationId was explicitly given
+    let active = true;
+    api
+      .get(`/v1/reservations/${targetReservationId}`, { params: { propertyId } })
+      .then((res) => {
+        if (!active || !res?.data) return;
+        const raw = res.data?.data ?? res.data;
+        const d = Array.isArray(raw) ? raw[0] : raw;
+        if (!d) return;
+        const rData = d.reservation ?? d;
+        const mapped: Reservation = {
+          ...rData,
+          status: rData.status ?? 'confirmed',
+          confirmationNumber: d.confirmationNumber ?? rData.confirmationNumber ?? '—',
+          guestName: d.guest ? `${d.guest.firstName} ${d.guest.lastName}`.trim() : (rData.guestName ?? '—'),
+          guest: d.guest ?? undefined,
+          roomNumber: d.room?.number ?? rData.roomNumber,
+          roomTypeName: d.roomType?.name ?? rData.roomTypeName,
+          ratePlanName: d.ratePlan?.name ?? rData.ratePlanName,
+        };
+        setDetailRes(mapped);
+      })
+      .catch(() => {
+        // Keep quiet on 404
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [propertyId, isLoading, targetReservationId, reservations, detailRes]);
+
+  const closeDetail = useCallback(() => {
+    if (targetReservationId) {
+      closedTargetRef.current = targetReservationId;
+    }
+    setDetailRes(null);
+    if (searchParams.has('id') || searchParams.has('reservationId') || searchParams.has('search')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('id');
+      next.delete('reservationId');
+      next.delete('search');
+      setSearchParams(next, { replace: true });
+    }
+  }, [targetReservationId, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!detailRes) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeDetail();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [detailRes, closeDetail]);
 
   const searchAvailMutation = useMutation({
     mutationFn: async () => {
@@ -332,12 +422,6 @@ function ReservationList() {
     setSelectedRatePlan('');
     setSelectedGuest(null);
     setCreateStep(0);
-  }
-
-  function guestName(r: Reservation) {
-    if (r.guestName) return r.guestName;
-    if (r.guest) return `${r.guest.firstName} ${r.guest.lastName}`;
-    return '—';
   }
 
   const pageIds = useMemo(() => reservations.map((r) => r.id), [reservations]);
@@ -615,11 +699,11 @@ function ReservationList() {
       {/* Detail Slide-Over */}
       {detailRes && (
         <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setDetailRes(null)} />
+          <div className="absolute inset-0 bg-black/30" onClick={closeDetail} />
           <div className="relative w-full max-w-lg bg-white shadow-xl overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-telivity-navy">{t('reservations.details')}</h2>
-              <button onClick={() => setDetailRes(null)} className="p-1 rounded hover:bg-telivity-light-grey"><X size={18} /></button>
+              <button onClick={closeDetail} className="p-1 rounded hover:bg-telivity-light-grey"><X size={18} /></button>
             </div>
             <div className="p-6 space-y-5">
               <div className="flex items-center justify-between">
@@ -658,11 +742,11 @@ function ReservationList() {
               <ReservationMessageCompose reservationId={detailRes.id} propertyId={propertyId!} />
               <div className="flex gap-2 pt-2">
                 {detailRes.guestId && (
-                  <button onClick={() => { navigate(`/guests/${detailRes.guestId}`); setDetailRes(null); }} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-3 py-2 text-sm font-semibold hover:bg-telivity-light-grey">
+                  <button onClick={() => { navigate(`/guests/${detailRes.guestId}`); closeDetail(); }} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-3 py-2 text-sm font-semibold hover:bg-telivity-light-grey">
                     {t('reservations.viewGuest')}
                   </button>
                 )}
-                <button onClick={() => { navigate(`/folios?reservationId=${detailRes.id}`); setDetailRes(null); }} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-3 py-2 text-sm font-semibold hover:bg-telivity-light-grey">
+                <button onClick={() => { navigate(`/folios?reservationId=${detailRes.id}`); closeDetail(); }} className="flex-1 border border-gray-200 text-telivity-slate rounded-lg px-3 py-2 text-sm font-semibold hover:bg-telivity-light-grey">
                   {t('reservations.viewFolio')}
                 </button>
               </div>
