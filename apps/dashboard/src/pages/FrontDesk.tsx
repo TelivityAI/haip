@@ -950,7 +950,9 @@ export default function FrontDesk() {
     let nights = 0;
     try {
       nights = differenceInCalendarDays(parseISO(dep), parseISO(arr));
-    } catch {}
+    } catch {
+      /* invalid dates — keep nights at 0 */
+    }
 
     if (wiRatePlanId && wiRoomTypeId) {
       const plan = rpList.find((p) => p.id === wiRatePlanId);
