@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -39,6 +39,8 @@ interface RoomType {
 interface RatePlan {
   id: string;
   name: string;
+  roomTypeId?: string;
+  isActive?: boolean;
 }
 
 interface Room {
@@ -132,6 +134,15 @@ export default function ReservationPartyPanel({
         .then((r) => (r.data?.data ?? r.data ?? []) as Room[]),
     enabled: !!propertyId && splitOpen && !!splitRoomTypeId,
   });
+
+  const availableRatePlans = useMemo(() => {
+    const targetRoomTypeId =
+      splitRoomTypeId || rooms.find((r) => r.id === splitRoomId)?.roomTypeId;
+    if (!targetRoomTypeId) return ratePlans.filter((rp) => rp.isActive !== false);
+    return ratePlans.filter(
+      (rp) => (!rp.roomTypeId || rp.roomTypeId === targetRoomTypeId) && rp.isActive !== false,
+    );
+  }, [ratePlans, splitRoomTypeId, splitRoomId, rooms]);
 
   const addMutation = useMutation({
     mutationFn: () => {
@@ -435,7 +446,7 @@ export default function ReservationPartyPanel({
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
               >
                 <option value="">{t('common.select', { defaultValue: 'Select' })}</option>
-                {ratePlans.map((rp) => (
+                {availableRatePlans.map((rp) => (
                   <option key={rp.id} value={rp.id}>
                     {rp.name}
                   </option>
