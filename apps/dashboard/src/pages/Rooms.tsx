@@ -16,7 +16,6 @@ import {
   User,
   MoreVertical,
   Eye,
-  CheckCircle2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
