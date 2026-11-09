@@ -676,6 +676,7 @@
     "selectRatePlan": "Seleccione plan tarifario",
     "selectRoom": "Seleccione habitación",
     "selectRoomType": "Seleccione tipo de habitación",
+    "otherAvailableRooms": "Otras habitaciones disponibles",
     "title": "Recepción",
     "transportModes": {
       "bus": "Bus",

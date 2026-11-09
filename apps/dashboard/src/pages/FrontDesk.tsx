@@ -124,6 +124,24 @@ function emptyWalkInExtraRoom(defaults?: {
   };
 }
 
+function isRatePlanSelectable(
+  p: any,
+  roomTypeId?: string,
+  arrivalDate?: string,
+  departureDate?: string,
+  nights?: number,
+): boolean {
+  if (!p || p.isActive === false) return false;
+  if (roomTypeId && p.roomTypeId !== roomTypeId) return false;
+  if (arrivalDate && p.validFrom && arrivalDate < p.validFrom) return false;
+  if (arrivalDate && p.validTo && arrivalDate > p.validTo) return false;
+  if (nights !== undefined && Number.isFinite(nights) && nights > 0) {
+    if (p.minLos != null && p.minLos > 0 && nights < p.minLos) return false;
+    if (p.maxLos != null && p.maxLos > 0 && nights > p.maxLos) return false;
+  }
+  return true;
+}
+
 export default function FrontDesk() {
   const { t } = useTranslation();
   const { propertyId, currencyCode } = useProperty();
@@ -742,16 +760,25 @@ export default function FrontDesk() {
   const noteList: NoteRow[] = notesData?.notes ?? notesData?.data ?? (Array.isArray(notesData) ? notesData : []);
   const activeNoteCount = notesData?.activeCount ?? noteList.filter((n) => n.isActive).length;
 
-  const rtList: any[] = Array.isArray(roomTypes) ? roomTypes : roomTypes?.data ?? [];
-  const rpList: any[] = Array.isArray(ratePlans) ? ratePlans : ratePlans?.data ?? [];
+  const rtList: any[] = useMemo(() => {
+    const raw = roomTypes?.data ?? roomTypes ?? [];
+    return Array.isArray(raw) ? raw : [];
+  }, [roomTypes]);
+  const rpList: any[] = useMemo(() => {
+    const raw = ratePlans?.data ?? ratePlans ?? [];
+    return Array.isArray(raw) ? raw : [];
+  }, [ratePlans]);
   const maxOccupancyFor = (roomTypeId: string): number | undefined =>
     rtList.find((rt) => rt.id === roomTypeId)?.maxOccupancy ?? undefined;
-  const filteredPlans = wiRoomTypeId
-    ? rpList.filter((p) => p.roomTypeId === wiRoomTypeId && p.isActive !== false)
-    : rpList;
-  const walkInRooms = wiRoomTypeId
-    ? roomList.filter((r) => !r.roomTypeId || r.roomTypeId === wiRoomTypeId)
-    : roomList;
+
+  const roomTypeById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const rt of rtList) {
+      map.set(rt.id, rt.name);
+    }
+    return map;
+  }, [rtList]);
+
   const takenRoomIds = (exceptKey?: string) => {
     const ids = new Set<string>();
     if (wiRoomId) ids.add(wiRoomId);
@@ -761,18 +788,199 @@ export default function FrontDesk() {
     }
     return ids;
   };
-  const roomsForExtra = (extra: WalkInExtraRoom) => {
-    const taken = takenRoomIds(extra.key);
-    return roomList.filter(
-      (r) =>
-        !taken.has(r.id) &&
-        (!extra.roomTypeId || !r.roomTypeId || r.roomTypeId === extra.roomTypeId),
+
+  const availableRoomsForPrimary = useMemo(() => {
+    const taken = takenRoomIds();
+    return roomList.filter((r) => !taken.has(r.id) || r.id === wiRoomId);
+  }, [roomList, wiRoomId, wiExtraRooms]);
+
+  const availableRoomsForExtra = (extraKey: string, currentRoomId: string) => {
+    const taken = takenRoomIds(extraKey);
+    return roomList.filter((r) => !taken.has(r.id) || r.id === currentRoomId);
+  };
+
+  const primarySelectablePlans = useMemo(() => {
+    return rpList.filter((p) =>
+      isRatePlanSelectable(p, wiRoomTypeId || undefined, wiArrivalDate, wiDepartureDate, wiNights),
+    );
+  }, [rpList, wiRoomTypeId, wiArrivalDate, wiDepartureDate, wiNights]);
+
+  const selectablePlansForRoomType = (roomTypeId: string) => {
+    return rpList.filter((p) =>
+      isRatePlanSelectable(p, roomTypeId || undefined, wiArrivalDate, wiDepartureDate, wiNights),
     );
   };
-  const plansForRoomType = (roomTypeId: string) =>
-    roomTypeId
-      ? rpList.filter((p) => p.roomTypeId === roomTypeId && p.isActive !== false)
-      : rpList;
+
+  const handleSelectPrimaryRoom = (roomId: string) => {
+    setWiRoomId(roomId);
+    setWiExtraRooms((prev) =>
+      prev.map((r) => (r.roomId === roomId ? { ...r, roomId: '' } : r)),
+    );
+    if (!roomId) return;
+
+    const room = roomList.find((r) => r.id === roomId);
+    if (room?.roomTypeId) {
+      setWiRoomTypeId(room.roomTypeId);
+      const validPlans = rpList.filter((p) =>
+        isRatePlanSelectable(p, room.roomTypeId, wiArrivalDate, wiDepartureDate, wiNights),
+      );
+      if (wiRatePlanId && !validPlans.some((p) => p.id === wiRatePlanId)) {
+        setWiRatePlanId(validPlans.length === 1 ? validPlans[0].id : '');
+      } else if (!wiRatePlanId && validPlans.length === 1) {
+        setWiRatePlanId(validPlans[0].id);
+      }
+    }
+  };
+
+  const handleSelectPrimaryRatePlan = (ratePlanId: string) => {
+    setWiRatePlanId(ratePlanId);
+    if (!ratePlanId) return;
+
+    const plan = rpList.find((p) => p.id === ratePlanId);
+    if (plan?.roomTypeId) {
+      if (wiRoomTypeId !== plan.roomTypeId) {
+        setWiRoomTypeId(plan.roomTypeId);
+      }
+      if (wiRoomId) {
+        const room = roomList.find((r) => r.id === wiRoomId);
+        if (room && room.roomTypeId && room.roomTypeId !== plan.roomTypeId) {
+          setWiRoomId('');
+        }
+      }
+    }
+  };
+
+  const handleSelectPrimaryRoomType = (roomTypeId: string) => {
+    setWiRoomTypeId(roomTypeId);
+    if (wiRoomId) {
+      const room = roomList.find((r) => r.id === wiRoomId);
+      if (room && roomTypeId && room.roomTypeId !== roomTypeId) {
+        setWiRoomId('');
+      }
+    }
+    const validPlans = rpList.filter((p) =>
+      isRatePlanSelectable(p, roomTypeId || undefined, wiArrivalDate, wiDepartureDate, wiNights),
+    );
+    if (wiRatePlanId && !validPlans.some((p) => p.id === wiRatePlanId)) {
+      setWiRatePlanId(validPlans.length === 1 ? validPlans[0].id : '');
+    } else if (!wiRatePlanId && validPlans.length === 1) {
+      setWiRatePlanId(validPlans[0].id);
+    }
+  };
+
+  const handleSelectExtraRoom = (extraKey: string, roomId: string) => {
+    const room = roomList.find((r) => r.id === roomId);
+    const extra = wiExtraRooms.find((r) => r.key === extraKey);
+    const targetRoomTypeId = room?.roomTypeId || extra?.roomTypeId || '';
+
+    const validPlans = rpList.filter((p) =>
+      isRatePlanSelectable(p, targetRoomTypeId || undefined, wiArrivalDate, wiDepartureDate, wiNights),
+    );
+
+    let newRatePlanId = extra?.ratePlanId || '';
+    if (newRatePlanId && !validPlans.some((p) => p.id === newRatePlanId)) {
+      newRatePlanId = validPlans.length === 1 ? validPlans[0].id : '';
+    } else if (!newRatePlanId && validPlans.length === 1) {
+      newRatePlanId = validPlans[0].id;
+    }
+
+    if (roomId && wiRoomId === roomId) {
+      setWiRoomId('');
+    }
+
+    updateExtraRoom(extraKey, {
+      roomId,
+      ...(room?.roomTypeId ? { roomTypeId: room.roomTypeId } : {}),
+      ratePlanId: newRatePlanId,
+    });
+  };
+
+  const handleSelectExtraRatePlan = (extraKey: string, ratePlanId: string) => {
+    const plan = rpList.find((p) => p.id === ratePlanId);
+    const extra = wiExtraRooms.find((r) => r.key === extraKey);
+    let newRoomTypeId = extra?.roomTypeId || '';
+    let newRoomId = extra?.roomId || '';
+
+    if (plan?.roomTypeId) {
+      newRoomTypeId = plan.roomTypeId;
+      if (newRoomId) {
+        const room = roomList.find((r) => r.id === newRoomId);
+        if (room && room.roomTypeId && room.roomTypeId !== plan.roomTypeId) {
+          newRoomId = '';
+        }
+      }
+    }
+
+    updateExtraRoom(extraKey, {
+      ratePlanId,
+      roomTypeId: newRoomTypeId,
+      roomId: newRoomId,
+    });
+  };
+
+  const handleSelectExtraRoomType = (extraKey: string, roomTypeId: string) => {
+    const extra = wiExtraRooms.find((r) => r.key === extraKey);
+    let newRoomId = extra?.roomId || '';
+    if (newRoomId) {
+      const room = roomList.find((r) => r.id === newRoomId);
+      if (room && roomTypeId && room.roomTypeId !== roomTypeId) {
+        newRoomId = '';
+      }
+    }
+
+    const validPlans = rpList.filter((p) =>
+      isRatePlanSelectable(p, roomTypeId || undefined, wiArrivalDate, wiDepartureDate, wiNights),
+    );
+
+    let newRatePlanId = extra?.ratePlanId || '';
+    if (newRatePlanId && !validPlans.some((p) => p.id === newRatePlanId)) {
+      newRatePlanId = validPlans.length === 1 ? validPlans[0].id : '';
+    } else if (!newRatePlanId && validPlans.length === 1) {
+      newRatePlanId = validPlans[0].id;
+    }
+
+    updateExtraRoom(extraKey, {
+      roomTypeId,
+      roomId: newRoomId,
+      ratePlanId: newRatePlanId,
+    });
+  };
+
+  const validateRatesForStay = (arr: string, dep: string) => {
+    let nights = 0;
+    try {
+      nights = differenceInCalendarDays(parseISO(dep), parseISO(arr));
+    } catch {
+      /* invalid dates — keep nights at 0 */
+    }
+
+    if (wiRatePlanId && wiRoomTypeId) {
+      const plan = rpList.find((p) => p.id === wiRatePlanId);
+      if (plan && !isRatePlanSelectable(plan, wiRoomTypeId, arr, dep, nights)) {
+        const validPlans = rpList.filter((p) =>
+          isRatePlanSelectable(p, wiRoomTypeId, arr, dep, nights),
+        );
+        setWiRatePlanId(validPlans.length === 1 ? validPlans[0].id : '');
+      }
+    }
+
+    setWiExtraRooms((prev) =>
+      prev.map((extra) => {
+        if (!extra.ratePlanId || !extra.roomTypeId) return extra;
+        const plan = rpList.find((p) => p.id === extra.ratePlanId);
+        if (plan && !isRatePlanSelectable(plan, extra.roomTypeId, arr, dep, nights)) {
+          const validPlans = rpList.filter((p) =>
+            isRatePlanSelectable(p, extra.roomTypeId, arr, dep, nights),
+          );
+          return {
+            ...extra,
+            ratePlanId: validPlans.length === 1 ? validPlans[0].id : '',
+          };
+        }
+        return extra;
+      }),
+    );
+  };
 
   const currentList = tab === 'arrivals' ? arrList : tab === 'in-house' ? ihList : depList;
   const partyGroups = useMemo(() => groupByBooking(currentList), [currentList]);
@@ -1584,11 +1792,8 @@ export default function FrontDesk() {
                 </label>
                 <select
                   value={wiRoomTypeId}
-                  onChange={(e) => {
-                    setWiRoomTypeId(e.target.value);
-                    setWiRatePlanId('');
-                    setWiRoomId('');
-                  }}
+                  aria-label={t('frontDesk.roomType')}
+                  onChange={(e) => handleSelectPrimaryRoomType(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
                 >
                   <option value="">{t('frontDesk.selectRoomType')}</option>
@@ -1605,15 +1810,43 @@ export default function FrontDesk() {
                 </label>
                 <select
                   value={wiRatePlanId}
-                  onChange={(e) => setWiRatePlanId(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  aria-label={t('frontDesk.ratePlan')}
+                  onChange={(e) => handleSelectPrimaryRatePlan(e.target.value)}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm ${
+                    walkInMutation.isError && !wiRatePlanId
+                      ? 'border-telivity-orange ring-1 ring-telivity-orange'
+                      : 'border-gray-200'
+                  }`}
                 >
                   <option value="">{t('frontDesk.selectRatePlan')}</option>
-                  {filteredPlans.map((rp) => (
-                    <option key={rp.id} value={rp.id}>
-                      {rp.name} — {moneyString(rp.baseAmount)}
-                    </option>
-                  ))}
+                  {wiRoomTypeId ? (
+                    primarySelectablePlans.map((rp) => (
+                      <option key={rp.id} value={rp.id}>
+                        {rp.name} — {moneyString(rp.baseAmount)}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      {rtList.map((rt) => {
+                        const plans = primarySelectablePlans.filter((p) => p.roomTypeId === rt.id);
+                        if (plans.length === 0) return null;
+                        return (
+                          <optgroup key={rt.id} label={rt.name}>
+                            {plans.map((rp) => (
+                              <option key={rp.id} value={rp.id}>
+                                {rp.name} — {moneyString(rp.baseAmount)}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
+                      {primarySelectablePlans.filter((p) => !p.roomTypeId).map((rp) => (
+                        <option key={rp.id} value={rp.id}>
+                          {rp.name} — {moneyString(rp.baseAmount)}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
               </div>
               <div>
@@ -1622,13 +1855,8 @@ export default function FrontDesk() {
                 </label>
                 <select
                   value={wiRoomId}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setWiRoomId(next);
-                    setWiExtraRooms((prev) =>
-                      prev.map((r) => (r.roomId === next ? { ...r, roomId: '' } : r)),
-                    );
-                  }}
+                  aria-label={t('frontDesk.assignRoom')}
+                  onChange={(e) => handleSelectPrimaryRoom(e.target.value)}
                   className={`w-full border rounded-lg px-3 py-2 text-sm ${
                     walkInMutation.isError && !wiRoomId
                       ? 'border-telivity-orange ring-1 ring-telivity-orange'
@@ -1636,13 +1864,59 @@ export default function FrontDesk() {
                   }`}
                 >
                   <option value="">{t('frontDesk.selectRoom')}</option>
-                  {walkInRooms
-                    .filter((room) => !takenRoomIds().has(room.id) || room.id === wiRoomId)
-                    .map((room) => (
-                      <option key={room.id} value={room.id}>
-                        {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
-                      </option>
-                    ))}
+                  {wiRoomTypeId ? (
+                    <>
+                      {availableRoomsForPrimary.filter((r) => r.roomTypeId === wiRoomTypeId).length > 0 && (
+                        <optgroup label={roomTypeById.get(wiRoomTypeId) || t('frontDesk.roomType')}>
+                          {availableRoomsForPrimary
+                            .filter((r) => r.roomTypeId === wiRoomTypeId)
+                            .map((room) => (
+                              <option key={room.id} value={room.id}>
+                                {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      {availableRoomsForPrimary.filter((r) => r.roomTypeId !== wiRoomTypeId).length > 0 && (
+                        <optgroup label={t('frontDesk.otherAvailableRooms')}>
+                          {availableRoomsForPrimary
+                            .filter((r) => r.roomTypeId !== wiRoomTypeId)
+                            .map((room) => (
+                              <option key={room.id} value={room.id}>
+                                {room.roomNumber ?? room.number} ({roomTypeById.get(room.roomTypeId ?? '') || t('common.other')}) — {formatLabel(room.status, t)}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {rtList.map((rt) => {
+                        const rooms = availableRoomsForPrimary.filter((r) => r.roomTypeId === rt.id);
+                        if (rooms.length === 0) return null;
+                        return (
+                          <optgroup key={rt.id} label={rt.name}>
+                            {rooms.map((room) => (
+                              <option key={room.id} value={room.id}>
+                                {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
+                      {availableRoomsForPrimary.filter((r) => !r.roomTypeId).length > 0 && (
+                        <optgroup label={t('common.other')}>
+                          {availableRoomsForPrimary
+                            .filter((r) => !r.roomTypeId)
+                            .map((room) => (
+                              <option key={room.id} value={room.id}>
+                                {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                    </>
+                  )}
                 </select>
               </div>
             </div>
@@ -1658,8 +1932,7 @@ export default function FrontDesk() {
           </div>
 
           {wiExtraRooms.map((extra, idx) => {
-            const plans = plansForRoomType(extra.roomTypeId);
-            const rooms = roomsForExtra(extra);
+            const plans = selectablePlansForRoomType(extra.roomTypeId);
             return (
               <div
                 key={extra.key}
@@ -1692,14 +1965,13 @@ export default function FrontDesk() {
                     </label>
                     <select
                       value={extra.roomTypeId}
-                      onChange={(e) =>
-                        updateExtraRoom(extra.key, {
-                          roomTypeId: e.target.value,
-                          ratePlanId: '',
-                          roomId: '',
-                        })
-                      }
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                      aria-label={t('frontDesk.roomType')}
+                      onChange={(e) => handleSelectExtraRoomType(extra.key, e.target.value)}
+                      className={`w-full border rounded-lg px-3 py-2 text-sm ${
+                        walkInMutation.isError && !extra.roomTypeId
+                          ? 'border-telivity-orange ring-1 ring-telivity-orange'
+                          : 'border-gray-200'
+                      }`}
                     >
                       <option value="">{t('frontDesk.selectRoomType')}</option>
                       {rtList.map((rt) => (
@@ -1715,15 +1987,43 @@ export default function FrontDesk() {
                     </label>
                     <select
                       value={extra.ratePlanId}
-                      onChange={(e) => updateExtraRoom(extra.key, { ratePlanId: e.target.value })}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                      aria-label={t('frontDesk.ratePlan')}
+                      onChange={(e) => handleSelectExtraRatePlan(extra.key, e.target.value)}
+                      className={`w-full border rounded-lg px-3 py-2 text-sm ${
+                        walkInMutation.isError && !extra.ratePlanId
+                          ? 'border-telivity-orange ring-1 ring-telivity-orange'
+                          : 'border-gray-200'
+                      }`}
                     >
                       <option value="">{t('frontDesk.selectRatePlan')}</option>
-                      {plans.map((rp) => (
-                        <option key={rp.id} value={rp.id}>
-                          {rp.name} — {moneyString(rp.baseAmount)}
-                        </option>
-                      ))}
+                      {extra.roomTypeId ? (
+                        plans.map((rp) => (
+                          <option key={rp.id} value={rp.id}>
+                            {rp.name} — {moneyString(rp.baseAmount)}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          {rtList.map((rt) => {
+                            const subPlans = plans.filter((p) => p.roomTypeId === rt.id);
+                            if (subPlans.length === 0) return null;
+                            return (
+                              <optgroup key={rt.id} label={rt.name}>
+                                {subPlans.map((rp) => (
+                                  <option key={rp.id} value={rp.id}>
+                                    {rp.name} — {moneyString(rp.baseAmount)}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            );
+                          })}
+                          {plans.filter((p) => !p.roomTypeId).map((rp) => (
+                            <option key={rp.id} value={rp.id}>
+                              {rp.name} — {moneyString(rp.baseAmount)}
+                            </option>
+                          ))}
+                        </>
+                      )}
                     </select>
                   </div>
                   <div>
@@ -1732,7 +2032,8 @@ export default function FrontDesk() {
                     </label>
                     <select
                       value={extra.roomId}
-                      onChange={(e) => updateExtraRoom(extra.key, { roomId: e.target.value })}
+                      aria-label={t('frontDesk.assignRoom')}
+                      onChange={(e) => handleSelectExtraRoom(extra.key, e.target.value)}
                       className={`w-full border rounded-lg px-3 py-2 text-sm ${
                         walkInMutation.isError && !extra.roomId
                           ? 'border-telivity-orange ring-1 ring-telivity-orange'
@@ -1740,11 +2041,63 @@ export default function FrontDesk() {
                       }`}
                     >
                       <option value="">{t('frontDesk.selectRoom')}</option>
-                      {rooms.map((room) => (
-                        <option key={room.id} value={room.id}>
-                          {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
-                        </option>
-                      ))}
+                      {(() => {
+                        const rooms = availableRoomsForExtra(extra.key, extra.roomId);
+                        if (extra.roomTypeId) {
+                          const matching = rooms.filter((r) => r.roomTypeId === extra.roomTypeId);
+                          const other = rooms.filter((r) => r.roomTypeId !== extra.roomTypeId);
+                          return (
+                            <>
+                              {matching.length > 0 && (
+                                <optgroup label={roomTypeById.get(extra.roomTypeId) || t('frontDesk.roomType')}>
+                                  {matching.map((room) => (
+                                    <option key={room.id} value={room.id}>
+                                      {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {other.length > 0 && (
+                                <optgroup label={t('frontDesk.otherAvailableRooms')}>
+                                  {other.map((room) => (
+                                    <option key={room.id} value={room.id}>
+                                      {room.roomNumber ?? room.number} ({roomTypeById.get(room.roomTypeId ?? '') || t('common.other')}) — {formatLabel(room.status, t)}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                            </>
+                          );
+                        }
+                        return (
+                          <>
+                            {rtList.map((rt) => {
+                              const matching = rooms.filter((r) => r.roomTypeId === rt.id);
+                              if (matching.length === 0) return null;
+                              return (
+                                <optgroup key={rt.id} label={rt.name}>
+                                  {matching.map((room) => (
+                                    <option key={room.id} value={room.id}>
+                                      {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              );
+                            })}
+                            {rooms.filter((r) => !r.roomTypeId).length > 0 && (
+                              <optgroup label={t('common.other')}>
+                                {rooms
+                                  .filter((r) => !r.roomTypeId)
+                                  .map((room) => (
+                                    <option key={room.id} value={room.id}>
+                                      {room.roomNumber ?? room.number} — {formatLabel(room.status, t)}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                            )}
+                          </>
+                        );
+                      })()}
                     </select>
                   </div>
                 </div>
@@ -1789,7 +2142,11 @@ export default function FrontDesk() {
               <input
                 type="date"
                 value={wiArrivalDate}
-                onChange={(e) => setWiArrivalDate(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setWiArrivalDate(val);
+                  validateRatesForStay(val, wiDepartureDate);
+                }}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
               />
             </div>
@@ -1801,7 +2158,11 @@ export default function FrontDesk() {
                 type="date"
                 value={wiDepartureDate}
                 min={wiArrivalDate}
-                onChange={(e) => setWiDepartureDate(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setWiDepartureDate(val);
+                  validateRatesForStay(wiArrivalDate, val);
+                }}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
               />
             </div>
