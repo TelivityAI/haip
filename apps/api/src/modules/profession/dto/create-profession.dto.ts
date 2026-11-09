@@ -1,12 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
+/**
+ * Creates (or resolves) an entry in the global professions catalog.
+ * This catalog is intentionally not property-scoped — occupations are shared.
+ */
 export class CreateProfessionDto {
-  @ApiPropertyOptional({ description: 'Tenant property id' })
-  @IsOptional()
-  @IsString()
-  propertyId?: string;
-
   @ApiProperty({ description: 'Name/title of the profession or occupation', example: 'Software Engineer' })
   @IsString()
   @IsNotEmpty()
@@ -25,7 +24,11 @@ export class CreateProfessionDto {
   @MaxLength(2)
   countryCode?: string;
 
-  @ApiPropertyOptional({ description: 'Structured metadata (e.g. FNRH integration metadata, synonyms, family)', example: { cbo: '212405' } })
+  @ApiPropertyOptional({
+    description: 'Structured metadata (e.g. FNRH integration metadata, synonyms, family)',
+    example: { cbo: '212405' },
+  })
   @IsOptional()
+  @IsObject()
   metadata?: Record<string, unknown>;
 }

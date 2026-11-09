@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ilike, or, eq, sql, desc, asc } from 'drizzle-orm';
+import { ilike, or, eq, sql, asc } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/database.module';
 import { professions } from '@telivityhaip/database';
 import { CreateProfessionDto } from './dto/create-profession.dto';
@@ -57,7 +57,7 @@ export class ProfessionService {
   async findOrCreate(dto: CreateProfessionDto) {
     const trimmedName = dto.name.trim();
 
-    // Check if profession with exact same name already exists
+    // Case-insensitive name match keeps the global catalog free of near-duplicates.
     const existing = await this.db
       .select()
       .from(professions)

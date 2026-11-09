@@ -1,3 +1,5 @@
+-- Global professions catalog (not property-scoped).
+-- Official CBO/SOC seed rows are a follow-up; this migration only creates the table.
 CREATE TABLE IF NOT EXISTS "professions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" varchar(200) NOT NULL,

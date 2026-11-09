@@ -1,9 +1,14 @@
 import { pgTable, uuid, varchar, boolean, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
 
 /**
- * Professions / Occupations catalog.
- * Global dictionary supporting standard codes (such as CBO for Brazil, SOC for US, etc.),
- * arbitrary custom additions by users, and structured metadata for fiscal integrations like FNRH.
+ * Global professions / occupations catalog (not property-scoped).
+ *
+ * Supports standard occupational codes (CBO, SOC, …), staff-created custom
+ * values, and optional metadata for fiscal integrations (e.g. FNRH).
+ *
+ * System CBO/SOC seed data is intentionally not shipped in the initial
+ * migration — entries accumulate via find-or-create from guest registration
+ * and a future seed follow-up can mark official rows with `is_system = true`.
  */
 export const professions = pgTable(
   'professions',

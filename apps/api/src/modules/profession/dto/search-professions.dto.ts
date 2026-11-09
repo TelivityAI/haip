@@ -2,12 +2,8 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
+/** Search the global professions catalog (not property-scoped). */
 export class SearchProfessionsDto {
-  @ApiPropertyOptional({ description: 'Tenant property id' })
-  @IsOptional()
-  @IsString()
-  propertyId?: string;
-
   @ApiPropertyOptional({ description: 'Text search query for profession name or code' })
   @IsString()
   @IsOptional()
