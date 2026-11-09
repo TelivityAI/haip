@@ -26,6 +26,8 @@ import { useProperty } from '../context/PropertyContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import CreateGuestModal from '../components/guests/CreateGuestModal';
+import Combobox from '../components/ui/Combobox';
+import { COUNTRIES, BRAZIL_STATES } from '../lib/location-data';
 import type { Guest } from '../types/guest';
 
 function guestListSearchParams(term: string): { search?: string; loyaltyNumber?: string } {
@@ -433,7 +435,16 @@ function GuestDetail() {
                     <option value="female">{t('guests.genderOptions.female')}</option>
                     <option value="other">{t('guests.genderOptions.other')}</option>
                   </select>
-                  <input type="text" maxLength={2} value={nationality} onChange={(e) => setNationality(e.target.value.toUpperCase())} placeholder={t('guests.labels.nationality')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
+                  <Combobox
+                    value={nationality}
+                    onChange={(val) => setNationality(val)}
+                    options={COUNTRIES.map((c) => ({
+                      value: c.code,
+                      label: `${c.name} (${c.code})`,
+                    }))}
+                    placeholder={t('guests.labels.nationality')}
+                    autoUppercase
+                  />
                 </div>
 
                 {isMinor && (
@@ -456,7 +467,35 @@ function GuestDetail() {
                   </div>
                 )}
 
-                <input type="text" value={profession} onChange={(e) => setProfession(e.target.value)} placeholder={t('guests.placeholders.profession')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                <Combobox
+                  value={profession}
+                  onChange={async (val) => {
+                    setProfession(val);
+                    if (val && val.trim()) {
+                      try {
+                        await api.post('/v1/professions', {
+                          name: val.trim(),
+                          countryCode: defaultCountry,
+                        });
+                      } catch (e) {
+                        // Ignore duplicate or network errors on background persistence
+                      }
+                    }
+                  }}
+                  onSearch={async (q) => {
+                    const res = await api.get('/v1/professions', {
+                      params: { q, limit: 30, countryCode: isBR ? 'BR' : undefined },
+                    });
+                    const items = res.data?.data ?? [];
+                    return items.map((p: any) => ({
+                      value: p.name,
+                      label: p.name,
+                      secondary: p.code ? `CBO: ${p.code}` : undefined,
+                    }));
+                  }}
+                  placeholder={t('guests.placeholders.profession')}
+                  allowCustom
+                />
               </div>
 
               {/* Edit Section 2 */}
@@ -479,11 +518,29 @@ function GuestDetail() {
                 {isBR && (
                   <div className="grid grid-cols-2 gap-3">
                     <input type="text" value={idIssuer} onChange={(e) => setIdIssuer(e.target.value)} placeholder={t('guests.placeholders.idIssuer')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
-                    <input type="text" maxLength={2} value={idIssuerState} onChange={(e) => setIdIssuerState(e.target.value.toUpperCase())} placeholder={t('guests.placeholders.idIssuerState')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
+                    <Combobox
+                      value={idIssuerState}
+                      onChange={(val) => setIdIssuerState(val)}
+                      options={BRAZIL_STATES.map((s) => ({
+                        value: s.code,
+                        label: `${s.code} - ${s.name}`,
+                      }))}
+                      placeholder={t('guests.placeholders.idIssuerState')}
+                      autoUppercase
+                    />
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
-                  <input type="text" maxLength={2} value={idCountry} onChange={(e) => setIdCountry(e.target.value.toUpperCase())} placeholder={t('guests.labels.idCountry')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
+                  <Combobox
+                    value={idCountry}
+                    onChange={(val) => setIdCountry(val)}
+                    options={COUNTRIES.map((c) => ({
+                      value: c.code,
+                      label: `${c.name} (${c.code})`,
+                    }))}
+                    placeholder={t('guests.labels.idCountry')}
+                    autoUppercase
+                  />
                   <input type="date" value={idExpiry} onChange={(e) => setIdExpiry(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
                 </div>
               </div>
@@ -500,10 +557,32 @@ function GuestDetail() {
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <input type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder={`${t('guests.labels.city')} (${t('guests.placeholders.city')})`} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
-                  <input type="text" maxLength={isBR ? 2 : 50} value={stateProvince} onChange={(e) => setStateProvince(isBR ? e.target.value.toUpperCase() : e.target.value)} placeholder={t('guests.placeholders.state')} className={`border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white ${isBR ? 'uppercase' : ''}`} />
+                  {isBR ? (
+                    <Combobox
+                      value={stateProvince}
+                      onChange={(val) => setStateProvince(val)}
+                      options={BRAZIL_STATES.map((s) => ({
+                        value: s.code,
+                        label: `${s.code} - ${s.name}`,
+                      }))}
+                      placeholder={t('guests.placeholders.state')}
+                      autoUppercase
+                    />
+                  ) : (
+                    <input type="text" maxLength={50} value={stateProvince} onChange={(e) => setStateProvince(e.target.value)} placeholder={t('guests.placeholders.state')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
+                  )}
                   <input type="text" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder={t('guests.placeholders.postalCode')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white" />
                 </div>
-                <input type="text" maxLength={2} value={countryCode} onChange={(e) => setCountryCode(e.target.value.toUpperCase())} placeholder={t('guests.labels.countryCode')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white" />
+                <Combobox
+                  value={countryCode}
+                  onChange={(val) => setCountryCode(val)}
+                  options={COUNTRIES.map((c) => ({
+                    value: c.code,
+                    label: `${c.name} (${c.code})`,
+                  }))}
+                  placeholder={t('guests.labels.countryCode')}
+                  autoUppercase
+                />
               </div>
 
               {/* Edit Section 4 */}

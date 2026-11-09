@@ -54,6 +54,7 @@ import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { IcalModule } from './modules/ical/ical.module';
 import { FiscalModule } from './modules/fiscal/fiscal.module';
+import { ProfessionModule } from './modules/profession/profession.module';
 import { bookingRequestsModules } from './booking-requests.bootstrap';
 
 const imports: any[] = [
@@ -71,6 +72,7 @@ const imports: any[] = [
   PropertyModule,
   RoomModule,
   GuestModule,
+  ProfessionModule,
   MediaModule,
   ReservationModule,
   FolioModule,

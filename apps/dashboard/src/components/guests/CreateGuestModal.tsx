@@ -7,7 +7,9 @@ import { api } from '../../lib/api';
 import type { ParsedIdDocument } from '../../lib/id-document-swipe';
 import { useProperty } from '../../context/PropertyContext';
 import Modal from '../ui/Modal';
+import Combobox, { type ComboboxOption } from '../ui/Combobox';
 import IdSwipeCapture from './IdSwipeCapture';
+import { COUNTRIES, BRAZIL_STATES, STATES_BY_COUNTRY } from '../../lib/location-data';
 import type { Guest } from '../../types/guest';
 
 export interface CreateGuestModalProps {
@@ -319,13 +321,15 @@ export default function CreateGuestModal({
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
                 {t('guests.labels.nationality')}
               </label>
-              <input
-                type="text"
-                maxLength={2}
+              <Combobox
                 value={nationality}
-                onChange={(e) => setNationality(e.target.value.toUpperCase())}
+                onChange={(val) => setNationality(val)}
+                options={COUNTRIES.map((c) => ({
+                  value: c.code,
+                  label: `${c.name} (${c.code})`,
+                }))}
                 placeholder={defaultCountry}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white"
+                autoUppercase
               />
             </div>
           </div>
@@ -445,12 +449,34 @@ export default function CreateGuestModal({
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
               {t('guests.profession')}
             </label>
-            <input
-              type="text"
+            <Combobox
               value={profession}
-              onChange={(e) => setProfession(e.target.value)}
+              onChange={async (val) => {
+                setProfession(val);
+                if (val && val.trim()) {
+                  try {
+                    await api.post('/v1/professions', {
+                      name: val.trim(),
+                      countryCode: defaultCountry,
+                    });
+                  } catch (e) {
+                    // Ignore duplicate or network errors on background persistence
+                  }
+                }
+              }}
+              onSearch={async (q) => {
+                const res = await api.get('/v1/professions', {
+                  params: { q, limit: 30, countryCode: isBR ? 'BR' : undefined },
+                });
+                const items = res.data?.data ?? [];
+                return items.map((p: any) => ({
+                  value: p.name,
+                  label: p.name,
+                  secondary: p.code ? `CBO: ${p.code}` : undefined,
+                }));
+              }}
               placeholder={t('guests.placeholders.profession')}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
+              allowCustom
             />
           </div>
         </div>
@@ -590,15 +616,15 @@ export default function CreateGuestModal({
                 <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
                   {t('guests.idIssuerState')}
                 </label>
-                <input
-                  type="text"
-                  maxLength={2}
+                <Combobox
                   value={idIssuerState}
-                  onChange={(e) =>
-                    setIdIssuerState(e.target.value.toUpperCase())
-                  }
+                  onChange={(val) => setIdIssuerState(val)}
+                  options={BRAZIL_STATES.map((s) => ({
+                    value: s.code,
+                    label: `${s.code} - ${s.name}`,
+                  }))}
                   placeholder={t('guests.placeholders.idIssuerState')}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white"
+                  autoUppercase
                 />
               </div>
             </div>
@@ -609,13 +635,15 @@ export default function CreateGuestModal({
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
                 {t('guests.labels.idCountry')}
               </label>
-              <input
-                type="text"
-                maxLength={2}
+              <Combobox
                 value={idCountry}
-                onChange={(e) => setIdCountry(e.target.value.toUpperCase())}
+                onChange={(val) => setIdCountry(val)}
+                options={COUNTRIES.map((c) => ({
+                  value: c.code,
+                  label: `${c.name} (${c.code})`,
+                }))}
                 placeholder={defaultCountry}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white"
+                autoUppercase
               />
             </div>
             <div>
@@ -698,19 +726,27 @@ export default function CreateGuestModal({
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
                 {t('guests.labels.state')}
               </label>
-              <input
-                type="text"
-                maxLength={isBR ? 2 : 50}
-                value={stateProvince}
-                onChange={(e) =>
-                  setStateProvince(
-                    isBR ? e.target.value.toUpperCase() : e.target.value
-                  )
-                }
-                placeholder={t('guests.placeholders.state')}
-                className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white ${isBR ? 'uppercase' : ''
-                  }`}
-              />
+              {isBR ? (
+                <Combobox
+                  value={stateProvince}
+                  onChange={(val) => setStateProvince(val)}
+                  options={BRAZIL_STATES.map((s) => ({
+                    value: s.code,
+                    label: `${s.code} - ${s.name}`,
+                  }))}
+                  placeholder={t('guests.placeholders.state')}
+                  autoUppercase
+                />
+              ) : (
+                <input
+                  type="text"
+                  maxLength={50}
+                  value={stateProvince}
+                  onChange={(e) => setStateProvince(e.target.value)}
+                  placeholder={t('guests.placeholders.state')}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-telivity-teal bg-white"
+                />
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
@@ -730,13 +766,15 @@ export default function CreateGuestModal({
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">
               {t('guests.labels.countryCode')}
             </label>
-            <input
-              type="text"
-              maxLength={2}
+            <Combobox
               value={countryCode}
-              onChange={(e) => setCountryCode(e.target.value.toUpperCase())}
+              onChange={(val) => setCountryCode(val)}
+              options={COUNTRIES.map((c) => ({
+                value: c.code,
+                label: `${c.name} (${c.code})`,
+              }))}
               placeholder={defaultCountry}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-telivity-teal bg-white"
+              autoUppercase
             />
           </div>
         </div>
