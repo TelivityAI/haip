@@ -25,6 +25,9 @@ export let AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED === 'true';
 /** Extra keycloak.init() options for the runtime provider (scope, redirect). */
 export let authInitOptions: { scope?: string; redirectUri?: string } = {};
 
+/** Role keys that grant a property (scope, not roles) — see oidc-config.ts. */
+let propertyRolePrefix = 'property:';
+
 interface RuntimeAuthConfig {
   authEnabled?: boolean;
   oidcIssuer?: string;
@@ -32,6 +35,7 @@ interface RuntimeAuthConfig {
   realm?: string;
   clientId?: string;
   scope?: string;
+  propertyRolePrefix?: string;
 }
 
 export async function loadAuthConfig(): Promise<void> {
@@ -50,6 +54,7 @@ export async function loadAuthConfig(): Promise<void> {
     // Generic providers match redirect URIs exactly (no wildcards), so the
     // login always returns to the app root instead of the current deep link.
     authInitOptions = { scope: cfg.scope, redirectUri: `${window.location.origin}/` };
+    if (cfg.propertyRolePrefix) propertyRolePrefix = cfg.propertyRolePrefix;
   } else if (cfg.keycloakUrl) {
     keycloak = new Keycloak({ url: cfg.keycloakUrl, realm: cfg.realm ?? 'haip', clientId });
   }
@@ -58,13 +63,19 @@ export async function loadAuthConfig(): Promise<void> {
 /**
  * Role keys from a parsed token, mirroring the API's mapping (oidc-config.ts):
  * Keycloak realm roles, Zitadel project roles, or a flat `roles` array.
+ * Property grants (`property:<uuid>`) are scope, not roles: left out.
  */
 export function tokenRoles(parsed: Record<string, any> | undefined): string[] {
   if (!parsed) return [];
-  if (Array.isArray(parsed.realm_access?.roles)) return parsed.realm_access.roles;
   const zitadel = parsed['urn:zitadel:iam:org:project:roles'];
-  if (zitadel && typeof zitadel === 'object' && !Array.isArray(zitadel)) {
-    return Object.keys(zitadel);
-  }
-  return Array.isArray(parsed.roles) ? parsed.roles : [];
+  const keys: unknown[] = Array.isArray(parsed.realm_access?.roles)
+    ? parsed.realm_access.roles
+    : zitadel && typeof zitadel === 'object' && !Array.isArray(zitadel)
+      ? Object.keys(zitadel)
+      : Array.isArray(parsed.roles)
+        ? parsed.roles
+        : [];
+  return keys.filter(
+    (k): k is string => typeof k === 'string' && !k.startsWith(propertyRolePrefix),
+  );
 }

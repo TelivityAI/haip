@@ -154,6 +154,7 @@ export function dashboardAuthConfig(get: EnvLookup): Record<string, unknown> {
       oidcIssuer: read(get, 'DASHBOARD_OIDC_ISSUER') ?? issuer,
       clientId: read(get, 'DASHBOARD_OIDC_CLIENT_ID') ?? 'haip-dashboard',
       scope: read(get, 'DASHBOARD_OIDC_SCOPE') ?? 'openid profile email',
+      propertyRolePrefix: read(get, 'OIDC_PROPERTY_ROLE_PREFIX') ?? DEFAULT_PROPERTY_ROLE_PREFIX,
     };
   }
   const keycloakUrl = read(get, 'DASHBOARD_KEYCLOAK_URL');

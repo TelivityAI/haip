@@ -144,6 +144,7 @@ describe('dashboardAuthConfig', () => {
       oidcIssuer: 'https://auth.example.com',
       clientId: 'dash-1',
       scope: 'openid profile email',
+      propertyRolePrefix: 'property:',
     });
     expect(JSON.stringify(out)).not.toContain('s3cret');
   });
