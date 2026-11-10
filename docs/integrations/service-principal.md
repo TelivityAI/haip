@@ -81,6 +81,13 @@ Profiles:
 
 Re-running the command is **idempotent** (same `keycloakSub` updates name; ensures role assignment).
 
+In the **production image** (no `pnpm`/`tsx`), the same CLI ships compiled:
+
+```bash
+docker compose exec api node packages/database/dist/link-integration-principal.js \
+  --property-id <uuid> --keycloak-sub <sub-from-jwt> --label enquiry-pipeline --profile reservations
+```
+
 ### Multi-property principals
 
 One Keycloak service account can operate on several properties: the JWT `property_ids` claim is multivalued, and `PermissionsGuard` resolves grants per request `propertyId` via `user_roles`. Link the same `keycloakSub` on each property — either run `integration:link` once per property, or pass a comma-separated list:
