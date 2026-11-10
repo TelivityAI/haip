@@ -60,21 +60,40 @@ export async function loadAuthConfig(): Promise<void> {
   }
 }
 
+const ZITADEL_PROJECT_ROLES = 'urn:zitadel:iam:org:project:roles';
+
+function zitadelRoleKeys(parsed: Record<string, any>): string[] | undefined {
+  const generic = parsed[ZITADEL_PROJECT_ROLES];
+  if (generic && typeof generic === 'object' && !Array.isArray(generic)) {
+    return Object.keys(generic);
+  }
+  // Per-audience form (API tokenRoleKeys): urn:zitadel:iam:org:project:<aud>:roles
+  const audiences = Array.isArray(parsed.aud)
+    ? parsed.aud.filter((a): a is string => typeof a === 'string')
+    : typeof parsed.aud === 'string'
+      ? [parsed.aud]
+      : [];
+  for (const aud of audiences) {
+    const claim = parsed[`urn:zitadel:iam:org:project:${aud}:roles`];
+    if (claim && typeof claim === 'object' && !Array.isArray(claim)) {
+      return Object.keys(claim);
+    }
+  }
+  return undefined;
+}
+
 /**
  * Role keys from a parsed token, mirroring the API's mapping (oidc-config.ts):
- * Keycloak realm roles, Zitadel project roles, or a flat `roles` array.
- * Property grants (`property:<uuid>`) are scope, not roles: left out.
+ * Keycloak realm roles, Zitadel project roles (generic or per-audience), or a
+ * flat `roles` array. Property grants (`property:<uuid>`) are scope, not roles:
+ * left out.
  */
 export function tokenRoles(parsed: Record<string, any> | undefined): string[] {
   if (!parsed) return [];
-  const zitadel = parsed['urn:zitadel:iam:org:project:roles'];
+  const zitadelKeys = zitadelRoleKeys(parsed);
   const keys: unknown[] = Array.isArray(parsed.realm_access?.roles)
     ? parsed.realm_access.roles
-    : zitadel && typeof zitadel === 'object' && !Array.isArray(zitadel)
-      ? Object.keys(zitadel)
-      : Array.isArray(parsed.roles)
-        ? parsed.roles
-        : [];
+    : zitadelKeys ?? (Array.isArray(parsed.roles) ? parsed.roles : []);
   return keys.filter(
     (k): k is string => typeof k === 'string' && !k.startsWith(propertyRolePrefix),
   );
