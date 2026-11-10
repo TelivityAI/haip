@@ -1,5 +1,6 @@
 /**
- * Link a Keycloak service-account JWT subject to a local HAIP user + role grants.
+ * Link a service-account JWT subject (Keycloak or any OIDC provider) to a local
+ * HAIP user + role grants.
  * Used by server-to-server integrations that call staff REST routes (@RequirePermissions).
  *
  * Permission keys come from `@telivityhaip/shared/permissions-catalog` — keep
@@ -8,8 +9,10 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { properties, roles, rolePermissions, userRoles, users } from './schema/index.js';
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// An OIDC `sub` is any case-sensitive string of at most 255 ASCII characters
+// (OIDC Core §2): Keycloak issues UUIDs, Zitadel numeric strings. Whitespace
+// and control characters are refused — they only appear in copy-paste errors.
+const OIDC_SUB_RE = /^[\x21-\x7e]{1,255}$/;
 
 export type IntegrationProfile = 'inventory' | 'reservations' | 'custom';
 
@@ -85,7 +88,7 @@ export function integrationPrincipalEmail(label: string): string {
 }
 
 export function isValidKeycloakSub(sub: string): boolean {
-  return UUID_RE.test(sub);
+  return OIDC_SUB_RE.test(sub);
 }
 
 function assertValidCustomPermissions(permissions: string[]): void {
@@ -164,7 +167,7 @@ export async function linkIntegrationPrincipal(
   const { propertyId, keycloakSub, label, profile } = input;
 
   if (!isValidKeycloakSub(keycloakSub)) {
-    throw new Error(`keycloakSub must be a UUID (service-account token sub): ${keycloakSub}`);
+    throw new Error(`keycloakSub must be the service-account token sub (1–255 printable ASCII): ${keycloakSub}`);
   }
 
   const [property] = await (db as any)

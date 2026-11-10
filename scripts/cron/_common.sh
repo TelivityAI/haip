@@ -10,22 +10,33 @@ fetch_token() {
     return 0
   fi
 
-  : "${KEYCLOAK_URL:?Set KEYCLOAK_URL or HAIP_CRON_TOKEN}"
-  : "${KEYCLOAK_REALM:?Set KEYCLOAK_REALM (e.g. haip)}"
+  # OIDC_TOKEN_URL: any provider's token endpoint (Zitadel: <issuer>/oauth/v2/token).
+  # Unset, the Keycloak endpoint is derived from KEYCLOAK_URL + KEYCLOAK_REALM.
+  local token_url="${OIDC_TOKEN_URL:-}"
+  if [ -z "$token_url" ]; then
+    : "${KEYCLOAK_URL:?Set KEYCLOAK_URL, OIDC_TOKEN_URL or HAIP_CRON_TOKEN}"
+    : "${KEYCLOAK_REALM:?Set KEYCLOAK_REALM (e.g. haip)}"
+    token_url="${KEYCLOAK_URL%/}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token"
+  fi
   : "${KEYCLOAK_CLIENT_ID:?Set KEYCLOAK_CLIENT_ID (cron service client)}"
   : "${KEYCLOAK_CLIENT_SECRET:?Set KEYCLOAK_CLIENT_SECRET}"
 
   local response token
+  local scope_args=()
+  if [ -n "${OIDC_TOKEN_SCOPE:-}" ]; then
+    scope_args=(--data-urlencode "scope=${OIDC_TOKEN_SCOPE}")
+  fi
   response=$(curl -sf \
-    -X POST "${KEYCLOAK_URL%/}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token" \
+    -X POST "$token_url" \
     -H 'Content-Type: application/x-www-form-urlencoded' \
     --data-urlencode 'grant_type=client_credentials' \
     --data-urlencode "client_id=${KEYCLOAK_CLIENT_ID}" \
-    --data-urlencode "client_secret=${KEYCLOAK_CLIENT_SECRET}")
+    --data-urlencode "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
+    ${scope_args[@]+"${scope_args[@]}"})
 
   token=$(printf '%s' "$response" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
   if [ -z "$token" ]; then
-    echo "Failed to obtain access token from Keycloak" >&2
+    echo "Failed to obtain access token from the identity provider" >&2
     exit 1
   fi
   printf '%s' "$token"

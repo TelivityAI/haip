@@ -33,9 +33,13 @@ export class CreateUserDto {
   @IsIn(USER_STATUSES)
   status?: (typeof USER_STATUSES)[number];
 
-  @ApiPropertyOptional({ format: 'uuid', description: 'Keycloak subject (link real login — LATER)' })
+  @ApiPropertyOptional({
+    description: 'IdP subject (`sub`) that links a real login: a UUID for Keycloak, any OIDC subject otherwise',
+  })
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
   keycloakSub?: string;
 
   @ApiPropertyOptional({ type: [String], format: 'uuid', description: 'Role ids to assign on creation' })
