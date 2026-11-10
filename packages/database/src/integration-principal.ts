@@ -12,7 +12,8 @@ import { properties, roles, rolePermissions, userRoles, users } from './schema/i
 // An OIDC `sub` is any case-sensitive string of at most 255 ASCII characters
 // (OIDC Core §2): Keycloak issues UUIDs, Zitadel numeric strings. Whitespace
 // and control characters are refused — they only appear in copy-paste errors.
-const OIDC_SUB_RE = /^[\x21-\x7e]{1,255}$/;
+// Exported so admin CreateUserDto can enforce the same rule via @Matches.
+export const OIDC_SUB_RE = /^[\x21-\x7e]{1,255}$/;
 
 export type IntegrationProfile = 'inventory' | 'reservations' | 'custom';
 
