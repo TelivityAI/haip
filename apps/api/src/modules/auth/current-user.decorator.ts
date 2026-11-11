@@ -2,7 +2,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
 /**
  * Extract the authenticated user from the request.
- * Populated by JwtStrategy from the Keycloak JWT claims.
+ * Populated by JwtStrategy from the JWT claims (Keycloak or generic OIDC).
  *
  * @example
  * @Get('profile')
@@ -19,9 +19,9 @@ export const CurrentUser = createParamDecorator(
 );
 
 export interface AuthUser {
-  sub: string;          // Keycloak user ID
+  sub: string;          // IdP subject (Keycloak UUID, Zitadel numeric id, …)
   email: string;
   name: string;
-  roles: string[];      // Realm roles from realm_access.roles
-  propertyIds?: string[]; // Allowed property IDs (from user attributes)
+  roles: string[];      // realm_access.roles, Zitadel project roles or `roles`
+  propertyIds?: string[]; // property_ids claim, or `property:<uuid>` roles
 }

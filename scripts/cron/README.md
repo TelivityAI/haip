@@ -46,6 +46,8 @@ If you refresh tokens externally, set `HAIP_CRON_TOKEN` to a valid Bearer JWT an
 | `KEYCLOAK_REALM` | option A | Realm name (default `haip`) |
 | `KEYCLOAK_CLIENT_ID` | option A | Cron service client id |
 | `KEYCLOAK_CLIENT_SECRET` | option A | Cron service client secret |
+| `OIDC_TOKEN_URL` | option A, non-Keycloak IdP | Token endpoint of any OIDC provider (e.g. Zitadel `<issuer>/oauth/v2/token`); replaces `KEYCLOAK_URL` + `KEYCLOAK_REALM` |
+| `OIDC_TOKEN_SCOPE` | optional | `scope` sent with the client-credentials grant (Zitadel needs the project audience scope) |
 
 ## Install
 

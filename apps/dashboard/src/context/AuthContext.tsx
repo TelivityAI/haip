@@ -7,7 +7,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { keycloak, AUTH_ENABLED } from '../lib/keycloak';
+import { keycloak, AUTH_ENABLED, authInitOptions, tokenRoles } from '../lib/keycloak';
 import { api } from '../lib/api';
 import { reconnectSocket } from '../lib/socket';
 import { useToast } from '../components/ui/Toast';
@@ -72,15 +72,16 @@ export function useAuth() {
 }
 
 /**
- * AuthProvider — wraps the app with Keycloak authentication.
+ * AuthProvider — wraps the app with OIDC authentication (Keycloak or any OIDC
+ * provider, settings from GET /api/v1/auth/config — see lib/keycloak.ts).
  *
- * When VITE_AUTH_ENABLED=true:
+ * When auth is enabled:
  * - Initializes Keycloak and redirects to login if not authenticated
  * - Attaches Bearer token to all API requests via axios interceptor
  * - Auto-refreshes token before expiry (every 4 minutes)
  * - Provides user info, roles, and logout function
  *
- * When VITE_AUTH_ENABLED=false (default):
+ * When auth is disabled (default):
  * - Renders children immediately without auth
  * - All role checks return true (unrestricted)
  */
@@ -101,15 +102,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         onLoad: 'login-required',
         pkceMethod: 'S256',
         checkLoginIframe: false,
+        ...authInitOptions,
       })
       .then((authenticated) => {
         if (authenticated && keycloak.tokenParsed) {
           const parsed = keycloak.tokenParsed as any;
+          // Some providers keep profile claims in the ID token only (Zitadel).
+          const id = (keycloak.idTokenParsed ?? {}) as any;
           setUser({
             sub: parsed.sub ?? '',
-            email: parsed.email ?? '',
-            name: parsed.name ?? parsed.preferred_username ?? '',
-            roles: parsed.realm_access?.roles ?? [],
+            email: parsed.email ?? id.email ?? '',
+            name: parsed.name ?? parsed.preferred_username ?? id.name ?? id.preferred_username ?? '',
+            roles: tokenRoles(parsed),
           });
 
           // Set token on axios

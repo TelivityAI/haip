@@ -18,9 +18,17 @@ describe('integration-principal helpers', () => {
     );
   });
 
-  it('isValidKeycloakSub accepts UUIDs', () => {
+  it('isValidKeycloakSub accepts any OIDC subject (Keycloak UUID, Zitadel numeric id)', () => {
     expect(isValidKeycloakSub('a0000001-0000-4000-a000-000000000001')).toBe(true);
-    expect(isValidKeycloakSub('not-a-uuid')).toBe(false);
+    expect(isValidKeycloakSub('77776025198584418')).toBe(true);
+    expect(isValidKeycloakSub('auth0|5f7c8ec7c33c6c004bbafe82')).toBe(true);
+  });
+
+  it('isValidKeycloakSub refuses empty, whitespace and over-long subjects', () => {
+    expect(isValidKeycloakSub('')).toBe(false);
+    expect(isValidKeycloakSub('has space')).toBe(false);
+    expect(isValidKeycloakSub(' 7777602519858441')).toBe(false);
+    expect(isValidKeycloakSub('x'.repeat(256))).toBe(false);
   });
 
   it('INTEGRATION_PROFILES match catalog intent', () => {

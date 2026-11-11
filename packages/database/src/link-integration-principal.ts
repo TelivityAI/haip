@@ -1,8 +1,9 @@
 /**
- * CLI: link a Keycloak service-account sub to a local user + integration role.
+ * CLI: link a service-account sub (Keycloak UUID or any OIDC subject) to a local
+ * user + integration role.
  *
  * Usage:
- *   pnpm integration:link -- --property-id <uuid> --keycloak-sub <uuid> --label my-bot --profile inventory
+ *   pnpm integration:link -- --property-id <uuid> --keycloak-sub <sub> --label my-bot --profile inventory
  */
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -57,7 +58,7 @@ async function main() {
 
   if (!propertyIdRaw || !keycloakSub || !label) {
     console.error(
-      'Usage: pnpm integration:link -- --property-id <uuid>[,uuid...] --keycloak-sub <uuid> --label <name> --profile inventory|reservations|custom [--permissions key1,key2]',
+      'Usage: pnpm integration:link -- --property-id <uuid>[,uuid...] --keycloak-sub <sub> --label <name> --profile inventory|reservations|custom [--permissions key1,key2]',
     );
     process.exit(1);
   }

@@ -39,9 +39,11 @@ export const users = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     // Nullable propertyId = cross-property / global operator (e.g. a chain admin).
     propertyId: uuid('property_id').references(() => properties.id),
-    // Link to the Keycloak subject when real auth is enabled (LATER). Nullable
-    // so demo users and locally-created users exist without a Keycloak account.
-    keycloakSub: uuid('keycloak_sub'),
+    // Link to the IdP subject when real auth is enabled. Nullable so demo users
+    // and locally-created users exist without an IdP account. Text, not uuid:
+    // Keycloak subjects are UUIDs but other OIDC providers' are not (Zitadel's
+    // are numeric strings) — migration 0032.
+    keycloakSub: text('keycloak_sub'),
     email: varchar('email', { length: 255 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     status: userStatusEnum('status').notNull().default('active'),

@@ -11,12 +11,15 @@ import { PermissionsService } from './permissions.service';
 import { ApiKeyGuard } from './api-key.guard';
 import { ConnectScopeGuard } from './connect-scope.guard';
 import { WsAuthService } from './ws-auth.service';
+import { AuthConfigController } from './auth-config.controller';
 
 /**
  * Authentication & Authorization module.
  *
- * Uses Keycloak as the OIDC provider. JWT tokens issued by Keycloak
- * are validated against the JWKS endpoint.
+ * Uses Keycloak as the OIDC provider by default, or any OIDC provider when
+ * OIDC_ISSUER is set (see oidc-config.ts). Tokens are validated against the
+ * provider's JWKS endpoint. GET /auth/config hands the dashboard its login
+ * settings at runtime.
  *
  * AUTH_ENABLED env var controls whether auth is enforced:
  * - 'false' (default) — all requests pass through, no JWT required
@@ -31,6 +34,7 @@ import { WsAuthService } from './ws-auth.service';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     ConfigModule,
   ],
+  controllers: [AuthConfigController],
   providers: [
     // Register JWT strategy unless auth is explicitly disabled.
     // The guards (JwtAuthGuard / RolesGuard) are secure-by-default — they enforce

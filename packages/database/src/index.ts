@@ -13,6 +13,7 @@ export {
   integrationPrincipalEmail,
   slugifyIntegrationLabel,
   isValidKeycloakSub,
+  OIDC_SUB_RE,
   type IntegrationProfile,
   type LinkIntegrationPrincipalInput,
   type LinkIntegrationPrincipalResult,

@@ -6,9 +6,11 @@ import {
   IsEmail,
   IsIn,
   IsArray,
+  Matches,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { OIDC_SUB_RE } from '@telivityhaip/database';
 
 export const USER_STATUSES = ['active', 'disabled', 'invited'] as const;
 
@@ -33,9 +35,17 @@ export class CreateUserDto {
   @IsIn(USER_STATUSES)
   status?: (typeof USER_STATUSES)[number];
 
-  @ApiPropertyOptional({ format: 'uuid', description: 'Keycloak subject (link real login — LATER)' })
+  @ApiPropertyOptional({
+    description:
+      'IdP subject (`sub`) that links a real login: a UUID for Keycloak, any OIDC subject otherwise (same rule as isValidKeycloakSub / OIDC_SUB_RE)',
+  })
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  @Matches(OIDC_SUB_RE, {
+    message: 'keycloakSub must be the IdP subject (1–255 printable ASCII)',
+  })
   keycloakSub?: string;
 
   @ApiPropertyOptional({ type: [String], format: 'uuid', description: 'Role ids to assign on creation' })

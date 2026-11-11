@@ -73,4 +73,13 @@ describe('Unauthenticated access to financial module routes', () => {
       expect(res.status).toBe(401);
     });
   }
+
+  // The dashboard reads its login settings BEFORE it has a token (issue #388),
+  // so this one route must stay public — and must not leak anything secret.
+  it('GET /api/v1/auth/config without Authorization returns 200 and no secret', async () => {
+    const res = await request(app.getHttpServer()).get('/api/v1/auth/config');
+    expect(res.status).toBe(200);
+    expect(res.body.authEnabled).toBe(true);
+    expect(JSON.stringify(res.body)).not.toMatch(/secret/i);
+  });
 });

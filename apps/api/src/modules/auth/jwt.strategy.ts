@@ -4,12 +4,19 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { passportJwtSecret } from 'jwks-rsa';
 import type { AuthUser } from './current-user.decorator';
+import {
+  azpAllowed,
+  principalFromPayload,
+  resolveOidcVerifierConfig,
+  type OidcVerifierConfig,
+} from './oidc-config';
 
 /**
- * JWT Strategy — validates Keycloak-issued JWTs.
+ * JWT Strategy — validates JWTs from Keycloak or, with OIDC_ISSUER set, from
+ * any OIDC provider (see oidc-config.ts).
  *
- * Fetches Keycloak's public signing keys via JWKS endpoint.
- * Extracts user info and realm roles from the JWT claims.
+ * Fetches the provider's public signing keys via JWKS endpoint.
+ * Extracts user info, roles and property scope from the JWT claims.
  *
  * Audience enforcement:
  * - `aud` is validated against KEYCLOAK_CLIENT_ID (or KEYCLOAK_AUDIENCE if set).
@@ -19,27 +26,22 @@ import type { AuthUser } from './current-user.decorator';
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  private readonly allowedAzp: string[];
+  private readonly oidc: OidcVerifierConfig;
 
   constructor(configService: ConfigService) {
-    const keycloakUrl = configService.get<string>('KEYCLOAK_URL', 'http://localhost:8080');
-    const realm = configService.get<string>('KEYCLOAK_REALM', 'haip');
-    const issuer = `${keycloakUrl}/realms/${realm}`;
-    const audience =
-      configService.get<string>('KEYCLOAK_AUDIENCE') ||
-      configService.get<string>('KEYCLOAK_CLIENT_ID', 'haip-api');
+    const oidc = resolveOidcVerifierConfig((key) => configService.get<string>(key));
 
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      issuer,
-      audience,
+      issuer: oidc.issuer,
+      audience: oidc.audience,
       algorithms: ['RS256'],
       secretOrKeyProvider: passportJwtSecret({
         cache: true,
         rateLimit: true,
         jwksRequestsPerMinute: 5,
-        jwksUri: `${issuer}/protocol/openid-connect/certs`,
+        jwksUri: oidc.jwksUri,
       }),
     });
 
@@ -49,10 +51,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     // equality no matter what mappers it carries -- while `aud` stays the
     // single audience above, which any caller can add via an audience mapper.
     // Unset, behaviour is exactly as before: only the primary client passes.
-    this.allowedAzp = (configService.get<string>('KEYCLOAK_ALLOWED_AZP') || audience)
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    // With a generic OIDC issuer, `*` accepts any azp: the `aud` check above is
+    // then the boundary (one service account per integration can't be listed).
+    this.oidc = oidc;
   }
 
   /**
@@ -62,15 +63,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
    * Returns the user object attached to req.user.
    */
   validate(payload: any): AuthUser {
-    if (payload.azp && !this.allowedAzp.includes(payload.azp)) {
+    if (!azpAllowed(this.oidc, payload.azp)) {
       throw new UnauthorizedException('Invalid token audience (azp mismatch)');
     }
-    return {
-      sub: payload.sub,
-      email: payload.email ?? '',
-      name: payload.name ?? payload.preferred_username ?? '',
-      roles: payload.realm_access?.roles ?? [],
-      propertyIds: payload.property_ids ?? undefined,
-    };
+    return principalFromPayload(payload, this.oidc);
   }
 }
