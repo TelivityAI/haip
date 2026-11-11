@@ -39,12 +39,68 @@ export class RolesService {
           .where(and(eq(rolePermissions.propertyId, propertyId), inArray(rolePermissions.roleId, ids)))
       : [];
 
-    return roleRows.map((r: { id: string }) => ({
-      ...r,
-      permissions: permRows
-        .filter((p: { roleId: string }) => p.roleId === r.id)
-        .map((p: { permissionKey: string }) => p.permissionKey),
-    }));
+    const hydrated = roleRows.map(
+      (r: { id: string; key: string; name: string; propertyId: string | null; isSystem: boolean }) => ({
+        ...r,
+        permissions: permRows
+          .filter((p: { roleId: string }) => p.roleId === r.id)
+          .map((p: { permissionKey: string }) => p.permissionKey),
+      }),
+    );
+
+    return RolesService.dedupeSystemRoles(hydrated);
+  }
+
+  /**
+   * Deduplicate global system roles (`isSystem` / `propertyId == null`) by `key` while
+   * preserving every property-scoped custom role distinct by `id`.
+   *
+   * Postgres `UNIQUE(property_id, key)` treats `NULL != NULL`, so historical seed +
+   * integration-principal runs could insert two global rows per built-in key. Prefer the
+   * row holding granted `role_permissions` at `propertyId` so `user_roles` joins resolve.
+   */
+  static dedupeSystemRoles<
+    T extends {
+      id: string;
+      key: string;
+      name: string;
+      propertyId?: string | null;
+      isSystem?: boolean;
+      permissions: string[];
+    },
+  >(rows: T[]): T[] {
+    const systemByKey = new Map<string, T>();
+    const customRoles: T[] = [];
+
+    for (const row of rows) {
+      const isSystem = Boolean(row.isSystem) || row.propertyId == null;
+      const key = typeof row.key === 'string' ? row.key.trim() : '';
+      if (!isSystem || !key) {
+        customRoles.push(row);
+        continue;
+      }
+
+      const perms = [...new Set(row.permissions ?? [])];
+      const existing = systemByKey.get(key);
+      if (!existing) {
+        systemByKey.set(key, { ...row, permissions: perms });
+        continue;
+      }
+
+      const mergedPerms = [...new Set([...existing.permissions, ...perms])];
+      const preferCandidate =
+        perms.length > existing.permissions.length ||
+        (perms.length === existing.permissions.length &&
+          String(row.id).startsWith('ee000001-') &&
+          !String(existing.id).startsWith('ee000001-'));
+
+      const winner = preferCandidate ? row : existing;
+      systemByKey.set(key, { ...winner, permissions: mergedPerms });
+    }
+
+    return [...systemByKey.values(), ...customRoles].sort((a, b) =>
+      String(a.name ?? '').localeCompare(String(b.name ?? '')),
+    );
   }
 
   /** Custom role at this property (system roles are intentionally not matched). */

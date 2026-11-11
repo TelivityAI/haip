@@ -72,4 +72,29 @@ describe('RolesService', () => {
     mock.state.select = [{ id: 'r1', propertyId: PROP, isSystem: false }]; // getCustomRole + assigned check
     await expect(service.delete('r1', PROP)).rejects.toBeInstanceOf(ConflictException);
   });
+
+  it('list collapses duplicate global system roles (20 -> 10) while keeping custom roles distinct', async () => {
+    mock.state.select = [
+      { id: 'ee000001-0000-4000-a000-000000000001', propertyId: null, key: 'admin', name: 'Administrator', isSystem: true },
+      { id: 'boot-admin-uuid', propertyId: null, key: 'admin', name: 'Administrator', isSystem: true },
+      { id: 'ee000001-0000-4000-a000-000000000002', propertyId: null, key: 'front_desk', name: 'Front Desk', isSystem: true },
+      { id: 'boot-fd-uuid', propertyId: null, key: 'front_desk', name: 'Front Desk', isSystem: true },
+      { id: 'custom-1', propertyId: PROP, key: 'spa_lead', name: 'Spa Lead', isSystem: false },
+    ];
+    mock.state.where = [
+      { roleId: 'boot-admin-uuid', permissionKey: 'dashboard.view' },
+      { roleId: 'boot-admin-uuid', permissionKey: 'admin.roles.manage' },
+      { roleId: 'custom-1', permissionKey: 'guests.read' },
+    ];
+
+    const out = await service.list(PROP);
+    expect(out).toHaveLength(3);
+    const admin = out.find((r: any) => r.key === 'admin');
+    const fd = out.find((r: any) => r.key === 'front_desk');
+    const custom = out.find((r: any) => r.key === 'spa_lead');
+    expect(admin.id).toBe('boot-admin-uuid');
+    expect(admin.permissions).toEqual(['dashboard.view', 'admin.roles.manage']);
+    expect(fd.id).toBe('ee000001-0000-4000-a000-000000000002');
+    expect(custom.id).toBe('custom-1');
+  });
 });
