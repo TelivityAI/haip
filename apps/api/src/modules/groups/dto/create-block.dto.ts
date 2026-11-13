@@ -6,12 +6,38 @@ import {
   IsBoolean,
   IsInt,
   IsDateString,
+  IsArray,
+  ValidateNested,
   Min,
   MaxLength,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 const BLOCK_STATUSES = ['tentative', 'definite', 'released', 'cancelled'] as const;
+
+export class BlockAllocationDto {
+  @ApiProperty()
+  @IsUUID()
+  roomTypeId!: string;
+
+  @ApiProperty({ example: 10 })
+  @IsInt()
+  @Min(0)
+  roomsAllotted!: number;
+
+  /** Inclusive. Defaults to the block inventory span start. */
+  @ApiPropertyOptional({ example: '2026-06-01' })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  /** Exclusive. Defaults to the block inventory span end. */
+  @ApiPropertyOptional({ example: '2026-06-05' })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+}
 
 export class CreateBlockDto {
   @ApiProperty({ description: 'Property ID (required for multi-tenancy)' })
@@ -82,4 +108,14 @@ export class CreateBlockDto {
   @IsOptional()
   @IsIn(BLOCK_STATUSES)
   status?: string;
+
+  @ApiPropertyOptional({
+    type: [BlockAllocationDto],
+    description: 'Optional per-room-type holds written in the same transaction as the block',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BlockAllocationDto)
+  allocations?: BlockAllocationDto[];
 }

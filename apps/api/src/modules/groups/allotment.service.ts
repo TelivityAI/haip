@@ -19,6 +19,7 @@ import { CreateBlockDto } from './dto/create-block.dto';
 import { UpdateBlockDto } from './dto/update-block.dto';
 import { ListBlocksDto } from './dto/list-blocks.dto';
 import { SetInventoryDto } from './dto/set-inventory.dto';
+import { SetInventorySpanDto } from './dto/set-inventory-span.dto';
 
 @Injectable()
 export class AllotmentService {
@@ -51,25 +52,37 @@ export class AllotmentService {
         throw new BadRequestException(`rate plan ${dto.ratePlanId} not found in this property`);
       }
     }
-    const [block] = await this.db
-      .insert(allotmentBlocks)
-      .values({
-        propertyId: dto.propertyId,
-        groupProfileId: dto.groupProfileId,
-        name: dto.name,
-        ratePlanId: dto.ratePlanId,
-        startDate: dto.startDate,
-        endDate: dto.endDate,
-        cutoffDate: dto.cutoffDate,
-        autoRelease: dto.autoRelease ?? true,
-        shoulderStart: dto.shoulderStart,
-        shoulderEnd: dto.shoulderEnd,
-        minLos: dto.minLos,
-        maxLos: dto.maxLos,
-        groupCode: dto.groupCode,
-        status: (dto.status as any) ?? 'tentative',
-      })
-      .returning();
+    const values = {
+      propertyId: dto.propertyId,
+      groupProfileId: dto.groupProfileId,
+      name: dto.name,
+      ratePlanId: dto.ratePlanId,
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      cutoffDate: dto.cutoffDate,
+      autoRelease: dto.autoRelease ?? true,
+      shoulderStart: dto.shoulderStart,
+      shoulderEnd: dto.shoulderEnd,
+      minLos: dto.minLos,
+      maxLos: dto.maxLos,
+      groupCode: dto.groupCode,
+      status: (dto.status as any) ?? 'tentative',
+    };
+    if (dto.allocations?.length) {
+      const draft = { ...values, id: 'pending' };
+      for (const allocation of dto.allocations) {
+        await this.assertSpanFits(dto.propertyId, draft, allocation);
+      }
+    }
+    const [block] = await this.withTx(async (tx) => {
+      const [created] = await tx.insert(allotmentBlocks).values(values).returning();
+      if (dto.allocations?.length) {
+        for (const allocation of dto.allocations) {
+          await this.writeSpanInventory(tx, created, dto.propertyId, allocation);
+        }
+      }
+      return [created];
+    });
 
     await this.webhookService.emit(
       'group.block_created',
@@ -281,6 +294,34 @@ export class AllotmentService {
   }
 
   /**
+   * Hold the same room count on every night of a span in one transaction.
+   * Existing roomsPickedUp values are kept. Availability is checked for the
+   * whole span before any row is written.
+   */
+  async setInventorySpan(blockId: string, propertyId: string, dto: SetInventorySpanDto) {
+    const block = await this.findBlockById(blockId, propertyId);
+    if (block.status === 'released' || block.status === 'cancelled') {
+      throw new BadRequestException(`Cannot set inventory on a ${block.status} block`);
+    }
+    await this.assertSpanFits(propertyId, block, dto);
+    const rows = await this.withTx((tx) => this.writeSpanInventory(tx, block, propertyId, dto));
+    await this.webhookService.emit(
+      'group.inventory_set',
+      'allotment_block',
+      blockId,
+      {
+        roomTypeId: dto.roomTypeId,
+        roomsAllotted: dto.roomsAllotted,
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        nights: rows.length,
+      },
+      propertyId,
+    );
+    return { blockId, roomTypeId: dto.roomTypeId, nights: rows };
+  }
+
+  /**
    * Pickup report: per date/room-type allotted vs picked up, plus totals and
    * the overall pickup rate (KB 14.5).
    */
@@ -432,6 +473,135 @@ export class AllotmentService {
       .where(eq(allotmentBlockInventory.id, existing.id))
       .returning();
     return row;
+  }
+
+  private async assertSpanFits(
+    propertyId: string,
+    block: { startDate: string; endDate: string; shoulderStart?: string | null; shoulderEnd?: string | null },
+    dto: { roomTypeId: string; roomsAllotted: number; startDate?: string; endDate?: string },
+  ) {
+    const bounds = this.getInventorySpan(block);
+    const start = (dto.startDate ?? bounds.spanStart).slice(0, 10);
+    const end = (dto.endDate ?? bounds.spanEndExclusive).slice(0, 10);
+    if (end <= start) {
+      throw new BadRequestException('endDate must be after startDate');
+    }
+    if (start < bounds.spanStart || end > bounds.spanEndExclusive) {
+      throw new BadRequestException(
+        `allocation ${start}..${end} is outside the block inventory span (${bounds.spanStart} to ${bounds.spanEndExclusive}, exclusive end)`,
+      );
+    }
+    const [rt] = await this.db
+      .select({ id: roomTypes.id })
+      .from(roomTypes)
+      .where(and(eq(roomTypes.id, dto.roomTypeId), eq(roomTypes.propertyId, propertyId)));
+    if (!rt) {
+      throw new BadRequestException(`room type ${dto.roomTypeId} not found in this property`);
+    }
+    const dates = this.datesBetween(start, end);
+    const availability = await this.availabilityService.searchAvailability(
+      propertyId,
+      start,
+      end,
+      dto.roomTypeId,
+    );
+    for (const stayDate of dates) {
+      const dayAvail = availability.find(
+        (row: { roomTypeId: string; date: string; available?: number }) =>
+          row.roomTypeId === dto.roomTypeId && row.date === stayDate,
+      );
+      const sellable = dayAvail?.available ?? 0;
+      const [existing] = await this.db
+        .select()
+        .from(allotmentBlockInventory)
+        .where(
+          and(
+            eq(allotmentBlockInventory.allotmentBlockId, (block as { id?: string }).id ?? 'pending'),
+            eq(allotmentBlockInventory.propertyId, propertyId),
+            eq(allotmentBlockInventory.stayDate, stayDate),
+            eq(allotmentBlockInventory.roomTypeId, dto.roomTypeId),
+          ),
+        );
+      const pickedUp = existing ? Number(existing.roomsPickedUp) : 0;
+      const alreadyHeldUnpicked = existing
+        ? Math.max(0, Number(existing.roomsAllotted) - pickedUp)
+        : 0;
+      const ceiling = sellable + alreadyHeldUnpicked;
+      if (dto.roomsAllotted < pickedUp) {
+        throw new BadRequestException(
+          `roomsAllotted (${dto.roomsAllotted}) cannot be below rooms already picked up (${pickedUp}) on ${stayDate}`,
+        );
+      }
+      if (dto.roomsAllotted - pickedUp > ceiling) {
+        throw new BadRequestException(
+          `Over-allotment: ${dto.roomsAllotted} rooms requested for ${stayDate} exceeds sellable availability (${ceiling})`,
+        );
+      }
+    }
+  }
+
+  private async writeSpanInventory(
+    tx: any,
+    block: { id: string; startDate: string; endDate: string; shoulderStart?: string | null; shoulderEnd?: string | null },
+    propertyId: string,
+    dto: { roomTypeId: string; roomsAllotted: number; startDate?: string; endDate?: string },
+  ) {
+    const bounds = this.getInventorySpan(block);
+    const start = (dto.startDate ?? bounds.spanStart).slice(0, 10);
+    const end = (dto.endDate ?? bounds.spanEndExclusive).slice(0, 10);
+    const rows = [];
+    for (const stayDate of this.datesBetween(start, end)) {
+      const [existing] = await tx
+        .select()
+        .from(allotmentBlockInventory)
+        .where(
+          and(
+            eq(allotmentBlockInventory.allotmentBlockId, block.id),
+            eq(allotmentBlockInventory.propertyId, propertyId),
+            eq(allotmentBlockInventory.stayDate, stayDate),
+            eq(allotmentBlockInventory.roomTypeId, dto.roomTypeId),
+          ),
+        );
+      if (existing) {
+        const [row] = await tx
+          .update(allotmentBlockInventory)
+          .set({ roomsAllotted: dto.roomsAllotted, updatedAt: new Date() })
+          .where(eq(allotmentBlockInventory.id, existing.id))
+          .returning();
+        rows.push(row);
+      } else {
+        const [row] = await tx
+          .insert(allotmentBlockInventory)
+          .values({
+            propertyId,
+            allotmentBlockId: block.id,
+            stayDate,
+            roomTypeId: dto.roomTypeId,
+            roomsAllotted: dto.roomsAllotted,
+            roomsPickedUp: 0,
+          })
+          .returning();
+        rows.push(row);
+      }
+    }
+    return rows;
+  }
+
+  private datesBetween(startInclusive: string, endExclusive: string): string[] {
+    const dates: string[] = [];
+    let cursor = startInclusive;
+    while (cursor < endExclusive && dates.length < 366) {
+      dates.push(cursor);
+      cursor = this.nextDay(cursor);
+    }
+    return dates;
+  }
+
+  private async withTx<T>(fn: (tx: any) => Promise<T>): Promise<T> {
+    if (typeof this.db.transaction === 'function') {
+      return this.db.transaction(fn);
+    }
+    return fn(this.db);
   }
 
   private nextDay(dateStr: string): string {

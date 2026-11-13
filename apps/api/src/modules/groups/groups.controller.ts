@@ -22,6 +22,7 @@ import { CreateBlockDto } from './dto/create-block.dto';
 import { UpdateBlockDto } from './dto/update-block.dto';
 import { ListBlocksDto } from './dto/list-blocks.dto';
 import { SetInventoryDto } from './dto/set-inventory.dto';
+import { SetInventorySpanDto } from './dto/set-inventory-span.dto';
 import { ImportRoomingListDto } from './dto/import-rooming-list.dto';
 
 @ApiTags('groups')
@@ -188,6 +189,20 @@ export class GroupsController {
     @Body() dto: SetInventoryDto,
   ) {
     return this.allotmentService.setInventory(id, dto.propertyId, dto);
+  }
+
+  @Put('blocks/:id/inventory/span')
+  @Roles('admin', 'general_manager', 'front_desk', 'reservations', 'revenue_manager')
+  @ApiOperation({
+    summary: 'Set the same held inventory on every night of a span',
+    description: 'Validates sellable availability for the whole span, then writes every night in one transaction. roomsPickedUp is preserved.',
+  })
+  @ApiResponse({ status: 200, description: 'Span inventory upserted' })
+  setInventorySpan(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetInventorySpanDto,
+  ) {
+    return this.allotmentService.setInventorySpan(id, dto.propertyId, dto);
   }
 
   @Get('blocks/:id/pickup')

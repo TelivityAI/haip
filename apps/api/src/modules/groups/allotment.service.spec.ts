@@ -439,4 +439,107 @@ describe('AllotmentService', () => {
       expect(result.released).toBe(2);
     });
   });
+
+  describe('setInventorySpan', () => {
+    it('rejects the whole span when one night is over-allotted and writes nothing', async () => {
+      const inserts: unknown[] = [];
+      const db: any = {
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() => {
+              const rows = [{ ...mockBlock }, { id: 'rt-001' }];
+              const promise = Promise.resolve(rows.slice(0, 1));
+              return { then: promise.then.bind(promise) };
+            }),
+          }),
+        }),
+        insert: vi.fn().mockImplementation(() => {
+          inserts.push(true);
+          return { values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'row' }]) }) };
+        }),
+      };
+      let selects = 0;
+      db.select = vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            selects += 1;
+            const rows = selects === 1 ? [mockBlock] : selects === 2 ? [{ id: 'rt-001' }] : [];
+            const promise = Promise.resolve(rows);
+            return { then: promise.then.bind(promise) };
+          }),
+        }),
+      }));
+      const availability = {
+        searchAvailability: vi.fn().mockResolvedValue([
+          { roomTypeId: 'rt-001', date: '2026-06-01', available: 5 },
+          { roomTypeId: 'rt-001', date: '2026-06-02', available: 1 },
+        ]),
+      };
+      const svc = await buildService(db, availability as any);
+      await expect(
+        svc.setInventorySpan('block-001', 'prop-001', {
+          propertyId: 'prop-001',
+          roomTypeId: 'rt-001',
+          roomsAllotted: 4,
+          startDate: '2026-06-01',
+          endDate: '2026-06-03',
+        }),
+      ).rejects.toThrow(/2026-06-02/);
+      expect(inserts).toHaveLength(0);
+    });
+
+    it('writes every night and keeps rooms already picked up', async () => {
+      const written: Array<{ stayDate?: string; roomsAllotted?: number }> = [];
+      let selects = 0;
+      const db: any = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() => {
+              selects += 1;
+              let rows: unknown[] = [];
+              if (selects === 1) rows = [mockBlock];
+              else if (selects === 2) rows = [{ id: 'rt-001' }];
+              else if (selects === 3) rows = [];
+              else if (selects === 4) rows = [{ id: 'inv-2', roomsPickedUp: 2, roomsAllotted: 3 }];
+              else if (selects === 5) rows = [{ id: 'inv-2', roomsPickedUp: 2, roomsAllotted: 3 }];
+              const promise = Promise.resolve(rows);
+              return { then: promise.then.bind(promise) };
+            }),
+          }),
+        })),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockImplementation((value: { stayDate: string; roomsAllotted: number }) => {
+            written.push(value);
+            return { returning: vi.fn().mockResolvedValue([{ ...value, roomsPickedUp: 0 }]) };
+          }),
+        }),
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockImplementation((value: { roomsAllotted: number }) => ({
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([{ id: 'inv-2', ...value, roomsPickedUp: 2 }]),
+            }),
+          })),
+        }),
+      };
+      const availability = {
+        searchAvailability: vi.fn().mockResolvedValue([
+          { roomTypeId: 'rt-001', date: '2026-06-01', available: 5 },
+          { roomTypeId: 'rt-001', date: '2026-06-02', available: 2 },
+        ]),
+      };
+      const svc = await buildService(db, availability as any);
+      const result = await svc.setInventorySpan('block-001', 'prop-001', {
+        propertyId: 'prop-001',
+        roomTypeId: 'rt-001',
+        roomsAllotted: 4,
+        startDate: '2026-06-01',
+        endDate: '2026-06-03',
+      });
+      expect(result.nights).toHaveLength(2);
+      expect(written).toEqual([
+        expect.objectContaining({ roomsAllotted: 4, roomsPickedUp: 0 }),
+      ]);
+      expect(db.update).toHaveBeenCalled();
+    });
+  });
 });
