@@ -213,6 +213,7 @@ describe('ReportsService', () => {
       [{ totalRooms: 50 }],
       [
         { status: 'occupied', count: 20 },
+        { status: 'vacant_clean', count: 15 },
         { status: 'out_of_order', count: 10 },
         { status: 'out_of_service', count: 5 },
       ],
@@ -263,6 +264,32 @@ describe('ReportsService', () => {
     expect(result.stayovers).toBe(0);
   });
 
+  it('uses the active room count when properties.total_rooms has drifted', async () => {
+    const db = createMockDb([
+      [{ totalRooms: 100 }],
+      [
+        { status: 'occupied', count: 10 },
+        { status: 'vacant_clean', count: 20 },
+        { status: 'out_of_order', count: 5 },
+      ],
+      [{ count: 10 }],
+      [{ count: 0 }],
+      [{ count: 0 }],
+      [{ count: 0 }],
+      [{ count: 0 }],
+      [{ count: 0 }],
+    ]);
+    const module = await Test.createTestingModule({
+      providers: [ReportsService, { provide: DRIZZLE, useValue: db }],
+    }).compile();
+    service = module.get(ReportsService);
+
+    const result = await service.getOccupancy('prop-001', '2026-04-06');
+    expect(result.totalRooms).toBe(35);
+    expect(result.availableRooms).toBe(30);
+    expect(result.occupancyRate).toBeCloseTo(10 / 30, 3);
+  });
+
   // --- Financial Summary ---
 
   it('should calculate ADR correctly (revenue / rooms sold)', async () => {
@@ -279,9 +306,10 @@ describe('ReportsService', () => {
       [{ count: 20 }],
       // property
       [{ totalRooms: 50 }],
-      // room status counts
+      // room status counts (sum equals totalRooms; OOO is inside that inventory)
       [
         { status: 'occupied', count: 20 },
+        { status: 'vacant_clean', count: 25 },
         { status: 'out_of_order', count: 5 },
       ],
       // outstanding balances

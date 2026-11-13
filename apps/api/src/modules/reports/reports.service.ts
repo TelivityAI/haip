@@ -149,7 +149,8 @@ export class ReportsService {
       else if (row.status === 'occupied') occupiedFromRoomStatus = row.count;
     }
 
-    const availableRooms = totalRooms - outOfOrder - outOfService;
+    const inventoryRooms = activeRoomDenominator(roomStatusCounts, totalRooms);
+    const availableRooms = Math.max(0, inventoryRooms - outOfOrder - outOfService);
 
     // Room-nights occupied on reportDate (departure exclusive). Prefer stay window
     // over sticky room.status so stale demo stayovers past departure do not inflate %.
@@ -228,7 +229,7 @@ export class ReportsService {
 
     return {
       date: reportDate,
-      totalRooms,
+      totalRooms: inventoryRooms,
       outOfOrder,
       outOfService,
       availableRooms,
@@ -359,7 +360,8 @@ export class ReportsService {
       }
     }
 
-    const availableRooms = totalRooms - unavailableRooms;
+    const inventoryRooms = activeRoomDenominator(roomStatusCounts, totalRooms);
+    const availableRooms = Math.max(0, inventoryRooms - unavailableRooms);
     const occupancyRate = availableRooms > 0 ? roomsSold / availableRooms : 0;
     // ADR / RevPAR are displayed as currency — compute via Decimal to avoid drift
     const adrDec = roomsSold > 0 ? roomRevenueDec.div(roomsSold) : new Decimal(0);
@@ -439,7 +441,8 @@ export class ReportsService {
         unavailableRooms += row.count;
       }
     }
-    const availableRooms = totalRooms - unavailableRooms;
+    const inventoryRooms = activeRoomDenominator(roomStatusCounts, totalRooms);
+    const availableRooms = Math.max(0, inventoryRooms - unavailableRooms);
 
     // Room revenue per day
     const dailyRevenue = await this.db
@@ -980,4 +983,20 @@ export class ReportsService {
     };
   }
 
+}
+
+/**
+ * Sellable inventory is the count of active rooms already loaded for the
+ * report. properties.total_rooms is only a fallback when that count is zero
+ * (no room rows yet). A drifted total_rooms must not set the occupancy base.
+ */
+export function activeRoomDenominator(
+  statusCounts: Array<{ count?: number | null }>,
+  propertyTotalRooms: number,
+): number {
+  const activeRoomCount = statusCounts.reduce(
+    (sum, row) => sum + Number(row.count ?? 0),
+    0,
+  );
+  return activeRoomCount > 0 ? activeRoomCount : propertyTotalRooms;
 }
