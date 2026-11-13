@@ -1,6 +1,6 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and, inArray, sql } from 'drizzle-orm';
-import { rooms, roomTypes, reservations } from '@telivityhaip/database';
+import { rooms, roomTypes, reservations, properties } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateRoomTypeDto } from './dto/create-room-type.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
@@ -136,8 +136,11 @@ export class RoomService {
     if (!rt) {
       throw new BadRequestException(`room type ${dto.roomTypeId} not found in this property`);
     }
-    const [room] = await this.db.insert(rooms).values(dto).returning();
-    return room;
+    return this.withTx(async (tx) => {
+      const [room] = await tx.insert(rooms).values(dto).returning();
+      await this.syncActiveRoomCount(tx, dto.propertyId);
+      return room;
+    });
   }
 
   async findAllRooms(propertyId: string, roomTypeId?: string) {
@@ -206,14 +209,74 @@ export class RoomService {
       }
     }
 
-    const [room] = await this.db
-      .update(rooms)
-      .set({ ...dto, updatedAt: new Date() })
-      .where(and(eq(rooms.id, id), eq(rooms.propertyId, propertyId)))
-      .returning();
-    if (!room) {
-      throw new NotFoundException(`Room ${id} not found`);
+    const retiring = dto.isActive === false && existing.isActive;
+    const reactivating = dto.isActive === true && existing.isActive === false;
+    if (retiring) {
+      if (existing.status === 'occupied') {
+        throw new BadRequestException(
+          `Cannot retire room ${existing.number} while status is occupied`,
+        );
+      }
+      const [linked] = await this.db
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.propertyId, propertyId),
+            eq(reservations.roomId, id),
+            inArray(reservations.status, [...ROOM_TYPE_MOVE_BLOCKING_RESERVATION_STATUSES]),
+          ),
+        )
+        .limit(1);
+      if (linked) {
+        throw new BadRequestException(
+          `Cannot retire room ${existing.number} while it is linked to an active stay (${linked.id})`,
+        );
+      }
     }
-    return room;
+
+    const write = async (tx: any) => {
+      const [room] = await tx
+        .update(rooms)
+        .set({ ...dto, updatedAt: new Date() })
+        .where(and(eq(rooms.id, id), eq(rooms.propertyId, propertyId)))
+        .returning();
+      if (!room) {
+        throw new NotFoundException(`Room ${id} not found`);
+      }
+      if (retiring || reactivating) {
+        await this.syncActiveRoomCount(tx, propertyId);
+      }
+      return room;
+    };
+
+    if (retiring || reactivating) {
+      return this.withTx(write);
+    }
+    return write(this.db);
+  }
+
+  /**
+   * properties.total_rooms is the sellable count. Recompute it from active
+   * rooms in the same transaction as the insert or retirement that changed it.
+   */
+  private async syncActiveRoomCount(tx: any, propertyId: string): Promise<number> {
+    const [row] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(rooms)
+      .where(and(eq(rooms.propertyId, propertyId), eq(rooms.isActive, true)));
+    const totalRooms = Number(row?.count ?? 0);
+    await tx
+      .update(properties)
+      .set({ totalRooms, updatedAt: new Date() })
+      .where(eq(properties.id, propertyId));
+    return totalRooms;
+  }
+
+  private async withTx<T>(fn: (tx: any) => Promise<T>): Promise<T> {
+    if (typeof this.db.transaction === 'function') {
+      return this.db.transaction(fn);
+    }
+    return fn(this.db);
   }
 }

@@ -55,14 +55,24 @@ describe('RoomService — createRoom cross-tenant FK ownership (audit #5)', () =
   });
 
   it('allows when dto.roomTypeId is same-property (insert runs)', async () => {
+    let selects = 0;
     const db: any = {
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([{ id: 'rt-1' }]),
+          where: vi.fn().mockImplementation(() => {
+            selects += 1;
+            // 1: room type belongs to the property. 2: active-room count.
+            return Promise.resolve(selects === 1 ? [{ id: 'rt-1' }] : [{ count: 4 }]);
+          }),
         }),
       }),
       insert: vi.fn().mockReturnValue({
         values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'room-1' }]) }),
+      }),
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
       }),
     };
     const mod = await Test.createTestingModule({

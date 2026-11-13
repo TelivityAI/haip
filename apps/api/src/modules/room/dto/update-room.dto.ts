@@ -1,6 +1,6 @@
 import { PartialType, OmitType } from '@nestjs/swagger';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
+import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
 import { CreateRoomDto } from './create-room.dto';
 
 export class UpdateRoomDto extends PartialType(
@@ -17,4 +17,14 @@ export class UpdateRoomDto extends PartialType(
   @IsOptional()
   @IsUUID()
   roomTypeId?: string;
+
+  /**
+   * Retire (false) or restore (true) the room. CreateRoomDto has no isActive,
+   * so a partial update could not change it. Retiring a room drops it from
+   * sellable inventory and from properties.total_rooms.
+   */
+  @ApiPropertyOptional({ description: 'Set false to retire the room from sellable inventory' })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
