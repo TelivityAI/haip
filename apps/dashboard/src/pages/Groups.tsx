@@ -714,6 +714,7 @@ function BlockDetail() {
   const [invStayDate, setInvStayDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [invRoomTypeId, setInvRoomTypeId] = useState('');
   const [invRoomsAllotted, setInvRoomsAllotted] = useState('1');
+  const [applySpan, setApplySpan] = useState(false);
 
   const { data: blockData } = useQuery({
     queryKey: ['groups', 'block', blockId, propertyId],
@@ -783,6 +784,15 @@ function BlockDetail() {
   const setInventory = useMutation({
     mutationFn: () => {
       requirePropertyId(propertyId);
+      if (applySpan && block) {
+        return api.put(`/v1/groups/blocks/${blockId}/inventory/span`, {
+          propertyId,
+          roomTypeId: invRoomTypeId,
+          roomsAllotted: Number(invRoomsAllotted),
+          startDate: block.shoulderStart || block.startDate,
+          endDate: block.shoulderEnd || block.endDate,
+        });
+      }
       return api.put(`/v1/groups/blocks/${blockId}/inventory`, {
         propertyId,
         stayDate: invStayDate,
@@ -976,6 +986,10 @@ function BlockDetail() {
       <Modal open={inventoryOpen} onClose={() => setInventoryOpen(false)} title={t('groups.setInventory')}>
         <div className="space-y-4">
           <p className="text-xs text-telivity-mid-grey">{t('groups.setInventoryHint')}</p>
+          <label className="flex items-center gap-2 text-xs text-telivity-slate">
+            <input type="checkbox" checked={applySpan} onChange={(e) => setApplySpan(e.target.checked)} />
+            {t('groups.applySpan')}
+          </label>
           <div>
             <label className="block text-xs font-medium text-telivity-mid-grey mb-1">{t('groups.stayDate')}</label>
             <input type="date" value={invStayDate} onChange={(e) => setInvStayDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
