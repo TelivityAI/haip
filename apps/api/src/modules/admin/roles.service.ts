@@ -56,8 +56,11 @@ export class RolesService {
    * preserving every property-scoped custom role distinct by `id`.
    *
    * Postgres `UNIQUE(property_id, key)` treats `NULL != NULL`, so historical seed +
-   * integration-principal runs could insert two global rows per built-in key. Prefer the
-   * row holding granted `role_permissions` at `propertyId` so `user_roles` joins resolve.
+   * integration-principal runs could insert two global rows per built-in key. Compare
+   * candidates using each row’s own property-scoped grants (richest set wins; then
+   * canonical `ee000001-*` on a tie). Return only the selected ID’s permissions — never
+   * a union across discarded duplicates — so assigning that role ID grants exactly what
+   * the list shows.
    */
   static dedupeSystemRoles<
     T extends {
@@ -72,6 +75,18 @@ export class RolesService {
     const systemByKey = new Map<string, T>();
     const customRoles: T[] = [];
 
+    const ownPerms = (row: T): string[] => [...new Set(row.permissions ?? [])];
+    const preferCandidate = (candidate: T, existing: T): boolean => {
+      const candPerms = ownPerms(candidate);
+      const existPerms = ownPerms(existing);
+      if (candPerms.length !== existPerms.length) {
+        return candPerms.length > existPerms.length;
+      }
+      const candCanon = String(candidate.id).startsWith('ee000001-');
+      const existCanon = String(existing.id).startsWith('ee000001-');
+      return candCanon && !existCanon;
+    };
+
     for (const row of rows) {
       const isSystem = Boolean(row.isSystem) || row.propertyId == null;
       const key = typeof row.key === 'string' ? row.key.trim() : '';
@@ -80,22 +95,16 @@ export class RolesService {
         continue;
       }
 
-      const perms = [...new Set(row.permissions ?? [])];
+      const perms = ownPerms(row);
       const existing = systemByKey.get(key);
       if (!existing) {
         systemByKey.set(key, { ...row, permissions: perms });
         continue;
       }
 
-      const mergedPerms = [...new Set([...existing.permissions, ...perms])];
-      const preferCandidate =
-        perms.length > existing.permissions.length ||
-        (perms.length === existing.permissions.length &&
-          String(row.id).startsWith('ee000001-') &&
-          !String(existing.id).startsWith('ee000001-'));
-
-      const winner = preferCandidate ? row : existing;
-      systemByKey.set(key, { ...winner, permissions: mergedPerms });
+      const winner = preferCandidate(row, existing) ? row : existing;
+      // Winner keeps only its own grants — do not accumulate discarded IDs' permissions.
+      systemByKey.set(key, { ...winner, permissions: ownPerms(winner) });
     }
 
     return [...systemByKey.values(), ...customRoles].sort((a, b) =>
