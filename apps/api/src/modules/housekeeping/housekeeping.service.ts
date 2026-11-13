@@ -703,8 +703,22 @@ export class HousekeepingService {
       )
       .orderBy(desc(housekeepingTasks.priority));
 
+    const openBusinessDate = await this.getPropertyBusinessDate(propertyId);
+    const [overdueRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(housekeepingTasks)
+      .where(
+        and(
+          eq(housekeepingTasks.propertyId, propertyId),
+          sql`${housekeepingTasks.serviceDate}::date < ${openBusinessDate}::date`,
+          sql`${housekeepingTasks.status} in ('pending', 'assigned', 'in_progress')`,
+        ),
+      );
+
     return {
       date: resolvedDate,
+      openBusinessDate,
+      overdueTasksCount: Number(overdueRow?.count ?? 0),
       roomSummary,
       taskSummary,
       housekeeperSummary: housekeeperSummary.map((h: any) => ({
