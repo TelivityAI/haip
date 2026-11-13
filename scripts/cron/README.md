@@ -75,9 +75,11 @@ set +a
 
 | Script | Schedule (typical) | API |
 |--------|-------------------|-----|
-| `night-audit.sh` | Daily ~00:30 property local time | `POST /api/v1/night-audit/run` |
+| `night-audit.sh` | Daily ~00:30 property local time | `POST /api/v1/night-audit/run` with `"mode": "unattended"` |
 | `group-cutoffs.sh` | Daily after night audit | `POST /api/v1/groups/blocks/process-cutoffs` |
 | `agent-runs.sh <agentType>` | See matrix in [`docs/operations/cron.md`](../../docs/operations/cron.md) | `POST /api/v1/agents/:propertyId/:agentType/run?triggeredBy=schedule` |
+
+`night-audit.sh` posts `{"propertyId","businessDate","mode":"unattended"}`. That marks the run as a scheduled close. Do not drop `mode` when reimplementing the call. A body without `mode` is a manual close. The staff Night Audit screen omits `mode` on purpose. An API that accepts the extra field and does not use it ignores it and closes as before.
 
 **Revenue cadence:** cron `revenue_manager` only — do **not** also schedule `demand_forecast` / `pricing` / `overbooking` / `channel_mix` / `group_pickup` (they run inside RManager).
 

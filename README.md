@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-  <img src="https://img.shields.io/badge/Tests-2677%20passing-brightgreen" alt="2677 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
+  <img src="https://img.shields.io/badge/Tests-2681%20passing-brightgreen" alt="2681 Tests Passing" />  <img src="https://img.shields.io/badge/AI%20Agents-12%20built--in-blueviolet" alt="12 AI Agents" />
 </p>
 
 <p align="center">
@@ -392,7 +392,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Analytics: average turn time, median turn time, inspection pass rate, maintenance issue rate, breakdown by room type and housekeeper
 
 ### Night Audit & Reporting
-- Automated night audit: room revenue posting, no-show processing, rate validation, day close
+- Automated night audit: room revenue posting, no-show processing, rate validation, day close. The scheduled job is [`scripts/cron/night-audit.sh`](./scripts/cron/night-audit.sh), which posts `"mode": "unattended"` (see [`docs/operations/cron.md`](./docs/operations/cron.md)).
 - AI anomaly detection: 8 anomaly types (incl. cash-drawer variance) with severity ranking and confidence scores
 - Daily revenue reports with department breakdown
 - Occupancy reports with ADR (Average Daily Rate) and RevPAR
@@ -501,7 +501,7 @@ Operator notes for activating existing adapters, metasearch landings on the dire
 | OTA Channels | Booking.com + Expedia (EQC) + SiteMinder + DerbySoft | Direct + aggregated OTA connectivity (ARI + content) |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (2677 passing tests across 314 files with passing tests) | Unit and integration tests |
+| Testing | Vitest (2681 passing tests across 315 files with passing tests) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -639,7 +639,7 @@ Before going live, verify the items in [`docs/deployment.md`](./docs/deployment.
 ### Run tests
 
 ```bash
-# Passing-test count: 2677 test cases across 314 files (skipped excluded)
+# Passing-test count: 2681 test cases across 315 files (skipped excluded)
 
 # API tests only
 pnpm --filter @telivityhaip/api test
@@ -1033,7 +1033,7 @@ GET    /api/v1/reports/financial-summary            # Financial summary
 GET    /api/v1/reports/occupancy-trend              # Occupancy trend
 
 # Night Audit — 3 endpoints
-POST   /api/v1/night-audit/run                     # Execute night audit
+POST   /api/v1/night-audit/run                     # Execute night audit (cron sends mode=unattended)
 GET    /api/v1/night-audit/runs                    # List audit runs
 GET    /api/v1/night-audit/runs/:id                # Get audit run
 
@@ -1185,7 +1185,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (2677 passing, 314 files with passes; skipped excluded)
+pnpm test             # Run all tests (2681 passing, 315 files with passes; skipped excluded)
 pnpm lint             # ESLint
 ```
 

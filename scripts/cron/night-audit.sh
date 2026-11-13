@@ -16,7 +16,9 @@ if [ -z "${HAIP_BUSINESS_DATE:-}" ]; then
   fi
 fi
 
+# mode=unattended marks a scheduled close. Omit mode only for a staff (manual) close.
+# APIs that accept the field and do not branch on it keep the previous close behavior.
 api_post 'night-audit/run' \
-  -d "{\"propertyId\":\"${HAIP_PROPERTY_ID}\",\"businessDate\":\"${HAIP_BUSINESS_DATE}\"}"
+  -d "{\"propertyId\":\"${HAIP_PROPERTY_ID}\",\"businessDate\":\"${HAIP_BUSINESS_DATE}\",\"mode\":\"unattended\"}"
 
 echo "Night audit completed for ${HAIP_PROPERTY_ID} (${HAIP_BUSINESS_DATE})"

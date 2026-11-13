@@ -15,8 +15,10 @@ POST /night-audit/run
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{ "propertyId": "<uuid>", "businessDate": "2026-07-01" }
+{ "propertyId": "<uuid>", "businessDate": "2026-07-01", "mode": "unattended" }
 ```
+
+`scripts/cron/night-audit.sh` always sends `"mode": "unattended"`. Keep that field when copying this call into EventBridge, Cloud Scheduler, or a Kubernetes CronJob. A request without `mode` (or with `"mode": "manual"`) is a manual close. On an API that distinguishes the two, unattended auto-extends a guest who is still checked in past departure by one night and still rolls the business date; a manual close is blocked until that stay is checked out, extended, or overridden. An API that accepts `mode` and does not branch on it leaves close behavior unchanged.
 
 Role: `admin` or `night_auditor`
 
