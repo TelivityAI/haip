@@ -7,8 +7,10 @@ import { WebhookModule } from '../webhook/webhook.module';
 import { AncillaryModule } from '../ancillary/ancillary.module';
 import { AccountingModule } from '../accounting/accounting.module';
 import { PolicyModule } from '../policy/policy.module';
+import { GroupsModule } from '../groups/groups.module';
 import { NightAuditController } from './night-audit.controller';
 import { NightAuditService } from './night-audit.service';
+import { NightAuditSchedulerService } from './night-audit-scheduler.service';
 
 @Module({
   imports: [
@@ -20,9 +22,10 @@ import { NightAuditService } from './night-audit.service';
     AncillaryModule,
     AccountingModule,
     PolicyModule,
+    GroupsModule,
   ],
   controllers: [NightAuditController],
-  providers: [NightAuditService],
-  exports: [NightAuditService],
+  providers: [NightAuditService, NightAuditSchedulerService],
+  exports: [NightAuditService, NightAuditSchedulerService],
 })
 export class NightAuditModule {}

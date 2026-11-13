@@ -30,10 +30,12 @@ describe('scheduled night-audit callers', () => {
   it('every cron script that calls night-audit/run sends mode unattended', () => {
     const dir = resolve(repoRoot, 'scripts/cron');
     const callers = readdirSync(dir).filter((name) => name.endsWith('.sh'));
-    const hits = callers.filter((name) =>
-      readFileSync(resolve(dir, name), 'utf8').includes('night-audit/run'),
-    );
+    const hits = callers.filter((name) => {
+      const text = readFileSync(resolve(dir, name), 'utf8');
+      return text.includes('night-audit/run') && !text.includes('night-audit/run-due');
+    });
     expect(hits).toEqual(['night-audit.sh']);
+    expect(readFileSync(resolve(dir, 'night-audit-due.sh'), 'utf8')).toContain('night-audit/run-due');
     expect(readFileSync(resolve(repoRoot, 'docs/operations/cron.md'), 'utf8')).toContain(
       '"mode": "unattended"',
     );

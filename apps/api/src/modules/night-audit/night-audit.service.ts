@@ -9,6 +9,7 @@ import { eq, and, inArray, sql, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import {
   auditRuns,
+  bookings,
   reservations,
   folios,
   charges,
@@ -27,6 +28,7 @@ import { AncillaryService } from '../ancillary/ancillary.service';
 import { PolicyService } from '../policy/policy.service';
 import { DepositSettlementService } from '../accounting/deposit-settlement.service';
 import { RunAuditDto } from './dto/run-audit.dto';
+import { calendarDay, stayCoversBusinessDate, addCalendarDays } from './night-audit-clock';
 import type {
   AuditRunResult,
   TariffResult,
@@ -79,7 +81,11 @@ export class NightAuditService {
     );
 
     try {
-      // 4. Post room tariffs to all in-house folios
+      if (dto.mode === 'unattended') {
+        await this.maybeAutoExtendOverdueStays(dto.propertyId, dto.businessDate);
+      }
+
+      // 4. Post room tariffs to in-house stays that cover this business date
       const tariffResult = await this.postRoomTariffs(dto.propertyId, dto.businessDate);
 
       // Post per-night stay extras (idempotent per service + business date)
@@ -101,11 +107,22 @@ export class NightAuditService {
       // 8. Mark due-outs (departure date = business date + 1, still in-house)
       await this.markDueOuts(dto.propertyId, dto.businessDate);
 
+      // Stays still in house on or after departure. The date still rolls.
+      const overdueWarnings = await this.collectOverdueDepartureWarnings(
+        dto.propertyId,
+        dto.businessDate,
+      );
+
       // 9. Lock charges for the business date
       await this.lockChargesForDate(dto.propertyId, dto.businessDate);
 
       // 10. Generate revenue summary
-      const summary = await this.generateRevenueSummary(dto.propertyId, dto.businessDate);
+      const baseSummary = await this.generateRevenueSummary(dto.propertyId, dto.businessDate);
+      const summary = {
+        ...baseSummary,
+        mode: dto.mode ?? 'manual',
+        overdueDeparturesCount: overdueWarnings.length,
+      };
 
       // 11. Complete audit run
       const completed = await this.completeAuditRun(auditRun.id, {
@@ -116,6 +133,7 @@ export class NightAuditService {
         errors: [
           ...tariffResult.errors,
           ...noShowResult.errors,
+          ...overdueWarnings,
           ...(serviceTariffResult.errors ?? []).map(
             (e: { id?: string; message: string }) => ({
               message: e.message,
@@ -154,6 +172,8 @@ export class NightAuditService {
         and(
           eq(reservations.propertyId, propertyId),
           sql`${reservations.status} in ('checked_in', 'stayover', 'due_out')`,
+          lte(reservations.arrivalDate, businessDate),
+          sql`${reservations.departureDate} > ${businessDate}`,
         ),
       );
 
@@ -165,6 +185,9 @@ export class NightAuditService {
 
     for (const reservation of inHouseReservations) {
       try {
+        if (!stayCoversBusinessDate(reservation.arrivalDate, reservation.departureDate, businessDate)) {
+          continue;
+        }
         if (reservation.acceptedPricingSnapshot) {
           const lockedPost = await withAcceptedPricingLock(
             this.db,
@@ -475,6 +498,124 @@ export class NightAuditService {
   }
 
   /**
+   * Unattended close only. Extends an overdue in-house stay by one night when
+   * the property opted in and the same room can be held. Otherwise the stay
+   * is left in place; collectOverdueDepartureWarnings records it and the
+   * business date still rolls.
+   */
+  private async maybeAutoExtendOverdueStays(propertyId: string, businessDate: string): Promise<void> {
+    const [property] = await this.db
+      .select({ settings: properties.settings })
+      .from(properties)
+      .where(eq(properties.id, propertyId));
+    const nightAudit = (property?.settings as { nightAudit?: { autoExtendOverdueStays?: boolean } } | null)
+      ?.nightAudit;
+    if (nightAudit?.autoExtendOverdueStays !== true) return;
+
+    const overdue = await this.listOverdueDepartureStays(propertyId, businessDate);
+    for (const stay of overdue) {
+      if (!(await this.roomCanHoldExtraNight(propertyId, stay))) continue;
+      const newDepartureDate = addCalendarDays(stay.departureDate, 1);
+      const nights = Math.max(1, Number(stay.nights ?? 0) + 1);
+      await this.db
+        .update(reservations)
+        .set({ departureDate: newDepartureDate, nights, updatedAt: new Date() })
+        .where(and(eq(reservations.id, stay.id), eq(reservations.propertyId, propertyId)));
+    }
+  }
+
+  private async roomCanHoldExtraNight(
+    propertyId: string,
+    stay: { id: string; roomId?: string | null; departureDate: string },
+  ): Promise<boolean> {
+    if (!stay.roomId) return false;
+    const [room] = await this.db
+      .select({ status: rooms.status, isActive: rooms.isActive })
+      .from(rooms)
+      .where(and(eq(rooms.id, stay.roomId), eq(rooms.propertyId, propertyId)));
+    if (!room?.isActive) return false;
+    if (room.status === 'out_of_order' || room.status === 'out_of_service') return false;
+
+    const extraNight = calendarDay(stay.departureDate);
+    const newDeparture = addCalendarDays(extraNight, 1);
+    const [conflict] = await this.db
+      .select({ id: reservations.id })
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.propertyId, propertyId),
+          eq(reservations.roomId, stay.roomId),
+          sql`${reservations.id} <> ${stay.id}`,
+          sql`${reservations.status} in ('assigned', 'checked_in', 'stayover', 'due_out')`,
+          lte(reservations.arrivalDate, extraNight),
+          sql`${reservations.departureDate} > ${extraNight}`,
+          sql`${reservations.arrivalDate} < ${newDeparture}`,
+        ),
+      )
+      .limit(1);
+    return !conflict;
+  }
+
+  private async listOverdueDepartureStays(propertyId: string, businessDate: string): Promise<Array<{
+    id: string;
+    confirmationNumber: string | null;
+    arrivalDate: string;
+    departureDate: string;
+    status: string;
+    nights: number;
+    roomId: string | null;
+  }>> {
+    const day = calendarDay(businessDate);
+    const rows = await this.db
+      .select({
+        id: reservations.id,
+        confirmationNumber: bookings.confirmationNumber,
+        arrivalDate: reservations.arrivalDate,
+        departureDate: reservations.departureDate,
+        status: reservations.status,
+        nights: reservations.nights,
+        roomId: reservations.roomId,
+      })
+      .from(reservations)
+      .leftJoin(bookings, eq(bookings.id, reservations.bookingId))
+      .where(
+        and(
+          eq(reservations.propertyId, propertyId),
+          sql`${reservations.status} in ('checked_in', 'stayover', 'due_out')`,
+          lte(reservations.departureDate, day),
+        ),
+      );
+    return rows.map((row: {
+      id: string;
+      confirmationNumber?: string | null;
+      arrivalDate?: string;
+      departureDate?: string;
+      status?: string;
+      nights?: number | null;
+      roomId?: string | null;
+    }) => ({
+      id: row.id,
+      confirmationNumber: row.confirmationNumber ?? null,
+      arrivalDate: calendarDay(row.arrivalDate),
+      departureDate: calendarDay(row.departureDate),
+      status: String(row.status ?? ''),
+      nights: Number(row.nights ?? 0),
+      roomId: row.roomId ?? null,
+    }));
+  }
+
+  private async collectOverdueDepartureWarnings(
+    propertyId: string,
+    businessDate: string,
+  ): Promise<Array<{ message: string; entity?: string }>> {
+    const overdue = await this.listOverdueDepartureStays(propertyId, businessDate);
+    return overdue.map((stay) => ({
+      entity: stay.id,
+      message: `overdue_departure: reservation ${stay.confirmationNumber ?? stay.id} (${stay.status}) had departureDate ${stay.departureDate} <= ${calendarDay(businessDate)} and remains checked in`,
+    }));
+  }
+
+  /**
    * Lock all charges for the business date property-wide (KB 5.8).
    * Prevents post-audit modifications to closed-day folios.
    */
@@ -533,27 +674,30 @@ export class NightAuditService {
           eq(reservations.propertyId, propertyId),
           sql`${reservations.status} in ('checked_in', 'stayover', 'due_out')`,
           lte(reservations.arrivalDate, businessDate),
+          sql`${reservations.departureDate} > ${businessDate}`,
         ),
       );
     const roomsSold = roomsSoldResult?.count ?? 0;
 
-    // Total available rooms
+    // Total available rooms. Active room rows win over a drifted total_rooms.
     const [propertyData] = await this.db
       .select({ totalRooms: properties.totalRooms })
       .from(properties)
       .where(eq(properties.id, propertyId));
-    const totalRooms = propertyData?.totalRooms ?? 0;
+    const propertyTotal = propertyData?.totalRooms ?? 0;
 
     // OOO/OOS rooms
     const roomSummary = await this.roomStatusService.getPropertyRoomSummary(propertyId);
     let unavailableRooms = 0;
+    let activeRoomCount = 0;
     for (const row of roomSummary) {
+      activeRoomCount += Number(row.count ?? 0);
       if (row.status === 'out_of_order' || row.status === 'out_of_service') {
         unavailableRooms += row.count;
       }
     }
-
-    const availableRooms = totalRooms - unavailableRooms;
+    const inventoryRooms = activeRoomCount > 0 ? activeRoomCount : propertyTotal;
+    const availableRooms = Math.max(0, inventoryRooms - unavailableRooms);
     const occupancyRate = availableRooms > 0 ? roomsSold / availableRooms : 0;
     // ADR / RevPAR computed via Decimal since they are displayed as currency
     const adrDec = roomsSold > 0 ? roomRevenueDec.div(roomsSold) : new Decimal(0);

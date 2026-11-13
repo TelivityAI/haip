@@ -36,4 +36,6 @@ export interface RevenueSummary {
   occupancyRate: number;
   adr: number;
   revpar: number;
+  mode?: 'manual' | 'unattended';
+  overdueDeparturesCount?: number;
 }

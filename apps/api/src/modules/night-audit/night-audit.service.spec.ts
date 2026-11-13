@@ -931,6 +931,7 @@ describe('NightAuditService', () => {
         [],          // processNoShows: no candidates
         [{ settings: {} }],  // property for no-show
         // advanceStayovers + markDueOuts handled by update mock
+        [],          // overdue departure warnings
         // lockChargesForDate handled by update mock
         // generateRevenueSummary
         [{ roomRevenue: '0', taxRevenue: '0', totalRevenue: '0' }],
@@ -978,6 +979,7 @@ describe('NightAuditService', () => {
         [],          // postRoomTariffs: no in-house
         [],          // processNoShows
         [{ settings: {} }],
+        [],          // overdue departure warnings
         [{ roomRevenue: '0', taxRevenue: '0', totalRevenue: '0' }],
         [{ count: 0 }],
         [{ totalRooms: 20 }],

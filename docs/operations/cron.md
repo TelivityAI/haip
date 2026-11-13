@@ -18,9 +18,21 @@ Content-Type: application/json
 { "propertyId": "<uuid>", "businessDate": "2026-07-01", "mode": "unattended" }
 ```
 
-`scripts/cron/night-audit.sh` always sends `"mode": "unattended"`. Keep that field when copying this call into EventBridge, Cloud Scheduler, or a Kubernetes CronJob. A request without `mode` (or with `"mode": "manual"`) is a manual close. On an API that distinguishes the two, unattended auto-extends a guest who is still checked in past departure by one night and still rolls the business date; a manual close is blocked until that stay is checked out, extended, or overridden. An API that accepts `mode` and does not branch on it leaves close behavior unchanged.
+`scripts/cron/night-audit.sh` always sends `"mode": "unattended"`. Keep that field when copying this call into EventBridge, Cloud Scheduler, or a Kubernetes CronJob. A request without `mode` (or with `"mode": "manual"`) is a manual close. Unattended mode extends a guest who is still checked in on or after departure by one night only when `settings.nightAudit.autoExtendOverdueStays` is true and that room can be held for the extra night. Otherwise the stay is left in place, the audit records an `overdue_departure` warning, and the business date still rolls.
 
-Role: `admin` or `night_auditor`
+### Every hotel, one call
+
+```
+POST /night-audit/run-due
+Authorization: Bearer <HAIP_SERVICE_TOKEN>
+Content-Type: application/json
+
+{}
+```
+
+`scripts/cron/night-audit-due.sh` calls this. The route returns 503 when `HAIP_SERVICE_TOKEN` is unset and 401 when the bearer does not match. For each active property whose `settings.nightAudit.autoCloseEnabled` is not false, it closes dates in that property's IANA timezone after `autoCloseHour` (default 2). A missing or invalid timezone is reported for that hotel and does not stop the others. Optional body fields: `forceWindow` (boolean) and `maxCatchupDays` (1–60, default 14).
+
+Role for `/night-audit/run`: `admin` or `night_auditor`
 
 ## AI agent training
 
