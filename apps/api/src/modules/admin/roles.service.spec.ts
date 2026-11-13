@@ -72,4 +72,145 @@ describe('RolesService', () => {
     mock.state.select = [{ id: 'r1', propertyId: PROP, isSystem: false }]; // getCustomRole + assigned check
     await expect(service.delete('r1', PROP)).rejects.toBeInstanceOf(ConflictException);
   });
+
+  it('list collapses duplicate global system roles (20 -> 10) while keeping custom roles distinct', async () => {
+    mock.state.select = [
+      { id: 'ee000001-0000-4000-a000-000000000001', propertyId: null, key: 'admin', name: 'Administrator', isSystem: true },
+      { id: 'boot-admin-uuid', propertyId: null, key: 'admin', name: 'Administrator', isSystem: true },
+      { id: 'ee000001-0000-4000-a000-000000000002', propertyId: null, key: 'front_desk', name: 'Front Desk', isSystem: true },
+      { id: 'boot-fd-uuid', propertyId: null, key: 'front_desk', name: 'Front Desk', isSystem: true },
+      { id: 'custom-1', propertyId: PROP, key: 'spa_lead', name: 'Spa Lead', isSystem: false },
+    ];
+    mock.state.where = [
+      { roleId: 'boot-admin-uuid', permissionKey: 'dashboard.view' },
+      { roleId: 'boot-admin-uuid', permissionKey: 'admin.roles.manage' },
+      { roleId: 'custom-1', permissionKey: 'guests.read' },
+    ];
+
+    const out = await service.list(PROP);
+    expect(out).toHaveLength(3);
+    const admin = out.find((r: any) => r.key === 'admin');
+    const fd = out.find((r: any) => r.key === 'front_desk');
+    const custom = out.find((r: any) => r.key === 'spa_lead');
+    expect(admin.id).toBe('boot-admin-uuid');
+    expect(admin.permissions).toEqual(['dashboard.view', 'admin.roles.manage']);
+    expect(fd.id).toBe('ee000001-0000-4000-a000-000000000002');
+    expect(custom.id).toBe('custom-1');
+  });
+
+  it('dedupeSystemRoles selects by each candidate’s own grants and never unions permissions across IDs', () => {
+    // Unequal overlapping sets — richer own-grant set wins; returned perms are that ID only.
+    const unequal = RolesService.dedupeSystemRoles([
+      {
+        id: 'ee000001-0000-4000-a000-000000000001',
+        propertyId: null,
+        key: 'admin',
+        name: 'Administrator',
+        isSystem: true,
+        permissions: ['dashboard.view', 'guests.read'],
+      },
+      {
+        id: 'boot-admin-rich',
+        propertyId: null,
+        key: 'admin',
+        name: 'Administrator',
+        isSystem: true,
+        permissions: ['dashboard.view', 'guests.read', 'admin.roles.manage'],
+      },
+      {
+        id: 'custom-1',
+        propertyId: PROP,
+        key: 'spa_lead',
+        name: 'Spa Lead',
+        isSystem: false,
+        permissions: ['guests.read'],
+      },
+    ]);
+    const admin = unequal.find((r) => r.key === 'admin')!;
+    expect(admin.id).toBe('boot-admin-rich');
+    expect(admin.permissions).toEqual([
+      'dashboard.view',
+      'guests.read',
+      'admin.roles.manage',
+    ]);
+    expect(unequal.find((r) => r.id === 'custom-1')).toBeTruthy();
+
+    // Equal-size different overlapping sets — prefer canonical ee000001-*; no union.
+    const equalSize = RolesService.dedupeSystemRoles([
+      {
+        id: 'boot-fd',
+        propertyId: null,
+        key: 'front_desk',
+        name: 'Front Desk',
+        isSystem: true,
+        permissions: ['dashboard.view', 'reservations.write'],
+      },
+      {
+        id: 'ee000001-0000-4000-a000-000000000002',
+        propertyId: null,
+        key: 'front_desk',
+        name: 'Front Desk',
+        isSystem: true,
+        permissions: ['dashboard.view', 'guests.read'],
+      },
+    ]);
+    const fd = equalSize.find((r) => r.key === 'front_desk')!;
+    expect(fd.id).toBe('ee000001-0000-4000-a000-000000000002');
+    expect(fd.permissions).toEqual(['dashboard.view', 'guests.read']);
+    expect(fd.permissions).not.toContain('reservations.write');
+
+    // Returned permissions must match what assigning that role ID grants
+    // (property-scoped role_permissions for that roleId only).
+    const grantsByRoleId: Record<string, string[]> = {
+      'boot-admin-rich': ['dashboard.view', 'guests.read', 'admin.roles.manage'],
+      'ee000001-0000-4000-a000-000000000002': ['dashboard.view', 'guests.read'],
+    };
+    expect(grantsByRoleId[admin.id]).toEqual(admin.permissions);
+    expect(grantsByRoleId[fd.id]).toEqual(fd.permissions);
+  });
+
+  it('list hydrates property-scoped grants per role id then dedupes without cross-ID permission bleed', async () => {
+    mock.state.select = [
+      {
+        id: 'ee000001-0000-4000-a000-000000000001',
+        propertyId: null,
+        key: 'admin',
+        name: 'Administrator',
+        isSystem: true,
+      },
+      {
+        id: 'boot-admin-uuid',
+        propertyId: null,
+        key: 'admin',
+        name: 'Administrator',
+        isSystem: true,
+      },
+      {
+        id: 'custom-1',
+        propertyId: PROP,
+        key: 'spa_lead',
+        name: 'Spa Lead',
+        isSystem: false,
+      },
+    ];
+    // Overlapping unequal grants at PROP — boot is richer; ee has a grant boot lacks.
+    mock.state.where = [
+      { roleId: 'ee000001-0000-4000-a000-000000000001', permissionKey: 'dashboard.view' },
+      { roleId: 'ee000001-0000-4000-a000-000000000001', permissionKey: 'folios.read' },
+      { roleId: 'boot-admin-uuid', permissionKey: 'dashboard.view' },
+      { roleId: 'boot-admin-uuid', permissionKey: 'guests.read' },
+      { roleId: 'boot-admin-uuid', permissionKey: 'admin.roles.manage' },
+      { roleId: 'custom-1', permissionKey: 'guests.read' },
+    ];
+
+    const out = await service.list(PROP);
+    const admin = out.find((r: any) => r.key === 'admin');
+    expect(admin.id).toBe('boot-admin-uuid');
+    expect(admin.permissions.sort()).toEqual(
+      ['admin.roles.manage', 'dashboard.view', 'guests.read'].sort(),
+    );
+    // Must not include folios.read from the discarded ee000001 row.
+    expect(admin.permissions).not.toContain('folios.read');
+    expect(out.find((r: any) => r.id === 'custom-1')?.permissions).toEqual(['guests.read']);
+  });
 });

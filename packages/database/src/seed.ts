@@ -10,7 +10,7 @@
 
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import {
   ROLE_DEFAULT_PERMISSIONS,
@@ -178,14 +178,25 @@ async function main() {
   }));
 
   const roleIdByKey: Record<string, string> = {};
-  await db.insert(schema.roles).values(
-    ROLE_DEFS.map((r, i) => {
-      const id = sid('ee000001', i + 1);
-      roleIdByKey[r.key] = id;
-      // System roles are global (propertyId null) and read-only in the admin UI.
-      return { id, propertyId: null, key: r.key, name: r.name, description: `Built-in ${r.name} role`, isSystem: true };
-    }),
-  );
+  const existingSystemRoles = await db
+    .select({ id: schema.roles.id, key: schema.roles.key })
+    .from(schema.roles)
+    .where(isNull(schema.roles.propertyId));
+  for (const row of existingSystemRoles) {
+    if (!roleIdByKey[row.key]) {
+      roleIdByKey[row.key] = row.id;
+    }
+  }
+  const missingRoleRows = ROLE_DEFS.flatMap((r, i) => {
+    if (roleIdByKey[r.key]) return [];
+    const id = sid('ee000001', i + 1);
+    roleIdByKey[r.key] = id;
+    // System roles are global (propertyId null) and read-only in the admin UI.
+    return [{ id, propertyId: null, key: r.key, name: r.name, description: `Built-in ${r.name} role`, isSystem: true }];
+  });
+  if (missingRoleRows.length > 0) {
+    await db.insert(schema.roles).values(missingRoleRows);
+  }
   await db.insert(schema.rolePermissions).values(
     ROLE_DEFS.flatMap((r) =>
       r.perms.map((permissionKey) => ({ propertyId, roleId: roleIdByKey[r.key]!, permissionKey })),

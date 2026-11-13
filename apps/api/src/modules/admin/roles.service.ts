@@ -39,12 +39,77 @@ export class RolesService {
           .where(and(eq(rolePermissions.propertyId, propertyId), inArray(rolePermissions.roleId, ids)))
       : [];
 
-    return roleRows.map((r: { id: string }) => ({
-      ...r,
-      permissions: permRows
-        .filter((p: { roleId: string }) => p.roleId === r.id)
-        .map((p: { permissionKey: string }) => p.permissionKey),
-    }));
+    const hydrated = roleRows.map(
+      (r: { id: string; key: string; name: string; propertyId: string | null; isSystem: boolean }) => ({
+        ...r,
+        permissions: permRows
+          .filter((p: { roleId: string }) => p.roleId === r.id)
+          .map((p: { permissionKey: string }) => p.permissionKey),
+      }),
+    );
+
+    return RolesService.dedupeSystemRoles(hydrated);
+  }
+
+  /**
+   * Deduplicate global system roles (`isSystem` / `propertyId == null`) by `key` while
+   * preserving every property-scoped custom role distinct by `id`.
+   *
+   * Postgres `UNIQUE(property_id, key)` treats `NULL != NULL`, so historical seed +
+   * integration-principal runs could insert two global rows per built-in key. Compare
+   * candidates using each row’s own property-scoped grants (richest set wins; then
+   * canonical `ee000001-*` on a tie). Return only the selected ID’s permissions — never
+   * a union across discarded duplicates — so assigning that role ID grants exactly what
+   * the list shows.
+   */
+  static dedupeSystemRoles<
+    T extends {
+      id: string;
+      key: string;
+      name: string;
+      propertyId?: string | null;
+      isSystem?: boolean;
+      permissions: string[];
+    },
+  >(rows: T[]): T[] {
+    const systemByKey = new Map<string, T>();
+    const customRoles: T[] = [];
+
+    const ownPerms = (row: T): string[] => [...new Set(row.permissions ?? [])];
+    const preferCandidate = (candidate: T, existing: T): boolean => {
+      const candPerms = ownPerms(candidate);
+      const existPerms = ownPerms(existing);
+      if (candPerms.length !== existPerms.length) {
+        return candPerms.length > existPerms.length;
+      }
+      const candCanon = String(candidate.id).startsWith('ee000001-');
+      const existCanon = String(existing.id).startsWith('ee000001-');
+      return candCanon && !existCanon;
+    };
+
+    for (const row of rows) {
+      const isSystem = Boolean(row.isSystem) || row.propertyId == null;
+      const key = typeof row.key === 'string' ? row.key.trim() : '';
+      if (!isSystem || !key) {
+        customRoles.push(row);
+        continue;
+      }
+
+      const perms = ownPerms(row);
+      const existing = systemByKey.get(key);
+      if (!existing) {
+        systemByKey.set(key, { ...row, permissions: perms });
+        continue;
+      }
+
+      const winner = preferCandidate(row, existing) ? row : existing;
+      // Winner keeps only its own grants — do not accumulate discarded IDs' permissions.
+      systemByKey.set(key, { ...winner, permissions: ownPerms(winner) });
+    }
+
+    return [...systemByKey.values(), ...customRoles].sort((a, b) =>
+      String(a.name ?? '').localeCompare(String(b.name ?? '')),
+    );
   }
 
   /** Custom role at this property (system roles are intentionally not matched). */
