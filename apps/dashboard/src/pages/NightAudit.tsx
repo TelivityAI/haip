@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { formatMoney } from '../lib/money';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Moon, Play, Brain, AlertTriangle, Info, XCircle } from 'lucide-react';
@@ -11,6 +12,13 @@ import { useTranslation } from 'react-i18next';
 
 interface RevenueSummary {
   totalRevenue?: number;
+  overdueDeparturesCount?: number;
+  mode?: string;
+}
+
+interface AuditError {
+  message?: string;
+  entity?: string;
 }
 
 interface AuditResult {
@@ -22,6 +30,7 @@ interface AuditResult {
   roomChargesPosted?: string | number;
   noShowsProcessed?: string | number;
   summary?: RevenueSummary | null;
+  errors?: AuditError[] | null;
   steps?: { step: string; count: number; status: string }[];
 }
 
@@ -105,6 +114,10 @@ export default function NightAudit() {
   });
 
   const audits: AuditResult[] = data?.data ?? data ?? [];
+  const overdueCount = Number(lastResult?.summary?.overdueDeparturesCount ?? 0);
+  const overdueWarnings = (lastResult?.errors ?? []).filter((error) =>
+    String(error.message ?? '').startsWith('overdue_departure'),
+  );
 
   const runMutation = useMutation({
     mutationFn: () => api.post('/v1/night-audit/run', { propertyId, businessDate: auditDate }),
@@ -151,6 +164,29 @@ export default function NightAudit() {
           <div className="mt-4 flex items-center gap-3">
             <div className="w-5 h-5 border-2 border-telivity-teal border-t-transparent rounded-full animate-spin" />
             <span className="text-sm text-telivity-slate">{t('nightAudit.processing')}</span>
+          </div>
+        )}
+
+        {(overdueCount > 0 || overdueWarnings.length > 0) && (
+          <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 p-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="mt-0.5 text-telivity-orange" />
+              <div>
+                <p className="text-sm font-semibold text-telivity-navy">
+                  {t('nightAudit.overdueCount', { count: overdueCount || overdueWarnings.length })}
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {overdueWarnings.slice(0, 8).map((warning) => (
+                    <li key={`${warning.entity}-${warning.message}`} className="text-xs text-telivity-slate">{warning.message}</li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs">
+                  <Link to="/front-desk" className="font-semibold text-telivity-teal hover:underline">{t('nightAudit.openFrontDesk')}</Link>
+                  <span className="mx-2">·</span>
+                  <Link to="/reservations" className="font-semibold text-telivity-teal hover:underline">{t('nightAudit.openReservations')}</Link>
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
