@@ -22,7 +22,12 @@ export class NightAuditController {
   @Post('/run')
   @RequirePermissions('nightaudit.run')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Execute night audit for a business date' })
+  @ApiOperation({
+    summary: 'Execute night audit for a business date',
+    description:
+      'Scheduled callers (scripts/cron/night-audit.sh) send mode "unattended". ' +
+      'Omit mode, or send "manual", for a staff close. This service accepts the field and does not change close behavior based on it.',
+  })
   async runAudit(@Body() dto: RunAuditDto) {
     return this.nightAuditService.runAudit(dto);
   }

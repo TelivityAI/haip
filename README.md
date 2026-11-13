@@ -392,7 +392,7 @@ Recent backlog deliveries, mapped to the feature sections below. Each slice is a
 - Analytics: average turn time, median turn time, inspection pass rate, maintenance issue rate, breakdown by room type and housekeeper
 
 ### Night Audit & Reporting
-- Automated night audit: room revenue posting, no-show processing, rate validation, day close
+- Automated night audit: room revenue posting, no-show processing, rate validation, day close. The scheduled job is [`scripts/cron/night-audit.sh`](./scripts/cron/night-audit.sh), which posts `"mode": "unattended"` (see [`docs/operations/cron.md`](./docs/operations/cron.md)).
 - AI anomaly detection: 8 anomaly types (incl. cash-drawer variance) with severity ranking and confidence scores
 - Daily revenue reports with department breakdown
 - Occupancy reports with ADR (Average Daily Rate) and RevPAR
@@ -1033,7 +1033,7 @@ GET    /api/v1/reports/financial-summary            # Financial summary
 GET    /api/v1/reports/occupancy-trend              # Occupancy trend
 
 # Night Audit — 3 endpoints
-POST   /api/v1/night-audit/run                     # Execute night audit
+POST   /api/v1/night-audit/run                     # Execute night audit (cron sends mode=unattended)
 GET    /api/v1/night-audit/runs                    # List audit runs
 GET    /api/v1/night-audit/runs/:id                # Get audit run
 
