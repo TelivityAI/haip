@@ -7,9 +7,9 @@ import {
 import { generateEmailDraft, getDefaultCommunicationConfig } from '../agent/guest-comms/guest-communication.models';
 
 const guest = {
-  firstName: 'Sofia',
-  lastName: 'Martinez',
-  email: 'sofia@example.com',
+  firstName: 'Ada',
+  lastName: 'Lovelace',
+  email: 'ada@example.com',
   vipLevel: 'none',
   isRepeatGuest: false,
   pastStayCount: 0,
@@ -29,7 +29,7 @@ const reservation = {
 };
 
 const property = {
-  name: 'Sweetness',
+  name: 'Example Hotel',
   checkInTime: '16:00',
   checkOutTime: '11:00',
 };
@@ -56,8 +56,8 @@ describe('email template override', () => {
       property,
       getDefaultCommunicationConfig(),
     );
-    expect(draft?.subject).toContain('Sweetness');
-    expect(draft?.bodyText).toContain('Sofia');
+    expect(draft?.subject).toContain('Example Hotel');
+    expect(draft?.bodyText).toContain('Ada');
   });
 
   it('prefers a per-property override and still fills tokens', () => {
@@ -71,8 +71,8 @@ describe('email template override', () => {
       },
     };
     const draft = generateEmailDraft('confirmation', guest, reservation, property, config);
-    expect(draft?.subject).toBe('See you at Sweetness, Sofia');
-    expect(draft?.bodyText).toBe('Dear Sofia, booking CONF-1 is confirmed.');
+    expect(draft?.subject).toBe('See you at Example Hotel, Ada');
+    expect(draft?.bodyText).toBe('Dear Ada, booking CONF-1 is confirmed.');
   });
 
   it('leaves the repeat body on the default when only the first-time body is overridden', () => {
