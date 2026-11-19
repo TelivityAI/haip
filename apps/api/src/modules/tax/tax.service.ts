@@ -6,8 +6,9 @@ import {
 } from '@nestjs/common';
 import { eq, and, lte, sql } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { taxProfiles, taxRules, guests } from '@telivityhaip/database';
+import { taxProfiles, taxRules, guests, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { CreateTaxProfileDto } from './dto/create-tax-profile.dto';
 import { UpdateTaxProfileDto } from './dto/update-tax-profile.dto';
 import { CreateTaxRuleDto } from './dto/create-tax-rule.dto';
@@ -18,11 +19,36 @@ import type { TaxLineItem } from './dto/calculate-tax.dto';
 export class TaxService {
   constructor(@Inject(DRIZZLE) private readonly db: any) {}
 
+  /**
+   * Tax rates are money-affecting configuration, so every profile/rule mutation is
+   * recorded in audit_logs — that table is also what "show me the tax changes" reads.
+   */
+  private async writeAudit(
+    propertyId: string,
+    action: 'create' | 'update' | 'delete',
+    entityType: 'tax_profile' | 'tax_rule',
+    entityId: string,
+    actor?: AuditActor,
+    previousValue?: unknown,
+    newValue?: unknown,
+  ): Promise<void> {
+    await this.db.insert(auditLogs).values({
+      propertyId,
+      action,
+      entityType,
+      entityId,
+      description: `${entityType}.${action === 'create' ? 'created' : action === 'update' ? 'updated' : 'deleted'}`,
+      ...(previousValue !== undefined ? { previousValue } : {}),
+      ...(newValue !== undefined ? { newValue } : {}),
+      ...actorFields(actor),
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Tax Profile CRUD
   // ---------------------------------------------------------------------------
 
-  async createProfile(dto: CreateTaxProfileDto) {
+  async createProfile(dto: CreateTaxProfileDto, actor?: AuditActor) {
     const [profile] = await this.db
       .insert(taxProfiles)
       .values({
@@ -34,16 +60,34 @@ export class TaxService {
         effectiveTo: dto.effectiveTo,
       })
       .returning();
+    await this.writeAudit(
+      dto.propertyId,
+      'create',
+      'tax_profile',
+      profile.id,
+      actor,
+      undefined,
+      { name: profile.name, jurisdictionCode: profile.jurisdictionCode },
+    );
     return profile;
   }
 
-  async updateProfile(id: string, propertyId: string, dto: UpdateTaxProfileDto) {
-    await this.findProfile(id, propertyId);
+  async updateProfile(id: string, propertyId: string, dto: UpdateTaxProfileDto, actor?: AuditActor) {
+    const before = await this.findProfile(id, propertyId);
     const [updated] = await this.db
       .update(taxProfiles)
       .set({ ...dto, updatedAt: new Date() })
       .where(and(eq(taxProfiles.id, id), eq(taxProfiles.propertyId, propertyId)))
       .returning();
+    await this.writeAudit(
+      propertyId,
+      'update',
+      'tax_profile',
+      id,
+      actor,
+      { name: before.name, jurisdictionCode: before.jurisdictionCode, isActive: before.isActive },
+      { ...dto },
+    );
     return updated;
   }
 
@@ -78,7 +122,7 @@ export class TaxService {
   // Tax Rule CRUD
   // ---------------------------------------------------------------------------
 
-  async createRule(profileId: string, propertyId: string, dto: CreateTaxRuleDto) {
+  async createRule(profileId: string, propertyId: string, dto: CreateTaxRuleDto, actor?: AuditActor) {
     await this.findProfile(profileId, propertyId);
     const [rule] = await this.db
       .insert(taxRules)
@@ -99,10 +143,25 @@ export class TaxService {
         effectiveTo: dto.effectiveTo,
       })
       .returning();
+    await this.writeAudit(
+      propertyId,
+      'create',
+      'tax_rule',
+      rule.id,
+      actor,
+      undefined,
+      { name: rule.name, code: rule.code, type: rule.type, rate: rule.rate },
+    );
     return rule;
   }
 
-  async updateRule(ruleId: string, profileId: string, propertyId: string, dto: UpdateTaxRuleDto) {
+  async updateRule(
+    ruleId: string,
+    profileId: string,
+    propertyId: string,
+    dto: UpdateTaxRuleDto,
+    actor?: AuditActor,
+  ) {
     await this.findProfile(profileId, propertyId);
     const [existing] = await this.db
       .select()
@@ -115,16 +174,35 @@ export class TaxService {
       .set({ ...dto, updatedAt: new Date() })
       .where(eq(taxRules.id, ruleId))
       .returning();
+    await this.writeAudit(
+      propertyId,
+      'update',
+      'tax_rule',
+      ruleId,
+      actor,
+      { name: existing.name, code: existing.code, type: existing.type, rate: existing.rate },
+      { ...dto },
+    );
     return updated;
   }
 
-  async deleteRule(ruleId: string, profileId: string, propertyId: string) {
+  async deleteRule(ruleId: string, profileId: string, propertyId: string, actor?: AuditActor) {
     await this.findProfile(profileId, propertyId);
     const result = await this.db
       .delete(taxRules)
       .where(and(eq(taxRules.id, ruleId), eq(taxRules.taxProfileId, profileId)))
       .returning();
     if (result.length === 0) throw new NotFoundException(`Tax rule ${ruleId} not found`);
+    const removed = result[0] as Record<string, unknown>;
+    await this.writeAudit(
+      propertyId,
+      'delete',
+      'tax_rule',
+      ruleId,
+      actor,
+      { name: removed['name'], code: removed['code'], type: removed['type'], rate: removed['rate'] },
+      undefined,
+    );
     return { deleted: true };
   }
 

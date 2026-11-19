@@ -12,7 +12,7 @@ import {
   Query,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
@@ -21,6 +21,7 @@ import { PermissionsService } from '../auth/permissions.service';
 import { PERMISSIONS, ALL_PERMISSIONS } from '../auth/permissions.catalog';
 import { UsersService } from './users.service';
 import { RolesService } from './roles.service';
+import { AuditLogsService } from './audit-logs.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AssignRolesDto } from './dto/assign-roles.dto';
@@ -37,6 +38,7 @@ export class AdminController {
     private readonly usersService: UsersService,
     private readonly rolesService: RolesService,
     private readonly permissionsService: PermissionsService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   // ---- Permission catalog ----
@@ -214,6 +216,48 @@ export class AdminController {
     @AuditActorCtx() actor: AuditActor,
   ) {
     return this.rolesService.setPermissions(id, propertyId, dto.permissionKeys, actor);
+  }
+
+  // ---- Audit trail ----
+
+  /**
+   * Read-only audit trail for this property. Deliberately NOT under the `admin`
+   * class role: the property Admin *and* General Manager personas answer "who changed
+   * this?" questions, so the gate is the `settings.manage` permission (which is
+   * narrower than a blanket admin role and denies read-only personas).
+   */
+  @Get('audit-logs')
+  @Roles()
+  @RequirePermissions('settings.manage')
+  @ApiOperation({ summary: 'Read the property audit trail (who changed what, when)' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'entityType', required: false })
+  @ApiQuery({ name: 'entityId', required: false })
+  @ApiQuery({ name: 'action', required: false })
+  @ApiQuery({ name: 'from', required: false, description: 'YYYY-MM-DD (inclusive)' })
+  @ApiQuery({ name: 'to', required: false, description: 'YYYY-MM-DD (inclusive)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'default 50, max 100' })
+  @ApiQuery({ name: 'page', required: false })
+  listAuditLogs(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('entityType') entityType?: string,
+    @Query('entityId') entityId?: string,
+    @Query('action') action?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+    @Query('page') page?: string,
+  ) {
+    return this.auditLogsService.list({
+      propertyId,
+      entityType: entityType?.trim() || undefined,
+      entityId: entityId?.trim() || undefined,
+      action: action?.trim() || undefined,
+      from: from?.trim() || undefined,
+      to: to?.trim() || undefined,
+      limit: limit ? Number(limit) : undefined,
+      page: page ? Number(page) : undefined,
+    });
   }
 }
 

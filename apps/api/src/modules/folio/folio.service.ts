@@ -30,6 +30,7 @@ import { ListFoliosDto } from './dto/list-folios.dto';
 import { TransferChargeDto } from './dto/transfer-charge.dto';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { ListChargesDto } from './dto/list-charges.dto';
+import { ListPropertyChargesDto } from './dto/list-property-charges.dto';
 
 const CHARGE_WAS_CREATED = Symbol('chargeWasCreated');
 
@@ -1114,6 +1115,116 @@ export class FolioService {
     );
 
     return reversal;
+  }
+
+  /**
+   * Property-wide charge ledger. Answers "what was charged, reversed or corrected
+   * across this hotel in a window" — the question the folio-scoped `getCharges`
+   * cannot, because the caller does not know which folio to open.
+   *
+   * `reversalsOnly` covers every shape a reversal takes in this ledger: a canonical
+   * reversal (`is_reversal`), a signed amendment (`adjusts_charge_id`), a manual
+   * `adjustment` charge, and any negative amount.
+   */
+  async listPropertyCharges(dto: ListPropertyChargesDto) {
+    const conditions: any[] = [eq(charges.propertyId, dto.propertyId)];
+
+    if (dto.type) conditions.push(eq(charges.type, dto.type as any));
+    if (dto.folioId) conditions.push(eq(charges.folioId, dto.folioId));
+    if (dto.from) conditions.push(gte(charges.serviceDate, new Date(dto.from)));
+    if (dto.to) conditions.push(lte(charges.serviceDate, new Date(`${dto.to.slice(0, 10)}T23:59:59.999Z`)));
+    if (dto.reversalsOnly === 'true') {
+      conditions.push(
+        or(
+          eq(charges.isReversal, true),
+          sql`${charges.adjustsChargeId} IS NOT NULL`,
+          eq(charges.type, 'adjustment' as never),
+          sql`${charges.amount} < 0`,
+        ),
+      );
+    }
+
+    const page = dto.page ?? 1;
+    const limit = dto.limit ?? 50;
+    const offset = (page - 1) * limit;
+    const whereClause = and(...conditions);
+
+    const [rows, countResult] = await Promise.all([
+      this.db
+        .select({
+          id: charges.id,
+          folioId: charges.folioId,
+          houseAccountId: charges.houseAccountId,
+          type: charges.type,
+          description: charges.description,
+          amount: charges.amount,
+          currencyCode: charges.currencyCode,
+          taxAmount: charges.taxAmount,
+          taxCode: charges.taxCode,
+          serviceDate: charges.serviceDate,
+          isReversal: charges.isReversal,
+          originalChargeId: charges.originalChargeId,
+          adjustsChargeId: charges.adjustsChargeId,
+          postedAt: charges.postedAt,
+        })
+        .from(charges)
+        .where(whereClause)
+        .orderBy(charges.serviceDate, charges.postedAt)
+        .limit(limit)
+        .offset(offset),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(charges)
+        .where(whereClause),
+    ]);
+
+    const folioNumberById = new Map<string, string>();
+    const folioIds = [...new Set(rows.map((r: any) => r.folioId).filter(Boolean))] as string[];
+    if (folioIds.length > 0) {
+      const folioRows = (await this.db
+        .select({ id: folios.id, folioNumber: folios.folioNumber })
+        .from(folios)
+        .where(and(eq(folios.propertyId, dto.propertyId), inArray(folios.id, folioIds)))) as Array<{
+        id: string;
+        folioNumber: string;
+      }>;
+      for (const f of folioRows) folioNumberById.set(f.id, f.folioNumber);
+    }
+
+    // Totals are per currency: adding EUR to USD is never a real answer.
+    const byCurrency: Record<string, { count: number; total: number; reversalsTotal: number }> = {};
+    for (const row of rows as Array<Record<string, unknown>>) {
+      const code = String(row['currencyCode'] ?? 'UNKNOWN').toUpperCase();
+      const entry = (byCurrency[code] ??= { count: 0, total: 0, reversalsTotal: 0 });
+      const amount = Number(row['amount'] ?? 0) || 0;
+      entry.count += 1;
+      entry.total += amount;
+      if (
+        row['isReversal'] === true ||
+        row['adjustsChargeId'] != null ||
+        String(row['type']) === 'adjustment' ||
+        amount < 0
+      ) {
+        entry.reversalsTotal += amount;
+      }
+    }
+
+    const total = countResult[0]?.count ?? rows.length;
+    return {
+      count: rows.length,
+      total,
+      page,
+      limit,
+      hasMore: offset + rows.length < total,
+      byCurrency,
+      charges: (rows as Array<Record<string, unknown>>).map((row) => ({
+        ...row,
+        folioNumber: row['folioId'] ? (folioNumberById.get(String(row['folioId'])) ?? null) : null,
+      })),
+      scopeNote:
+        'Property-wide charge ledger for this hotel. Reversals and corrections appear as their own rows ' +
+        '(negative amounts, is_reversal, or adjustment type) — do not net them by hand unless the question asks for a net.',
+    };
   }
 
   async getCharges(folioId: string, dto: ListChargesDto) {

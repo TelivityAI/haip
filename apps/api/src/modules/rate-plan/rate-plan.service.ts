@@ -6,8 +6,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and, lte, gte, sql } from 'drizzle-orm';
-import { ratePlans, rateRestrictions, roomTypes, cancellationPolicies, groupProfiles, properties, rooms, reservations } from '@telivityhaip/database';
+import { ratePlans, rateRestrictions, roomTypes, cancellationPolicies, groupProfiles, properties, rooms, reservations, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { WebhookService } from '../webhook/webhook.service';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
@@ -39,6 +40,32 @@ export class RatePlanService {
     @Inject(DRIZZLE) private readonly db: any,
     @Optional() private readonly webhookService?: WebhookService,
   ) {}
+
+  /**
+   * Prices and selling restrictions are money-affecting: every mutation is written to
+   * audit_logs so "what changed and who changed it" is answerable (also the source for
+   * the rate-override history report).
+   */
+  private async writeAudit(
+    propertyId: string,
+    action: 'create' | 'update' | 'delete',
+    entityType: 'rate_plan' | 'rate_restriction',
+    entityId: string,
+    actor?: AuditActor,
+    previousValue?: unknown,
+    newValue?: unknown,
+  ): Promise<void> {
+    await this.db.insert(auditLogs).values({
+      propertyId,
+      action,
+      entityType,
+      entityId,
+      description: `${entityType}.${action === 'create' ? 'created' : action === 'update' ? 'updated' : 'deleted'}`,
+      ...(previousValue !== undefined ? { previousValue } : {}),
+      ...(newValue !== undefined ? { newValue } : {}),
+      ...actorFields(actor),
+    });
+  }
 
   /**
    * Enforce rate-plan sellability for a stay [checkIn, checkOut). Throws 400 if
@@ -134,7 +161,7 @@ export class RatePlanService {
 
   // --- Rate Plans ---
 
-  async create(dto: CreateRatePlanDto & { propertyId: string }) {
+  async create(dto: CreateRatePlanDto & { propertyId: string }, actor?: AuditActor) {
     // FK ownership (security audit follow-on): roomTypeId is required on the
     // DTO. Without scoping to dto.propertyId, a caller at property A could
     // create a rate plan pointing at property B's room type. The existing
@@ -208,6 +235,15 @@ export class RatePlanService {
       .insert(ratePlans)
       .values(dto)
       .returning();
+    await this.writeAudit(
+      propertyId,
+      'create',
+      'rate_plan',
+      ratePlan.id,
+      actor,
+      undefined,
+      { name: ratePlan.name, code: ratePlan.code, baseAmount: ratePlan.baseAmount },
+    );
     return ratePlan;
   }
 
@@ -233,7 +269,7 @@ export class RatePlanService {
     return ratePlan;
   }
 
-  async update(id: string, propertyId: string, dto: UpdateRatePlanDto) {
+  async update(id: string, propertyId: string, dto: UpdateRatePlanDto, actor?: AuditActor) {
     // FK ownership (security audit follow-on): UpdateRatePlanDto omits propertyId
     // and roomTypeId but NOT parentRatePlanId. Without scoping that FK to the
     // request's propertyId, a caller could re-parent a rate plan onto another
@@ -271,6 +307,15 @@ export class RatePlanService {
     if (!ratePlan) {
       throw new NotFoundException(`Rate plan ${id} not found`);
     }
+    await this.writeAudit(
+      propertyId,
+      'update',
+      'rate_plan',
+      ratePlan.id,
+      actor,
+      { baseAmount: ratePlan.baseAmount, name: ratePlan.name },
+      { ...dto },
+    );
     // Drive channel ARI delta when base price / plan fields change in the PMS UI.
     await this.webhookService?.emit(
       'rate_plan.updated',
@@ -409,12 +454,27 @@ export class RatePlanService {
     ratePlanId: string,
     propertyId: string,
     dto: CreateRateRestrictionDto,
+    actor?: AuditActor,
   ) {
     await this.findById(ratePlanId, propertyId); // Verify rate plan exists + tenant scope
     const [restriction] = await this.db
       .insert(rateRestrictions)
       .values({ ...dto, ratePlanId, propertyId })
       .returning();
+    await this.writeAudit(
+      propertyId,
+      'create',
+      'rate_restriction',
+      restriction.id,
+      actor,
+      undefined,
+      {
+        ratePlanId,
+        startDate: restriction.startDate,
+        endDate: restriction.endDate,
+        rateOverride: restriction.rateOverride,
+      },
+    );
     await this.webhookService?.emit(
       'rate_restriction.created',
       'rate_restriction',
@@ -446,7 +506,17 @@ export class RatePlanService {
     id: string,
     propertyId: string,
     dto: UpdateRateRestrictionDto,
+    actor?: AuditActor,
   ) {
+    const [before] = await this.db
+      .select()
+      .from(rateRestrictions)
+      .where(
+        and(
+          eq(rateRestrictions.id, id),
+          eq(rateRestrictions.propertyId, propertyId),
+        ),
+      );
     const [restriction] = await this.db
       .update(rateRestrictions)
       .set({ ...dto, updatedAt: new Date() })
@@ -460,6 +530,15 @@ export class RatePlanService {
     if (!restriction) {
       throw new NotFoundException(`Rate restriction ${id} not found`);
     }
+    await this.writeAudit(
+      propertyId,
+      'update',
+      'rate_restriction',
+      restriction.id,
+      actor,
+      before ? { rateOverride: before.rateOverride, startDate: before.startDate, endDate: before.endDate } : undefined,
+      { ...dto },
+    );
     await this.webhookService?.emit(
       'rate_restriction.updated',
       'rate_restriction',
@@ -474,7 +553,7 @@ export class RatePlanService {
     return restriction;
   }
 
-  async deleteRestriction(id: string, propertyId: string) {
+  async deleteRestriction(id: string, propertyId: string, actor?: AuditActor) {
     const [restriction] = await this.db
       .delete(rateRestrictions)
       .where(
@@ -487,6 +566,20 @@ export class RatePlanService {
     if (!restriction) {
       throw new NotFoundException(`Rate restriction ${id} not found`);
     }
+    await this.writeAudit(
+      propertyId,
+      'delete',
+      'rate_restriction',
+      id,
+      actor,
+      {
+        ratePlanId: restriction.ratePlanId,
+        startDate: restriction.startDate,
+        endDate: restriction.endDate,
+        rateOverride: restriction.rateOverride,
+      },
+      undefined,
+    );
     await this.webhookService?.emit(
       'rate_restriction.deleted',
       'rate_restriction',

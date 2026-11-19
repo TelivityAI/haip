@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { AuditActorCtx, type AuditActor } from '../../common/audit/audit-actor';
 import { RatePlanService } from './rate-plan.service';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
@@ -49,9 +50,10 @@ export class RatePlanController {
   createRatePlan(
     @Body() dto: CreateRatePlanDto,
     @Query('propertyId', new ParseUUIDPipe({ optional: true })) queryPropertyId?: string,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
     dto.propertyId = resolvePropertyId({ body: dto.propertyId, query: queryPropertyId });
-    return this.ratePlanService.create(dto as CreateRatePlanDto & { propertyId: string });
+    return this.ratePlanService.create(dto as CreateRatePlanDto & { propertyId: string }, actor);
   }
 
   @Get(':id')
@@ -96,8 +98,9 @@ export class RatePlanController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateRatePlanDto,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
-    return this.ratePlanService.update(id, propertyId, dto);
+    return this.ratePlanService.update(id, propertyId, dto, actor);
   }
 
   // --- Restrictions sub-resource ---
@@ -121,8 +124,9 @@ export class RatePlanController {
   createRestriction(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateRateRestrictionDto,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
-    return this.ratePlanService.createRestriction(id, dto.propertyId, dto);
+    return this.ratePlanService.createRestriction(id, dto.propertyId, dto, actor);
   }
 
   @Patch(':id/restrictions/:restrictionId')
@@ -136,8 +140,9 @@ export class RatePlanController {
     @Param('restrictionId', ParseUUIDPipe) restrictionId: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateRateRestrictionDto,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
-    return this.ratePlanService.updateRestriction(restrictionId, propertyId, dto);
+    return this.ratePlanService.updateRestriction(restrictionId, propertyId, dto, actor);
   }
 
   @Delete(':id/restrictions/:restrictionId')
@@ -150,7 +155,8 @@ export class RatePlanController {
     @Param('id', ParseUUIDPipe) _id: string,
     @Param('restrictionId', ParseUUIDPipe) restrictionId: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
-    return this.ratePlanService.deleteRestriction(restrictionId, propertyId);
+    return this.ratePlanService.deleteRestriction(restrictionId, propertyId, actor);
   }
 }

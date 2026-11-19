@@ -8,6 +8,7 @@ import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { ReportsService } from './reports.service';
 import { PortfolioPropertyResolver } from './portfolio-property-resolver';
+import { RateOverridesReportService } from './rate-overrides-report.service';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
 import { ReportQueryDto } from './dto/report-query.dto';
@@ -24,6 +25,7 @@ export class ReportsController {
     private readonly reportsService: ReportsService,
     private readonly portfolioResolver: PortfolioPropertyResolver,
     private readonly configService: ConfigService,
+    private readonly rateOverrides: RateOverridesReportService,
   ) {}
 
   private authOn(): boolean {
@@ -138,6 +140,31 @@ export class ReportsController {
     @Query('endDate') endDate: string,
   ) {
     return this.reportsService.getBookingPace(propertyId, startDate, endDate);
+  }
+
+  @Get('/rate-overrides')
+  @ApiOperation({
+    summary: 'Rate-override history — manual rates in force, who changed them, what was pushed',
+  })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'from', required: false, description: 'YYYY-MM-DD (inclusive)' })
+  @ApiQuery({ name: 'to', required: false, description: 'YYYY-MM-DD (inclusive)' })
+  @ApiQuery({ name: 'ratePlanId', required: false })
+  @ApiQuery({ name: 'limit', required: false, description: 'default 50, max 100' })
+  async getRateOverrides(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('ratePlanId') ratePlanId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.rateOverrides.getRateOverrides({
+      propertyId,
+      from: from?.trim() || undefined,
+      to: to?.trim() || undefined,
+      ratePlanId: ratePlanId?.trim() || undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 
   @Get('/portfolio/financial-summary')

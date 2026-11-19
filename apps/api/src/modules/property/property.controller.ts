@@ -7,12 +7,15 @@ import {
   Body,
   ParseUUIDPipe,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Roles } from '../auth/roles.decorator';
+import { PermissionsService } from '../auth/permissions.service';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
 import { userCanAccessProperty } from '../auth/property-access';
+import { AuditActorCtx, type AuditActor } from '../../common/audit/audit-actor';
 import { PropertyService } from './property.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
@@ -23,6 +26,7 @@ export class PropertyController {
   constructor(
     private readonly propertyService: PropertyService,
     private readonly configService: ConfigService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
   private authOn(): boolean {
@@ -61,14 +65,56 @@ export class PropertyController {
   }
 
   @Patch(':id')
-  @Roles('admin')
+  // Settings writes are a property-admin action, not a global-admin one: the
+  // class-free @RequirePermissions below would fall back to the `?propertyId=`
+  // lookup, and this route carries the tenant in `:id`, so the check is explicit.
+  // `@Roles()` is intentionally left empty to override nothing while keeping the
+  // global roles guard permissive for property-scoped custom roles.
+  @Roles()
   @ApiOperation({ summary: 'Update property' })
   @ApiResponse({ status: 200, description: 'Property updated' })
   @ApiResponse({ status: 404, description: 'Property not found' })
-  updateProperty(
+  async updateProperty(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePropertyDto,
+    @CurrentUser() user?: AuthUser,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
-    return this.propertyService.update(id, dto);
+    if (this.authOn()) {
+      if (!user) throw new ForbiddenException('No authenticated user');
+      if (!userCanAccessProperty(user, id)) {
+        throw new ForbiddenException('You do not have access to this property');
+      }
+      await this.assertMayManageSettings(user, id, dto);
+    }
+    return this.propertyService.update(id, dto, actor);
+  }
+
+  /**
+   * `settings.manage` for the `:id` property. PermissionsGuard resolves its
+   * propertyId from the query/body, which this route does not carry, so the
+   * permission is checked here against the path tenant instead of silently
+   * skipping the requirement.
+   */
+  private async assertMayManageSettings(
+    user: AuthUser,
+    propertyId: string,
+    dto: UpdatePropertyDto,
+  ): Promise<void> {
+    const propertyIdInBody = (dto as { propertyId?: unknown }).propertyId;
+    if (propertyIdInBody !== undefined && propertyIdInBody !== propertyId) {
+      throw new BadRequestException('propertyId in the body must match the property being updated');
+    }
+    const local = await this.permissionsService.findLocalUser(user.sub, user.email);
+    if (!local) {
+      throw new ForbiddenException('No local user account is linked to this login');
+    }
+    const permissions = await this.permissionsService.getEffectivePermissions(
+      local.id,
+      propertyId,
+    );
+    if (!permissions.includes('settings.manage')) {
+      throw new ForbiddenException('Access denied. Required permission(s): settings.manage');
+    }
   }
 }

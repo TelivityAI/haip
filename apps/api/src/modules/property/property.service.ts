@@ -1,7 +1,8 @@
 import { Injectable, Inject, Optional, NotFoundException } from '@nestjs/common';
 import { eq, inArray } from 'drizzle-orm';
-import { properties, media } from '@telivityhaip/database';
+import { properties, media, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
+import { actorFields, type AuditActor } from '../../common/audit/audit-actor';
 import { WebhookService } from '../webhook/webhook.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
@@ -45,15 +46,48 @@ export class PropertyService {
     return this.withLogoUrl(property as PropertyRow);
   }
 
-  async update(id: string, dto: UpdatePropertyDto) {
+  /**
+   * Patch a property. `settings` is MERGED, not replaced: it is a bag of independent
+   * feature settings (kpiThresholds, operational fees, onlineCheckIn, …) and assigning
+   * the column wholesale silently deletes every key the caller did not resend.
+   */
+  async update(id: string, dto: UpdatePropertyDto, actor?: AuditActor) {
+    const existing = (await this.findById(id)) as unknown as Record<string, unknown>;
+    const patch: Record<string, unknown> = { ...dto, updatedAt: new Date() };
+    if (dto.settings !== undefined) {
+      const current =
+        existing['settings'] && typeof existing['settings'] === 'object'
+          ? (existing['settings'] as Record<string, unknown>)
+          : {};
+      const incoming =
+        dto.settings && typeof dto.settings === 'object'
+          ? (dto.settings as Record<string, unknown>)
+          : {};
+      patch['settings'] = { ...current, ...incoming };
+    }
+
     const [property] = await this.db
       .update(properties)
-      .set({ ...dto, updatedAt: new Date() })
+      .set(patch)
       .where(eq(properties.id, id))
       .returning();
     if (!property) {
       throw new NotFoundException(`Property ${id} not found`);
     }
+
+    // Settings edits are the audit trail "who changed the check-in time / tax rate" needs;
+    // record only the keys the caller actually sent so the row stays readable.
+    await this.db.insert(auditLogs).values({
+      propertyId: id,
+      action: 'update',
+      entityType: 'property',
+      entityId: id,
+      description: 'property.updated',
+      previousValue: { settings: existing['settings'] ?? null },
+      newValue: { settings: (patch['settings'] as unknown) ?? existing['settings'] ?? null, fields: Object.keys(dto) },
+      ...actorFields(actor),
+    });
+
     await this.webhookService?.emit(
       'property.content_updated',
       'property',
