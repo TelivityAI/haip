@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { AuditActorCtx, type AuditActor } from '../../common/audit/audit-actor';
 import { RoomService } from './room.service';
 import { RoomStatusService } from './room-status.service';
 import { RoomDiscrepancyService } from './room-discrepancy.service';
@@ -119,6 +120,29 @@ export class RoomController {
     return this.roomStatusService.getRoomsByStatus(propertyId, status);
   }
 
+  @Get('status-history')
+  @RequirePermissions('rooms.read')
+  @ApiOperation({
+    summary: "Room status age and recorded status transitions (how long out of order)",
+  })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'roomId', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiResponse({ status: 200, description: 'Status age per room plus recent room_status audit rows' })
+  getStatusHistory(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('roomId') roomId?: string,
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.roomStatusService.getStatusHistory(propertyId, {
+      roomId: roomId?.trim() || undefined,
+      status: status?.trim() || undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
   @Get('discrepancies')
   @RequirePermissions('ops.read')
   @ApiOperation({ summary: 'List room status discrepancies for a business date' })
@@ -223,8 +247,15 @@ export class RoomController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateRoomStatusDto,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
-    return this.roomStatusService.transitionStatus(id, propertyId, dto.status as any, dto.maintenanceNotes);
+    return this.roomStatusService.transitionStatus(
+      id,
+      propertyId,
+      dto.status as any,
+      dto.maintenanceNotes,
+      actor,
+    );
   }
 
   @Put(':id/hk-observation')

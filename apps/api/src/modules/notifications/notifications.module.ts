@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { WebhookModule } from '../webhook/webhook.module';
 import { NotificationsController } from './notifications.controller';
 import { NotificationService } from './notification.service';
+import { EmailTemplatesService } from './email-templates.service';
 import { NotificationProviderFactory } from './notification-provider.factory';
 import { TwilioSmsProvider } from './providers/twilio-sms.provider';
 import { BirdSmsProvider } from './providers/bird-sms.provider';
@@ -26,6 +27,7 @@ import {
   controllers: [NotificationsController],
   providers: [
     NotificationService,
+    EmailTemplatesService,
     NotificationProviderFactory,
     TwilioSmsProvider,
     BirdSmsProvider,

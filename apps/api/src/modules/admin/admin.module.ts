@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module';
 import { AdminController } from './admin.controller';
 import { UsersService } from './users.service';
 import { RolesService } from './roles.service';
+import { AuditLogsService } from './audit-logs.service';
 
 /**
  * Admin module — local user/role/permission administration.
@@ -11,7 +12,7 @@ import { RolesService } from './roles.service';
 @Module({
   imports: [AuthModule],
   controllers: [AdminController],
-  providers: [UsersService, RolesService],
-  exports: [UsersService, RolesService],
+  providers: [UsersService, RolesService, AuditLogsService],
+  exports: [UsersService, RolesService, AuditLogsService],
 })
 export class AdminModule {}

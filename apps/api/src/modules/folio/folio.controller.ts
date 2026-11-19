@@ -19,6 +19,7 @@ import { TransferChargeDto } from './dto/transfer-charge.dto';
 import { TransferCityLedgerDto } from './dto/transfer-city-ledger.dto';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { ListChargesDto } from './dto/list-charges.dto';
+import { ListPropertyChargesDto } from './dto/list-property-charges.dto';
 import { CreateRoutingRuleDto } from './dto/create-routing-rule.dto';
 import { MoveTransactionsDto } from './dto/move-transactions.dto';
 import {
@@ -47,6 +48,27 @@ export class FolioController {
   @ApiResponse({ status: 201, description: 'Routing rule created' })
   createRoutingRule(@Body() dto: CreateRoutingRuleDto) {
     return this.folioRoutingService.createRoutingRule(dto.propertyId, dto);
+  }
+
+  /**
+   * Property-wide charge ledger. Declared before `:id` so `charges` is not captured
+   * as a folio id. Answers "what charges / reversals hit this property", which the
+   * per-folio `/folios/:id/charges` cannot without knowing the folio first.
+   */
+  @Get('charges')
+  @RequirePermissions('folios.read')
+  @ApiOperation({ summary: 'List charges across the whole property (optionally reversals only)' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'type', required: false })
+  @ApiQuery({ name: 'reversalsOnly', required: false, description: 'true = reversals / corrections only' })
+  @ApiQuery({ name: 'from', required: false, description: 'YYYY-MM-DD (inclusive)' })
+  @ApiQuery({ name: 'to', required: false, description: 'YYYY-MM-DD (inclusive)' })
+  @ApiQuery({ name: 'folioId', required: false })
+  @ApiQuery({ name: 'limit', required: false, description: 'default 50, max 100' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiResponse({ status: 200, description: 'Paginated property charge ledger with per-currency totals' })
+  listPropertyCharges(@Query() dto: ListPropertyChargesDto) {
+    return this.folioService.listPropertyCharges(dto);
   }
 
   @Get('routing-rules')

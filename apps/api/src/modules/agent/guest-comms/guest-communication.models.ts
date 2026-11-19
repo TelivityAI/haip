@@ -72,6 +72,13 @@ export interface CommunicationConfig {
   localTips: string[];
   managerName?: string;
   managerTitle?: string;
+  /**
+   * Per-property wording overrides for a lifecycle email. Any field left out falls
+   * back to the built-in copy, so an override never needs to restate the default.
+   */
+  customTemplates?: Partial<
+    Record<EmailType, { subject?: string; firstTime?: string; repeat?: string }>
+  >;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +313,13 @@ export function generateEmailDraft(
 
   const isRepeat = guest.isRepeatGuest;
   const templates = BODY_TEMPLATES[emailType];
-  const bodyTemplate = isRepeat ? templates.repeat : templates.firstTime;
+  // A per-property template override replaces the built-in copy for this type. It is a
+  // hotel's own wording, so it goes through the same fillTemplate/token path — never
+  // interpolated as raw HTML.
+  const override = config.customTemplates?.[emailType];
+  const bodyTemplate =
+    (isRepeat ? override?.repeat : override?.firstTime) ??
+    (isRepeat ? templates.repeat : templates.firstTime);
 
   // Build token map
   const daysUntilArrival = Math.max(0, Math.ceil(
@@ -353,7 +366,7 @@ export function generateEmailDraft(
   if (isRepeat) personalizationTokens.push('repeat_guest');
   if (guest.vipLevel !== 'none') personalizationTokens.push('vip_level');
 
-  const subject = fillTemplate(SUBJECTS[emailType], tokens);
+  const subject = fillTemplate(override?.subject ?? SUBJECTS[emailType], tokens);
   const bodyText = fillTemplate(bodyTemplate, tokens);
   const bodyHtml = textToHtml(bodyText);
 

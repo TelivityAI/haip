@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { AuditActorCtx, type AuditActor } from '../../common/audit/audit-actor';
 import { TaxService } from './tax.service';
 import { CreateTaxProfileDto } from './dto/create-tax-profile.dto';
 import { UpdateTaxProfileDto } from './dto/update-tax-profile.dto';
@@ -34,8 +35,8 @@ export class TaxController {
   @Post('profiles')
   @RequirePermissions('tax.manage')
   @ApiOperation({ summary: 'Create a tax profile' })
-  createProfile(@Body() dto: CreateTaxProfileDto) {
-    return this.taxService.createProfile(dto);
+  createProfile(@Body() dto: CreateTaxProfileDto, @AuditActorCtx() actor?: AuditActor) {
+    return this.taxService.createProfile(dto, actor);
   }
 
   @Get('profiles/:id')
@@ -54,8 +55,9 @@ export class TaxController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateTaxProfileDto,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
-    return this.taxService.updateProfile(id, propertyId, dto);
+    return this.taxService.updateProfile(id, propertyId, dto, actor);
   }
 
   // --- Tax Rules ---
@@ -67,8 +69,9 @@ export class TaxController {
     @Param('profileId', ParseUUIDPipe) profileId: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: CreateTaxRuleDto,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
-    return this.taxService.createRule(profileId, propertyId, dto);
+    return this.taxService.createRule(profileId, propertyId, dto, actor);
   }
 
   @Patch('profiles/:profileId/rules/:ruleId')
@@ -79,8 +82,9 @@ export class TaxController {
     @Param('ruleId', ParseUUIDPipe) ruleId: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateTaxRuleDto,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
-    return this.taxService.updateRule(ruleId, profileId, propertyId, dto);
+    return this.taxService.updateRule(ruleId, profileId, propertyId, dto, actor);
   }
 
   @Delete('profiles/:profileId/rules/:ruleId')
@@ -90,8 +94,9 @@ export class TaxController {
     @Param('profileId', ParseUUIDPipe) profileId: string,
     @Param('ruleId', ParseUUIDPipe) ruleId: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @AuditActorCtx() actor?: AuditActor,
   ) {
-    return this.taxService.deleteRule(ruleId, profileId, propertyId);
+    return this.taxService.deleteRule(ruleId, profileId, propertyId, actor);
   }
 
   // --- Tax Calculation Preview ---

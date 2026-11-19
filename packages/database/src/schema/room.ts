@@ -85,6 +85,8 @@ export const rooms = pgTable('rooms', {
 
   // Status (state machine)
   status: roomStatusEnum('status').notNull().default('vacant_clean'),
+  /** When `status` last changed (not touched by notes-only edits). Drives "how long OOO". */
+  statusChangedAt: timestamp('status_changed_at', { withTimezone: true }).notNull().defaultNow(),
 
   // HK observed occupancy (orthogonal to FO / cleanliness status)
   hkOccupancy: hkOccupancyEnum('hk_occupancy').notNull().default('unknown'),

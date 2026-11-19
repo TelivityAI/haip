@@ -4,9 +4,10 @@ import { OrganizationController } from './organization.controller';
 import { PropertyService } from './property.service';
 import { OrganizationService } from './organization.service';
 import { WebhookModule } from '../webhook/webhook.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [WebhookModule],
+  imports: [WebhookModule, AuthModule],
   controllers: [PropertyController, OrganizationController],
   providers: [PropertyService, OrganizationService],
   exports: [PropertyService, OrganizationService],

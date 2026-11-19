@@ -20,6 +20,9 @@ function createMockDb(returnData: any[] = [mockRoom]) {
         where: vi.fn().mockReturnValue({
           then: (resolve: any) => resolve(returnData),
           groupBy: vi.fn().mockResolvedValue(returnData),
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue(returnData),
+          }),
         }),
       }),
     })),
@@ -29,6 +32,9 @@ function createMockDb(returnData: any[] = [mockRoom]) {
           returning: vi.fn().mockResolvedValue(returnData.map(r => ({ ...r }))),
         }),
       }),
+    }),
+    insert: vi.fn().mockReturnValue({
+      values: vi.fn().mockResolvedValue(undefined),
     }),
   };
 }
@@ -493,6 +499,74 @@ describe('RoomStatusService', () => {
       await expect(
         svc.transitionStatus('nonexistent', 'prop-001', 'occupied'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('status_changed_at and audit trail', () => {
+    it('moves statusChangedAt and writes a room_status audit row on a real status change', async () => {
+      const room = { ...mockRoom, status: 'vacant_clean' };
+      const db = createMockDb([room]);
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([{ ...room, status: 'out_of_order' }]),
+        }),
+      });
+      db.update = vi.fn().mockReturnValue({ set: setSpy });
+      const insertValues = vi.fn().mockResolvedValue(undefined);
+      db.insert = vi.fn().mockReturnValue({ values: insertValues });
+
+      const module = await Test.createTestingModule({
+        providers: [
+          RoomStatusService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<RoomStatusService>(RoomStatusService);
+
+      await svc.transitionStatus('room-001', 'prop-001', 'out_of_order', 'AC broken');
+
+      expect(setSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'out_of_order', statusChangedAt: expect.any(Date) }),
+      );
+      expect(db.insert).toHaveBeenCalled();
+      expect(insertValues).toHaveBeenCalledWith(
+        expect.objectContaining({
+          propertyId: 'prop-001',
+          entityType: 'room_status',
+          entityId: 'room-001',
+          previousValue: expect.objectContaining({ status: 'vacant_clean' }),
+          newValue: expect.objectContaining({ status: 'out_of_order' }),
+        }),
+      );
+    });
+
+    it('computes daysInCurrentStatus from statusChangedAt, not updatedAt', async () => {
+      const now = new Date('2026-11-19T12:00:00.000Z');
+      const db = createMockDb([
+        {
+          id: 'room-110',
+          number: '110',
+          floor: '1',
+          status: 'out_of_order',
+          statusChangedAt: new Date('2026-11-14T12:00:00.000Z'),
+          maintenanceNotes: 'AC',
+          updatedAt: new Date('2026-11-19T08:00:00.000Z'),
+        },
+      ]);
+      const module = await Test.createTestingModule({
+        providers: [
+          RoomStatusService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<RoomStatusService>(RoomStatusService);
+
+      const result = await svc.getStatusHistory('prop-001', { now });
+      expect(result.rooms[0]).toEqual(
+        expect.objectContaining({ roomNumber: '110', daysInCurrentStatus: 5 }),
+      );
     });
   });
 });
