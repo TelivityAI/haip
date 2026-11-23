@@ -57,7 +57,11 @@ export {
   reservationGuests,
   reservationNotes,
 } from './reservation.js';
-export type { AcceptedPricingSnapshot } from './reservation.js';
+export type {
+  AcceptedPricingSnapshot,
+  CardGuaranteeInfo,
+  CardGuaranteeStatus,
+} from './reservation.js';
 
 // Cancellation policies (rate-plan money outcomes)
 export {

@@ -20,6 +20,7 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { ListTasksDto } from './dto/list-tasks.dto';
 import { AssignTaskDto } from './dto/assign-task.dto';
 import { AutoAssignDto } from './dto/auto-assign.dto';
+import { StartTaskDto } from './dto/start-task.dto';
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { InspectTaskDto } from './dto/inspect-task.dto';
 
@@ -132,8 +133,9 @@ export class HousekeepingController {
   startTask(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto?: StartTaskDto,
   ) {
-    return this.housekeepingService.startTask(id, propertyId);
+    return this.housekeepingService.startTask(id, propertyId, dto);
   }
 
   @Patch('/tasks/:id/unassign')
