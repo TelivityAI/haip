@@ -82,6 +82,20 @@ export interface AcceptedPricingSnapshot {
   };
 }
 
+export type CardGuaranteeStatus = 'valid' | 'missing' | 'expired' | 'declined';
+
+/** Non-sensitive card-guarantee summary on a reservation (never raw PAN or CVV). */
+export interface CardGuaranteeInfo {
+  status: CardGuaranteeStatus;
+  cardBrand?: string | null;
+  last4?: string | null;
+  expMonth?: number | null;
+  expYear?: number | null;
+  holderName?: string | null;
+  verifiedAt?: string | null;
+  reason?: string | null;
+}
+
 /**
  * Bookings — container for one or more reservations; identifies the booker.
  * Booking is the party wrapper; reservations are per-room.
@@ -147,6 +161,9 @@ export const reservations = pgTable('reservations', {
   // Special requests & preferences
   specialRequests: text('special_requests'),
   preferences: jsonb('preferences').$type<Record<string, string>>(),
+
+  // Non-sensitive card-guarantee summary (never raw PAN or CVV)
+  cardGuarantee: jsonb('card_guarantee').$type<CardGuaranteeInfo>(),
 
   // Check-in/out tracking
   checkedInAt: timestamp('checked_in_at', { withTimezone: true }),

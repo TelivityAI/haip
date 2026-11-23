@@ -1,6 +1,8 @@
-import { IsUUID, IsInt, IsOptional, IsString, IsBoolean, Min } from 'class-validator';
+import { IsUUID, IsInt, IsOptional, IsString, IsBoolean, Min, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsCanonicalCalendarDate } from '@telivityhaip/shared';
+import { CardGuaranteeDto } from './card-guarantee.dto';
 
 export class ModifyReservationDto {
   @ApiPropertyOptional({ example: '2024-06-02' })
@@ -49,4 +51,10 @@ export class ModifyReservationDto {
   @IsOptional()
   @IsBoolean()
   doNotMove?: boolean;
+
+  @ApiPropertyOptional({ type: () => CardGuaranteeDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CardGuaranteeDto)
+  cardGuarantee?: CardGuaranteeDto | null;
 }

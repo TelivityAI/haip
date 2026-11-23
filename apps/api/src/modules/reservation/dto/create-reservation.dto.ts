@@ -7,9 +7,12 @@ import {
   IsIn,
   Min,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsMoneyString } from '../../../common/validation/is-money-string.validator';
+import { CardGuaranteeDto } from './card-guarantee.dto';
 
 export class CreateReservationDto {
   @ApiProperty()
@@ -82,4 +85,10 @@ export class CreateReservationDto {
   @IsString()
   @MaxLength(100)
   externalConfirmation?: string;
+
+  @ApiPropertyOptional({ type: () => CardGuaranteeDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CardGuaranteeDto)
+  cardGuarantee?: CardGuaranteeDto | null;
 }
