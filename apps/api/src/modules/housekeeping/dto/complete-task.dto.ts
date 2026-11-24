@@ -3,6 +3,7 @@ import {
   IsString,
   IsBoolean,
   IsArray,
+  IsDateString,
   ValidateNested,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -45,4 +46,14 @@ export class CompleteTaskDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Optional ISO start timestamp when backfilling or completing directly' })
+  @IsOptional()
+  @IsDateString()
+  startedAt?: string;
+
+  @ApiPropertyOptional({ description: 'Optional ISO finish timestamp; defaults to now()' })
+  @IsOptional()
+  @IsDateString()
+  completedAt?: string;
 }

@@ -30,6 +30,16 @@ export class ListTasksDto {
   @IsDateString()
   serviceDate?: string;
 
+  @ApiPropertyOptional({ description: 'Inclusive start serviceDate (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ description: 'Inclusive end serviceDate (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()

@@ -26,6 +26,10 @@ import { DepositSettlementService } from '../accounting/deposit-settlement.servi
 import { RatePlanService } from '../rate-plan/rate-plan.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ModifyReservationDto } from './dto/modify-reservation.dto';
+import {
+  resolveReservationCardGuarantee,
+  sanitizeCardGuarantee,
+} from './dto/card-guarantee.dto';
 import { AssignRoomDto } from './dto/assign-room.dto';
 import { MoveRoomDto } from './dto/move-room.dto';
 import { CancelReservationDto, resolveCancellationReason } from './dto/cancel-reservation.dto';
@@ -195,6 +199,9 @@ export class ReservationService {
           adults: dto.adults ?? 1,
           children: dto.children ?? 0,
           specialRequests: dto.specialRequests,
+          ...(dto.cardGuarantee !== undefined
+            ? { cardGuarantee: sanitizeCardGuarantee(dto.cardGuarantee) }
+            : {}),
           status: 'pending',
         })
         .returning();
@@ -1140,6 +1147,10 @@ export class ReservationService {
     if (dto.specialRequests !== undefined)
       updates['specialRequests'] = dto.specialRequests;
     if (dto.doNotMove !== undefined) updates['doNotMove'] = dto.doNotMove;
+    if (dto.cardGuarantee !== undefined) {
+      updates['cardGuarantee'] =
+        dto.cardGuarantee === null ? null : sanitizeCardGuarantee(dto.cardGuarantee);
+    }
 
     // If dates or room type change, re-check availability on the new window.
     // The existing reservation still occupies its old window (and room type) in searchAvailability,
@@ -1311,7 +1322,16 @@ export class ReservationService {
       throw new NotFoundException(`Reservation ${id} not found`);
     }
 
-    return results[0];
+    const row = results[0]!;
+    const cardGuarantee = resolveReservationCardGuarantee(row.reservation as unknown as Record<string, unknown>);
+    return {
+      ...row,
+      reservation: {
+        ...row.reservation,
+        cardGuarantee,
+      },
+      cardGuarantee,
+    };
   }
 
   async list(dto: ListReservationsDto) {
@@ -1385,6 +1405,7 @@ export class ReservationService {
 
     const data = rows.map((r: any) => ({
       ...r.reservation,
+      cardGuarantee: resolveReservationCardGuarantee(r.reservation),
       confirmationNumber: r.confirmationNumber ?? null,
       guestName: r.guestFirstName ? `${r.guestFirstName} ${r.guestLastName}` : null,
       guest: r.guestFirstName

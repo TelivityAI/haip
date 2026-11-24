@@ -16,6 +16,7 @@ import { type UpdateTaskDto } from './dto/update-task.dto';
 import { type ListTasksDto } from './dto/list-tasks.dto';
 import { type AssignTaskDto } from './dto/assign-task.dto';
 import { type AutoAssignDto } from './dto/auto-assign.dto';
+import { type StartTaskDto } from './dto/start-task.dto';
 import { type CompleteTaskDto } from './dto/complete-task.dto';
 import { type InspectTaskDto } from './dto/inspect-task.dto';
 import {
@@ -23,6 +24,17 @@ import {
   ADA_EXTRA_ITEMS,
   VIP_EXTRA_ITEMS,
 } from './checklist-templates';
+
+export function computeCleaningDurationMinutes(
+  startedAt: Date | string | null | undefined,
+  completedAt: Date | string | null | undefined,
+): number | null {
+  if (!startedAt || !completedAt) return null;
+  const startMs = startedAt instanceof Date ? startedAt.getTime() : Date.parse(String(startedAt));
+  const endMs = completedAt instanceof Date ? completedAt.getTime() : Date.parse(String(completedAt));
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return null;
+  return Math.round(((endMs - startMs) / 60_000) * 100) / 100;
+}
 
 @Injectable()
 export class HousekeepingService {
@@ -105,6 +117,7 @@ export class HousekeepingService {
     const { task, roomNumber, roomFloor, roomBuilding } = results[0];
     return {
       ...task,
+      cleaningDurationMinutes: computeCleaningDurationMinutes(task.startedAt, task.completedAt),
       room: { number: roomNumber, floor: roomFloor, building: roomBuilding },
     };
   }
@@ -123,6 +136,18 @@ export class HousekeepingService {
       dayEnd.setDate(dayEnd.getDate() + 1);
       conditions.push(gte(housekeepingTasks.serviceDate, dayStart));
       conditions.push(lt(housekeepingTasks.serviceDate, dayEnd));
+    } else if (dto.startDate || dto.endDate) {
+      if (dto.startDate && dto.endDate && dto.startDate > dto.endDate) {
+        throw new BadRequestException('startDate must be on or before endDate');
+      }
+      if (dto.startDate) {
+        conditions.push(gte(housekeepingTasks.serviceDate, new Date(dto.startDate + 'T00:00:00')));
+      }
+      if (dto.endDate) {
+        const endExclusive = new Date(dto.endDate + 'T00:00:00');
+        endExclusive.setDate(endExclusive.getDate() + 1);
+        conditions.push(lt(housekeepingTasks.serviceDate, endExclusive));
+      }
     }
     if (dto.roomId) conditions.push(eq(housekeepingTasks.roomId, dto.roomId));
 
@@ -151,6 +176,7 @@ export class HousekeepingService {
 
     const data = rows.map((r: any) => ({
       ...r.task,
+      cleaningDurationMinutes: computeCleaningDurationMinutes(r.task.startedAt, r.task.completedAt),
       roomNumber: r.roomNumber,
     }));
 
@@ -250,13 +276,18 @@ export class HousekeepingService {
     return updated;
   }
 
-  async startTask(taskId: string, propertyId: string) {
+  async startTask(taskId: string, propertyId: string, dto?: StartTaskDto) {
     const task = await this.findByIdRaw(taskId, propertyId);
 
     if (task.status !== 'assigned') {
       throw new BadRequestException(
         `Cannot start task in '${task.status}' status — must be assigned`,
       );
+    }
+
+    const startedAt = dto?.startedAt ? new Date(dto.startedAt) : new Date();
+    if (Number.isNaN(startedAt.getTime())) {
+      throw new BadRequestException('startedAt must be a valid ISO timestamp');
     }
 
     // Bug 5: atomic claim
@@ -266,13 +297,16 @@ export class HousekeepingService {
       ['assigned'],
       {
         status: 'in_progress',
-        startedAt: new Date(),
+        startedAt,
         updatedAt: new Date(),
       },
       'in_progress',
     );
 
-    return updated;
+    return {
+      ...updated,
+      cleaningDurationMinutes: computeCleaningDurationMinutes(updated.startedAt, updated.completedAt),
+    };
   }
 
   async unassign(taskId: string, propertyId: string) {
@@ -358,11 +392,28 @@ export class HousekeepingService {
       );
     }
 
+    const completedAt = dto.completedAt ? new Date(dto.completedAt) : new Date();
+    if (Number.isNaN(completedAt.getTime())) {
+      throw new BadRequestException('completedAt must be a valid ISO timestamp');
+    }
+    const effectiveStartedAt = dto.startedAt
+      ? new Date(dto.startedAt)
+      : task.startedAt
+        ? new Date(task.startedAt)
+        : null;
+    if (effectiveStartedAt && Number.isNaN(effectiveStartedAt.getTime())) {
+      throw new BadRequestException('startedAt must be a valid ISO timestamp');
+    }
+    if (effectiveStartedAt && completedAt.getTime() < effectiveStartedAt.getTime()) {
+      throw new BadRequestException('completedAt cannot be earlier than startedAt');
+    }
+
     const updates: Record<string, unknown> = {
       status: 'completed',
-      completedAt: new Date(),
+      completedAt,
       updatedAt: new Date(),
     };
+    if (dto.startedAt) updates['startedAt'] = effectiveStartedAt;
     if (dto.checklist) updates['checklist'] = dto.checklist;
     if (dto.notes !== undefined) updates['notes'] = dto.notes;
     if (dto.maintenanceRequired !== undefined) updates['maintenanceRequired'] = dto.maintenanceRequired;
@@ -424,7 +475,13 @@ export class HousekeepingService {
       });
     }
 
-    return updated;
+    return {
+      ...updated,
+      cleaningDurationMinutes: computeCleaningDurationMinutes(
+        updated.startedAt ?? effectiveStartedAt,
+        updated.completedAt ?? completedAt,
+      ),
+    };
   }
 
   async inspectTask(taskId: string, propertyId: string, dto: InspectTaskDto) {

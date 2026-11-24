@@ -511,6 +511,52 @@ describe('HousekeepingService — CRUD', () => {
     const svc = await createService(db);
     const result = await svc.list({ propertyId: 'prop-001', serviceDate: '2026-04-06' });
     expect(result.data).toHaveLength(1);
+    expect(result.data[0].cleaningDurationMinutes).toBeNull();
+  });
+
+  it('computes cleaningDurationMinutes on finished tasks and validates startDate..endDate range', async () => {
+    const finishedTask = {
+      ...mockTask,
+      status: 'completed',
+      startedAt: new Date('2026-11-10T15:00:00Z'),
+      completedAt: new Date('2026-11-10T15:28:30Z'),
+    };
+    const db = createMockDb();
+    db.select = vi.fn().mockImplementation(() => ({
+      from: vi.fn().mockReturnValue({
+        leftJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                offset: vi.fn().mockReturnValue({
+                  then: (resolve: any) => resolve([{ task: finishedTask, roomNumber: '101' }]),
+                }),
+              }),
+            }),
+            then: (resolve: any) => resolve([{ count: 1 }]),
+          }),
+        }),
+        where: vi.fn().mockReturnValue({
+          then: (resolve: any) => resolve([{ count: 1 }]),
+        }),
+      }),
+    }));
+    const svc = await createService(db);
+    const result = await svc.list({
+      propertyId: 'prop-001',
+      startDate: '2026-11-09',
+      endDate: '2026-11-15',
+    });
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].cleaningDurationMinutes).toBe(28.5);
+
+    await expect(
+      svc.list({
+        propertyId: 'prop-001',
+        startDate: '2026-11-15',
+        endDate: '2026-11-09',
+      }),
+    ).rejects.toThrow('startDate must be on or before endDate');
   });
 });
 

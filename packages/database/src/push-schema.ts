@@ -1500,6 +1500,7 @@ export async function pushSchema(databaseUrl: string = DATABASE_URL) {
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_at timestamptz`,
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS hk_observed_by uuid`,
     `ALTER TABLE rooms ADD COLUMN IF NOT EXISTS status_changed_at timestamptz NOT NULL DEFAULT now()`,
+    `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS card_guarantee jsonb`,
     `ALTER TABLE rate_restrictions ADD COLUMN IF NOT EXISTS rate_override numeric(12,2)`,
     `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS external_id varchar(255)`,
     `ALTER TABLE guest_reviews ADD COLUMN IF NOT EXISTS external_url text`,
