@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PermissionsGuard } from './permissions.guard';
 
 function ctx(req: any) {
@@ -72,5 +72,16 @@ describe('PermissionsGuard', () => {
     reflector.getAllAndOverride.mockReturnValue(['admin.users.manage']);
     const req = { user: { sub: 'kc-1' }, query: {} };
     await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects mismatched query and body propertyId before checking permissions', async () => {
+    reflector.getAllAndOverride.mockReturnValue(['admin.users.manage']);
+    const req = {
+      user: { sub: 'kc-1' },
+      query: { propertyId: 'p1' },
+      body: { propertyId: 'p2' },
+    };
+    await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(BadRequestException);
+    expect(permissions.getEffectivePermissions).not.toHaveBeenCalled();
   });
 });

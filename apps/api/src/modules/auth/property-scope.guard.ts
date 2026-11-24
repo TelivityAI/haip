@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import type { AuthUser } from './current-user.decorator';
 import { userCanAccessProperty } from './property-access';
+import { resolveRequestPropertyId } from '../../common/property-id';
 
 /**
  * Property-scope guard — binds the authenticated principal to the `propertyId`
@@ -56,11 +57,14 @@ export class PropertyScopeGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const raw: unknown =
-      request.query?.propertyId ?? request.body?.propertyId ?? request.params?.propertyId;
+    const propertyId = resolveRequestPropertyId({
+      query: request.query?.propertyId,
+      body: request.body?.propertyId,
+      params: request.params?.propertyId,
+    });
     // Routes without a propertyId aren't property-scoped (e.g. global admin lists,
     // /properties). Nothing to enforce here.
-    if (raw === undefined || raw === null) {
+    if (propertyId === undefined) {
       return true;
     }
 
@@ -68,12 +72,7 @@ export class PropertyScopeGuard implements CanActivate {
     if (!user) {
       throw new ForbiddenException('No authenticated user');
     }
-    // A duplicated query param (`?propertyId=A&propertyId=B`) parses to an array;
-    // reject anything non-scalar rather than skipping the membership check.
-    if (typeof raw !== 'string') {
-      throw new ForbiddenException('Invalid propertyId');
-    }
-    if (!userCanAccessProperty(user, raw)) {
+    if (!userCanAccessProperty(user, propertyId)) {
       throw new ForbiddenException('You do not have access to this property');
     }
 
