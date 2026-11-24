@@ -1,6 +1,6 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
-import { resolvePropertyId } from './property-id';
+import { resolvePropertyId, resolveRequestPropertyId } from './property-id';
 
 const A = 'a0000001-0000-4000-a000-000000000001';
 const B = 'b0000001-0000-4000-a000-000000000001';
@@ -30,5 +30,27 @@ describe('resolvePropertyId', () => {
     expect(() => resolvePropertyId({ body: null, query: '' })).toThrow(
       /propertyId is required/,
     );
+  });
+});
+
+describe('resolveRequestPropertyId', () => {
+  it('returns undefined when no location carries propertyId', () => {
+    expect(resolveRequestPropertyId({})).toBeUndefined();
+  });
+
+  it('accepts a single query propertyId', () => {
+    expect(resolveRequestPropertyId({ query: A })).toBe(A);
+  });
+
+  it('requires query, body, and params to match when more than one is set', () => {
+    expect(resolveRequestPropertyId({ query: A, body: A, params: A })).toBe(A);
+    expect(() => resolveRequestPropertyId({ query: A, body: B })).toThrow(BadRequestException);
+    expect(() => resolveRequestPropertyId({ query: A, body: B })).toThrow(
+      /query, body, and route params must match/,
+    );
+  });
+
+  it('rejects non-scalar propertyId (duplicated query)', () => {
+    expect(() => resolveRequestPropertyId({ query: [A, B] })).toThrow(ForbiddenException);
   });
 });

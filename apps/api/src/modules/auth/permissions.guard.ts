@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { PERMISSIONS_KEY } from './permissions.decorator';
 import { PermissionsService } from './permissions.service';
 import type { AuthUser } from './current-user.decorator';
+import { resolveRequestPropertyId } from '../../common/property-id';
 
 /**
  * Permission-based authorization guard (local authz).
@@ -48,8 +49,11 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('No authenticated user');
     }
 
-    const propertyId: string | undefined =
-      request.query?.propertyId ?? request.body?.propertyId;
+    const propertyId = resolveRequestPropertyId({
+      query: request.query?.propertyId,
+      body: request.body?.propertyId,
+      params: request.params?.propertyId,
+    });
     if (!propertyId) {
       throw new ForbiddenException('propertyId is required to resolve permissions');
     }

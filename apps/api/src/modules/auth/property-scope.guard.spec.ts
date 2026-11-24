@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, type ExecutionContext } from '@nestjs/common';
 import { PropertyScopeGuard } from './property-scope.guard';
 
 function ctx(request: any): ExecutionContext {
@@ -40,6 +40,16 @@ describe('PropertyScopeGuard', () => {
     expect(() => run('true', { user: member, body: { propertyId: 'propB' } })).toThrow(
       ForbiddenException,
     );
+  });
+
+  it('rejects mismatched query and body propertyId (confused-deputy)', () => {
+    expect(() =>
+      run('true', {
+        user: member,
+        query: { propertyId: 'propA' },
+        body: { propertyId: 'propB' },
+      }),
+    ).toThrow(BadRequestException);
   });
 
   it('lets platform admins cross properties', () => {
